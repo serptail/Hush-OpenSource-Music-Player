@@ -1,0 +1,30 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "Hush"
+
+include(":app")
+include(":core:core-common")
+include(":core:core-database")
+include(":core:core-network")
+include(":core:core-model")
+include(":core:core-designsystem")
+include(":core:core-player")
+include(":feature:feature-search")
+include(":feature:feature-library")
+include(":feature:feature-player-ui")
+include(":feature:feature-resolver")
+include(":sync")
