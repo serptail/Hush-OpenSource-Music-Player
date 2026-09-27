@@ -2,7 +2,6 @@ package com.hush.feature.search
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,12 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -43,13 +36,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.SubcomposeAsyncImage
+import com.adamglin.PhosphorIcons
+import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.light.VinylRecord
+import com.adamglin.phosphoricons.light.MagnifyingGlass
+import com.adamglin.phosphoricons.light.MusicNote
+import com.adamglin.phosphoricons.light.User
+import com.adamglin.phosphoricons.light.X
 import com.hush.core.designsystem.ArtworkShape
 import com.hush.core.designsystem.HushAccentA
 import com.hush.core.designsystem.HushInk
 import com.hush.core.designsystem.HushMist
 import com.hush.core.designsystem.HushPaper
 import com.hush.core.designsystem.PillShape
+import com.hush.core.designsystem.acrylicFrame
 import com.hush.core.designsystem.hairlineBorder
+import com.hush.core.designsystem.pressScale
+import com.hush.core.designsystem.thinCard
 import com.hush.core.model.Track
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -70,7 +73,7 @@ fun SearchScreen(
                 Text("Good evening", style = MaterialTheme.typography.bodyMedium, color = HushMist)
                 Text("Find your quiet", style = MaterialTheme.typography.headlineLarge, color = HushInk, fontWeight = FontWeight.SemiBold)
             }
-            IconButton(onClick = {}) { Icon(Icons.Default.Person, "Profile", tint = HushInk) }
+            IconButton(onClick = {}) { Icon(PhosphorIcons.Light.User, "Profile", tint = HushInk) }
         }
         Spacer(Modifier.height(18.dp))
         Row(
@@ -82,7 +85,7 @@ fun SearchScreen(
                 .padding(horizontal = 16.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Default.Search, null, tint = HushMist)
+            Icon(PhosphorIcons.Light.MagnifyingGlass, null, tint = HushMist)
             OutlinedTextField(
                 value = state.query,
                 onValueChange = viewModel::updateQuery,
@@ -99,7 +102,7 @@ fun SearchScreen(
                 ),
             )
             if (state.query.isNotEmpty()) {
-                IconButton(onClick = { viewModel.updateQuery("") }) { Icon(Icons.Default.Close, "Clear", tint = HushMist) }
+                IconButton(onClick = { viewModel.updateQuery("") }) { Icon(PhosphorIcons.Light.X, "Clear", tint = HushMist) }
             }
         }
         Spacer(Modifier.height(20.dp))
@@ -136,7 +139,7 @@ fun SearchScreen(
 private fun EmptySearchState() {
     Column(Modifier.fillMaxWidth().padding(top = 54.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(84.dp).clip(CircleShape).background(HushAccentA.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.MusicNote, null, tint = HushAccentA, modifier = Modifier.size(36.dp))
+            Icon(PhosphorIcons.Light.MusicNote, null, tint = HushAccentA, modifier = Modifier.size(36.dp))
         }
         Spacer(Modifier.height(16.dp))
         Text("A softer soundtrack", style = MaterialTheme.typography.titleLarge, color = HushInk)
@@ -147,16 +150,16 @@ private fun EmptySearchState() {
 @Composable
 private fun TrackResultRow(track: Track, isResolving: Boolean, onTrackSelected: (Track) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable { onTrackSelected(track) }.padding(vertical = 10.dp),
+        Modifier.fillMaxWidth().pressScale(onClick = { onTrackSelected(track) }, scaleDown = 0.98f).padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         SubcomposeAsyncImage(
             model = track.albumArtUrl,
             contentDescription = null,
-            modifier = Modifier.size(52.dp).clip(ArtworkShape),
+            modifier = Modifier.size(52.dp).acrylicFrame(ArtworkShape, strength = 0.4f),
             contentScale = ContentScale.Crop,
-            loading = { Icon(Icons.Default.MusicNote, null, tint = HushMist) },
-            error = { Icon(Icons.Default.MusicNote, null, tint = HushMist) },
+            loading = { Icon(PhosphorIcons.Light.MusicNote, null, tint = HushMist) },
+            error = { Icon(PhosphorIcons.Light.MusicNote, null, tint = HushMist) },
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
             Text(track.title, style = MaterialTheme.typography.titleMedium, color = HushInk, maxLines = 1)
@@ -175,15 +178,15 @@ private fun BottomNavigation(onLibrary: () -> Unit, onPlayer: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.Search, null, tint = HushAccentA)
+            Icon(PhosphorIcons.Light.MagnifyingGlass, null, tint = HushAccentA)
             Text("Discover", color = HushAccentA, style = MaterialTheme.typography.labelMedium)
         }
-        Column(Modifier.clickable(onClick = onLibrary), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.LibraryMusic, null, tint = HushMist)
+        Column(Modifier.pressScale(onClick = onLibrary), horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(PhosphorIcons.Light.VinylRecord, null, tint = HushMist)
             Text("Library", color = HushMist, style = MaterialTheme.typography.labelMedium)
         }
-        Column(Modifier.clickable(onClick = onPlayer), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.MusicNote, null, tint = HushMist)
+        Column(Modifier.pressScale(onClick = onPlayer), horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(PhosphorIcons.Light.MusicNote, null, tint = HushMist)
             Text("Now playing", color = HushMist, style = MaterialTheme.typography.labelMedium)
         }
     }

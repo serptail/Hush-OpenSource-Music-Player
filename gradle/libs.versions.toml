@@ -21,6 +21,7 @@ coil = "2.7.0"
 youtubedl-android = "0.18.1"
 # --- new: dynamic color extraction ---
 palette-ktx = "1.0.0"               # dominant-color extraction from bitmaps
+phosphor-icon = "1.0.0"             # thin, minimal icon set (Compose Multiplatform port)
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }
@@ -56,6 +57,7 @@ coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
 youtubedl-android = { module = "io.github.junkfood02.youtubedl-android:library", version.ref = "youtubedl-android" }
 # --- new ---
 androidx-palette-ktx = { module = "androidx.palette:palette-ktx", version.ref = "palette-ktx" }
+phosphor-icon = { module = "com.adamglin:phosphor-icon", version.ref = "phosphor-icon" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

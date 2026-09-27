@@ -20,17 +20,22 @@ import coil.request.SuccessResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** The two soft colors the player's background gradient eases between. */
-data class HushAccent(val top: Color, val bottom: Color)
+/** The three colors the player's gradient blends between — real colors from the art, kept clean. */
+data class HushAccent(val top: Color, val mid: Color, val bottom: Color)
 
-private val CalmAccent = HushAccent(HushAccentA, HushAccentB)
+private val CalmAccent = HushAccent(HushAccentA, HushAccentC, HushAccentB)
 
 /**
  * Loads [artworkUrl] (if any), runs it through the Palette API, and returns
- * a pastel-lightened [HushAccent] that *animates* between values (900ms) as
- * artwork changes — so switching tracks eases the background instead of
- * snapping. Falls back to the calm default on null art or extraction
+ * a [HushAccent] trio that *animates* between values (900ms) as artwork
+ * changes. Falls back to the calm default on null art or extraction
  * failure; never blocks or crashes playback.
+ *
+ * "Clean, not jank" constraint: rather than using Palette's swatches raw
+ * (which can be muddy, near-black, or near-white depending on the source
+ * photo), every extracted color is normalized into a fixed lightness/
+ * saturation band before use — this is what keeps an arbitrary album cover
+ * from ever producing a background that looks broken or illegible.
  */
 @Composable
 fun rememberDynamicAccent(artworkUrl: String?): HushAccent {
@@ -50,32 +55,47 @@ fun rememberDynamicAccent(artworkUrl: String?): HushAccent {
                     .build()
                 val result = context.imageLoader.execute(request)
                 val bitmap = (result as? SuccessResult)?.drawable?.toBitmapOrNull() ?: return@runCatching null
-                extractSoftAccent(bitmap)
+                extractAccentTrio(bitmap)
             }.getOrNull()
         }
         target = extracted ?: CalmAccent
     }
 
     val top by animateColorAsState(target.top, animationSpec = tween(900), label = "accent-top")
+    val mid by animateColorAsState(target.mid, animationSpec = tween(900), label = "accent-mid")
     val bottom by animateColorAsState(target.bottom, animationSpec = tween(900), label = "accent-bottom")
-    return HushAccent(top, bottom)
+    return HushAccent(top, mid, bottom)
 }
 
-private fun extractSoftAccent(bitmap: Bitmap): HushAccent? {
+private fun extractAccentTrio(bitmap: Bitmap): HushAccent? {
     val palette = Palette.from(bitmap).generate()
-    val a = palette.vibrantSwatch ?: palette.lightVibrantSwatch ?: palette.dominantSwatch ?: return null
-    val b = palette.lightMutedSwatch ?: palette.mutedSwatch ?: a
 
-    // Lift both toward pastel: high lightness, moderated saturation — this is
-    // what makes an arbitrary cover photo still look like a soft Samsung
-    // Music-style wash instead of a loud, high-contrast gradient.
-    return HushAccent(top = Color(a.rgb).softened(), bottom = Color(b.rgb).softened(lighter = true))
+    // Pull three genuinely different swatches so the gradient has real range
+    // instead of three near-identical tones (which reads as a flat wash).
+    val a = palette.vibrantSwatch ?: palette.lightVibrantSwatch ?: palette.dominantSwatch ?: return null
+    val b = palette.mutedSwatch ?: palette.darkVibrantSwatch ?: a
+    val c = palette.lightVibrantSwatch ?: palette.lightMutedSwatch ?: a
+
+    return HushAccent(
+        top = Color(a.rgb).normalized(),
+        mid = Color(b.rgb).normalized(shiftHue = true),
+        bottom = Color(c.rgb).normalized(lighter = true),
+    )
 }
 
-private fun Color.softened(lighter: Boolean = false): Color {
+/**
+ * Clamps a raw Palette color into a band that always reads clean against
+ * white text/icons: moderate-to-high saturation (so it doesn't look grey or
+ * muddy) but never so dark it swallows white icon contrast, and never so
+ * light it looks washed out. [shiftHue] nudges the hue slightly so the
+ * middle gradient stop reads as a distinct color rather than a near-repeat
+ * of the top stop when Palette returns very similar swatches.
+ */
+private fun Color.normalized(lighter: Boolean = false, shiftHue: Boolean = false): Color {
     val hsv = FloatArray(3)
     android.graphics.Color.colorToHSV(this.toArgb(), hsv)
-    hsv[1] = hsv[1].coerceIn(0.25f, 0.55f)
-    hsv[2] = if (lighter) hsv[2].coerceIn(0.85f, 0.97f) else hsv[2].coerceIn(0.70f, 0.88f)
+    if (shiftHue) hsv[0] = (hsv[0] + 18f) % 360f
+    hsv[1] = hsv[1].coerceIn(0.45f, 0.75f)
+    hsv[2] = if (lighter) hsv[2].coerceIn(0.72f, 0.88f) else hsv[2].coerceIn(0.48f, 0.68f)
     return Color(android.graphics.Color.HSVToColor(hsv))
 }
