@@ -5,6 +5,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
 import kotlinx.serialization.json.Json
@@ -27,12 +28,25 @@ object NetworkModule {
     fun musicBrainzClient(): OkHttpClient = baseClient().newBuilder()
         .addInterceptor(UserAgentInterceptor)
         .addInterceptor(MusicBrainzRateLimitInterceptor)
+        .addInterceptor(BackoffInterceptor())
         .build()
 
     @Provides
     @Singleton
     @Named("coverart")
     fun coverArtClient(): OkHttpClient = baseClient()
+
+    @Provides
+    @Singleton
+    @Named("itunes")
+    fun itunesClient(): OkHttpClient = baseClient().newBuilder()
+        // iTunes has no documented hard limit but empirically throttles around
+        // ~20 requests/minute/IP and signals it with 403 rather than 429/5xx.
+        // SearchRepositoryImpl's Semaphore(1) + 10-min result cache already keep us well
+        // under that in normal typing; this interceptor is the safety net for the rare
+        // case we do trip it, since plain BackoffInterceptor ignores 403 by design.
+        .addInterceptor(ItunesBackoffInterceptor())
+        .build()
 
     @Provides
     @Singleton
@@ -56,6 +70,11 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    fun itunesApi(@Named("itunes") client: OkHttpClient): ItunesApi =
+        retrofit("https://itunes.apple.com/", client).create(ItunesApi::class.java)
+
+    @Provides
+    @Singleton
     fun youtubeApi(@Named("youtube") client: OkHttpClient): YoutubeMusicApi =
         retrofit("https://music.youtube.com/", client).create(YoutubeMusicApi::class.java)
 
@@ -72,6 +91,9 @@ object NetworkModule {
         .build()
 
     private fun baseClient() = OkHttpClient.Builder().apply {
+        connectTimeout(8, TimeUnit.SECONDS)
+        readTimeout(15, TimeUnit.SECONDS)
+        writeTimeout(15, TimeUnit.SECONDS)
         if (com.hush.core.network.BuildConfig.DEBUG) {
             addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
         }
@@ -98,15 +120,53 @@ private object MusicBrainzRateLimitInterceptor : Interceptor {
     }
 }
 
-private class BackoffInterceptor : Interceptor {
+/**
+ * Retries on 5xx AND on a slow/hanging response (timeout), not just non-2xx codes.
+ * Shared by MusicBrainz and sync clients.
+ */
+private class BackoffInterceptor(private val maxAttempts: Int = 3) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
-        var last: Response? = null
-        repeat(3) { attempt ->
-            last?.close()
-            last = chain.proceed(chain.request())
-            if (last!!.isSuccessful || last!!.code < 500) return last!!
-            Thread.sleep(150L * (1L shl attempt))
+        var lastResponse: Response? = null
+        var lastError: java.io.IOException? = null
+        repeat(maxAttempts) { attempt ->
+            lastResponse?.close()
+            try {
+                lastResponse = chain.proceed(chain.request())
+                lastError = null
+                if (lastResponse!!.isSuccessful || lastResponse!!.code < 500) return lastResponse!!
+            } catch (error: java.io.IOException) {
+                lastError = error
+            }
+            if (attempt < maxAttempts - 1) Thread.sleep(150L * (1L shl attempt))
         }
-        return last!!
+        lastResponse?.let { return it }
+        throw lastError ?: java.io.IOException("Request failed after $maxAttempts attempts")
+    }
+}
+
+/**
+ * Same shape as BackoffInterceptor, but also retries on 403 -- the code iTunes returns
+ * when its soft rate limit is tripped, rather than 429/5xx like most APIs. Kept as a
+ * separate class rather than a flag on BackoffInterceptor so a 403 from an *authenticated*
+ * client elsewhere in the app is never silently retried by accident.
+ */
+private class ItunesBackoffInterceptor(private val maxAttempts: Int = 3) : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): Response {
+        var lastResponse: Response? = null
+        var lastError: java.io.IOException? = null
+        repeat(maxAttempts) { attempt ->
+            lastResponse?.close()
+            try {
+                lastResponse = chain.proceed(chain.request())
+                lastError = null
+                val code = lastResponse!!.code
+                if (lastResponse!!.isSuccessful || (code < 500 && code != 403)) return lastResponse!!
+            } catch (error: java.io.IOException) {
+                lastError = error
+            }
+            if (attempt < maxAttempts - 1) Thread.sleep(300L * (1L shl attempt))
+        }
+        lastResponse?.let { return it }
+        throw lastError ?: java.io.IOException("Request failed after $maxAttempts attempts")
     }
 }

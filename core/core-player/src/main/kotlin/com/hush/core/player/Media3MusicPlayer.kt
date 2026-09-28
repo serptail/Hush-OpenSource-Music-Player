@@ -22,7 +22,20 @@ import kotlinx.coroutines.flow.StateFlow
 
 @Singleton
 class Media3MusicPlayer @Inject constructor(@ApplicationContext context: Context) : MusicPlayer {
-    private val player = ExoPlayer.Builder(context).setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true).build()
+    private val player = ExoPlayer.Builder(context)
+        .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
+        .build()
+        .apply {
+            // This is a music player -- some yt-dlp-resolved sources are muxed video+audio
+            // (YouTube doesn't always expose an audio-only format for a given video without
+            // a PO token). Disabling the video track type means ExoPlayer never allocates a
+            // video decoder or renders frames for those, regardless of what format yt-dlp
+            // picked -- a guaranteed fix at the player layer, independent of the "-f" selector.
+            trackSelectionParameters = trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+                .build()
+        }
     internal val sessionPlayer: ExoPlayer get() = player
     private val state = MutableStateFlow<PlaybackState>(PlaybackState.Idle)
     override val playbackState: StateFlow<PlaybackState> = state

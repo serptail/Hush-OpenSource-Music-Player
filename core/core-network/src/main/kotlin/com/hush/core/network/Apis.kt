@@ -22,6 +22,17 @@ interface CoverArtApi {
     suspend fun getCoverArt(@Path("mbid") releaseMbid: String): Response<CoverArtResponse>
 }
 
+interface ItunesApi {
+    @GET("search")
+    suspend fun search(
+        @Query("term") term: String,
+        @Query("media") media: String = "music",
+        @Query("entity") entity: String = "song",
+        @Query("limit") limit: Int = 25,
+        @Query("country") country: String = "US",
+    ): Response<ItunesSearchResponse>
+}
+
 interface YoutubeMusicApi {
     @POST("search") suspend fun search(@Body request: YoutubeSearchRequest): YoutubeSearchResponse
 }
@@ -32,3 +43,4 @@ interface ResolverSyncApi {
     @GET("youtube/search") suspend fun searchYoutube(@Query("query") query: String): YoutubeSearchResponse
     @GET("youtube/stream/{videoId}") suspend fun youtubeStream(@Path("videoId") videoId: String): Response<AudioStreamDto>
 }
+

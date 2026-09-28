@@ -15,11 +15,14 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): HushDatabase =
-        Room.databaseBuilder(context, HushDatabase::class.java, "hush.db").addMigrations(MIGRATION_1_2).build()
+        Room.databaseBuilder(context, HushDatabase::class.java, "hush.db")
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .build()
 
     @Provides fun trackDao(db: HushDatabase): TrackDao = db.trackDao()
     @Provides fun resolvedSourceDao(db: HushDatabase): ResolvedSourceDao = db.resolvedSourceDao()
     @Provides fun playlistDao(db: HushDatabase): PlaylistDao = db.playlistDao()
     @Provides fun playlistTrackDao(db: HushDatabase): PlaylistTrackDao = db.playlistTrackDao()
     @Provides fun downloadDao(db: HushDatabase): DownloadDao = db.downloadDao()
+    @Provides fun artworkCacheDao(db: HushDatabase): ArtworkCacheDao = db.artworkCacheDao()
 }

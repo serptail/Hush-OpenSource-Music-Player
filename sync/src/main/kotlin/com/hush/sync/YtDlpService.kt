@@ -1,6 +1,7 @@
 package com.hush.sync
 
 import java.io.IOException
+import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -21,6 +22,7 @@ data class YoutubeCandidate(
     val durationMs: Long,
     val viewCount: Long,
     val category: String = "songs",
+    val isMusicCatalog: Boolean = false,
 )
 
 @Serializable
@@ -48,28 +50,64 @@ class YtDlpService(
     private val streamCache = ConcurrentHashMap<String, CachedStream>()
     private var lastUpdateAtMs = 0L
 
+    /**
+     * Tries YouTube Music's "Songs" catalog first (matches what YouTube itself badges as
+     * a music track); falls back to a broad ytsearch only if that comes back empty, so
+     * intentionally obscure edits/bootlegs stay reachable without polluting the common case.
+     */
     suspend fun search(query: String): YoutubeSearchResponse = withContext(Dispatchers.IO) {
         ensureUpdated()
+        val songs = searchMusicCatalog(query)
+        if (songs.candidates.isNotEmpty()) return@withContext songs
+        searchBroad(query)
+    }
+
+    private fun searchMusicCatalog(query: String): YoutubeSearchResponse {
+        val encoded = URLEncoder.encode(query, "UTF-8")
+        val result = runCatching {
+            runCommand(
+                "--dump-single-json",
+                "--flat-playlist",
+                "--skip-download",
+                "--no-warnings",
+                "--playlist-end", "10",
+                "https://music.youtube.com/search?q=$encoded",
+            )
+        }.getOrNull() ?: return YoutubeSearchResponse(emptyList())
+
+        val parsed = runCatching { parser.decodeFromString<YtDlpSearchResult>(result) }.getOrNull() ?: return YoutubeSearchResponse(emptyList())
+        return YoutubeSearchResponse(
+            parsed.entries.filter { it.id.isNotBlank() }.map { it.toCandidate(isMusicCatalog = true) },
+        )
+    }
+
+    private fun searchBroad(query: String): YoutubeSearchResponse {
         val result = runCommand(
             "--dump-single-json",
             "--flat-playlist",
             "--skip-download",
             "--no-warnings",
-            "--playlist-end", "5",
+            "--playlist-end", "8",
             "--extractor-args", "youtube:player_client=web_safari",
-            "ytsearch5:$query",
+            "ytsearch8:$query",
         )
         val parsed = parser.decodeFromString<YtDlpSearchResult>(result)
-        YoutubeSearchResponse(parsed.entries.filter { it.id.isNotBlank() }.map { entry ->
-            YoutubeCandidate(
-                videoId = entry.id,
-                title = entry.title,
-                channelName = entry.channel ?: entry.uploader.orEmpty(),
-                channelIsTopicChannel = false,
-                durationMs = ((entry.duration ?: 0.0) * 1_000).toLong(),
-                viewCount = entry.viewCount ?: 0L,
-            )
-        })
+        return YoutubeSearchResponse(
+            parsed.entries.filter { it.id.isNotBlank() }.map { it.toCandidate(isMusicCatalog = false) },
+        )
+    }
+
+    private fun YtDlpEntry.toCandidate(isMusicCatalog: Boolean): YoutubeCandidate {
+        val channelOrUploader = channel ?: uploader
+        return YoutubeCandidate(
+            videoId = id,
+            title = title,
+            channelName = channelOrUploader.orEmpty(),
+            channelIsTopicChannel = channelOrUploader?.trim()?.endsWith("- Topic", ignoreCase = true) == true,
+            durationMs = ((duration ?: 0.0) * 1_000).toLong(),
+            viewCount = viewCount ?: 0L,
+            isMusicCatalog = isMusicCatalog,
+        )
     }
 
     suspend fun audioStream(videoId: String): AudioStreamResponse = withContext(Dispatchers.IO) {

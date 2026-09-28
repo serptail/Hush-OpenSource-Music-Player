@@ -44,3 +44,10 @@ interface DownloadDao {
     @Query("SELECT * FROM downloads WHERE isrc = :isrc") fun observe(isrc: String): Flow<DownloadEntity?>
     @Query("DELETE FROM downloads WHERE isrc = :isrc") suspend fun delete(isrc: String)
 }
+
+@Dao
+interface ArtworkCacheDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(entry: ArtworkCacheEntity)
+    @Query("SELECT * FROM artwork_cache WHERE releaseId = :releaseId") suspend fun get(releaseId: String): ArtworkCacheEntity?
+    @Query("SELECT * FROM artwork_cache WHERE releaseId IN (:releaseIds)") suspend fun getAll(releaseIds: List<String>): List<ArtworkCacheEntity>
+}

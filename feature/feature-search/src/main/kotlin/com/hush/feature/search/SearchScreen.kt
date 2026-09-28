@@ -54,6 +54,7 @@ import com.hush.core.designsystem.hairlineBorder
 import com.hush.core.designsystem.pressScale
 import com.hush.core.designsystem.thinCard
 import com.hush.core.model.Track
+import com.hush.core.model.TrackSource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -163,7 +164,23 @@ private fun TrackResultRow(track: Track, isResolving: Boolean, onTrackSelected: 
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
             Text(track.title, style = MaterialTheme.typography.titleMedium, color = HushInk, maxLines = 1)
-            Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = HushMist, maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = HushMist, maxLines = 1)
+                // Distinguishes fan edits / bootlegs / off-catalog finds (source = YOUTUBE,
+                // no MusicBrainz match) from the canonical catalog tracks above them.
+                if (track.source == TrackSource.YOUTUBE) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "YouTube",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = HushAccentA,
+                        modifier = Modifier
+                            .clip(PillShape)
+                            .background(HushAccentA.copy(alpha = 0.12f), PillShape)
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                    )
+                }
+            }
             if (isResolving) Text("Checking a verified source", style = MaterialTheme.typography.labelMedium, color = HushAccentA)
         }
         if (isResolving) CircularProgressIndicator(Modifier.size(16.dp), color = HushAccentA, strokeWidth = 2.dp)

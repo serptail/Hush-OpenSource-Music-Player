@@ -4,14 +4,15 @@ import com.hush.core.database.ResolvedSourceDao
 import com.hush.core.database.toDomain
 import com.hush.core.database.toEntity
 import com.hush.core.model.ResolvedSource
+import com.hush.core.network.BuildConfig
 import com.hush.core.network.ResolvedSourceDto
 import com.hush.core.network.ResolverSyncApi
-import com.hush.core.network.BuildConfig
-import javax.inject.Inject
+import com.hush.core.network.YoutubeMusicSearchSource
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import javax.inject.Inject
 
 interface ResolvedSourceRepository {
     suspend fun getLocal(isrc: String): ResolvedSource?
@@ -37,4 +38,9 @@ abstract class ResolverRepositoryModule {
     @Binds abstract fun bindResolvedSourceRepository(impl: ResolvedSourceRepositoryImpl): ResolvedSourceRepository
     @Binds abstract fun bindYoutubeCandidateRepository(impl: YoutubeCandidateRepositoryImpl): YoutubeCandidateRepository
     @Binds abstract fun bindAudioSourceRepository(impl: AudioSourceRepositoryImpl): AudioSourceRepository
+
+    // Exposes AndroidYtDlpEngine to feature-search as the core-network interface, so
+    // SearchRepositoryImpl can fan out to YouTube during live search without feature-search
+    // depending on feature-resolver directly.
+    @Binds abstract fun bindYoutubeMusicSearchSource(engine: AndroidYtDlpEngine): YoutubeMusicSearchSource
 }

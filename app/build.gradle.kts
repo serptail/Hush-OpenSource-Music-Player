@@ -1,7 +1,12 @@
 plugins { alias(libs.plugins.android.application); alias(libs.plugins.kotlin.android); alias(libs.plugins.kotlin.compose); alias(libs.plugins.hilt); alias(libs.plugins.ksp) }
 
 android { namespace = "com.hush"; compileSdk = 35
-    defaultConfig { applicationId = "com.hush"; minSdk = 26; targetSdk = 35; versionCode = 1; versionName = "1.0" }
+    defaultConfig {
+        applicationId = "com.hush"; minSdk = 26; targetSdk = 35; versionCode = 1; versionName = "1.0"
+        ndk {
+            abiFilters += listOf("x86", "x86_64", "armeabi-v7a", "arm64-v8a")
+        }
+    }
     buildFeatures { compose = true; buildConfig = true }
     packaging { jniLibs { useLegacyPackaging = true } }
 }

@@ -13,6 +13,10 @@ data class TrackEntity(
     val album: String?,
     val durationMs: Long,
     val albumArtUrl: String?,
+    // Additive columns for the unified MusicBrainz+YouTube search. Nullable with defaults
+    // so this is a safe migration on top of existing rows (see DatabaseMigrations.kt notes).
+    val source: String = "MUSICBRAINZ",
+    val youtubeVideoId: String? = null,
 )
 
 @Entity(tableName = "resolved_sources")
@@ -40,4 +44,16 @@ data class DownloadEntity(
     val localFilePath: String,
     val downloadedAtEpochMs: Long,
     val fileSizeBytes: Long,
+)
+
+/**
+ * Persistent cover-art URL cache, keyed by MusicBrainz release ID. Closes the "gone on
+ * restart, re-fetch every session" gap: SearchRepositoryImpl now checks this table before
+ * hitting Cover Art Archive, and writes to it after every successful lookup.
+ */
+@Entity(tableName = "artwork_cache")
+data class ArtworkCacheEntity(
+    @PrimaryKey val releaseId: String,
+    val artworkUrl: String,
+    val cachedAtEpochMs: Long,
 )
