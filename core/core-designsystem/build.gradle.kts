@@ -14,11 +14,13 @@ android {
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
+    // Canvas, border, background, clickable, LazyColumn-level foundation APIs (version comes from the BOM).
+    implementation("androidx.compose.foundation:foundation")
     implementation(libs.androidx.compose.material3)
 
     implementation(libs.androidx.core.ktx)
+    // coil.compose also brings Coil 2's core (coil.imageLoader / ImageRequest) used by AdaptiveBackground.kt
     implementation(libs.coil.compose)
-    implementation(libs.androidx.palette.ktx)
 
     api(libs.phosphor.icon)
 }

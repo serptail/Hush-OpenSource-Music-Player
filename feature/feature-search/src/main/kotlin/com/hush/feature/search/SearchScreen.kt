@@ -1,6 +1,8 @@
 package com.hush.feature.search
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,50 +15,71 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.SubcomposeAsyncImage
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.VinylRecord
 import com.adamglin.phosphoricons.light.MagnifyingGlass
 import com.adamglin.phosphoricons.light.MusicNote
 import com.adamglin.phosphoricons.light.User
+import com.adamglin.phosphoricons.light.VinylRecord
 import com.adamglin.phosphoricons.light.X
-import com.hush.core.designsystem.ArtworkShape
-import com.hush.core.designsystem.HushAccentA
-import com.hush.core.designsystem.HushInk
-import com.hush.core.designsystem.HushMist
-import com.hush.core.designsystem.HushPaper
-import com.hush.core.designsystem.PillShape
-import com.hush.core.designsystem.acrylicFrame
-import com.hush.core.designsystem.hairlineBorder
+import com.hush.core.designsystem.BottomBarItem
+import com.hush.core.designsystem.CoverTheme
+import com.hush.core.designsystem.HushBottomBar
+import com.hush.core.designsystem.LocalCoverPalette
+import com.hush.core.designsystem.TransparentStatusBar
+import com.hush.core.designsystem.fadeEdges
+import com.hush.core.designsystem.glass
+import com.hush.core.designsystem.ink
 import com.hush.core.designsystem.pressScale
-import com.hush.core.designsystem.thinCard
+import com.hush.core.designsystem.squareArtUrl
 import com.hush.core.model.Track
 import com.hush.core.model.TrackSource
 
-@OptIn(ExperimentalMaterial3Api::class)
+// The only expressive element is the flowing background, which takes its colors from the cover of
+// the track that is playing. Everything on top of it is a neutral "ink" (white on dark covers, near-black
+// on light ones, supplied by CoverTheme) plus that cover's accent in a few small places (cursor, focus
+// ring, spinners). Surfaces are flat, translucent ink.
+
+private val TextPrimary: Color
+    @Composable @ReadOnlyComposable get() = ink()
+private val TextSecondary: Color
+    @Composable @ReadOnlyComposable get() = ink(0.6f)
+private val TextTertiary: Color
+    @Composable @ReadOnlyComposable get() = ink(0.4f)
+
+private val PanelShape = RoundedCornerShape(12.dp)
+private val TagShape = RoundedCornerShape(4.dp)
+private val ArtShape = RoundedCornerShape(8.dp)
+
 @Composable
 fun SearchScreen(
     viewModel: SearchViewModel,
@@ -64,147 +87,188 @@ fun SearchScreen(
     resolutionMessage: String?,
     onTrackSelected: (Track) -> Unit,
     onLibrary: () -> Unit,
-    onPlayer: () -> Unit,
+    nowPlaying: @Composable () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    Column(Modifier.fillMaxSize().background(HushPaper).padding(horizontal = 20.dp)) {
-        Row(Modifier.fillMaxWidth().padding(top = 22.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Good evening", style = MaterialTheme.typography.bodyMedium, color = HushMist)
-                Text("Find your quiet", style = MaterialTheme.typography.headlineLarge, color = HushInk, fontWeight = FontWeight.SemiBold)
-            }
-            IconButton(onClick = {}) { Icon(PhosphorIcons.Light.User, "Profile", tint = HushInk) }
-        }
-        Spacer(Modifier.height(18.dp))
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(PillShape)
-                .background(Color.White, PillShape)
-                .hairlineBorder(PillShape)
-                .padding(horizontal = 16.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(PhosphorIcons.Light.MagnifyingGlass, null, tint = HushMist)
-            OutlinedTextField(
-                value = state.query,
-                onValueChange = viewModel::updateQuery,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Artists, songs, albums", color = HushMist) },
-                textStyle = MaterialTheme.typography.bodyLarge.copy(color = HushInk),
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedBorderColor = Color.Transparent,
-                    focusedBorderColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedContainerColor = Color.Transparent,
-                    cursorColor = HushAccentA,
-                ),
-            )
-            if (state.query.isNotEmpty()) {
-                IconButton(onClick = { viewModel.updateQuery("") }) { Icon(PhosphorIcons.Light.X, "Clear", tint = HushMist) }
-            }
-        }
-        Spacer(Modifier.height(20.dp))
-        AnimatedVisibility(state.isLoading) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(Modifier.size(16.dp), color = HushAccentA, strokeWidth = 2.dp)
-                Spacer(Modifier.width(8.dp))
-                Text("Tuning the room...", color = HushMist)
-            }
-        }
-        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(vertical = 8.dp)) }
-        resolutionMessage?.let {
-            Text(it, color = HushMist, modifier = Modifier.padding(bottom = 8.dp))
-        }
-        if (state.tracks.isEmpty() && state.query.isBlank()) {
-            EmptySearchState()
-        } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                item { Text("Results", style = MaterialTheme.typography.titleLarge, color = HushInk, modifier = Modifier.padding(vertical = 8.dp)) }
-                items(state.tracks, key = { it.isrc }) { track ->
-                    TrackResultRow(track, resolvingIsrc == track.isrc, onTrackSelected)
+    // The flowing background is drawn once, behind the NavHost (see MainActivity); this is only its palette.
+    val palette = LocalCoverPalette.current
+    TransparentStatusBar(darkIcons = palette.isLight)
+
+    CoverTheme(palette) {
+        val accent = MaterialTheme.colorScheme.primary
+        Box(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().statusBarsPadding()) {
+                Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 24.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(top = 22.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Discover",
+                            style = MaterialTheme.typography.displayLarge,
+                            color = TextPrimary,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Box(Modifier.size(44.dp).pressScale(onClick = {}), contentAlignment = Alignment.Center) {
+                            Icon(PhosphorIcons.Light.User, "Profile", tint = ink(0.85f), modifier = Modifier.size(24.dp))
+                        }
+                    }
+
+                    Spacer(Modifier.height(22.dp))
+                    SearchField(query = state.query, onQueryChange = viewModel::updateQuery, accent = accent)
+                    Spacer(Modifier.height(20.dp))
+
+                    AnimatedVisibility(state.isLoading) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
+                            CircularProgressIndicator(Modifier.size(14.dp), color = accent, strokeWidth = 1.5.dp)
+                            Spacer(Modifier.width(10.dp))
+                            Text("Tuning the room...", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+                        }
+                    }
+                    state.error?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(vertical = 8.dp))
+                    }
+                    resolutionMessage?.let {
+                        Text(it, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, modifier = Modifier.padding(bottom = 8.dp))
+                    }
+
+                    if (state.tracks.isEmpty() && state.query.isBlank()) {
+                        // Mockup content for now, see DiscoverSection.kt.
+                        DiscoverContent(Modifier.weight(1f).fillMaxWidth())
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f).fadeEdges(),
+                            contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            item {
+                                Text(
+                                    "Results",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = TextPrimary.copy(alpha = 0.9f),
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                )
+                            }
+                            items(state.tracks, key = { it.isrc }) { track ->
+                                TrackResultRow(track, resolvingIsrc == track.isrc, accent, onTrackSelected)
+                            }
+                        }
+                    }
                 }
+
+                HushBottomBar(
+                    listOf(
+                        BottomBarItem("Discover", PhosphorIcons.Light.MagnifyingGlass, selected = true),
+                        BottomBarItem("Library", PhosphorIcons.Light.VinylRecord, onClick = onLibrary),
+                    ),
+                    nowPlaying = nowPlaying,
+                )
             }
         }
-        BottomNavigation(onLibrary = onLibrary, onPlayer = onPlayer)
     }
 }
 
+/** Flat translucent field, no edge at rest. While focused it gets a hairline ring in the cover's accent. */
 @Composable
-private fun EmptySearchState() {
-    Column(Modifier.fillMaxWidth().padding(top = 54.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(84.dp).clip(CircleShape).background(HushAccentA.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-            Icon(PhosphorIcons.Light.MusicNote, null, tint = HushAccentA, modifier = Modifier.size(36.dp))
+private fun SearchField(query: String, onQueryChange: (String) -> Unit, accent: Color) {
+    var focused by remember { mutableStateOf(false) }
+    val focus by animateFloatAsState(if (focused) 1f else 0f, tween(200), label = "search-focus")
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .glass(PanelShape, fill = 0.07f, borderColor = accent.copy(alpha = 0.55f * focus))
+            .padding(start = 18.dp, end = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(PhosphorIcons.Light.MagnifyingGlass, null, tint = ink(0.55f), modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(12.dp))
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier.weight(1f).onFocusChanged { focused = it.isFocused },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = TextPrimary),
+            cursorBrush = SolidColor(accent),
+            decorationBox = { inner ->
+                Box(contentAlignment = Alignment.CenterStart) {
+                    if (query.isEmpty()) {
+                        Text("Artists, songs, albums", style = MaterialTheme.typography.bodyLarge, color = TextTertiary)
+                    }
+                    inner()
+                }
+            },
+        )
+        if (query.isNotEmpty()) {
+            IconButton(onClick = { onQueryChange("") }) {
+                Icon(PhosphorIcons.Light.X, "Clear", tint = ink(0.6f), modifier = Modifier.size(20.dp))
+            }
         }
-        Spacer(Modifier.height(16.dp))
-        Text("A softer soundtrack", style = MaterialTheme.typography.titleLarge, color = HushInk)
-        Text("Search for something that feels like now.", color = HushMist)
     }
 }
 
 @Composable
-private fun TrackResultRow(track: Track, isResolving: Boolean, onTrackSelected: (Track) -> Unit) {
+private fun TrackResultRow(track: Track, isResolving: Boolean, accent: Color, onTrackSelected: (Track) -> Unit) {
     Row(
         Modifier.fillMaxWidth().pressScale(onClick = { onTrackSelected(track) }, scaleDown = 0.98f).padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // YouTube thumbnails keep their own 16:9 shape (bar-free frame), everything else is square.
+        val isYoutubeThumb = track.albumArtUrl?.let { "ytimg.com" in it || "img.youtube.com" in it } == true
         SubcomposeAsyncImage(
-            model = track.albumArtUrl,
+            model = squareArtUrl(track.albumArtUrl, 300),
             contentDescription = null,
-            modifier = Modifier.size(52.dp).acrylicFrame(ArtworkShape, strength = 0.4f),
+            modifier = Modifier
+                .size(width = if (isYoutubeThumb) 100.dp else 56.dp, height = 56.dp)
+                .shadow(3.dp, ArtShape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
+                .clip(ArtShape),
             contentScale = ContentScale.Crop,
-            loading = { Icon(PhosphorIcons.Light.MusicNote, null, tint = HushMist) },
-            error = { Icon(PhosphorIcons.Light.MusicNote, null, tint = HushMist) },
+            loading = { ArtworkPlaceholder() },
+            error = { ArtworkPlaceholder() },
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-            Text(track.title, style = MaterialTheme.typography.titleMedium, color = HushInk, maxLines = 1)
+            Text(
+                track.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = HushMist, maxLines = 1)
+                Text(
+                    track.artist,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
                 // Distinguishes fan edits / bootlegs / off-catalog finds (source = YOUTUBE,
                 // no MusicBrainz match) from the canonical catalog tracks above them.
                 if (track.source == TrackSource.YOUTUBE) {
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(8.dp))
                     Text(
                         "YouTube",
                         style = MaterialTheme.typography.labelSmall,
-                        color = HushAccentA,
+                        color = ink(0.75f),
                         modifier = Modifier
-                            .clip(PillShape)
-                            .background(HushAccentA.copy(alpha = 0.12f), PillShape)
+                            .clip(TagShape)
+                            .background(ink(0.10f), TagShape)
                             .padding(horizontal = 6.dp, vertical = 1.dp),
                     )
                 }
             }
-            if (isResolving) Text("Checking a verified source", style = MaterialTheme.typography.labelMedium, color = HushAccentA)
+            if (isResolving) {
+                Text("Checking a verified source", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
+            }
         }
-        if (isResolving) CircularProgressIndicator(Modifier.size(16.dp), color = HushAccentA, strokeWidth = 2.dp)
+        if (isResolving) {
+            CircularProgressIndicator(Modifier.size(16.dp), color = accent, strokeWidth = 1.5.dp)
+        }
     }
 }
 
 @Composable
-private fun BottomNavigation(onLibrary: () -> Unit, onPlayer: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceAround,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(PhosphorIcons.Light.MagnifyingGlass, null, tint = HushAccentA)
-            Text("Discover", color = HushAccentA, style = MaterialTheme.typography.labelMedium)
-        }
-        Column(Modifier.pressScale(onClick = onLibrary), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(PhosphorIcons.Light.VinylRecord, null, tint = HushMist)
-            Text("Library", color = HushMist, style = MaterialTheme.typography.labelMedium)
-        }
-        Column(Modifier.pressScale(onClick = onPlayer), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(PhosphorIcons.Light.MusicNote, null, tint = HushMist)
-            Text("Now playing", color = HushMist, style = MaterialTheme.typography.labelMedium)
-        }
+private fun ArtworkPlaceholder() {
+    Box(Modifier.fillMaxSize().background(ink(0.08f)), contentAlignment = Alignment.Center) {
+        Icon(PhosphorIcons.Light.MusicNote, null, tint = ink(0.45f), modifier = Modifier.size(22.dp))
     }
 }

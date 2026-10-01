@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -68,12 +69,14 @@ private val HushColors = lightColorScheme(
 
 /**
  * Fonts, bundled as .ttf under THIS module's res/font/
- * (core/core-designsystem/src/main/res/font/).
+ * (core/core-designsystem/src/main/res/font/). File names must be lowercase a-z, 0-9 and underscores,
+ * so CodeNext-ExtraBold.ttf has to be named codenext_extrabold.ttf, and so on.
+ *
+ * CodeNext ExtraBold (and its italic, via fontStyle = FontStyle.Italic) is the display face for headings.
  */
-private val HushDisplayFont = FontFamily(
-    Font(R.font.manrope_regular, FontWeight.Normal),
-    Font(R.font.manrope_medium, FontWeight.Medium),
-    Font(R.font.manrope_semibold, FontWeight.SemiBold),
+val HushDisplayFont = FontFamily(
+    Font(R.font.codenext_extrabold, FontWeight.ExtraBold, FontStyle.Normal),
+    Font(R.font.codenext_extrabolditalic, FontWeight.ExtraBold, FontStyle.Italic),
 )
 
 private val HushBodyFont = FontFamily(
@@ -84,10 +87,10 @@ private val HushBodyFont = FontFamily(
 
 private val HushTypography = Typography().run {
     copy(
-        displayLarge = displayLarge.copy(fontFamily = HushDisplayFont, fontWeight = FontWeight.SemiBold, fontSize = 34.sp, lineHeight = 38.sp, letterSpacing = (-0.3).sp),
-        headlineLarge = headlineLarge.copy(fontFamily = HushDisplayFont, fontWeight = FontWeight.SemiBold, fontSize = 26.sp, lineHeight = 30.sp),
-        headlineMedium = headlineMedium.copy(fontFamily = HushDisplayFont, fontWeight = FontWeight.Medium, fontSize = 21.sp, lineHeight = 26.sp),
-        titleLarge = titleLarge.copy(fontFamily = HushDisplayFont, fontWeight = FontWeight.Medium, fontSize = 18.sp, lineHeight = 23.sp),
+        displayLarge = displayLarge.copy(fontFamily = HushDisplayFont, fontWeight = FontWeight.ExtraBold, fontSize = 34.sp, lineHeight = 38.sp, letterSpacing = (-0.3).sp),
+        headlineLarge = headlineLarge.copy(fontFamily = HushDisplayFont, fontWeight = FontWeight.ExtraBold, fontSize = 26.sp, lineHeight = 30.sp),
+        headlineMedium = headlineMedium.copy(fontFamily = HushDisplayFont, fontWeight = FontWeight.ExtraBold, fontSize = 21.sp, lineHeight = 26.sp),
+        titleLarge = titleLarge.copy(fontFamily = HushDisplayFont, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, lineHeight = 23.sp),
         titleMedium = titleMedium.copy(fontFamily = HushBodyFont, fontWeight = FontWeight.Medium, fontSize = 15.sp, lineHeight = 20.sp),
         bodyLarge = bodyLarge.copy(fontFamily = HushBodyFont, fontSize = 16.sp, lineHeight = 22.sp),
         bodyMedium = bodyMedium.copy(fontFamily = HushBodyFont, fontSize = 14.sp, lineHeight = 19.sp),

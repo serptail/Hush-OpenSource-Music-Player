@@ -1,6 +1,12 @@
 package com.hush.feature.playerui
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.os.Build
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -18,6 +24,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
@@ -46,8 +53,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,7 +63,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -70,26 +76,28 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asAndroidPath
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -109,16 +117,33 @@ import com.adamglin.phosphoricons.light.Shuffle
 import com.adamglin.phosphoricons.light.SkipBack
 import com.adamglin.phosphoricons.light.SkipForward
 import com.adamglin.phosphoricons.light.SpeakerHigh
+import com.hush.core.designsystem.CoverPalette
 import com.hush.core.model.PlaybackState
 import com.hush.core.model.Track
 import com.hush.core.player.MusicPlayer
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 import kotlin.math.hypot
+import kotlin.math.pow
+import kotlin.math.roundToInt
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import org.json.JSONArray
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.core.graphics.drawable.toBitmapOrNull
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.get
@@ -130,15 +155,31 @@ import coil.request.SuccessResult
 
 // ---- Sizing (no dynamic-palette dependency) ----
 private val CoverShape = RoundedCornerShape(30.dp)
-private val CoverCornerRadius = 30.dp
-private val MaxCoverSize = 290.dp   // upper bound only; the real size comes from the space available
+private val CoverCornerRadius = 30.dp   // same corner as the album cards on Discover
+private val BackgroundBlur = 56.dp   // how hard the cover is blurred behind the screen (acrylic wants it soft, not recognisable)
+private val MaxCoverSize = 360.dp   // upper bound only; the real size comes from the space available (the width between prev / next)
 private val RingGap = 3.5.dp     // same gap distance as before, now measured outward instead of inward
 private val RingStrokeWidth = 1.5.dp
-private val RingClearance = 28.dp     // total (both sides) room for gap + stroke + shadow blur outside the cover
+private val RingOutlineWidth = 0.5.dp   // extremely thin gray outline, per side, around the progress line
+private val RingOutlineColor = Color(0xFF8C8C8C)
+private const val PausedCoverScale = 0.96f   // the cover settles a touch smaller while paused (set to 1f to turn off)
+
+// Scrubbing visuals (shown while the progress line is being dragged). Everything here has to fit in
+// the space between the ring and the edge of its box: RingInset - (RingGap + stroke/2) ~= 13.75dp.
+private val WaveBarWidth = 1.5.dp
+private val WaveBarPitch = 4.dp          // distance between bar centers along the line
+private val WaveStartOffset = 2.5.dp     // gap between the line's center and the base of a bar
+private val WaveMinLength = 2.dp         // quietest bar
+private val WaveMaxLength = 10.dp        // tallest bar; base + length + cap (~13.25dp) stays inside the box
+private val ScrubKnobRadius = 4.dp
+private val ScrubDashHalfLength = 3.dp
+private val ScrubDashWidth = 2.dp
+private val RingClearance = 36.dp     // total (both sides) room for gap + stroke + waveform outside the cover
 private val RingInset = RingClearance / 2  // the same room, per side
 
 @Composable
 fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
+    TransparentStatusBar()
     val state by player.playbackState.collectAsState()
     val track = (state as? PlaybackState.Playing)?.track ?: (state as? PlaybackState.Paused)?.track
     val position = (state as? PlaybackState.Playing)?.positionMs ?: (state as? PlaybackState.Paused)?.positionMs ?: 0L
@@ -156,7 +197,7 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
         baseTimestamp = System.currentTimeMillis()
     }
     var smoothPositionMs by remember { mutableFloatStateOf(position.toFloat()) }
-    LaunchedEffect(isPlaying, basePosition) {
+    LaunchedEffect(isPlaying, basePosition, duration) {
         if (!isPlaying) {
             smoothPositionMs = basePosition.toFloat()
         } else {
@@ -167,13 +208,24 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
             }
         }
     }
-    val progress = (smoothPositionMs / duration).coerceIn(0f, 1f)
+    // While the progress line is being dragged, the line (and the time label) follow the finger and the
+    // real seek happens once, on release. Everything below is read inside lambdas, so the per-frame
+    // position only invalidates the small pieces that draw it instead of recomposing the whole screen.
+    var scrubFraction by remember { mutableStateOf<Float?>(null) }
+    val progressProvider = remember(duration) { { scrubFraction ?: (smoothPositionMs / duration).coerceIn(0f, 1f) } }
+    val positionProvider = remember(duration) { { (progressProvider() * duration).toLong() } }
 
     // Lyrics state
     var lyricsState by remember { mutableStateOf<LyricsState>(LyricsState.Loading) }
     var lyricsExpanded by remember { mutableStateOf(true) }
     // Highlight color for the lyrics, pulled from the cover art.
-    val accent = rememberCoverAccent(track?.albumArtUrl)
+    // Computed once per track (this screen recomposes every frame while playing).
+    val rawArt = track?.albumArtUrl
+    val artUrl = remember(rawArt) { backdropArtUrl(rawArt) }   // blurred backdrops + accent
+    val coverUrl = remember(rawArt) { squareArtUrl(rawArt) }   // the cover itself
+    val accent = rememberCoverAccent(artUrl)
+    val waveform = rememberWaveform(track)
+    var rootSize by remember { mutableStateOf(IntSize.Zero) } // lets the lyrics card line its blurred art up with the screen background
 
     // Fetch lyrics when track changes
     LaunchedEffect(track?.isrc) {
@@ -186,83 +238,91 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
         lyricsState = LyricsRepository.fetchLyrics(currentTrack)
     }
 
-    Box(Modifier.fillMaxSize().background(Color(0xFF121014))) {
-
-        // Real cover art, blurred. It is kept subtle (24dp, not 80), so it reads
-        // as frosted glass over a photo rather than a mushy color wash.
-        if (track?.albumArtUrl != null) {
+    // Base = the same flat fill as Discover / Library. With a track loaded, an acrylic surface goes on top of
+    // it: the cover heavily blurred, a frosted tint in the base color, a faint white veil, and a diagonal
+    // sheen. Nothing loaded: none of those layers are drawn, so it is just the flat fill.
+    Box(Modifier.fillMaxSize().onSizeChanged { rootSize = it }.background(CoverPalette.Neutral.base)) {
+        if (artUrl != null) {
             AsyncImage(
-                model = track.albumArtUrl,
+                model = rememberFadeRequest(artUrl),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { scaleX = 1.15f; scaleY = 1.15f }
-                    .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(24.dp) else Modifier),
+                    .graphicsLayer { scaleX = 1.3f; scaleY = 1.3f }   // overscan, so the blur never shows an edge
+                    .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(BackgroundBlur) else Modifier),
+            )
+            // Frosted tint: the app's base color, translucent, denser toward the bottom where the controls are.
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        listOf(
+                            CoverPalette.Neutral.base.copy(alpha = 0.50f),
+                            CoverPalette.Neutral.base.copy(alpha = 0.78f),
+                        ),
+                    ),
+                ),
+            )
+            // Luminosity veil: a hint of white, the milky depth that makes it read as acrylic and not just dimmed.
+            Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.05f)))
+            // Diagonal sheen, brightest top-left where light would hit the slab.
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.linearGradient(
+                        colors = listOf(Color.White.copy(alpha = 0.13f), Color.White.copy(alpha = 0.02f), Color.White.copy(alpha = 0.06f)),
+                        start = Offset(0f, 0f),
+                        end = Offset(1000f, 1700f),
+                    ),
+                ),
             )
         }
-        // Glass tint: a translucent, faintly cool-tinted layer (not flat black)
-        // reads as acrylic rather than as a dark overlay.
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(
-                    listOf(Color(0x99151318), Color(0xCC0E0C10)),
-                ),
-            ),
-        )
-        // A faint diagonal sheen across the whole glass surface — the gloss cue.
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.linearGradient(
-                    colors = listOf(Color.White.copy(alpha = 0.06f), Color.Transparent),
-                    start = Offset(0f, 0f),
-                    end = Offset(900f, 1400f),
-                ),
-            ),
-        )
 
         Column(
             Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp),
         ) {
             TopBar(onBack, Modifier.fillMaxWidth())
 
+            // Nothing playing: a stripped-down screen (title at the top, empty vinyl, prev/next
+            // and the control row). No artist line, favorite button, timestamps, progress line
+            // or lyrics card.
+            val hasTrack = track != null
+
             Spacer(Modifier.height(20.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
-                    Text(
-                        track?.title ?: "Nothing playing",
-                        style = MaterialTheme.typography.headlineLarge,
+                    BouncingText(
+                        text = track?.title ?: "No song",
+                        style = MaterialTheme.typography.headlineLarge.copy(letterSpacing = (-0.3).sp),
                         color = Color.White,
-                        maxLines = 1,
                     )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        track?.artist ?: "Choose something to play",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Color.White.copy(alpha = 0.65f),
-                        maxLines = 1,
-                    )
+                    if (hasTrack) {
+                        Spacer(Modifier.height(2.dp))
+                        BouncingText(
+                            text = track?.artist ?: "",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color.White.copy(alpha = 0.65f),
+                        )
+                    }
                 }
-                Icon(
-                    PhosphorIcons.Light.Heart, "Favorite", tint = Color.White,
-                    modifier = Modifier.bounceTap(onClick = {}).padding(4.dp).size(26.dp),
-                )
+                if (hasTrack) {
+                    DepthIcon(PhosphorIcons.Light.Heart, "Favorite", Modifier.bounceTap(onClick = {}).padding(4.dp), size = 26.dp)
+                }
             }
 
-            Spacer(Modifier.height(20.dp))
+            // Gap between the title row and the cover: bigger = cover + controls sit lower / more central.
+            Spacer(Modifier.height(40.dp))
+            if (!hasTrack) Spacer(Modifier.weight(1f)) // centers the vinyl + controls in the space under the title
 
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                Icon(
-                    PhosphorIcons.Light.SkipBack, "Previous", tint = Color.White,
-                    modifier = Modifier.bounceTap(onClick = player::skipPrevious).padding(14.dp).size(28.dp),
-                )
+                DepthIcon(PhosphorIcons.Light.SkipBack, "Previous", Modifier.bounceTap(onClick = player::skipPrevious).padding(8.dp), size = 28.dp)
                 ArtworkWithRing(
                     modifier = Modifier.weight(1f),
-                    url = track?.albumArtUrl,
-                    progress = progress,
+                    url = coverUrl,
+                    progress = progressProvider,
+                    onScrub = { scrubFraction = it },
                     isPlaying = isPlaying,
                     enabled = track != null,
-                    isEdgeLight = rememberIsEdgeLight(track?.albumArtUrl),
+                    waveform = waveform,
                     onTogglePlay = { if (isPlaying) player.pause() else player.resume() },
                     onSeekFraction = { fraction ->
                         // Move the line right away instead of waiting for the player's next
@@ -274,39 +334,39 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
                         player.seekTo(target)
                     },
                 )
-                Icon(
-                    PhosphorIcons.Light.SkipForward, "Next", tint = Color.White,
-                    modifier = Modifier.bounceTap(onClick = player::skipNext).padding(14.dp).size(28.dp),
-                )
+                DepthIcon(PhosphorIcons.Light.SkipForward, "Next", Modifier.bounceTap(onClick = player::skipNext).padding(8.dp), size = 28.dp)
             }
 
             Spacer(Modifier.height(14.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(formatTime(smoothPositionMs.toLong()), color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelMedium)
-                Text(formatTime(track?.durationMs ?: 0L), color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelMedium)
-            }
+            if (hasTrack) TimeRow(positionProvider, track?.durationMs ?: 0L)
 
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                Icon(PhosphorIcons.Light.Shuffle, "Shuffle", tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.bounceTap(onClick = {}).padding(8.dp).size(22.dp))
-                Icon(PhosphorIcons.Light.Repeat, "Repeat", tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.bounceTap(onClick = {}).padding(8.dp).size(22.dp))
-                Icon(PhosphorIcons.Light.Queue, "Queue", tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.bounceTap(onClick = {}).padding(8.dp).size(22.dp))
+                DepthIcon(PhosphorIcons.Light.Shuffle, "Shuffle", Modifier.bounceTap(onClick = {}).padding(8.dp), tint = Color.White.copy(alpha = 0.85f), size = 22.dp)
+                DepthIcon(PhosphorIcons.Light.Repeat, "Repeat", Modifier.bounceTap(onClick = {}).padding(8.dp), tint = Color.White.copy(alpha = 0.85f), size = 22.dp)
+                DepthIcon(PhosphorIcons.Light.Queue, "Queue", Modifier.bounceTap(onClick = {}).padding(8.dp), tint = Color.White.copy(alpha = 0.85f), size = 22.dp)
             }
 
             Spacer(Modifier.height(16.dp))
 
-            // Lyrics: a collapsible card that takes whatever space is left below the controls.
-            LyricsSection(
-                lyricsState = lyricsState,
-                positionMs = { smoothPositionMs.toLong() },
-                accent = accent,
-                expanded = lyricsExpanded,
-                onToggle = { lyricsExpanded = !lyricsExpanded },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .padding(bottom = 16.dp),
-            )
+            if (hasTrack) {
+                // Lyrics: a collapsible card that takes whatever space is left below the controls.
+                LyricsSection(
+                    lyricsState = lyricsState,
+                    positionMs = { smoothPositionMs.toLong() },
+                    accent = accent,
+                    expanded = lyricsExpanded,
+                    onToggle = { lyricsExpanded = !lyricsExpanded },
+                    backdropUrl = artUrl,
+                    backdropSize = rootSize,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(bottom = 16.dp),
+                )
+            } else {
+                Spacer(Modifier.weight(1f))
+            }
         }
     }
 }
@@ -314,11 +374,11 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
 @Composable
 private fun TopBar(onBack: () -> Unit, modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Icon(PhosphorIcons.Light.CaretDown, "Collapse", tint = Color.White, modifier = Modifier.tapTarget(onClick = onBack).padding(8.dp))
+        DepthIcon(PhosphorIcons.Light.CaretDown, "Collapse", Modifier.tapTarget(onClick = onBack).padding(8.dp))
         Spacer(Modifier.weight(1f))
-        Icon(PhosphorIcons.Light.SpeakerHigh, "Volume", tint = Color.White, modifier = Modifier.tapTarget(onClick = {}).padding(8.dp))
-        Icon(PhosphorIcons.Light.Equalizer, "Equalizer", tint = Color.White, modifier = Modifier.tapTarget(onClick = {}).padding(8.dp))
-        Icon(PhosphorIcons.Light.DotsThreeVertical, "More", tint = Color.White, modifier = Modifier.tapTarget(onClick = {}).padding(8.dp))
+        DepthIcon(PhosphorIcons.Light.SpeakerHigh, "Volume", Modifier.tapTarget(onClick = {}).padding(8.dp))
+        DepthIcon(PhosphorIcons.Light.Equalizer, "Equalizer", Modifier.tapTarget(onClick = {}).padding(8.dp))
+        DepthIcon(PhosphorIcons.Light.DotsThreeVertical, "More", Modifier.tapTarget(onClick = {}).padding(8.dp))
     }
 }
 
@@ -331,21 +391,36 @@ private fun TopBar(onBack: () -> Unit, modifier: Modifier = Modifier) {
 private fun ArtworkWithRing(
     modifier: Modifier = Modifier,
     url: String?,
-    progress: Float,
+    progress: () -> Float,
     isPlaying: Boolean,
     enabled: Boolean,
-    isEdgeLight: Boolean,
+    waveform: FloatArray,
     onTogglePlay: () -> Unit,
+    onScrub: (Float?) -> Unit,
     onSeekFraction: (Float) -> Unit,
 ) {
+    // Stretched + exaggerated once, so loud and quiet parts of the song look clearly different.
+    val shapedWaveform = remember(waveform) { shapeWaveform(waveform) }
     var tapTrigger by remember { mutableIntStateOf(0) }
     var iconVisible by remember { mutableStateOf(true) }
-    var ringPx by remember { mutableIntStateOf(0) } // measured side of the square ring box
+    var ringSize by remember { mutableStateOf(IntSize.Zero) } // measured size of the ring box
+    var scrubbing by remember { mutableStateOf(false) }
+    // 0 -> 1 while the line is being dragged; drives the waveform, dash and knob.
+    val scrub by animateFloatAsState(if (scrubbing) 1f else 0f, tween(180), label = "scrub")
 
-    // The gesture block below is keyed on (enabled, ringPx) only, so without these it would keep
+    // The gesture block below is keyed on (enabled, ringSize) only, so without these it would keep
     // calling the first lambdas it ever saw (stale `duration`, stale `isPlaying`).
     val currentToggle by rememberUpdatedState(onTogglePlay)
     val currentSeek by rememberUpdatedState(onSeekFraction)
+    val currentScrub by rememberUpdatedState(onScrub)
+    val haptics = LocalHapticFeedback.current
+
+    // Settles slightly smaller while paused and lifts back when playback starts.
+    val coverScale by animateFloatAsState(
+        targetValue = if (enabled && !isPlaying) PausedCoverScale else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
+        label = "cover-scale",
+    )
 
     LaunchedEffect(isPlaying, tapTrigger) {
         iconVisible = true
@@ -356,280 +431,430 @@ private fun ArtworkWithRing(
     }
     val iconAlpha by animateFloatAsState(if (iconVisible) 1f else 0f, animationSpec = tween(220), label = "icon-alpha")
 
+    // YouTube thumbnails are 16:9 frames, so for them the cover takes the thumbnail's own shape
+    // instead of a square (no bars, nothing cropped). The aspect comes from the loaded image, so
+    // odd sizes are exact too; it is 16:9 until the image has loaded. Everything else stays square.
+    val youtubeThumbs = remember(url) { url?.let(::youtubeThumbCandidates) }
+    var attempt by remember(url) { mutableIntStateOf(0) }
+    val shownUrl = youtubeThumbs?.get(attempt.coerceAtMost(youtubeThumbs.lastIndex)) ?: url
+    var loadedAspect by remember(shownUrl) { mutableStateOf<Float?>(null) }
+    val targetAspect = if (enabled && youtubeThumbs != null) (loadedAspect ?: (16f / 9f)).coerceIn(1f, 2f) else 1f
+    val aspect by animateFloatAsState(targetAspect, tween(250), label = "cover-aspect")
+
     // The caller decides how much width we get: the space between the prev/next
-    // icons. The ring box fills that width up to a maximum and stays square.
-    // Every inner size derives from it, so nothing depends on a fixed dp value.
+    // icons. The ring box fills that width up to a maximum; its height follows the cover's
+    // aspect (square by default). Every inner size derives from it, so nothing depends on a
+    // fixed dp value.
     Box(modifier, contentAlignment = Alignment.Center) {
         Box(
             Modifier
                 .widthIn(max = MaxCoverSize + RingClearance)
                 .fillMaxWidth()
-                .aspectRatio(1f),
+                .layout { measurable, constraints ->
+                    val w = constraints.maxWidth
+                    val clearance = RingClearance.roundToPx()
+                    val h = ((w - clearance) / aspect).roundToInt() + clearance
+                    val placeable = measurable.measure(Constraints.fixed(w, h))
+                    layout(w, h) { placeable.place(0, 0) }
+                }
+                .graphicsLayer { scaleX = coverScale; scaleY = coverScale },
             contentAlignment = Alignment.Center,
         ) {
-            // Soft ambient glow, sized and blurred enough to sit behind the
-            // shape rather than smear into its edge.
-            Box(
-                Modifier
-                    .padding(RingInset)
-                    .fillMaxSize(0.82f)
-                    .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(40.dp) else Modifier)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.14f)),
-            )
-            // Lift the cover off the background, so it doesn't flatten into the
-            // blurred backdrop behind it.
             Box(
                 Modifier
                     .padding(RingInset)
                     .fillMaxSize()
-                    .shadow(elevation = 18.dp, shape = CoverShape, ambientColor = Color.Black, spotColor = Color.Black, clip = false)
-                    .clip(CoverShape)
-                    .background(Color.Transparent),
-            )
-
-            Box(
-                Modifier
-                    .padding(RingInset)
-                    .fillMaxSize()
+                    // One soft drop shadow: the same card look as Discover's album cards. No rim, no glow.
+                    .shadow(elevation = 14.dp, shape = CoverShape, ambientColor = Color.Black, spotColor = Color.Black, clip = false)
                     .clip(CoverShape),
                 contentAlignment = Alignment.Center,
             ) {
-                SubcomposeAsyncImage(
-                    model = url,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                    loading = { ArtworkPlaceholder() },
-                    error = { ArtworkPlaceholder() },
-                )
-                Box(
-                    Modifier.fillMaxSize().background(
-                        Brush.linearGradient(
-                            colors = listOf(Color.White.copy(alpha = 0.16f), Color.Transparent),
-                            start = Offset(0f, 0f),
-                            end = Offset(300f, 380f),
-                        ),
-                    ),
-                )
-                Box(
-                    Modifier
-                        .size(64.dp)
-                        .graphicsLayer { alpha = iconAlpha }
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.35f))
-                        .border(1.dp, Color.White.copy(alpha = 0.4f), CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        if (isPlaying) PhosphorIcons.Light.Pause else PhosphorIcons.Light.Play,
-                        contentDescription = if (isPlaying) "Pause" else "Play",
-                        tint = Color.White,
-                        modifier = Modifier.size(30.dp),
+                if (enabled) {
+                    // The whole image is shown (Fit) in a box of its own shape, so nothing is cut off.
+                    // If it still doesn't fill the box (an outlier), a heavily blurred copy of it fills
+                    // the space around it instead of bars.
+                    AsyncImage(
+                        model = shownUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { scaleX = 1.3f; scaleY = 1.3f }
+                            .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(28.dp) else Modifier),
                     )
+                    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
+                    SubcomposeAsyncImage(
+                        model = shownUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit,
+                        loading = { Box(Modifier.fillMaxSize()) },   // empty while loading: a light placeholder reads as a white flash on entry
+                        error = { ArtworkPlaceholder() },
+                        // A YouTube size that doesn't exist for this video: try the next one.
+                        onError = { if (youtubeThumbs != null && attempt < youtubeThumbs.lastIndex) attempt++ },
+                        onSuccess = { state ->
+                            val size = state.painter.intrinsicSize
+                            if (size.width > 0f && size.height > 0f) loadedAspect = size.width / size.height
+                        },
+                    )
+                } else {
+                    EmptyVinyl()
+                }
+                // No circle behind the icon anymore, just the bare glyph (a bit larger so it
+                // still reads on top of the artwork).
+                // Nothing loaded: no play/pause glyph at all, the empty vinyl stands alone.
+                if (enabled) {
+                    Box(
+                        Modifier
+                            .size(64.dp)
+                            .graphicsLayer { alpha = iconAlpha },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        DepthIcon(
+                            if (isPlaying) PhosphorIcons.Light.Pause else PhosphorIcons.Light.Play,
+                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            size = 44.dp,
+                        )
+                    }
                 }
             }
 
-            // Progress line, sitting outside the cover. Its color flips to dark
-            // whenever the artwork's own edges read as light (see
-            // rememberIsEdgeLight), so it stays visible against a pale cover
-            // instead of washing out.
-            Canvas(
+            // Progress line, sitting outside the cover. It is always white, with a
+            // hairline gray outline so it stays visible against pale covers.
+            // Drawn with drawWithCache: the ring's geometry (path, measurements, paints, waveform bars) is
+            // built once per size change instead of every frame, and `progress` is only read while drawing,
+            // so a moving line redraws this layer alone and never recomposes anything.
+            Box(
                 Modifier
                     .fillMaxSize()
-                    .onSizeChanged { ringPx = it.width }
-                    .pointerInput(enabled, ringPx) {
-                        if (!enabled || ringPx == 0) return@pointerInput
+                    .onSizeChanged { ringSize = it }
+                    .pointerInput(enabled, ringSize) {
+                        if (!enabled || ringSize.width == 0) return@pointerInput
                         val marginPx = RingInset.toPx()
-                        val coverPx = ringPx - RingClearance.toPx()
+                        val coverW = ringSize.width - RingClearance.toPx()
+                        val coverH = ringSize.height - RingClearance.toPx()
                         val gapPx = RingGap.toPx() + RingStrokeWidth.toPx() / 2f
-                        val path = outerRingPath(coverPx, marginPx, gapPx, CoverCornerRadius.toPx())
+                        val path = outerRingPath(coverW, coverH, marginPx, gapPx, CoverCornerRadius.toPx())
                         val measure = PathMeasure().apply { setPath(path, false) }
                         val total = measure.length
-                        val start = topAnchorOffset(path, measure)
                         val samples = 300
                         val pts = List(samples) { measure.getPosition(total * it / samples) }
 
                         // The line is only ~1.5dp thick, so it gets a generous touch band. The
                         // band stops short of the cover's interior so taps on the artwork itself
                         // still mean play/pause.
-                        val coverInner = Rect(marginPx, marginPx, marginPx + coverPx, marginPx + coverPx)
+                        val coverInner = Rect(marginPx, marginPx, marginPx + coverW, marginPx + coverH)
                             .deflate(10.dp.toPx())
                         val hitRadius = 20.dp.toPx()
                         fun nearLine(p: Offset) =
                             !coverInner.contains(p) && pts.minOf { hypot(it.x - p.x, it.y - p.y) } < hitRadius
-                        fun seek(p: Offset) {
+                        // Where along the line (0..1) the finger is, from the closest sampled point.
+                        fun fractionAt(p: Offset): Float {
                             var best = 0; var bestD = Float.MAX_VALUE
                             pts.forEachIndexed { i, o ->
                                 val d = hypot(o.x - p.x, o.y - p.y)
                                 if (d < bestD) { bestD = d; best = i }
                             }
-                            val dist = total * best / samples
-                            currentSeek((((dist - start) % total + total) % total / total).coerceIn(0f, 1f))
+                            return (best.toFloat() / samples).coerceIn(0f, 1f)
                         }
 
                         // detectDragGestures only reacts once the finger has moved past the touch
                         // slop, so a plain tap on the line did nothing. Handle down/drag/up by
-                        // hand: a touch on the line seeks immediately and follows the finger.
+                        // hand: a touch on the line grabs it immediately and follows the finger.
+                        // While held, only the preview moves; the player is asked to seek once, on
+                        // release (a seek per touch event makes the audio stutter and the line creep
+                        // away from a resting finger while the song keeps playing).
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
                             if (nearLine(down.position)) {
                                 down.consume()
-                                seek(down.position)
-                                drag(down.id) { change ->
-                                    change.consume()
-                                    seek(change.position)
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                scrubbing = true
+                                var last = fractionAt(down.position)
+                                try {
+                                    currentScrub(last)
+                                    val released = drag(down.id) { change ->
+                                        change.consume()
+                                        val f = fractionAt(change.position)
+                                        // The line is a closed loop: crossing its start/end seam pins the
+                                        // thumb to that end instead of teleporting it to the other one.
+                                        last = if (abs(f - last) > 0.5f) (if (last > 0.5f) 1f else 0f) else f
+                                        currentScrub(last)
+                                    }
+                                    if (released) currentSeek(last)
+                                } finally {
+                                    scrubbing = false
+                                    currentScrub(null)
                                 }
                             } else {
                                 // This layer sits above the cover, so it also owns the cover tap.
                                 val up = waitForUpOrCancellation()
                                 if (up != null) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     currentToggle()
                                     tapTrigger++
                                 }
                             }
                         }
-                    },
-            ) {
-                val marginPx = RingInset.toPx()
-                val coverPx = size.width - RingClearance.toPx()
-                val gapPx = RingGap.toPx() + RingStrokeWidth.toPx() / 2f
-                val path = outerRingPath(coverPx, marginPx, gapPx, CoverCornerRadius.toPx())
-                val measure = PathMeasure().apply { setPath(path, false) }
-                val total = measure.length
-                val start = topAnchorOffset(path, measure)
-
-                // Faint full-length track, so the whole line is visible before it fills.
-                drawPath(
-                    path = path,
-                    color = (if (isEdgeLight) Color.Black else Color.White).copy(alpha = 0.22f),
-                    style = Stroke(width = RingStrokeWidth.toPx()),
-                )
-
-                if (progress > 0f) {
-                    val len = total * progress
-                    val filled = Path()
-                    val end = start + len
-                    if (end <= total) {
-                        measure.getSegment(start, end, filled, true)
-                    } else {
-                        measure.getSegment(start, total, filled, true)
-                        measure.getSegment(0f, end - total, filled, true)
                     }
-                    val lineColor = if (isEdgeLight) android.graphics.Color.BLACK else android.graphics.Color.WHITE
-                    drawIntoCanvas { canvas ->
-                        val paint = android.graphics.Paint().apply {
+                    .drawWithCache {
+                        // Nothing playing: no progress line at all.
+                        if (!enabled) return@drawWithCache onDrawBehind {}
+                        val marginPx = RingInset.toPx()
+                        val coverW = size.width - RingClearance.toPx()
+                        val coverH = size.height - RingClearance.toPx()
+                        val gapPx = RingGap.toPx() + RingStrokeWidth.toPx() / 2f
+                        val path = outerRingPath(coverW, coverH, marginPx, gapPx, CoverCornerRadius.toPx())
+                        val measure = PathMeasure().apply { setPath(path, false) }
+                        val total = measure.length
+                        val strokePx = RingStrokeWidth.toPx()
+                        val outlinePx = RingOutlineWidth.toPx()
+
+                        // Reused every frame (no per-frame allocation).
+                        val filled = Path()
+                        // Gray outline underneath: same path, slightly thicker than the white line.
+                        val outlinePaint = android.graphics.Paint().apply {
                             isAntiAlias = true
                             style = android.graphics.Paint.Style.STROKE
-                            strokeWidth = RingStrokeWidth.toPx()
+                            strokeWidth = strokePx + outlinePx * 2f
                             strokeCap = android.graphics.Paint.Cap.ROUND
-                            color = lineColor
+                            color = RingOutlineColor.toArgb()
                             setShadowLayer(3.dp.toPx(), 0f, 1.dp.toPx(), android.graphics.Color.argb(80, 0, 0, 0))
                         }
-                        canvas.nativeCanvas.drawPath(filled.asAndroidPath(), paint)
-                    }
-                }
-            }
+                        val linePaint = android.graphics.Paint().apply {
+                            isAntiAlias = true
+                            style = android.graphics.Paint.Style.STROKE
+                            strokeWidth = strokePx
+                            strokeCap = android.graphics.Paint.Cap.ROUND
+                            color = android.graphics.Color.WHITE
+                        }
+
+                        // Scrub visuals. Bar positions, directions and heights never change for a given
+                        // size / track, so they are worked out once here.
+                        val barW = WaveBarWidth.toPx()
+                        val startOff = WaveStartOffset.toPx()
+                        val minLen = WaveMinLength.toPx()
+                        val maxLen = WaveMaxLength.toPx()
+                        val barCount = (total / WaveBarPitch.toPx()).toInt().coerceAtLeast(1)
+                        val barX = FloatArray(barCount)
+                        val barY = FloatArray(barCount)
+                        val barNx = FloatArray(barCount)
+                        val barNy = FloatArray(barCount)
+                        val barAmp = FloatArray(barCount)
+                        for (i in 0 until barCount) {
+                            val dist = total * (i + 0.5f) / barCount
+                            val pos = measure.getPosition(dist)
+                            val tan = measure.getTangent(dist)
+                            barX[i] = pos.x
+                            barY[i] = pos.y
+                            // The path runs clockwise, so (ty, -tx) points away from the cover.
+                            barNx[i] = tan.y
+                            barNy[i] = -tan.x
+                            barAmp[i] = waveformAt(shapedWaveform, i, barCount)
+                        }
+                        val dashHalfLength = ScrubDashHalfLength.toPx()
+                        val dashWidth = ScrubDashWidth.toPx()
+                        val knobRadius = ScrubKnobRadius.toPx()
+                        val startPoint = measure.getPosition(0f)
+
+                        onDrawBehind {
+                            val fill = progress()
+                            val reveal = scrub
+
+                            // Faint full-length track (with its hairline outline), so the whole line is
+                            // visible before it fills.
+                            drawPath(
+                                path = path,
+                                color = RingOutlineColor.copy(alpha = 0.45f),
+                                style = Stroke(width = strokePx + outlinePx * 2f),
+                            )
+                            drawPath(
+                                path = path,
+                                color = Color.White.copy(alpha = 0.22f),
+                                style = Stroke(width = strokePx),
+                            )
+
+                            if (fill > 0f) {
+                                filled.rewind()
+                                measure.getSegment(0f, total * fill, filled, true)
+                                drawIntoCanvas { canvas ->
+                                    val androidPath = filled.asAndroidPath()
+                                    canvas.nativeCanvas.drawPath(androidPath, outlinePaint)
+                                    canvas.nativeCanvas.drawPath(androidPath, linePaint)
+                                }
+                            }
+
+                            // While dragging: the track's waveform along the outside of the line, a small
+                            // dash where the track starts, and a knob at the current position.
+                            if (reveal > 0.01f) {
+                                for (i in 0 until barCount) {
+                                    val f = (i + 0.5f) / barCount
+                                    val len = (minLen + (maxLen - minLen) * barAmp[i]) * reveal
+                                    drawLine(
+                                        color = Color.White.copy(alpha = (if (f <= fill) 0.95f else 0.35f) * reveal),
+                                        start = Offset(barX[i] + barNx[i] * startOff, barY[i] + barNy[i] * startOff),
+                                        end = Offset(barX[i] + barNx[i] * (startOff + len), barY[i] + barNy[i] * (startOff + len)),
+                                        strokeWidth = barW,
+                                        cap = StrokeCap.Round,
+                                    )
+                                }
+
+                                // Start dash: the path begins at the top-center, where the line is horizontal,
+                                // so the dash is simply vertical.
+                                val half = dashHalfLength * reveal
+                                drawLine(
+                                    color = Color.White,
+                                    start = Offset(startPoint.x, startPoint.y - half),
+                                    end = Offset(startPoint.x, startPoint.y + half),
+                                    strokeWidth = dashWidth,
+                                    cap = StrokeCap.Round,
+                                )
+
+                                // Knob: plain filled circle, no outline.
+                                drawCircle(
+                                    color = Color.White,
+                                    radius = knobRadius * reveal,
+                                    center = measure.getPosition(total * fill),
+                                )
+                            }
+                        }
+                    },
+            )
         }
     }
 }
 
 /**
- * Builds the outward progress-line path. It is the cover's rectangle, grown
+ * Builds the outward progress-line path (the cover may be wider than tall). It is the cover's rectangle, grown
  * outward by [gapPx] on every side. The corner radius grows by the same
  * amount, so the curve stays concentric with the cover's own corners.
+ *
+ * The path is built by hand so it starts at the top-center and runs clockwise
+ * (right along the top edge, then down the right side, ...). addRoundRect's
+ * winding is not something to rely on, and the progress fill, seek math and
+ * waveform all depend on this order.
  */
-private fun outerRingPath(coverPx: Float, marginPx: Float, gapPx: Float, coverRadiusPx: Float): Path = Path().apply {
-    addRoundRect(
-        RoundRect(
-            left = marginPx - gapPx,
-            top = marginPx - gapPx,
-            right = marginPx + coverPx + gapPx,
-            bottom = marginPx + coverPx + gapPx,
-            cornerRadius = CornerRadius(coverRadiusPx + gapPx, coverRadiusPx + gapPx),
-        ),
-    )
-}
-
-/**
- * Finds the arc-length offset of the point on [path] closest to its own
- * top-center. It samples the path instead of assuming where addRoundRect
- * starts its winding, so the fill always begins at the top of the cover.
- */
-private fun topAnchorOffset(path: Path, measure: PathMeasure): Float {
-    val bounds = path.getBounds()
-    val topCenter = Offset((bounds.left + bounds.right) / 2f, bounds.top)
-    val total = measure.length
-    val samples = 480
-    var bestIdx = 0
-    var bestD = Float.MAX_VALUE
-    for (i in 0 until samples) {
-        val p = measure.getPosition(total * i / samples)
-        val dx = p.x - topCenter.x
-        val dy = p.y - topCenter.y
-        val d = dx * dx + dy * dy
-        if (d < bestD) { bestD = d; bestIdx = i }
+private fun outerRingPath(coverW: Float, coverH: Float, marginPx: Float, gapPx: Float, coverRadiusPx: Float): Path {
+    val left = marginPx - gapPx
+    val top = marginPx - gapPx
+    val right = marginPx + coverW + gapPx
+    val bottom = marginPx + coverH + gapPx
+    val r = coverRadiusPx + gapPx
+    val d = r * 2f
+    val cx = (left + right) / 2f
+    return Path().apply {
+        moveTo(cx, top)
+        lineTo(right - r, top)
+        arcTo(Rect(right - d, top, right, top + d), -90f, 90f, false)
+        lineTo(right, bottom - r)
+        arcTo(Rect(right - d, bottom - d, right, bottom), 0f, 90f, false)
+        lineTo(left + r, bottom)
+        arcTo(Rect(left, bottom - d, left + d, bottom), 90f, 90f, false)
+        lineTo(left, top + r)
+        arcTo(Rect(left, top, left + d, top + d), 180f, 90f, false)
+        close()
     }
-    return total * bestIdx / samples
+}
+
+/** Height of bar [index] of [count] (0..1): the loudest waveform sample that falls in its slice. */
+private fun waveformAt(wave: FloatArray, index: Int, count: Int): Float {
+    if (wave.isEmpty()) return 0f
+    val from = (index.toLong() * wave.size / count).toInt().coerceIn(0, wave.lastIndex)
+    val to = ((index + 1).toLong() * wave.size / count).toInt().coerceIn(from + 1, wave.size)
+    var m = 0f
+    for (k in from until to) if (wave[k] > m) m = wave[k]
+    return m.coerceIn(0f, 1f)
 }
 
 /**
- * Returns true when the artwork's border region reads as light enough to need
- * a dark progress line instead of a white one.
+ * Real amplitude envelope of [track] (0..1 per sample, evenly spaced over its duration).
  *
- * It samples the displayed artwork, center-cropped to a square the same way
- * ContentScale.Crop renders it, so the sampled pixels match what is really at
- * the cover's edges.
- *
- * Metric: perceptual luminance (ITU-R BT.601: 0.299R + 0.587G + 0.114B),
- * averaged over the perimeter pixels of a small scaled-down copy of the image.
- * That is exactly the band the ring sits against, so a dark center with a
- * light border (or vice versa) is judged correctly.
- *
- * This is a plain brightness check, not palette or color extraction.
+ * TODO: wire this to actual audio data. Until it returns non-null, [rememberWaveform] shows a
+ * placeholder shape so the scrub UI can be built and tuned.
  */
+private suspend fun loadWaveform(track: Track): FloatArray? = null
+
+/**
+ * Makes differences visible: stretches the samples so the quietest one is 0 and the loudest is 1,
+ * then squares-ish them (power > 1) so peaks (high notes / loud vocals) stand tall while
+ * everything else stays low. Without this, most bars land in the same mid range and look alike.
+ */
+private fun shapeWaveform(wave: FloatArray): FloatArray {
+    if (wave.isEmpty()) return wave
+    var lo = Float.MAX_VALUE
+    var hi = 0f
+    for (v in wave) {
+        if (v < lo) lo = v
+        if (v > hi) hi = v
+    }
+    val range = (hi - lo).coerceAtLeast(1e-3f)
+    return FloatArray(wave.size) { ((wave[it] - lo) / range).coerceIn(0f, 1f).pow(1.7f) }
+}
+
+/** Deterministic stand-in waveform (same track -> same shape). NOT real audio data. */
+private fun placeholderWaveform(seed: Int, count: Int = 240): FloatArray {
+    val rnd = java.util.Random(seed.toLong())
+    var prev = 0.5f
+    return FloatArray(count) { i ->
+        // Less smoothing than before, so neighbouring samples differ more.
+        prev = prev * 0.2f + rnd.nextFloat() * 0.8f
+        // Slow "sections" (quiet verse / loud chorus) plus the occasional spike.
+        val section = 0.35f + 0.65f * (0.5f + 0.5f * kotlin.math.sin(i * 0.07f + (seed % 7)))
+        val spike = if (rnd.nextFloat() < 0.08f) 1.6f else 1f
+        (prev * section * spike).coerceIn(0.03f, 1f)
+    }
+}
+
 @Composable
-private fun rememberIsEdgeLight(url: String?): Boolean {
-    val context = LocalContext.current
-    var isLight by remember { mutableStateOf(false) }
-    LaunchedEffect(url) {
-        if (url.isNullOrBlank()) {
-            isLight = false
-            return@LaunchedEffect
-        }
-        val luminance = withContext(Dispatchers.IO) {
-            runCatching {
-                val request = ImageRequest.Builder(context).data(url).allowHardware(false).build()
-                val result = context.imageLoader.execute(request)
-                val bitmap = (result as? SuccessResult)?.drawable?.toBitmapOrNull() ?: return@runCatching null
-                edgeLuminance(bitmap)
-            }.getOrNull()
-        }
-        isLight = (luminance ?: 0f) > 0.75f
+private fun rememberWaveform(track: Track?): FloatArray {
+    val seed = "${track?.title}|${track?.artist}".hashCode()
+    var data by remember(seed) { mutableStateOf(placeholderWaveform(seed)) }
+    LaunchedEffect(seed) {
+        val real = track?.let { loadWaveform(it) }
+        if (real != null && real.isNotEmpty()) data = real
     }
-    return isLight
+    return data
 }
 
-private fun edgeLuminance(bitmap: Bitmap): Float {
-    val side = minOf(bitmap.width, bitmap.height)
-    val x = (bitmap.width - side) / 2
-    val y = (bitmap.height - side) / 2
-    val square = Bitmap.createBitmap(bitmap, x, y, side, side)
-    val sample = Bitmap.createScaledBitmap(square, 24, 24, true)
-    var total = 0f
-    var count = 0
-    for (i in 0 until 24) {
-        for (j in 0 until 24) {
-            if (i != 0 && i != 23 && j != 0 && j != 23) continue // perimeter only — where the line actually sits
-            val px = sample[i, j]
-            val r = android.graphics.Color.red(px) / 255f
-            val g = android.graphics.Color.green(px) / 255f
-            val b = android.graphics.Color.blue(px) / 255f
-            total += 0.299f * r + 0.587f * g + 0.114f * b
-            count++
+/** Blank record shown in the cover slot when nothing is playing: grooves, a plain label, a spindle hole. */
+@Composable
+private fun EmptyVinyl() {
+    val tile = Color(0xFF1C1D24)   // a step lighter than the screen fill so the empty cover still reads as a card
+    Canvas(Modifier.fillMaxSize().background(tile)) {
+        val c = center
+        val r = size.minDimension / 2f * 0.9f
+        val labelR = r * 0.34f
+        // Record body.
+        drawCircle(
+            brush = Brush.radialGradient(listOf(Color(0xFF2B2830), Color(0xFF0B0A0D)), center = c, radius = r),
+            radius = r,
+            center = c,
+        )
+        // Grooves.
+        var g = labelR + r * 0.06f
+        while (g < r * 0.97f) {
+            drawCircle(color = Color.White.copy(alpha = 0.05f), radius = g, center = c, style = Stroke(0.8.dp.toPx()))
+            g += 3.dp.toPx()
         }
+        // Two opposite light glints, the way light rakes across a real record.
+        drawCircle(
+            brush = Brush.sweepGradient(
+                listOf(
+                    Color.Transparent, Color.White.copy(alpha = 0.11f), Color.Transparent,
+                    Color.Transparent, Color.White.copy(alpha = 0.11f), Color.Transparent,
+                ),
+                center = c,
+            ),
+            radius = r,
+            center = c,
+        )
+        // Edge highlight.
+        drawCircle(color = Color.White.copy(alpha = 0.10f), radius = r, center = c, style = Stroke(1.dp.toPx()))
+        // Blank label + spindle hole.
+        drawCircle(color = Color(0xFF3A3540), radius = labelR, center = c)
+        drawCircle(color = Color.White.copy(alpha = 0.08f), radius = labelR, center = c, style = Stroke(1.dp.toPx()))
+        drawCircle(color = tile, radius = r * 0.035f, center = c)
     }
-    return if (count > 0) total / count else 0f
 }
 
 @Composable
@@ -643,6 +868,33 @@ private fun ArtworkPlaceholder() {
 }
 
 private fun formatTime(milliseconds: Long): String = "%d:%02d".format(milliseconds / 60_000, (milliseconds / 1_000) % 60)
+
+/**
+ * Elapsed / total time. Digits are tabular so the label doesn't jitter as they change, and it only
+ * recomposes when the displayed second changes (not every frame).
+ */
+@Composable
+private fun TimeRow(position: () -> Long, durationMs: Long) {
+    val elapsedSecond by remember(position) { derivedStateOf { position() / 1_000 } }
+    val style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum", letterSpacing = 0.4.sp)
+    val color = Color.White.copy(alpha = 0.6f)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(formatTime(elapsedSecond * 1_000), color = color, style = style)
+        Text(formatTime(durationMs), color = color, style = style)
+    }
+}
+
+/** Image request that fades in when the URL changes (a new track) instead of popping in. */
+@Composable
+private fun rememberFadeRequest(url: String?, durationMs: Int = 600): ImageRequest {
+    val context = LocalContext.current
+    // The first image (already loaded elsewhere, e.g. in search) must appear instantly; only later
+    // track changes fade. A fade from the dark base on entry shows up as a flicker.
+    val firstUrl = remember { url }
+    return remember(url) {
+        ImageRequest.Builder(context).data(url).crossfade(if (url == firstUrl) 0 else durationMs).build()
+    }
+}
 
 @Composable
 private fun Modifier.tapTarget(onClick: () -> Unit): Modifier {
@@ -665,6 +917,7 @@ private fun Modifier.bounceTap(onClick: () -> Unit, scaleDown: Float = 0.88f): M
 // ==================== COVER ACCENT ====================
 
 private val DefaultAccent = Color.White
+private val accentCache = HashMap<String, Color>()
 
 /**
  * The most prominent *colorful* hue in the cover art, tuned to be readable on the dark glass
@@ -673,7 +926,7 @@ private val DefaultAccent = Color.White
 @Composable
 private fun rememberCoverAccent(url: String?): Color {
     val context = LocalContext.current
-    var accent by remember { mutableStateOf(DefaultAccent) }
+    var accent by remember { mutableStateOf(url?.let { accentCache[it] } ?: DefaultAccent) }
     LaunchedEffect(url) {
         if (url.isNullOrBlank()) {
             accent = DefaultAccent
@@ -687,6 +940,7 @@ private fun rememberCoverAccent(url: String?): Color {
                 accentFromBitmap(bitmap)
             }.getOrNull()
         } ?: DefaultAccent
+        accentCache[url] = accent
     }
     val animated by animateColorAsState(accent, tween(600), label = "lyrics-accent")
     return animated
@@ -730,8 +984,14 @@ private fun accentFromBitmap(bitmap: Bitmap): Color? {
 
 // ==================== LYRICS SYSTEM ====================
 
-private val LyricsHeaderHeight = 52.dp
-private val LyricsCardShape = RoundedCornerShape(26.dp)
+private val LyricsTitleHeight = 36.dp        // the "Lyrics" title row that sits above the card
+private val LyricsCollapsedHeight = 92.dp    // card height when folded: 14 + 28 + 8 + 28 + 14 (two lines)
+private val PreviewPaddingV = 14.dp          // top/bottom padding of the folded snippet
+private val PreviewLineGap = 8.dp            // gap between the two folded lines
+private const val PreviewFadeStart = 0.3f    // fade begins at this fraction of line 2's height (top of the letters' body)
+private const val PreviewFadeEnd = 0.75f     // fully invisible from here down (~ the baseline, so the bottom half of the letters is truly gone)
+private val LyricsCardShape = RoundedCornerShape(14.dp)
+private val AcrylicBlur = 72.dp              // how hard the art behind the lyrics card is blurred
 
 /** Represents the state of lyrics fetching. */
 sealed interface LyricsState {
@@ -930,8 +1190,9 @@ object LyricsRepository {
 }
 
 /**
- * Collapsible lyrics card. Collapsed, it is just a header docked under the controls; expanded, it
- * fills the space it is given and shows the auto-scrolling, word-highlighted lyrics.
+ * Collapsible lyrics card with its "Lyrics" title outside, on top. Folded, the card shows a snippet
+ * of the first lines fading out toward the bottom; expanded, it fills the space it is given and
+ * shows the auto-scrolling, word-highlighted lyrics.
  *
  * [positionMs] is a lambda so only the parts that need the frame-by-frame position read it.
  */
@@ -943,31 +1204,30 @@ fun LyricsSection(
     expanded: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Cover art + the size of the screen it is blurred across, so the card can show the same art, blurred harder, in the right place. */
+    backdropUrl: String? = null,
+    backdropSize: IntSize = IntSize.Zero,
 ) {
+    var cardOrigin by remember { mutableStateOf(Offset.Zero) }
     BoxWithConstraints(modifier) {
         val fullHeight = maxHeight
+        val expandedCardHeight = (fullHeight - LyricsTitleHeight).coerceAtLeast(0.dp)
+        val collapsedCardHeight = minOf(LyricsCollapsedHeight, expandedCardHeight)
         val cardHeight by animateDpAsState(
-            targetValue = if (expanded) fullHeight else LyricsHeaderHeight,
+            targetValue = if (expanded) expandedCardHeight else collapsedCardHeight,
             animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
             label = "lyrics-height",
         )
         val chevron by animateFloatAsState(if (expanded) 0f else 180f, tween(250), label = "lyrics-chevron")
 
-        Column(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(cardHeight)
-                .clip(LyricsCardShape)
-                .background(Color.White.copy(alpha = 0.08f))
-                .border(1.dp, Color.White.copy(alpha = 0.10f), LyricsCardShape),
-        ) {
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+            // Title, outside (above) the card.
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .height(LyricsHeaderHeight)
+                    .height(LyricsTitleHeight)
                     .tapTarget(onToggle)
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("Lyrics", color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.titleSmall)
@@ -979,32 +1239,216 @@ fun LyricsSection(
                     modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = chevron },
                 )
             }
-            Box(Modifier.fillMaxWidth().weight(1f)) {
-                when (lyricsState) {
-                    is LyricsState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        androidx.compose.material3.CircularProgressIndicator(
-                            color = Color.White.copy(alpha = 0.6f),
-                            modifier = Modifier.size(24.dp),
-                        )
-                    }
-                    is LyricsState.Loaded -> {
-                        if (lyricsState.lines.isEmpty()) {
-                            LyricsEmptyState("No timed lyrics available")
-                        } else {
-                            LyricsList(
-                                lines = lyricsState.lines,
-                                isSynced = lyricsState.isSynced,
-                                positionMs = positionMs,
-                                accent = accent,
-                                viewport = fullHeight - LyricsHeaderHeight,
-                            )
+
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(cardHeight)
+                    .shadow(
+                        elevation = 14.dp,
+                        shape = LyricsCardShape,
+                        ambientColor = Color.Black.copy(alpha = 0.35f),
+                        spotColor = Color.Black.copy(alpha = 0.45f),
+                        clip = false,
+                    )
+                    .clip(LyricsCardShape)
+                    .onGloballyPositioned { cardOrigin = it.positionInRoot() }
+                    // Folded, tapping anywhere on the snippet opens it.
+                    .tapTarget { if (!expanded) onToggle() },
+            ) {
+                AcrylicBackdrop(backdropUrl, backdropSize) { cardOrigin }
+                Crossfade(targetState = expanded, animationSpec = tween(250), label = "lyrics-content") { isExpanded ->
+                    if (!isExpanded) {
+                        LyricsPreview(lyricsState)
+                    } else {
+                        Box(Modifier.fillMaxSize()) {
+                            when (lyricsState) {
+                                is LyricsState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    androidx.compose.material3.CircularProgressIndicator(
+                                        color = Color.White.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
+                                is LyricsState.Loaded -> {
+                                    if (lyricsState.lines.isEmpty()) {
+                                        LyricsEmptyState("No timed lyrics available")
+                                    } else {
+                                        LyricsList(
+                                            lines = lyricsState.lines,
+                                            isSynced = lyricsState.isSynced,
+                                            positionMs = positionMs,
+                                            accent = accent,
+                                            viewport = fullHeight - LyricsTitleHeight,
+                                        )
+                                    }
+                                }
+                                is LyricsState.NotAvailable -> LyricsEmptyState(lyricsState.reason)
+                                is LyricsState.Error -> LyricsEmptyState("Error: ${lyricsState.message}")
+                            }
                         }
                     }
-                    is LyricsState.NotAvailable -> LyricsEmptyState(lyricsState.reason)
-                    is LyricsState.Error -> LyricsEmptyState("Error: ${lyricsState.message}")
                 }
             }
         }
+    }
+}
+
+/**
+ * Acrylic / frosted-glass surface for the lyrics card. Compose can't blur "whatever is behind" a
+ * composable, so this draws the same cover art the screen background uses, at the same size and
+ * position (shifted by the card's own position), blurred much harder, then adds the glass tint,
+ * a light sheen and a bright rim (brighter top-left, plus a faint inner ring).
+ * Below Android 12 there is no blur, so it falls back to the tint + rim only.
+ */
+@Composable
+private fun AcrylicBackdrop(url: String?, rootSize: IntSize, origin: () -> Offset) {
+    val density = LocalDensity.current
+    Box(Modifier.fillMaxSize().background(CoverPalette.Neutral.base)) {
+        if (url != null && rootSize.width > 0 && rootSize.height > 0) {
+            AsyncImage(
+                model = rememberFadeRequest(url),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    // Let the image be screen-sized inside the small card, anchored at the card's top-left...
+                    .wrapContentSize(Alignment.TopStart, unbounded = true)
+                    .size(
+                        with(density) { rootSize.width.toDp() },
+                        with(density) { rootSize.height.toDp() },
+                    )
+                    // ...then slide it back so it lines up with the screen background behind the card.
+                    .offset { origin().let { IntOffset(-it.x.roundToInt(), -it.y.roundToInt()) } }
+                    .graphicsLayer { scaleX = 1.3f; scaleY = 1.3f }   // same overscan as the screen background, so the art lines up
+                    .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(AcrylicBlur) else Modifier),
+            )
+        }
+        // Dark tint over the blurred art. Kept light (about 40%) so the card reads as see-through;
+        // raise the alpha (0x66) if lyrics get hard to read over a bright cover.
+        Box(Modifier.fillMaxSize().background(Color(0x66100E12)))
+        // A faint lift with white, brightest where light would hit (top-left).
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.linearGradient(
+                    listOf(Color.White.copy(alpha = 0.10f), Color.White.copy(alpha = 0.03f), Color.White.copy(alpha = 0.05f)),
+                ),
+            ),
+        )
+        // Rim, like the edge of a glass slab.
+        Box(
+            Modifier.fillMaxSize().border(
+                1.dp,
+                Brush.linearGradient(listOf(Color.White.copy(alpha = 0.55f), Color.White.copy(alpha = 0.10f), Color.White.copy(alpha = 0.28f))),
+                LyricsCardShape,
+            ),
+        )
+    }
+}
+
+/**
+ * An icon with a soft drop shadow: a blurred, dark copy sits just below the real one.
+ * Kept subtle on purpose. [size] is the glyph size; put any padding / click handling in [modifier].
+ */
+@Composable
+private fun DepthIcon(
+    imageVector: ImageVector,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    tint: Color = Color.White,
+    size: Dp = 24.dp,
+) {
+    Box(modifier.size(size)) {
+        val canBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        Icon(
+            imageVector,
+            contentDescription = null,
+            tint = Color.Black.copy(alpha = if (canBlur) 0.45f else 0.22f),
+            modifier = Modifier
+                .fillMaxSize()
+                .offset(y = 1.5.dp)
+                .then(if (canBlur) Modifier.blur(2.dp, BlurredEdgeTreatment.Unbounded) else Modifier),
+        )
+        Icon(imageVector, contentDescription, tint = tint, modifier = Modifier.fillMaxSize())
+    }
+}
+
+/** Folded-card content: the first lyric up top, the lines under it fading out toward the bottom. */
+@Composable
+private fun LyricsPreview(lyricsState: LyricsState) {
+    val font = rememberLyricsFont()
+    when (lyricsState) {
+        is LyricsState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            androidx.compose.material3.CircularProgressIndicator(
+                color = Color.White.copy(alpha = 0.6f),
+                modifier = Modifier.size(20.dp),
+                strokeWidth = 2.dp,
+            )
+        }
+        is LyricsState.Loaded -> {
+            if (lyricsState.lines.isEmpty()) {
+                LyricsPreviewMessage("No timed lyrics available")
+            } else {
+                val style = TextStyle(
+                    fontFamily = font,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 20.sp,
+                    lineHeight = 28.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+                // Measured heights of the two lines, so the fade can be aimed at the second line
+                // exactly (its own vertical middle), whatever the font size / wrapping is.
+                val density = LocalDensity.current
+                var firstLinePx by remember { mutableIntStateOf(0) }
+                var secondLinePx by remember { mutableIntStateOf(0) }
+                val secondTop = {
+                    with(density) { (PreviewPaddingV + PreviewLineGap).toPx() } + firstLinePx
+                }
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .fadeOutBetween(
+                            // Fully visible down to the top of line 2's letters...
+                            start = { secondTop() + secondLinePx * PreviewFadeStart },
+                            // ...and completely invisible from its baseline down.
+                            end = { secondTop() + secondLinePx * PreviewFadeEnd },
+                            hasSecondLine = { secondLinePx > 0 },
+                        ),
+                ) {
+                    Column(
+                        Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 20.dp, vertical = PreviewPaddingV),
+                        verticalArrangement = Arrangement.spacedBy(PreviewLineGap),
+                    ) {
+                        lyricsState.lines.take(2).forEachIndexed { i, line ->
+                            Text(
+                                text = line.text,
+                                color = Color.White.copy(alpha = 0.6f), // unhighlighted lyric color (same as unsung words in the expanded view); same on both lines: the fade alone does the cutting
+                                style = style,
+                                maxLines = 2,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .onSizeChanged { if (i == 0) firstLinePx = it.height else secondLinePx = it.height },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        is LyricsState.NotAvailable -> LyricsPreviewMessage(lyricsState.reason)
+        is LyricsState.Error -> LyricsPreviewMessage("Error: ${lyricsState.message}")
+    }
+}
+
+@Composable
+private fun LyricsPreviewMessage(message: String) {
+    Box(Modifier.fillMaxSize().padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
+        Text(
+            message,
+            color = Color.White.copy(alpha = 0.6f),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
     }
 }
 
@@ -1137,7 +1581,21 @@ private fun LyricLine(
         return
     }
 
-    val lineAlpha by animateFloatAsState(if (isActive) 1f else 0.6f, tween(300), label = "lyric-line-alpha")
+    // The line being sung is full size and full brightness; lines already sung recede the most.
+    val lineAlpha by animateFloatAsState(
+        targetValue = when {
+            isActive -> 1f
+            isPast -> 0.4f
+            else -> 0.6f
+        },
+        animationSpec = tween(300),
+        label = "lyric-line-alpha",
+    )
+    val lineScale by animateFloatAsState(
+        targetValue = if (isActive) 1f else 0.96f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
+        label = "lyric-line-scale",
+    )
     val unsung = Color.White.copy(alpha = 0.6f)
     val now = when {
         isActive -> readPosition()
@@ -1154,7 +1612,7 @@ private fun LyricLine(
     Text(
         text = text,
         style = style,
-        modifier = Modifier.fillMaxWidth().graphicsLayer { alpha = lineAlpha },
+        modifier = Modifier.fillMaxWidth().graphicsLayer { alpha = lineAlpha; scaleX = lineScale; scaleY = lineScale },
     )
 }
 
@@ -1175,6 +1633,38 @@ private fun activeLineIndex(lines: List<LyricsLine>, positionMs: Long): Int {
     return answer
 }
 
+/**
+ * Fades content out between two y positions (in px): fully visible above [start], completely gone
+ * at and below [end]. The curve drops quickly right after [start] so the fade reads as strong /
+ * deep instead of a lazy linear ramp. Does nothing while [hasSecondLine] is false (e.g. a song
+ * with a single lyric line, or before the lines have been measured).
+ */
+private fun Modifier.fadeOutBetween(
+    start: () -> Float,
+    end: () -> Float,
+    hasSecondLine: () -> Boolean,
+): Modifier = this
+    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+    .drawWithContent {
+        drawContent()
+        if (!hasSecondLine()) return@drawWithContent
+        val s = start()
+        val e = end()
+        if (e <= s) return@drawWithContent
+        drawRect(
+            brush = Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0f to Color.Black,
+                    0.5f to Color.Black.copy(alpha = 0.3f),
+                    1f to Color.Transparent,
+                ),
+                startY = s,
+                endY = e,
+            ),
+            blendMode = BlendMode.DstIn,
+        )
+    }
+
 /** Fades the top and bottom edges of a scrolling list into the card. */
 private fun Modifier.fadingEdges(fade: Float = 0.12f): Modifier = this
     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
@@ -1190,3 +1680,111 @@ private fun Modifier.fadingEdges(fade: Float = 0.12f): Modifier = this
             blendMode = BlendMode.DstIn,
         )
     }
+
+/**
+ * Makes the status bar transparent with light icons, so the screen's own background (color,
+ * gradient, blurred art) runs behind it instead of a separate bar.
+ */
+@Suppress("DEPRECATION")
+@Composable
+private fun TransparentStatusBar() {
+    // Intentionally empty: the window is configured once in MainActivity.onCreate. Changing decorFitsSystemWindows
+    // / status bar appearance here, when the player opens, made the window re-layout and flash its (white)
+    // background for a frame.
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
+/**
+ * Asks the art provider for a square, higher-resolution version where the URL format allows it
+ * (Apple, Deezer, Google / YouTube Music, Cover Art Archive). Any other host is returned as is,
+ * so this can never break an image, and non-square art from those is handled by the blurred fill.
+ */
+private fun squareArtUrl(url: String?, px: Int = 800): String? {
+    if (url == null) return null
+    return try {
+        when {
+            "mzstatic.com" in url ->
+                url.replace(Regex("""/\d{2,4}x\d{2,4}(bb|cc|sr)?(-\d+)?\.(jpg|jpeg|png|webp)$""", RegexOption.IGNORE_CASE)) {
+                    "/${px}x${px}bb.${it.groupValues[3]}"
+                }
+            "dzcdn.net" in url ->
+                url.replace(Regex("""/\d{2,4}x\d{2,4}-"""), "/${px}x${px}-")
+            "googleusercontent.com" in url || "ggpht.com" in url ->
+                url.replace(Regex("""=w\d+-h\d+"""), "=w$px-h$px").replace(Regex("""=s\d+"""), "=s$px")
+            "coverartarchive.org" in url ->
+                url.replace(Regex("""-(250|500)(\.\w+)$"""), "-1200$2")
+            else -> url
+        }
+    } catch (_: Exception) {
+        url
+    }
+}
+
+private const val BounceSpeedDpPerSecond = 45f  // how fast an overlong title glides
+
+/**
+ * One-line text. If it is too long for its box it glides to the far end so everything gets shown,
+ * then straight away glides back to the start, and repeats, like a ball bouncing between two walls.
+ * Text that fits stays still.
+ */
+@Composable
+private fun BouncingText(text: String, style: TextStyle, color: Color, modifier: Modifier = Modifier) {
+    val density = LocalDensity.current
+    var boxWidth by remember { mutableIntStateOf(0) }
+    var textWidth by remember { mutableIntStateOf(0) }
+    val overflowPx = (textWidth - boxWidth).coerceAtLeast(0)
+    val offset = remember { Animatable(0f) }
+
+    // Restarts from the beginning whenever the text (new track) or the amount it overflows changes.
+    LaunchedEffect(text, overflowPx) {
+        offset.snapTo(0f)
+        if (overflowPx <= 0) return@LaunchedEffect
+        val travelMs = (overflowPx / density.density / BounceSpeedDpPerSecond * 1000f).toInt().coerceAtLeast(400)
+        while (true) {
+            offset.animateTo(overflowPx.toFloat(), tween(travelMs, easing = LinearEasing))
+            offset.animateTo(0f, tween(travelMs, easing = LinearEasing))
+        }
+    }
+
+    Box(modifier.fillMaxWidth().clipToBounds().onSizeChanged { boxWidth = it.width }) {
+        Text(
+            text = text,
+            style = style,
+            color = color,
+            maxLines = 1,
+            softWrap = false,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Clip,
+            modifier = Modifier
+                // Let the text lay out at its full width (the box above clips it), and report that width.
+                .wrapContentWidth(Alignment.Start, unbounded = true)
+                .onSizeChanged { textWidth = it.width }
+                .graphicsLayer { translationX = -offset.value },
+        )
+    }
+}
+
+private val YouTubeThumb = Regex("""^(https?://[^/]*(?:ytimg\.com|img\.youtube\.com))/vi(?:_webp)?/([^/]+)/""")
+
+/**
+ * YouTube thumbnails are 16:9 frames. The default `hqdefault` one is a 4:3 image with black bars
+ * baked in above and below, and for "Topic" art tracks the real cover is the centered square of the
+ * frame. These are the bar-free 16:9 variants, best quality first; null if [url] is not a YouTube thumbnail.
+ */
+private fun youtubeThumbCandidates(url: String): List<String>? {
+    val m = YouTubeThumb.find(url) ?: return null
+    val base = m.groupValues[1]
+    val id = m.groupValues[2]
+    return listOf("hq720", "maxresdefault", "mqdefault").map { "$base/vi/$id/$it.jpg" }
+}
+
+/** Art for the blurred backdrops and the accent color: for YouTube, the small bar-free frame (always exists). */
+private fun backdropArtUrl(url: String?): String? {
+    if (url == null) return null
+    val id = YouTubeThumb.find(url) ?: return url
+    return "${id.groupValues[1]}/vi/${id.groupValues[2]}/mqdefault.jpg"
+}
