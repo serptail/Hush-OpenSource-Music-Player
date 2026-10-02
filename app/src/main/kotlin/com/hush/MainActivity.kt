@@ -2,6 +2,7 @@ package com.hush
 
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.EnterTransition
@@ -38,16 +39,22 @@ import com.hush.core.designsystem.squareArtUrl
 import com.hush.core.model.PlaybackState
 import com.hush.core.model.Track
 import com.hush.core.player.MusicPlayer
-import com.hush.feature.library.ArtistScreen
 import com.hush.feature.library.FavoritesScreen
 import com.hush.feature.library.LibraryScreen
 import com.hush.feature.library.LibraryViewModel
 import com.hush.feature.library.PlaylistScreen
 import com.hush.feature.playerui.PlayerScreen
 import com.hush.feature.resolver.ResolveTrackSourceUseCase
+import com.hush.feature.resolver.ResolveFailure
 import com.hush.feature.resolver.AudioSourceRepository
 import com.hush.feature.search.SearchScreen
 import com.hush.feature.search.SearchViewModel
+import com.hush.feature.search.ArtistScreen as DiscoverArtistScreen
+import com.hush.feature.search.ArtistViewModel
+import com.hush.feature.search.AlbumScreen
+import com.hush.feature.search.AlbumViewModel
+import com.hush.feature.search.DiscoverItem
+import androidx.navigation.navArgument
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.launch
@@ -96,9 +103,34 @@ private fun HushApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSourceU
             CompositionLocalProvider(LocalCoverPalette provides palette) {
                 // The strip docks onto the bottom bar of Search and Library (their `nowPlaying` slot).
                 val openPlayer = { nav.navigate("player") { launchSingleTop = true }; Unit }
-                val nowPlaying: @Composable () -> Unit = { NowPlayingStrip(player, docked = false, onOpen = openPlayer) }
+                val openArtist: (String) -> Unit = { artist -> nav.navigate("artist-name/${Uri.encode(artist)}") }
+                val nowPlaying: @Composable () -> Unit = { NowPlayingStrip(player, docked = false, onOpen = openPlayer, onArtistClick = openArtist) }
                 // Screens without a bottom bar (playlist, artist): the strip sits alone at the bottom edge.
-                val nowPlayingDocked: @Composable () -> Unit = { NowPlayingStrip(player, docked = true, onOpen = openPlayer) }
+                val nowPlayingDocked: @Composable () -> Unit = { NowPlayingStrip(player, docked = true, onOpen = openPlayer, onArtistClick = openArtist) }
+                val playTrack: (Track) -> Unit = { track ->
+                    selectedTrack = track
+                    resolvingIsrc = track.isrc
+                    resolutionMessage = null
+                    scope.launch {
+                        resolveTrackSource(track).fold(
+                            onSuccess = { source ->
+                                audioSources.audioUrl(source.youtubeVideoId).fold(
+                                    onSuccess = { audioUrl -> player.play(track, audioUrl); resolutionMessage = null; nav.navigate("player") },
+                                    onFailure = { error -> resolutionMessage = error.message ?: "No playable audio stream was found" },
+                                )
+                            },
+                            onFailure = { error ->
+                                resolutionMessage = when (error) {
+                                    is ResolveFailure.Timeout -> "Connection was slow. Try again."
+                                    is ResolveFailure.NoCandidates -> "No playable source was found."
+                                    is ResolveFailure.LowScore -> "No reliable match was found."
+                                    else -> error.message ?: "Could not verify a match"
+                                }
+                            },
+                        )
+                        resolvingIsrc = null
+                    }
+                }
                 NavHost(
                     navController = nav,
                     startDestination = "search",
@@ -112,23 +144,9 @@ private fun HushApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSourceU
                             viewModel = hiltViewModel<SearchViewModel>(),
                             resolvingIsrc = resolvingIsrc,
                             resolutionMessage = resolutionMessage,
-                            onTrackSelected = { track ->
-                                selectedTrack = track
-                                resolvingIsrc = track.isrc
-                                resolutionMessage = null
-                                scope.launch {
-                                    resolveTrackSource(track).fold(
-                                        onSuccess = { source ->
-                                            audioSources.audioUrl(source.youtubeVideoId).fold(
-                                                onSuccess = { audioUrl -> player.play(track, audioUrl); resolutionMessage = null; nav.navigate("player") },
-                                                onFailure = { error -> resolutionMessage = error.message ?: "No playable audio stream was found" },
-                                            )
-                                        },
-                                        onFailure = { error -> resolutionMessage = error.message ?: "Could not verify a match" },
-                                    )
-                                    resolvingIsrc = null
-                                }
-                            },
+                            onTrackSelected = playTrack,
+                            onArtistSelected = { artistId -> nav.navigate("artist-real/$artistId") },
+                            onAlbumSelected = { item -> nav.navigate(albumRoute(item)) },
                             onLibrary = { nav.navigate("library") },
                             nowPlaying = nowPlaying,
                         )
@@ -154,15 +172,46 @@ private fun HushApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSourceU
                         PlaylistScreen(
                             playlistId = entry.arguments?.getString("id").orEmpty(),
                             onBack = { nav.popBackStack() },
-                            onPlayer = { nav.navigate("player") },
+                            onTrackSelected = playTrack,
+                            viewModel = hiltViewModel<com.hush.feature.library.PlaylistViewModel>(),
                             nowPlaying = nowPlayingDocked,
                         )
                     }
-                    composable("artist/{id}") { entry ->
-                        ArtistScreen(
-                            artistId = entry.arguments?.getString("id").orEmpty(),
+                    composable("artist/{artistId}") {
+                        DiscoverArtistScreen(
+                            viewModel = hiltViewModel<ArtistViewModel>(),
                             onBack = { nav.popBackStack() },
-                            onPlayer = { nav.navigate("player") },
+                            onTrackSelected = playTrack,
+                            onAlbumSelected = { item -> nav.navigate(albumRoute(item)) },
+                            nowPlaying = nowPlayingDocked,
+                        )
+                    }
+                    composable("artist-real/{artistId}") {
+                        DiscoverArtistScreen(
+                            viewModel = hiltViewModel<ArtistViewModel>(),
+                            onBack = { nav.popBackStack() },
+                            onTrackSelected = playTrack,
+                            onAlbumSelected = { item -> nav.navigate(albumRoute(item)) },
+                            nowPlaying = nowPlayingDocked,
+                        )
+                    }
+                    composable("artist-name/{artistName}") {
+                        DiscoverArtistScreen(
+                            viewModel = hiltViewModel<ArtistViewModel>(),
+                            onBack = { nav.popBackStack() },
+                            onTrackSelected = playTrack,
+                            onAlbumSelected = { item -> nav.navigate(albumRoute(item)) },
+                            nowPlaying = nowPlayingDocked,
+                        )
+                    }
+                    composable(
+                        "album/{id}?title={title}&subtitle={subtitle}&art={art}",
+                        arguments = listOf("title", "subtitle", "art").map { navArgument(it) { defaultValue = "" } },
+                    ) {
+                        AlbumScreen(
+                            viewModel = hiltViewModel<AlbumViewModel>(),
+                            onBack = { nav.popBackStack() },
+                            onTrackSelected = playTrack,
                             nowPlaying = nowPlayingDocked,
                         )
                     }
@@ -179,7 +228,7 @@ private fun HushApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSourceU
 
 /** Reads the player state and feeds [MiniPlayerStrip]; slides open when a track is loaded, closed when not. */
 @Composable
-private fun NowPlayingStrip(player: MusicPlayer, docked: Boolean, onOpen: () -> Unit) {
+private fun NowPlayingStrip(player: MusicPlayer, docked: Boolean, onOpen: () -> Unit, onArtistClick: (String) -> Unit) {
     val state by player.playbackState.collectAsState()
     val track = (state as? PlaybackState.Playing)?.track ?: (state as? PlaybackState.Paused)?.track
     val isPlaying = state is PlaybackState.Playing
@@ -209,8 +258,11 @@ private fun NowPlayingStrip(player: MusicPlayer, docked: Boolean, onOpen: () -> 
                 onOpen = onOpen,
                 onTogglePlay = { if (isPlaying) player.pause() else player.resume() },
                 onNext = player::skipNext,
+                onArtistClick = { shown?.artist?.let(onArtistClick) },
                 dockedToEdge = docked,
             )
         }
     }
 }
+private fun albumRoute(item: DiscoverItem) =
+    "album/${Uri.encode(item.id)}?title=${Uri.encode(item.title)}&subtitle=${Uri.encode(item.subtitle)}&art=${Uri.encode(item.imageUrl)}"

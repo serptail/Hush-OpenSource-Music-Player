@@ -50,6 +50,7 @@ fun MiniPlayerStrip(
     onOpen: () -> Unit,
     onTogglePlay: () -> Unit,
     onNext: () -> Unit,
+    onArtistClick: () -> Unit = {},
     modifier: Modifier = Modifier,
     /** True when the strip sits at the very bottom of a screen without [HushBottomBar]: it then also fills the system navigation area. */
     dockedToEdge: Boolean = false,
@@ -84,7 +85,14 @@ fun MiniPlayerStrip(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, color = ink(), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(artist, color = ink(0.6f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    artist,
+                    color = ink(0.6f),
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.pressScale(onClick = onArtistClick, scaleDown = 0.98f),
+                )
             }
             Box(Modifier.size(48.dp).pressScale(onClick = onTogglePlay, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
                 Crossfade(isPlaying, animationSpec = tween(160), label = "mini-play") { playing ->

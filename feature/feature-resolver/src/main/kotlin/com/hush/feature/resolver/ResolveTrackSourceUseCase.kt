@@ -1,33 +1,80 @@
 package com.hush.feature.resolver
 
-import com.hush.core.common.AppFailure
 import com.hush.core.model.ResolutionMethod
 import com.hush.core.model.ResolvedSource
 import com.hush.core.model.Track
 import com.hush.core.model.TrackSource
 import com.hush.core.network.YoutubeCandidate
+import com.hush.core.network.YoutubeMusicSearchSource
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-interface YoutubeCandidateRepository { suspend fun candidates(track: Track): List<YoutubeCandidate> }
+sealed class ResolveFailure(message: String, cause: Throwable? = null) : Exception(message, cause) {
+    class NoCandidates(val query: String) : ResolveFailure("No candidates for $query")
+    class LowScore(val best: Double, val bestTitle: String) : ResolveFailure("Best candidate score: $best")
+    class Timeout(val stage: String) : ResolveFailure("Timed out at $stage")
+}
 
-class YoutubeCandidateRepositoryImpl @Inject constructor(private val engine: AndroidYtDlpEngine) : YoutubeCandidateRepository {
-    override suspend fun candidates(track: Track) = engine.search(track)
+interface YoutubeCandidateRepository {
+    suspend fun songs(track: Track): List<YoutubeCandidate>
+    suspend fun broad(track: Track): List<YoutubeCandidate>
+}
+
+class YoutubeCandidateRepositoryImpl @Inject constructor(private val source: YoutubeMusicSearchSource) : YoutubeCandidateRepository {
+    override suspend fun songs(track: Track) = source.searchSongs("${track.artist} ${track.title}")
+    override suspend fun broad(track: Track) = source.searchBroad("${track.artist} ${track.title}")
 }
 
 interface AudioSourceRepository { suspend fun audioUrl(videoId: String): Result<String> }
 
-class AudioSourceRepositoryImpl @Inject constructor(private val engine: AndroidYtDlpEngine) : AudioSourceRepository {
-    override suspend fun audioUrl(videoId: String): Result<String> = engine.audioUrl(videoId)
+class AudioSourceRepositoryImpl @Inject constructor(
+    private val engine: AndroidYtDlpEngine,
+    private val newPipe: NewPipeYoutubeSource,
+    @ApplicationScope private val appScope: CoroutineScope,
+) : AudioSourceRepository {
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, CachedAudio>()
+    private val inFlight = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Deferred<Result<String>>>()
+
+    override suspend fun audioUrl(videoId: String): Result<String> {
+        cache[videoId]?.takeIf { it.expiresAtMs > System.currentTimeMillis() }?.let {
+            return Result.success(it.url)
+        }
+        val job = inFlight.computeIfAbsent(videoId) {
+            appScope.async {
+                val result = kotlinx.coroutines.withTimeoutOrNull(AUDIO_PRIMARY_TIMEOUT_MS) { newPipe.audioUrl(videoId) }
+                    ?.fold(
+                        onSuccess = { Result.success(it) },
+                        onFailure = { engine.audioUrl(videoId) },
+                    )
+                    ?: engine.audioUrl(videoId)
+                result.onSuccess { url -> cache[videoId] = CachedAudio(url, expiryOf(url)) }
+                result
+            }
+        }
+        return try {
+            job.await()
+        } finally {
+            if (job.isCompleted) inFlight.remove(videoId, job)
+        }
+    }
+
+    private fun expiryOf(url: String): Long = Regex("[?&]expire=(\\d+)").find(url)?.groupValues?.get(1)
+        ?.toLongOrNull()?.times(1_000L)?.minus(120_000L)
+        ?: System.currentTimeMillis() + 20 * 60_000L
+
+    private data class CachedAudio(val url: String, val expiresAtMs: Long)
+
+    private companion object { const val AUDIO_PRIMARY_TIMEOUT_MS = 8_000L }
 }
 
 class ResolveTrackSourceUseCase @Inject constructor(
     private val sources: ResolvedSourceRepository,
     private val candidates: YoutubeCandidateRepository,
     private val scorer: CandidateScorer,
+    @ApplicationScope private val appScope: CoroutineScope,
 ) {
     suspend operator fun invoke(track: Track): Result<ResolvedSource> = runCatching {
         val resolutionKey = track.resolutionKey()
@@ -38,24 +85,45 @@ class ResolveTrackSourceUseCase @Inject constructor(
         if (track.source == TrackSource.YOUTUBE && !youtubeVideoId.isNullOrBlank()) {
             val direct = ResolvedSource(resolutionKey, youtubeVideoId, ResolutionMethod.DIRECT, 1.0f, 0)
             sources.saveLocal(direct)
-            CoroutineScope(Dispatchers.IO).launch { sources.submitRemote(direct) }
+            appScope.launch { sources.submitRemote(direct) }
             return@runCatching direct
         }
 
         // yt-dlp's search can occasionally hang or get slow-walked by YouTube instead of
         // failing outright -- a hard ceiling here means a click on a track surfaces "no
         // verified source found" within a bounded time instead of spinning indefinitely.
-        val foundCandidates = withTimeoutOrNull(CANDIDATE_SEARCH_TIMEOUT_MS) { candidates.candidates(track) }
-            ?: throw AppFailure.NoMatch()
+        val songs = withTimeoutOrNull(SEARCH_TIMEOUT_MS) { candidates.songs(track) }
+            ?: throw ResolveFailure.Timeout("songs search")
+        var pool = songs
+        var selected = scorer.selectBest(pool, track)
+        if (selected == null || selected.confidenceScore < CandidateScorer.ACCEPT) {
+            val broad = withTimeoutOrNull(BROAD_TIMEOUT_MS) { candidates.broad(track) }
+                ?: throw ResolveFailure.Timeout("broad search")
+            pool = songs + broad.filter { strictBroadOk(it, track) }
+            selected = scorer.selectBest(pool, track)
+        }
+        val result = selected?.copy(isrc = resolutionKey)
+            ?: if (pool.isEmpty()) throw ResolveFailure.NoCandidates(track.title)
+            else throw ResolveFailure.LowScore(scorer.rank(pool, track).first().score, pool.first().title)
+        if (result.confidenceScore >= CandidateScorer.ACCEPT) {
+            sources.saveLocal(result)
+            appScope.launch { sources.submitRemote(result) }
+        }
+        result
+    }
 
-        val selected = scorer.selectBest(foundCandidates, track)?.copy(isrc = resolutionKey) ?: throw AppFailure.NoMatch()
-        sources.saveLocal(selected)
-        CoroutineScope(Dispatchers.IO).launch { sources.submitRemote(selected) }
-        selected
+    private fun strictBroadOk(candidate: YoutubeCandidate, track: Track): Boolean {
+        val artist = com.hush.core.common.TextMatch.toks(track.artist)
+        val candidateText = com.hush.core.common.TextMatch.toks(candidate.title + " " + candidate.channelName)
+        val artistHit = artist.any { it in candidateText }
+        val durationOk = candidate.durationMs <= 0L || track.durationMs <= 0L ||
+            kotlin.math.abs(candidate.durationMs - track.durationMs) <= 8_000L
+        return artistHit && durationOk
     }
 
     private companion object {
-        const val CANDIDATE_SEARCH_TIMEOUT_MS = 15_000L
+        const val SEARCH_TIMEOUT_MS = 8_000L
+        const val BROAD_TIMEOUT_MS = 6_000L
     }
 }
 

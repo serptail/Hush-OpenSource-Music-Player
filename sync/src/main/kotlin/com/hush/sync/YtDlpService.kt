@@ -3,6 +3,7 @@ package com.hush.sync
 import java.io.IOException
 import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
+import java.util.regex.Pattern
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
@@ -50,13 +51,14 @@ class YtDlpService(
     private val streamCache = ConcurrentHashMap<String, CachedStream>()
     private var lastUpdateAtMs = 0L
 
+    suspend fun warmUp() = withContext(Dispatchers.IO) { ensureUpdated() }
+
     /**
      * Tries YouTube Music's "Songs" catalog first (matches what YouTube itself badges as
      * a music track); falls back to a broad ytsearch only if that comes back empty, so
      * intentionally obscure edits/bootlegs stay reachable without polluting the common case.
      */
     suspend fun search(query: String): YoutubeSearchResponse = withContext(Dispatchers.IO) {
-        ensureUpdated()
         val songs = searchMusicCatalog(query)
         if (songs.candidates.isNotEmpty()) return@withContext songs
         searchBroad(query)
@@ -70,14 +72,14 @@ class YtDlpService(
                 "--flat-playlist",
                 "--skip-download",
                 "--no-warnings",
-                "--playlist-end", "10",
-                "https://music.youtube.com/search?q=$encoded",
+                "--playlist-end", "15",
+                "https://music.youtube.com/search?q=$encoded$SONGS_FILTER",
             )
         }.getOrNull() ?: return YoutubeSearchResponse(emptyList())
 
         val parsed = runCatching { parser.decodeFromString<YtDlpSearchResult>(result) }.getOrNull() ?: return YoutubeSearchResponse(emptyList())
         return YoutubeSearchResponse(
-            parsed.entries.filter { it.id.isNotBlank() }.map { it.toCandidate(isMusicCatalog = true) },
+            parsed.entries.mapNotNull { it.toCandidate(isMusicCatalog = true) },
         )
     }
 
@@ -93,11 +95,12 @@ class YtDlpService(
         )
         val parsed = parser.decodeFromString<YtDlpSearchResult>(result)
         return YoutubeSearchResponse(
-            parsed.entries.filter { it.id.isNotBlank() }.map { it.toCandidate(isMusicCatalog = false) },
+            parsed.entries.mapNotNull { it.toCandidate(isMusicCatalog = false) },
         )
     }
 
-    private fun YtDlpEntry.toCandidate(isMusicCatalog: Boolean): YoutubeCandidate {
+    private fun YtDlpEntry.toCandidate(isMusicCatalog: Boolean): YoutubeCandidate? {
+        if (!VIDEO_ID.matcher(id).matches()) return null
         val channelOrUploader = channel ?: uploader
         return YoutubeCandidate(
             videoId = id,
@@ -115,7 +118,6 @@ class YtDlpService(
         streamCache[videoId]?.takeIf { it.expiresAtMs > now }?.let { cached ->
             return@withContext AudioStreamResponse(cached.url, cached.expiresAtMs / 1_000)
         }
-        ensureUpdated()
         val url = runCommand(
             "--get-url",
             "--format", "bestaudio/best",
@@ -145,16 +147,30 @@ class YtDlpService(
         } catch (error: IOException) {
             throw IllegalStateException("yt-dlp is not installed or YTDLP_PATH is invalid", error)
         }
-        val output = process.inputStream.bufferedReader().use { it.readText() }
-        val exitCode = process.waitFor()
+        val output = StringBuilder()
+        val reader = Thread {
+            process.inputStream.bufferedReader().useLines { lines -> lines.forEach { output.appendLine(it) } }
+        }
+        reader.start()
+        val finished = process.waitFor(COMMAND_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+        if (!finished) {
+            process.destroyForcibly()
+            reader.join(1_000)
+            error("yt-dlp command timed out after ${COMMAND_TIMEOUT_SECONDS}s")
+        }
+        reader.join(1_000)
+        val exitCode = process.exitValue()
         if (exitCode != 0) error("yt-dlp failed with exit code $exitCode")
-        return output.trim()
+        return output.toString().trim()
     }
 
     private data class CachedStream(val url: String, val expiresAtMs: Long)
 
     private companion object {
+        const val SONGS_FILTER = "&sp=EgWKAQIIAWoKEAoQAxAEEAkQBQ%3D%3D"
+        val VIDEO_ID: Pattern = Pattern.compile("^[A-Za-z0-9_-]{11}$")
         const val UPDATE_INTERVAL_MS = 86_400_000L
         const val STREAM_CACHE_TTL_MS = 240_000L
+        const val COMMAND_TIMEOUT_SECONDS = 30L
     }
 }

@@ -90,8 +90,6 @@ fun LibraryScreen(
     val palette = LocalCoverPalette.current
     TransparentStatusBar(darkIcons = palette.isLight)
 
-    val liked = LibraryMock.playlists.firstOrNull { it.isLiked }
-    val mockPlaylists = LibraryMock.playlists.filter { !it.isLiked }
     val followed = LibraryMock.followedIds.mapNotNull { LibraryMock.artist(it) }
 
     CoverTheme(palette) {
@@ -116,17 +114,6 @@ fun LibraryScreen(
                         contentPadding = PaddingValues(top = 22.dp, bottom = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        if (liked != null) {
-                            item(key = "liked") {
-                                LibraryRow(
-                                    title = liked.name,
-                                    subtitle = "${liked.songs.size} songs",
-                                    onClick = { onOpenPlaylist(liked.id) },
-                                    cover = { TileCover(PhosphorIcons.Fill.Heart) },
-                                )
-                            }
-                        }
-
                         if (followed.isNotEmpty()) {
                             item(key = "followed-header") { SectionTitle("Artists you follow") }
                             item(key = "followed-row") {
@@ -153,19 +140,6 @@ fun LibraryScreen(
                         }
 
                         item(key = "playlists-header") { SectionTitle("Your playlists") }
-                        items(mockPlaylists, key = { "m-${it.id}" }) { playlist ->
-                            LibraryRow(
-                                title = playlist.name,
-                                subtitle = "${playlist.songs.size} songs",
-                                onClick = { onOpenPlaylist(playlist.id) },
-                                cover = {
-                                    val first = playlist.songs.firstOrNull()
-                                    if (first != null) CoverImage(first.imageUrl, Modifier.size(58.dp).softCover())
-                                    else TileCover(PhosphorIcons.Light.VinylRecord)
-                                },
-                            )
-                        }
-                        // Playlists created in-app (view model). They open as an empty playlist until real data exists.
                         items(userPlaylists, key = { "v-${it.id}" }) { playlist ->
                             LibraryRow(
                                 title = playlist.name,

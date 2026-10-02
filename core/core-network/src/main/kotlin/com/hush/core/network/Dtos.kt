@@ -101,3 +101,97 @@ data class AudioStreamDto(val url: String, val expiresAtEpochSeconds: Long? = nu
 fun YoutubeCandidateDto.toDomain() = YoutubeCandidate(
     videoId, title, channelName, channelIsTopicChannel, durationMs, viewCount, category, isMusicCatalog,
 )
+
+@Serializable
+data class DeezerArtistSearchResponse(val data: List<DeezerArtistDto> = emptyList())
+
+@Serializable
+data class DeezerArtistDto(
+    val id: Long,
+    val name: String,
+    @SerialName("picture_xl") val pictureXl: String? = null,
+    @SerialName("picture_big") val pictureBig: String? = null,
+    @SerialName("nb_fan") val fanCount: Long? = null,
+)
+
+@Serializable
+data class DeezerTrackResponse(val data: List<DeezerTrackDto> = emptyList())
+
+@Serializable
+data class DeezerAlbumResponse(val data: List<DeezerAlbumDto> = emptyList())
+
+@Serializable
+data class DeezerTrackDto(
+    val id: Long,
+    val title: String,
+    @SerialName("title_short") val titleShort: String? = null,
+    @SerialName("title_version") val titleVersion: String? = null,
+    val duration: Long = 0L,
+    val rank: Long = 0L,
+    val isrc: String? = null,
+    val artist: DeezerArtistDto,
+    // Absent in /album/{id}/tracks responses -- that was making every album fetch fail to decode.
+    val album: DeezerAlbumDto = DeezerAlbumDto(),
+)
+
+@Serializable
+data class DeezerAlbumDto(
+    val id: Long = 0L,
+    val title: String? = null,
+    @SerialName("release_date") val releaseDate: String? = null,
+    @SerialName("cover_xl") val coverXl: String? = null,
+    @SerialName("cover_big") val coverBig: String? = null,
+    @SerialName("record_type") val recordType: String? = null,
+    val artist: DeezerArtistDto? = null,
+)
+
+@Serializable
+data class AppleChartResponse(val feed: AppleChartFeed)
+
+@Serializable
+data class AppleChartFeed(val results: List<AppleChartItem> = emptyList())
+
+@Serializable
+data class AppleChartItem(
+    val id: String,
+    val artistName: String,
+    val name: String,
+    val releaseDate: String? = null,
+    val artistId: String? = null,
+    val artworkUrl100: String? = null,
+    val url: String? = null,
+)
+
+@Serializable
+data class BillboardChartDto(
+    val chart: String = "",
+    val date: String? = null,
+    val entries: List<BillboardEntryDto> = emptyList(),
+)
+
+@Serializable
+data class BillboardEntryDto(
+    val rank: Int,
+    val title: String,
+    val artist: String,
+    val weeks: Int = 0,
+    val image: String? = null,
+)
+
+@Serializable
+data class AppleLookupResponse(val resultCount: Int = 0, val results: List<AppleLookupItem> = emptyList())
+
+@Serializable
+data class AppleLookupItem(
+    val wrapperType: String? = null,
+    val artistId: Long? = null,
+    val artistName: String? = null,
+    val collectionId: Long? = null,
+    val collectionName: String? = null,
+    val trackId: Long? = null,
+    val trackName: String? = null,
+    val trackTimeMillis: Long? = null,
+    val artworkUrl100: String? = null,
+    val releaseDate: String? = null,
+    val kind: String? = null,
+)

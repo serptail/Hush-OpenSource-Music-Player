@@ -3,16 +3,21 @@ package com.hush.feature.search
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hush.core.model.Track
+import com.hush.feature.resolver.PrefetchCoordinator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class SearchUiState(
@@ -22,19 +27,40 @@ data class SearchUiState(
     val error: String? = null,
 )
 
-@OptIn(FlowPreview::class)
+@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class SearchViewModel @Inject constructor(private val repository: SearchRepository) : ViewModel() {
+class SearchViewModel @Inject constructor(
+    private val repository: SearchRepository,
+    private val prefetch: PrefetchCoordinator,
+    private val discoverRepository: DiscoverRepository,
+) : ViewModel() {
     private val query = MutableStateFlow("")
     private val _state = MutableStateFlow(SearchUiState())
     val state: StateFlow<SearchUiState> = _state.asStateFlow()
+    private val _discover = MutableStateFlow(DiscoverState())
+    val discover: StateFlow<DiscoverState> = _discover.asStateFlow()
+
+    /** The artist whose name matches what is typed (null when none). Shown as a highlighted card above the songs. */
+    val artistHit: StateFlow<DiscoverItem?> = query
+        .debounce(300)
+        .distinctUntilChanged()
+        .mapLatest { value -> if (value.trim().length < 2) null else discoverRepository.artistHit(value) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     init {
+        viewModelScope.launch { _discover.value = discoverRepository.load() }
         viewModelScope.launch {
-            // collectLatest (not collect): a fresh keystroke cancels the previous search's
-            // in-flight MusicBrainz+YouTube+artwork batch instead of letting old and new
-            // results race each other into _state.
-            query.debounce(350).distinctUntilChanged().filter { it.length >= 2 }.collectLatest { search(it) }
+            query.debounce(250).distinctUntilChanged().flatMapLatest { value ->
+                if (value.trim().length < 2) kotlinx.coroutines.flow.flowOf(SearchResult(emptyList(), true))
+                else repository.search(value)
+            }.collect { result ->
+                _state.value = _state.value.copy(
+                    tracks = result.tracks,
+                    isLoading = !result.isFinal,
+                    error = null,
+                )
+                if (result.isFinal) prefetch.prefetch(result.tracks)
+            }
         }
     }
 
@@ -44,13 +70,4 @@ class SearchViewModel @Inject constructor(private val repository: SearchReposito
         if (value.isBlank()) _state.value = SearchUiState()
     }
 
-    private suspend fun search(value: String) {
-        _state.value = _state.value.copy(isLoading = true, error = null)
-        // SearchRepository.searchTracks now resolves cover art (MusicBrainz -> Cover Art
-        // Archive, cached in Room) and fans out to YouTube Music internally, so the tracks
-        // it returns already have albumArtUrl populated — no separate artwork pass needed.
-        repository.searchTracks(value)
-            .onSuccess { tracks -> _state.value = _state.value.copy(tracks = tracks, isLoading = false) }
-            .onFailure { error -> _state.value = _state.value.copy(isLoading = false, error = error.message ?: "Search failed") }
-    }
 }

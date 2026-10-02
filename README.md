@@ -71,4 +71,6 @@ gradle :sync:run
 
 The bundled Android yt-dlp wrapper updates its binary in-app from the stable release channel. The backend remains available for optional shared resolution caching and server deployments, but normal users do not need a server, Docker, Python, yt-dlp, or a terminal. The wrapper is GPL-3.0 licensed; preserve its license and notices when distributing Hush.
 
+Hush also uses NewPipe Extractor for YouTube Music search with yt-dlp as a fallback. NewPipe Extractor is GPL-3.0 licensed; preserve its license and required notices when distributing Hush.
+
 When MusicBrainz does not return an ISRC, Hush uses a deterministic `fallback:<artist>|<title>|<duration>` key for local and remote resolution caching. This prevents blank ISRCs from colliding while keeping the fallback visibly distinguishable from a real ISRC.

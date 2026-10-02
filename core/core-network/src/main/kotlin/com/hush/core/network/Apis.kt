@@ -31,6 +31,75 @@ interface ItunesApi {
         @Query("limit") limit: Int = 25,
         @Query("country") country: String = "US",
     ): Response<ItunesSearchResponse>
+
+    @GET("lookup")
+    suspend fun lookupAll(
+        @Query("id") id: String,
+        @Query("entity") entity: String? = null,
+        @Query("limit") limit: Int = 200,
+    ): AppleLookupResponse
+
+    @GET("search")
+    suspend fun searchArtists(
+        @Query("term") term: String,
+        @Query("entity") entity: String = "musicArtist",
+        @Query("limit") limit: Int = 10,
+    ): AppleLookupResponse
+
+    @GET("lookup")
+    suspend fun lookup(
+        @Query("id") id: String,
+        @Query("entity") entity: String = "song",
+    ): Response<ItunesSearchResponse>
+}
+
+interface DeezerApi {
+    @GET("search/artist")
+    suspend fun searchArtists(@Query("q") query: String, @Query("limit") limit: Int = 5): DeezerArtistSearchResponse
+
+    @GET("artist/{artistId}/top")
+    suspend fun topTracks(@Path("artistId") artistId: Long, @Query("limit") limit: Int = 100): DeezerTrackResponse
+
+    @GET("search")
+    suspend fun searchTracks(@Query("q") query: String, @Query("limit") limit: Int = 25): DeezerTrackResponse
+
+    @GET("chart/0/tracks")
+    suspend fun chartTracks(@Query("limit") limit: Int = 25): DeezerTrackResponse
+
+    @GET("chart/0/albums")
+    suspend fun chartAlbums(@Query("limit") limit: Int = 12): DeezerAlbumResponse
+
+    @GET("chart/0/artists")
+    suspend fun chartArtists(@Query("limit") limit: Int = 12): DeezerArtistSearchResponse
+
+    @GET("artist/{artistId}/albums")
+    suspend fun artistAlbums(
+        @Path("artistId") artistId: Long,
+        @Query("limit") limit: Int = 100,
+        @Query("index") index: Int = 0,
+    ): DeezerAlbumResponse
+
+    @GET("artist/{artistId}")
+    suspend fun artist(@Path("artistId") artistId: Long): DeezerArtistDto
+
+    /** Artist photo lookup: own DTO so it carries fan count + picture urls. */
+    @GET("search/artist")
+    suspend fun searchArtistPhotos(@Query("q") query: String, @Query("limit") limit: Int = 10): DeezerPhotoSearchResponse
+
+    /** Album titles only; used to verify that a Deezer artist is the same person as the Apple artist. */
+    @GET("artist/{artistId}/albums")
+    suspend fun artistAlbumTitles(@Path("artistId") artistId: Long, @Query("limit") limit: Int = 100): DeezerTitleResponse
+
+    @GET("album/{albumId}/tracks")
+    suspend fun albumTracks(@Path("albumId") albumId: Long, @Query("limit") limit: Int = 100): DeezerTrackResponse
+}
+
+interface AppleChartsApi {
+    @GET("music/most-played/{limit}/songs.json")
+    suspend fun topSongs(@Path("limit") limit: Int = 10): AppleChartResponse
+
+    @GET("music/most-played/{limit}/albums.json")
+    suspend fun topAlbums(@Path("limit") limit: Int = 10): AppleChartResponse
 }
 
 interface YoutubeMusicApi {
@@ -40,7 +109,7 @@ interface YoutubeMusicApi {
 interface ResolverSyncApi {
     @GET("resolve/{isrc}") suspend fun get(@Path("isrc") isrc: String): Response<ResolvedSourceDto>
     @POST("resolve") suspend fun save(@Body source: ResolvedSourceDto): Response<Unit>
+    @GET("charts/{name}") suspend fun chart(@Path("name") name: String, @Query("limit") limit: Int = 50): Response<BillboardChartDto>
     @GET("youtube/search") suspend fun searchYoutube(@Query("query") query: String): YoutubeSearchResponse
     @GET("youtube/stream/{videoId}") suspend fun youtubeStream(@Path("videoId") videoId: String): Response<AudioStreamDto>
 }
-

@@ -10,9 +10,14 @@ import com.hush.core.network.ResolverSyncApi
 import com.hush.core.network.YoutubeMusicSearchSource
 import dagger.Binds
 import dagger.Module
+import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 interface ResolvedSourceRepository {
     suspend fun getLocal(isrc: String): ResolvedSource?
@@ -42,5 +47,14 @@ abstract class ResolverRepositoryModule {
     // Exposes AndroidYtDlpEngine to feature-search as the core-network interface, so
     // SearchRepositoryImpl can fan out to YouTube during live search without feature-search
     // depending on feature-resolver directly.
-    @Binds abstract fun bindYoutubeMusicSearchSource(engine: AndroidYtDlpEngine): YoutubeMusicSearchSource
+    @Binds abstract fun bindYoutubeMusicSearchSource(source: HybridYoutubeMusicSearchSource): YoutubeMusicSearchSource
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+object ResolverScopeModule {
+    @Provides
+    @Singleton
+    @ApplicationScope
+    fun applicationScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import com.hush.core.model.Track
 import com.hush.core.network.YoutubeCandidate
 import com.hush.core.network.YoutubeMusicSearchSource
+import com.hush.core.network.isValidYoutubeVideoId
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -11,8 +12,13 @@ import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -58,6 +64,9 @@ class AndroidYtDlpEngine @Inject constructor(
     // A forced yt-dlp update is expensive (network round trip) -- only ever do it once per
     // process lifetime as a bot-check recovery attempt, not on every single failure.
     @Volatile private var hasForcedUpdateThisSession = false
+    private val streamScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val streamCache = ConcurrentHashMap<String, CachedUrl>()
+    private val streamInFlight = ConcurrentHashMap<String, Deferred<Result<String>>>()
 
     /**
      * Scoped to YouTube Music's own "Songs" catalog. --flat-playlist search rarely triggers
@@ -67,18 +76,40 @@ class AndroidYtDlpEngine @Inject constructor(
     override suspend fun searchSongs(query: String): List<YoutubeCandidate> = withContext(Dispatchers.IO) {
         ensureReady()
         val encoded = URLEncoder.encode(query, "UTF-8")
-        val request = YoutubeDLRequest("https://music.youtube.com/search?q=$encoded")
+        val filtered = searchMusicUrl("https://music.youtube.com/search?q=$encoded$SONGS_FILTER", true)
+        if (filtered.isNotEmpty()) return@withContext filtered
+
+        // The Songs filter is controlled by YouTube and can change independently of yt-dlp.
+        // Keep the older unfiltered Music URL as a compatibility path, then use ytsearch as
+        // the final fallback. The shared repository applies strict ID/title/artist filtering.
+        val musicUrl = searchMusicUrl("https://music.youtube.com/search?q=$encoded", false)
+        if (musicUrl.isNotEmpty()) return@withContext musicUrl
+        val broad = searchBroad(query)
+        if (broad.isNotEmpty() || hasForcedUpdateThisSession) return@withContext broad
+
+        // An installed yt-dlp binary can be stale even when initialization succeeds. Refresh
+        // once after an entirely empty search, then repeat the complete fallback chain.
+        hasForcedUpdateThisSession = true
+        forceUpdate()
+        val retryFiltered = searchMusicUrl("https://music.youtube.com/search?q=$encoded$SONGS_FILTER", true)
+        if (retryFiltered.isNotEmpty()) return@withContext retryFiltered
+        val retryMusic = searchMusicUrl("https://music.youtube.com/search?q=$encoded", false)
+        if (retryMusic.isNotEmpty()) return@withContext retryMusic
+        searchBroad(query)
+    }
+
+    private fun searchMusicUrl(url: String, isMusicCatalog: Boolean): List<YoutubeCandidate> {
+        val request = YoutubeDLRequest(url)
             .addOption("--flat-playlist")
             .addOption("--dump-single-json")
             .addOption("--skip-download")
             .addOption("--no-warnings")
-            .addOption("--playlist-end", "10")
-            .addOption("--extractor-args", CLIENT_ARGS)
-        val output = runCatching { YoutubeDL.getInstance().execute(request).out }.getOrNull() ?: return@withContext emptyList()
-        runCatching { json.decodeFromString<YtMusicSearchResultJson>(output) }
+            .addOption("--playlist-end", "15")
+        val output = runCatching { YoutubeDL.getInstance().execute(request).out }.getOrNull() ?: return emptyList()
+        return runCatching { json.decodeFromString<YtMusicSearchResultJson>(output) }
             .getOrNull()
             ?.entries
-            ?.mapNotNull { it.toCandidate(isMusicCatalog = true) }
+            ?.mapNotNull { it.toCandidate(isMusicCatalog) }
             ?: emptyList()
     }
 
@@ -95,7 +126,7 @@ class AndroidYtDlpEngine @Inject constructor(
             .getOrNull()
             ?.entries
             ?.mapNotNull { entry ->
-                entry.id.takeIf { it.isNotBlank() }?.let {
+                    entry.id.takeIf(::isValidYoutubeVideoId)?.let {
                     YoutubeCandidate(
                         videoId = it,
                         title = entry.title,
@@ -127,7 +158,28 @@ class AndroidYtDlpEngine @Inject constructor(
      * A 12s overall timeout also means a stuck/blocked resolution fails fast with a clear
      * error instead of leaving the UI hanging indefinitely.
      */
-    suspend fun audioUrl(videoId: String): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun audioUrl(videoId: String): Result<String> {
+        streamCache[videoId]?.takeIf { it.expiresAtMs > System.currentTimeMillis() }?.let {
+            return Result.success(it.url)
+        }
+        val deferred = streamInFlight.computeIfAbsent(videoId) {
+            streamScope.async {
+                resolveWithRetry(videoId).onSuccess { url ->
+                    streamCache[videoId] = CachedUrl(url, expiryOf(url))
+                    if (streamCache.size > MAX_STREAM_CACHE_ENTRIES) {
+                        streamCache.keys.firstOrNull()?.let(streamCache::remove)
+                    }
+                }
+            }
+        }
+        return try {
+            deferred.await()
+        } finally {
+            if (deferred.isCompleted) streamInFlight.remove(videoId, deferred)
+        }
+    }
+
+    private suspend fun resolveWithRetry(videoId: String): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             ensureReady()
             withTimeoutOrNull(AUDIO_RESOLVE_TIMEOUT_MS) { resolveAudioUrl(videoId) }
@@ -136,7 +188,7 @@ class AndroidYtDlpEngine @Inject constructor(
             // YouTube changes its bot-check/signature scheme often enough that a stale
             // yt-dlp build is frequently the actual cause -- force one update (once per
             // session) and retry before surfacing failure to the user.
-            if (error.looksLikeBotCheck() && !hasForcedUpdateThisSession) {
+            if (!hasForcedUpdateThisSession) {
                 hasForcedUpdateThisSession = true
                 forceUpdate()
                 withTimeoutOrNull(AUDIO_RESOLVE_TIMEOUT_MS) { resolveAudioUrl(videoId) }
@@ -171,7 +223,7 @@ class AndroidYtDlpEngine @Inject constructor(
     }
 
     private fun YtMusicEntryJson.toCandidate(isMusicCatalog: Boolean): YoutubeCandidate? {
-        val videoId = id.takeIf { it.isNotBlank() } ?: return null
+        val videoId = id.takeIf(::isValidYoutubeVideoId) ?: return null
         val channelOrUploader = channel ?: uploader
         return YoutubeCandidate(
             videoId = videoId,
@@ -200,16 +252,24 @@ class AndroidYtDlpEngine @Inject constructor(
                 }
             }
         }
-        val now = System.currentTimeMillis()
-        if (now - lastUpdateAtMs >= UPDATE_INTERVAL_MS) {
-            synchronized(this) {
-                if (now - lastUpdateAtMs >= UPDATE_INTERVAL_MS) {
-                    runCatching { YoutubeDL.getInstance().updateYoutubeDL(context, YoutubeDL.UpdateChannel.STABLE) }
-                    lastUpdateAtMs = now
-                }
-            }
+    }
+
+    suspend fun warmUp() = withContext(Dispatchers.IO) {
+        ensureReady()
+        val preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+        val lastUpdate = preferences.getLong(LAST_UPDATE_KEY, 0L)
+        if (System.currentTimeMillis() - lastUpdate >= UPDATE_INTERVAL_MS) {
+            runCatching { YoutubeDL.getInstance().updateYoutubeDL(context, YoutubeDL.UpdateChannel.STABLE) }
+            preferences.edit().putLong(LAST_UPDATE_KEY, System.currentTimeMillis()).apply()
+            lastUpdateAtMs = System.currentTimeMillis()
         }
     }
+
+    private fun expiryOf(url: String): Long = Regex("[?&]expire=(\\d+)").find(url)?.groupValues?.get(1)
+        ?.toLongOrNull()?.let { it * 1_000L - STREAM_EXPIRY_SAFETY_MS }
+        ?: (System.currentTimeMillis() + DEFAULT_STREAM_TTL_MS)
+
+    private data class CachedUrl(val url: String, val expiresAtMs: Long)
 
     private fun forceUpdate() {
         synchronized(this) {
@@ -219,8 +279,14 @@ class AndroidYtDlpEngine @Inject constructor(
     }
 
     private companion object {
+        const val SONGS_FILTER = "&sp=EgWKAQIIAWoKEAoQAxAEEAkQBQ%3D%3D"
+        const val PREFERENCES = "yt_dlp"
+        const val LAST_UPDATE_KEY = "last_update_ms"
         const val UPDATE_INTERVAL_MS = 86_400_000L
         const val AUDIO_RESOLVE_TIMEOUT_MS = 12_000L
+        const val STREAM_EXPIRY_SAFETY_MS = 120_000L
+        const val DEFAULT_STREAM_TTL_MS = 20 * 60_000L
+        const val MAX_STREAM_CACHE_ENTRIES = 200
         // ios/android clients generally don't demand a PO token the way "web" now does;
         // web_safari is kept as a third option since it occasionally succeeds when the
         // other two are rate-limited independently by YouTube.

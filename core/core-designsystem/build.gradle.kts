@@ -22,5 +22,8 @@ dependencies {
     // coil.compose also brings Coil 2's core (coil.imageLoader / ImageRequest) used by AdaptiveBackground.kt
     implementation(libs.coil.compose)
 
+    // Backdrop blur for Acrylic.kt. api (not implementation): HazeState appears in AcrylicHost / acrylicSource signatures, so feature modules need it on their compile classpath.
+    api(libs.haze)
+
     api(libs.phosphor.icon)
 }

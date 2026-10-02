@@ -88,6 +88,7 @@ private val HushBodyFont = FontFamily(
 private val HushTypography = Typography().run {
     copy(
         displayLarge = displayLarge.copy(fontFamily = HushDisplayFont, fontWeight = FontWeight.ExtraBold, fontSize = 34.sp, lineHeight = 38.sp, letterSpacing = (-0.3).sp),
+        displayMedium = displayMedium.copy(fontFamily = HushDisplayFont, fontWeight = FontWeight.ExtraBold, fontSize = 28.sp, lineHeight = 32.sp, letterSpacing = (-0.2).sp),
         headlineLarge = headlineLarge.copy(fontFamily = HushDisplayFont, fontWeight = FontWeight.ExtraBold, fontSize = 26.sp, lineHeight = 30.sp),
         headlineMedium = headlineMedium.copy(fontFamily = HushDisplayFont, fontWeight = FontWeight.ExtraBold, fontSize = 21.sp, lineHeight = 26.sp),
         titleLarge = titleLarge.copy(fontFamily = HushDisplayFont, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, lineHeight = 23.sp),

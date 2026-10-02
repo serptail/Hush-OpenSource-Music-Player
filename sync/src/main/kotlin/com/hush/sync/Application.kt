@@ -11,6 +11,7 @@ import io.ktor.server.response.respond
 import io.ktor.server.request.receive
 import io.ktor.server.routing.*
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.launch
 
 private val cache = ConcurrentHashMap<String, ResolvedSource>()
 
@@ -20,6 +21,7 @@ fun main(args: Array<String>) {
 
 fun Application.module() {
     val ytDlp = YtDlpService()
+    launch { ytDlp.warmUp() }
     install(ContentNegotiation) { json() }
     routing {
         get("/resolve/{isrc}") { val value = cache[call.parameters["isrc"]]; if (value == null) call.respond(HttpStatusCode.NotFound) else call.respond(value) }

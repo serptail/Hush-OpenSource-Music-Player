@@ -6,12 +6,17 @@ import android.content.ContextWrapper
 import android.os.Build
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -56,6 +61,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -83,6 +89,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -97,6 +104,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -277,41 +286,38 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
             )
         }
 
+        // Nothing playing (or still loading): no controls, no text, just a black record turning in the
+        // middle of the flat background. As soon as a track arrives the real player takes over.
+        if (track == null) {
+            LoadingVinyl(Modifier.align(Alignment.Center))
+            return@Box
+        }
+
         Column(
             Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp),
         ) {
             TopBar(onBack, Modifier.fillMaxWidth())
 
-            // Nothing playing: a stripped-down screen (title at the top, empty vinyl, prev/next
-            // and the control row). No artist line, favorite button, timestamps, progress line
-            // or lyrics card.
-            val hasTrack = track != null
-
             Spacer(Modifier.height(20.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
                     BouncingText(
-                        text = track?.title ?: "No song",
+                        text = track.title,
                         style = MaterialTheme.typography.headlineLarge.copy(letterSpacing = (-0.3).sp),
                         color = Color.White,
                     )
-                    if (hasTrack) {
-                        Spacer(Modifier.height(2.dp))
-                        BouncingText(
-                            text = track?.artist ?: "",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Color.White.copy(alpha = 0.65f),
-                        )
-                    }
+                    Spacer(Modifier.height(2.dp))
+                    BouncingText(
+                        text = track.artist,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White.copy(alpha = 0.65f),
+                    )
                 }
-                if (hasTrack) {
-                    DepthIcon(PhosphorIcons.Light.Heart, "Favorite", Modifier.bounceTap(onClick = {}).padding(4.dp), size = 26.dp)
-                }
+                DepthIcon(PhosphorIcons.Light.Heart, "Favorite", Modifier.bounceTap(onClick = {}).padding(4.dp), size = 26.dp)
             }
 
             // Gap between the title row and the cover: bigger = cover + controls sit lower / more central.
             Spacer(Modifier.height(40.dp))
-            if (!hasTrack) Spacer(Modifier.weight(1f)) // centers the vinyl + controls in the space under the title
 
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                 DepthIcon(PhosphorIcons.Light.SkipBack, "Previous", Modifier.bounceTap(onClick = player::skipPrevious).padding(8.dp), size = 28.dp)
@@ -321,7 +327,7 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
                     progress = progressProvider,
                     onScrub = { scrubFraction = it },
                     isPlaying = isPlaying,
-                    enabled = track != null,
+                    enabled = true,
                     waveform = waveform,
                     onTogglePlay = { if (isPlaying) player.pause() else player.resume() },
                     onSeekFraction = { fraction ->
@@ -338,7 +344,7 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
             }
 
             Spacer(Modifier.height(14.dp))
-            if (hasTrack) TimeRow(positionProvider, track?.durationMs ?: 0L)
+            TimeRow(positionProvider, track.durationMs)
 
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -349,24 +355,20 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
 
             Spacer(Modifier.height(16.dp))
 
-            if (hasTrack) {
-                // Lyrics: a collapsible card that takes whatever space is left below the controls.
-                LyricsSection(
-                    lyricsState = lyricsState,
-                    positionMs = { smoothPositionMs.toLong() },
-                    accent = accent,
-                    expanded = lyricsExpanded,
-                    onToggle = { lyricsExpanded = !lyricsExpanded },
-                    backdropUrl = artUrl,
-                    backdropSize = rootSize,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(bottom = 16.dp),
-                )
-            } else {
-                Spacer(Modifier.weight(1f))
-            }
+            // Lyrics: a collapsible card that takes whatever space is left below the controls.
+            LyricsSection(
+                lyricsState = lyricsState,
+                positionMs = { smoothPositionMs.toLong() },
+                accent = accent,
+                expanded = lyricsExpanded,
+                onToggle = { lyricsExpanded = !lyricsExpanded },
+                backdropUrl = artUrl,
+                backdropSize = rootSize,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(bottom = 16.dp),
+            )
         }
     }
 }
@@ -497,12 +499,9 @@ private fun ArtworkWithRing(
                             if (size.width > 0f && size.height > 0f) loadedAspect = size.width / size.height
                         },
                     )
-                } else {
-                    EmptyVinyl()
                 }
                 // No circle behind the icon anymore, just the bare glyph (a bit larger so it
                 // still reads on top of the artwork).
-                // Nothing loaded: no play/pause glyph at all, the empty vinyl stands alone.
                 if (enabled) {
                     Box(
                         Modifier
@@ -816,44 +815,108 @@ private fun rememberWaveform(track: Track?): FloatArray {
     return data
 }
 
-/** Blank record shown in the cover slot when nothing is playing: grooves, a plain label, a spindle hole. */
+/**
+ * The "no song yet" / loading screen: a plain black record, centered, turning at a steady pace until
+ * a track loads. Black grooves alone would look still when rotated, so the light glints and the hairline
+ * on the label turn with the disc; they are what makes the spin readable.
+ */
 @Composable
-private fun EmptyVinyl() {
-    val tile = Color(0xFF1C1D24)   // a step lighter than the screen fill so the empty cover still reads as a card
-    Canvas(Modifier.fillMaxSize().background(tile)) {
+private fun LoadingVinyl(modifier: Modifier = Modifier) {
+    Box(
+        modifier.fillMaxWidth(0.74f).widthIn(max = 330.dp).aspectRatio(1f),
+        contentAlignment = Alignment.Center,
+    ) {
+        PlayerSpinner(Modifier.fillMaxSize(), Color.White.copy(alpha = 0.6f), strokeWidth = 1.5.dp)
+        VinylDisc(Modifier.fillMaxSize(0.84f))
+    }
+}
+
+/** A thin arc that grows and shrinks while it circles, over a faint track. Replaces the stock Material spinner. */
+@Composable
+private fun PlayerSpinner(modifier: Modifier = Modifier, color: Color = Color.White, strokeWidth: Dp = 2.dp) {
+    val transition = rememberInfiniteTransition(label = "player-spinner")
+    val rotation by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(durationMillis = 1500, easing = LinearEasing)),
+        label = "spinner-rotation",
+    )
+    val sweep by transition.animateFloat(
+        initialValue = 40f,
+        targetValue = 250f,
+        animationSpec = infiniteRepeatable(tween(durationMillis = 1000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "spinner-sweep",
+    )
+    Canvas(modifier.semantics { contentDescription = "Loading" }) {
+        val stroke = strokeWidth.toPx()
+        val inset = stroke / 2f
+        val arcSize = Size(size.width - stroke, size.height - stroke)
+        val topLeft = Offset(inset, inset)
+        drawArc(color.copy(alpha = 0.14f), 0f, 360f, false, topLeft, arcSize, style = Stroke(stroke))
+        drawArc(color, rotation, sweep, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+    }
+}
+
+@Composable
+private fun VinylDisc(modifier: Modifier = Modifier) {
+    val spin = rememberInfiniteTransition(label = "vinyl-spin")
+    val angle by spin.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(durationMillis = 2400, easing = LinearEasing)),   // one turn per 2.4s
+        label = "vinyl-angle",
+    )
+    val black = Color(0xFF050506)
+    Canvas(
+        modifier
+            // Rotation lives on the layer: the record is drawn once and only turned each frame.
+            .graphicsLayer { rotationZ = angle },
+    ) {
         val c = center
-        val r = size.minDimension / 2f * 0.9f
-        val labelR = r * 0.34f
-        // Record body.
+        val r = size.minDimension / 2f
+        val labelR = r * 0.35f
+
+        // Body: near-black, a hair lighter toward the middle so the edge still reads on the dark screen.
         drawCircle(
-            brush = Brush.radialGradient(listOf(Color(0xFF2B2830), Color(0xFF0B0A0D)), center = c, radius = r),
+            brush = Brush.radialGradient(listOf(Color(0xFF16161A), black), center = c, radius = r),
             radius = r,
             center = c,
         )
-        // Grooves.
-        var g = labelR + r * 0.06f
-        while (g < r * 0.97f) {
-            drawCircle(color = Color.White.copy(alpha = 0.05f), radius = g, center = c, style = Stroke(0.8.dp.toPx()))
-            g += 3.dp.toPx()
+        // Fine grooves, from just outside the label to just inside the rim.
+        val groove = 0.6.dp.toPx()
+        var g = labelR + r * 0.12f
+        var i = 0
+        while (g < r * 0.95f) {
+            drawCircle(Color.White.copy(alpha = if (i % 3 == 0) 0.06f else 0.03f), radius = g, center = c, style = Stroke(groove))
+            g += 2.5.dp.toPx()
+            i++
         }
-        // Two opposite light glints, the way light rakes across a real record.
+        // Two opposite light glints raking across the grooves.
         drawCircle(
             brush = Brush.sweepGradient(
-                listOf(
-                    Color.Transparent, Color.White.copy(alpha = 0.11f), Color.Transparent,
-                    Color.Transparent, Color.White.copy(alpha = 0.11f), Color.Transparent,
-                ),
+                0.00f to Color.Transparent,
+                0.07f to Color.White.copy(alpha = 0.16f),
+                0.15f to Color.Transparent,
+                0.50f to Color.Transparent,
+                0.57f to Color.White.copy(alpha = 0.16f),
+                0.65f to Color.Transparent,
+                1.00f to Color.Transparent,
                 center = c,
             ),
-            radius = r,
+            radius = r * 0.97f,
             center = c,
         )
-        // Edge highlight.
-        drawCircle(color = Color.White.copy(alpha = 0.10f), radius = r, center = c, style = Stroke(1.dp.toPx()))
-        // Blank label + spindle hole.
-        drawCircle(color = Color(0xFF3A3540), radius = labelR, center = c)
-        drawCircle(color = Color.White.copy(alpha = 0.08f), radius = labelR, center = c, style = Stroke(1.dp.toPx()))
-        drawCircle(color = tile, radius = r * 0.035f, center = c)
+        // Raised lip + rim.
+        drawCircle(Color.White.copy(alpha = 0.05f), radius = r * 0.965f, center = c, style = Stroke(1.dp.toPx()))
+        drawCircle(Color.White.copy(alpha = 0.14f), radius = r - 0.5.dp.toPx(), center = c, style = Stroke(1.dp.toPx()))
+        // Blank white label, a faint hairline from the spindle hole to its edge, and the hole itself.
+        drawCircle(
+            brush = Brush.radialGradient(listOf(Color(0xFFF4F4F4), Color(0xFFDADADA)), center = c, radius = labelR),
+            radius = labelR,
+            center = c,
+        )
+        drawLine(Color.Black.copy(alpha = 0.18f), start = c, end = Offset(c.x - labelR * 0.96f, c.y), strokeWidth = 0.7.dp.toPx())
+        drawCircle(black, radius = r * 0.03f, center = c)
     }
 }
 
@@ -1264,10 +1327,7 @@ fun LyricsSection(
                         Box(Modifier.fillMaxSize()) {
                             when (lyricsState) {
                                 is LyricsState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    androidx.compose.material3.CircularProgressIndicator(
-                                        color = Color.White.copy(alpha = 0.6f),
-                                        modifier = Modifier.size(24.dp),
-                                    )
+                                    PlayerSpinner(Modifier.size(26.dp), Color.White.copy(alpha = 0.75f))
                                 }
                                 is LyricsState.Loaded -> {
                                     if (lyricsState.lines.isEmpty()) {
@@ -1377,11 +1437,7 @@ private fun LyricsPreview(lyricsState: LyricsState) {
     val font = rememberLyricsFont()
     when (lyricsState) {
         is LyricsState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            androidx.compose.material3.CircularProgressIndicator(
-                color = Color.White.copy(alpha = 0.6f),
-                modifier = Modifier.size(20.dp),
-                strokeWidth = 2.dp,
-            )
+            PlayerSpinner(Modifier.size(22.dp), Color.White.copy(alpha = 0.75f))
         }
         is LyricsState.Loaded -> {
             if (lyricsState.lines.isEmpty()) {

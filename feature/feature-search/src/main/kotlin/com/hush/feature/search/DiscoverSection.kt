@@ -23,11 +23,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,17 +39,20 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.light.DotsThreeVertical
 import com.adamglin.phosphoricons.light.MusicNote
 import com.adamglin.phosphoricons.light.Play
+import com.hush.core.designsystem.HushDisplayFont
 import com.hush.core.designsystem.fadeEdges
 import com.hush.core.designsystem.ink
 import com.hush.core.designsystem.pressScale
@@ -69,12 +73,27 @@ private val CardHeight = 272.dp
 @Composable
 internal fun DiscoverContent(
     modifier: Modifier = Modifier,
-    albums: List<DiscoverItem> = MockAlbums,
-    artists: List<DiscoverItem> = MockArtists,
-    tabs: List<DiscoverTab> = MockDiscoverTabs,
-    onItemClick: (DiscoverItem) -> Unit = {},
+    state: DiscoverState,
+    onTrackClick: (com.hush.core.model.Track) -> Unit,
+    onArtistClick: (Long) -> Unit,
+    onAlbumClick: (DiscoverItem) -> Unit,
 ) {
-    var selected by remember { mutableIntStateOf(0) }
+    var selected by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    val albums = state.albums
+    val artists = state.artists
+    val tabs = state.tabs
+    if (state.isLoading && tabs.isEmpty()) {
+        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = ink(), strokeWidth = 2.dp)
+        }
+        return
+    }
+    if (tabs.isEmpty()) {
+        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(state.error ?: "Discover is unavailable", color = ink(0.65f))
+        }
+        return
+    }
     // The parent screen pads 24dp on both sides; Discover is allowed to use the full screen width, so the
     // card rows scroll edge to edge. Sections add their own 24dp padding back where they need it.
     LazyColumn(
@@ -87,17 +106,17 @@ internal fun DiscoverContent(
                 contentPadding = PaddingValues(start = 24.dp, top = 14.dp, end = 24.dp, bottom = 26.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                items(albums, key = { it.imageUrl }) { AlbumCard(it, onItemClick) }
+                items(albums, key = { it.id }) { AlbumCard(it, onTrackClick, onAlbumClick) }
             }
         }
 
-        item { SectionTitle("Top artists") }
+        item { SectionTitle("Artists in top songs") }
         item {
             LazyRow(
                 contentPadding = PaddingValues(start = 24.dp, top = 14.dp, end = 24.dp, bottom = 26.dp),
                 horizontalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                items(artists, key = { it.imageUrl }) { ArtistItem(it, onItemClick) }
+                items(artists, key = { it.id }) { ArtistItem(it, onArtistClick) }
             }
         }
 
@@ -119,7 +138,7 @@ internal fun DiscoverContent(
                     Column(Modifier.fillMaxWidth()) {
                         SectionTitle(tabs[index].title, startPadding = 6.dp)
                         Spacer(Modifier.height(6.dp))
-                        tabs[index].items.forEach { SongRow(it, onItemClick) }
+                        tabs[index].items.forEach { SongRow(it, onTrackClick) }
                     }
                 }
             }
@@ -139,11 +158,11 @@ private fun SectionTitle(text: String, startPadding: Dp = 24.dp) {
 
 /** Big rounded cover card: art fills it, dark fade at the bottom carries the title, small play badge. */
 @Composable
-private fun AlbumCard(item: DiscoverItem, onClick: (DiscoverItem) -> Unit) {
+private fun AlbumCard(item: DiscoverItem, onTrackClick: (com.hush.core.model.Track) -> Unit, onAlbumClick: (DiscoverItem) -> Unit) {
     Box(
         Modifier
             .size(CardWidth, CardHeight)
-            .pressScale(onClick = { onClick(item) }, scaleDown = 0.97f)
+            .pressScale(onClick = { item.track?.let(onTrackClick) ?: onAlbumClick(item) }, scaleDown = 0.97f)
             .shadow(14.dp, CardShape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
             .clip(CardShape),
     ) {
@@ -191,9 +210,9 @@ private fun AlbumCard(item: DiscoverItem, onClick: (DiscoverItem) -> Unit) {
 
 /** Round artist portrait with the name underneath. */
 @Composable
-private fun ArtistItem(item: DiscoverItem, onClick: (DiscoverItem) -> Unit) {
+private fun ArtistItem(item: DiscoverItem, onArtistClick: (Long) -> Unit) {
     Column(
-        Modifier.width(92.dp).pressScale(onClick = { onClick(item) }, scaleDown = 0.96f),
+        Modifier.width(92.dp).pressScale(onClick = { item.artistId?.let(onArtistClick) }, scaleDown = 0.96f),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         SubcomposeAsyncImage(
@@ -210,8 +229,8 @@ private fun ArtistItem(item: DiscoverItem, onClick: (DiscoverItem) -> Unit) {
         Spacer(Modifier.height(10.dp))
         Text(
             item.title,
-            style = MaterialTheme.typography.bodyMedium,
-            color = ink(0.85f),
+            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = HushDisplayFont, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp),
+            color = ink(0.9f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
@@ -220,11 +239,11 @@ private fun ArtistItem(item: DiscoverItem, onClick: (DiscoverItem) -> Unit) {
 }
 
 @Composable
-private fun SongRow(item: DiscoverItem, onClick: (DiscoverItem) -> Unit) {
+private fun SongRow(item: DiscoverItem, onTrackClick: (com.hush.core.model.Track) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .pressScale(onClick = { onClick(item) }, scaleDown = 0.98f)
+            .pressScale(onClick = { item.track?.let(onTrackClick) }, scaleDown = 0.98f)
             .padding(start = 6.dp, end = 24.dp, top = 9.dp, bottom = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -314,14 +333,21 @@ private fun Modifier.bleedSides(amount: Dp): Modifier = layout { measurable, con
 
 // ------------------------------------------ MOCK DATA ------------------------------------------
 
-internal data class DiscoverItem(val title: String, val subtitle: String, val imageUrl: String)
+data class DiscoverItem(
+    val id: String = "",
+    val title: String,
+    val subtitle: String,
+    val imageUrl: String,
+    val track: com.hush.core.model.Track? = null,
+    val artistId: Long? = null,
+)
 
 /** One tab of the list beside the vertical tabs: a heading and its rows. */
-internal data class DiscoverTab(val label: String, val title: String, val items: List<DiscoverItem>)
+data class DiscoverTab(val label: String, val title: String, val items: List<DiscoverItem>)
 
 /** Random but stable cover per seed. */
 private fun cover(title: String, subtitle: String, seed: String) =
-    DiscoverItem(title, subtitle, "https://picsum.photos/seed/$seed/600/600")
+    DiscoverItem(id = "mock:$seed", title = title, subtitle = subtitle, imageUrl = "https://picsum.photos/seed/$seed/600/600")
 
 internal val MockAlbums = listOf(
     cover("Slow Bloom", "Velvet Static", "hush-a1"),

@@ -50,6 +50,16 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @Named("deezer")
+    fun deezerClient(): OkHttpClient = baseClient()
+
+    @Provides
+    @Singleton
+    @Named("apple")
+    fun appleClient(): OkHttpClient = baseClient()
+
+    @Provides
+    @Singleton
     @Named("youtube")
     fun youtubeClient(): OkHttpClient = baseClient()
 
@@ -72,6 +82,16 @@ object NetworkModule {
     @Singleton
     fun itunesApi(@Named("itunes") client: OkHttpClient): ItunesApi =
         retrofit("https://itunes.apple.com/", client).create(ItunesApi::class.java)
+
+    @Provides
+    @Singleton
+    fun deezerApi(@Named("deezer") client: OkHttpClient): DeezerApi =
+        retrofit("https://api.deezer.com/", client).create(DeezerApi::class.java)
+
+    @Provides
+    @Singleton
+    fun appleChartsApi(@Named("apple") client: OkHttpClient): AppleChartsApi =
+        retrofit("https://rss.marketingtools.apple.com/api/v2/us/", client).create(AppleChartsApi::class.java)
 
     @Provides
     @Singleton

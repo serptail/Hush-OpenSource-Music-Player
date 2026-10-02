@@ -8,6 +8,7 @@ compose-bom = "2024.09.03"
 activity-compose = "1.9.2"
 navigation-compose = "2.8.2"
 core-ktx = "1.13.1"
+multidex = "2.0.1"
 lifecycle = "2.8.6"
 room = "2.6.1"
 retrofit = "2.11.0"
@@ -19,12 +20,17 @@ ktor = "2.3.12"
 logback = "1.5.8"
 coil = "2.7.0"
 youtubedl-android = "0.18.1"
+newpipe-extractor = "v0.26.5"
+desugar-jdk-libs = "2.1.2"
 # --- new: dynamic color extraction ---
 palette-ktx = "1.0.0"               # dominant-color extraction from bitmaps
 phosphor-icon = "1.0.0"             # thin, minimal icon set (Compose Multiplatform port)
+# --- acrylic / frosted glass ---
+haze = "1.3.1"                      # backdrop blur; last line compatible with Kotlin 2.0.x / Compose 1.7 (hazeSource + hazeEffect API)
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }
+androidx-multidex = { module = "androidx.multidex:multidex", version.ref = "multidex" }
 androidx-lifecycle-runtime = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycle" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
@@ -56,9 +62,12 @@ ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json-jv
 logback = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
 youtubedl-android = { module = "io.github.junkfood02.youtubedl-android:library", version.ref = "youtubedl-android" }
+newpipe-extractor = { module = "com.github.teamnewpipe:NewPipeExtractor", version.ref = "newpipe-extractor" }
+desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugar-jdk-libs" }
 # --- new ---
 androidx-palette-ktx = { module = "androidx.palette:palette-ktx", version.ref = "palette-ktx" }
 phosphor-icon = { module = "com.adamglin:phosphor-icon", version.ref = "phosphor-icon" }
+haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

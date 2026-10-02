@@ -1,6 +1,6 @@
 package com.hush.feature.resolver
 
-import com.hush.core.common.TextSimilarity
+import com.hush.core.common.TextMatch
 import com.hush.core.model.ResolutionMethod
 import com.hush.core.model.ResolvedSource
 import com.hush.core.model.Track
@@ -8,55 +8,41 @@ import com.hush.core.network.YoutubeCandidate
 import javax.inject.Inject
 
 class CandidateScorer @Inject constructor() {
+    data class Scored(val candidate: YoutubeCandidate, val score: Double)
+
+    fun rank(candidates: List<YoutubeCandidate>, track: Track): List<Scored> =
+        candidates.map { Scored(it, score(it, track)) }.sortedByDescending { it.score }
+
     companion object {
-        const val TOPIC_MATCH_THRESHOLD = 0.86
-        const val HARD_MATCH_THRESHOLD = 0.70
-        const val DURATION_TOLERANCE_MS = 3_000L
-        // --flat-playlist frequently omits duration entirely (returns null -> 0).
-        // A missing duration must not be treated as "off by the whole song length".
-        private const val MISSING_DURATION_PENALTY = 0.05
-        private const val DURATION_MISMATCH_PENALTY_PER_SEC = 0.01
-        private const val MAX_DURATION_PENALTY = 0.25
+        const val ACCEPT = 0.60
+        const val LOW_CONFIDENCE = 0.45
     }
 
     fun selectBest(candidates: List<YoutubeCandidate>, track: Track): ResolvedSource? {
-        if (candidates.isEmpty()) return null
-        val expected = TextSimilarity.normalize("${track.artist} ${track.title}")
-
-        // Confident path: a YouTube Music "Songs"-catalog / auto-generated topic-channel
-        // result with a close title match. This previously could never fire because
-        // channelIsTopicChannel was hardcoded false upstream.
-        candidates
-            .filter { (it.channelIsTopicChannel || it.isMusicCatalog) }
-            .maxByOrNull { TextSimilarity.similarityNormalized(it.title, "${track.artist} ${track.title}") }
-            ?.takeIf { TextSimilarity.similarityNormalized(it.title, "${track.artist} ${track.title}") >= TOPIC_MATCH_THRESHOLD }
-            ?.let { return ResolvedSource(track.isrc, it.videoId, ResolutionMethod.TOPIC_CHANNEL, 0.95f, 0) }
-
-        // Fallback path: score every candidate on title similarity, then subtract a soft
-        // penalty for duration mismatch. A missing/zero duration gets a small flat penalty
-        // instead of being compared literally against the real duration and rejected outright.
-        return candidates
-            .asSequence()
-            .map { candidate ->
-                val titleScore = TextSimilarity.similarityNormalized(candidate.title, "${track.artist} ${track.title}")
-                candidate to (titleScore - durationPenalty(candidate, track))
-            }
-            .filter { (_, score) -> score >= HARD_MATCH_THRESHOLD }
-            .maxByOrNull { (candidate, score) -> score + viewCountTiebreak(candidate) }
-            ?.let { (candidate, score) ->
-                ResolvedSource(track.isrc, candidate.videoId, ResolutionMethod.HARD_FILTER, score.toFloat().coerceIn(0f, 1f), 0)
-            }
+        val best = rank(candidates, track).firstOrNull()?.takeIf { it.score >= LOW_CONFIDENCE } ?: return null
+        val method = if (best.candidate.isMusicCatalog || best.candidate.channelIsTopicChannel) ResolutionMethod.TOPIC_CHANNEL else ResolutionMethod.HARD_FILTER
+        return ResolvedSource(track.isrc, best.candidate.videoId, method, best.score.toFloat().coerceIn(0f, 1f), 0)
     }
 
-    private fun durationPenalty(candidate: YoutubeCandidate, track: Track): Double {
-        if (candidate.durationMs <= 0L) return MISSING_DURATION_PENALTY
-        val deltaMs = kotlin.math.abs(candidate.durationMs - track.durationMs)
-        if (deltaMs <= DURATION_TOLERANCE_MS) return 0.0
-        val deltaSeconds = (deltaMs - DURATION_TOLERANCE_MS) / 1000.0
-        return (deltaSeconds * DURATION_MISMATCH_PENALTY_PER_SEC).coerceAtMost(MAX_DURATION_PENALTY)
+    private fun score(candidate: YoutubeCandidate, track: Track): Double {
+        val title = TextMatch.toks(track.title)
+        val artist = TextMatch.toks(track.artist)
+        val candidateTitle = TextMatch.toks(candidate.title)
+        val channel = TextMatch.toks(candidate.channelName.removeSuffix(" - Topic"))
+        val coverage = title.count { it in candidateTitle }.toDouble() / title.size.coerceAtLeast(1)
+        val artistHit = artist.any { it in candidateTitle || it in channel }
+        val junk = (candidateTitle - title - artist).size.coerceAtMost(6)
+        var score = 0.55 * coverage + if (artistHit) 0.25 else 0.0
+        if (!artistHit) score -= 0.35
+        score -= 0.03 * junk
+        if (candidate.channelIsTopicChannel) score += 0.15
+        if (candidate.isMusicCatalog) score += 0.10
+        if (((candidateTitle intersect TextMatch.DERIVATIVE) - (title + artist)).isNotEmpty()) score -= 0.40
+        if (candidate.durationMs > 0L && track.durationMs > 0L) {
+            val seconds = kotlin.math.abs(candidate.durationMs - track.durationMs) / 1_000
+            score += when { seconds <= 3 -> 0.20; seconds <= 8 -> 0.05; seconds > 20 -> -0.50; else -> -0.15 }
+        }
+        return score + kotlin.math.ln((candidate.viewCount + 1).toDouble()) / 1_000_000.0
     }
 
-    /** Tiny nudge so that among near-equal title/duration scores, the more-watched upload wins. */
-    private fun viewCountTiebreak(candidate: YoutubeCandidate): Double =
-        (kotlin.math.ln((candidate.viewCount + 1).toDouble()) / 1_000_000.0)
 }

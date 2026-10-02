@@ -1,6 +1,7 @@
 package com.hush.feature.library
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.hush.core.model.Playlist
 import com.hush.core.model.Track
@@ -16,4 +17,14 @@ class LibraryViewModel @Inject constructor(private val repository: LibraryReposi
     val playlists: StateFlow<List<Playlist>> = repository.observePlaylists().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     fun createPlaylist(name: String) { if (name.isNotBlank()) viewModelScope.launch { repository.createPlaylist(name.trim()) } }
     fun addTrack(playlistId: Long, track: Track) { viewModelScope.launch { repository.addTrack(playlistId, track, 0) } }
+}
+
+@HiltViewModel
+class PlaylistViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
+    repository: LibraryRepository,
+) : ViewModel() {
+    private val playlistId = savedStateHandle.get<String>("id")?.toLongOrNull() ?: -1L
+    val tracks: StateFlow<List<Track>> = repository.observeTracks(playlistId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 }

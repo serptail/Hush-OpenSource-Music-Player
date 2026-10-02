@@ -1,5 +1,7 @@
 package com.hush.core.network
 
+private val YoutubeVideoId = Regex("^[A-Za-z0-9_-]{11}$")
+
 data class YoutubeCandidate(
     val videoId: String,
     val title: String,
@@ -13,6 +15,8 @@ data class YoutubeCandidate(
     // False for candidates from a broad/regular YouTube search fallback.
     val isMusicCatalog: Boolean = false,
 )
+
+fun isValidYoutubeVideoId(value: String): Boolean = YoutubeVideoId.matches(value)
 
 /**
  * Defined in core-network (a dependency both feature-search and feature-resolver already have)

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.CircularProgressIndicator
@@ -86,10 +87,14 @@ fun SearchScreen(
     resolvingIsrc: String?,
     resolutionMessage: String?,
     onTrackSelected: (Track) -> Unit,
+    onArtistSelected: (Long) -> Unit,
+    onAlbumSelected: (DiscoverItem) -> Unit,
     onLibrary: () -> Unit,
     nowPlaying: @Composable () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val discover by viewModel.discover.collectAsStateWithLifecycle()
+    val artistHit by viewModel.artistHit.collectAsStateWithLifecycle()
 
     // The flowing background is drawn once, behind the NavHost (see MainActivity); this is only its palette.
     val palette = LocalCoverPalette.current
@@ -131,14 +136,22 @@ fun SearchScreen(
                     }
 
                     if (state.tracks.isEmpty() && state.query.isBlank()) {
-                        // Mockup content for now, see DiscoverSection.kt.
-                        DiscoverContent(Modifier.weight(1f).fillMaxWidth())
+                        DiscoverContent(
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            state = discover,
+                            onTrackClick = onTrackSelected,
+                            onArtistClick = onArtistSelected,
+                            onAlbumClick = onAlbumSelected,
+                        )
                     } else {
                         LazyColumn(
                             modifier = Modifier.weight(1f).fadeEdges(),
                             contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
+                            artistHit?.let { hit ->
+                                item(key = "artist-hit") { ArtistHit(hit, accent, onArtistSelected) }
+                            }
                             item {
                                 Text(
                                     "Results",
@@ -201,6 +214,33 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit, accent: 
             IconButton(onClick = { onQueryChange("") }) {
                 Icon(PhosphorIcons.Light.X, "Clear", tint = ink(0.6f), modifier = Modifier.size(20.dp))
             }
+        }
+    }
+}
+
+/** Highlighted card for a searched artist: round portrait, name in the display face, tap opens their page. */
+@Composable
+private fun ArtistHit(item: DiscoverItem, accent: Color, onClick: (Long) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp)
+            .pressScale(onClick = { item.artistId?.let(onClick) }, scaleDown = 0.98f)
+            .glass(PanelShape, fill = 0.07f, borderColor = accent.copy(alpha = 0.55f))
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SubcomposeAsyncImage(
+            model = item.imageUrl,
+            contentDescription = item.title,
+            modifier = Modifier.size(72.dp).clip(CircleShape),
+            contentScale = ContentScale.Crop,
+            loading = { ArtworkPlaceholder() },
+            error = { ArtworkPlaceholder() },
+        )
+        Column(Modifier.weight(1f).padding(start = 16.dp)) {
+            Text(item.title, style = MaterialTheme.typography.headlineMedium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("Artist", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
         }
     }
 }
