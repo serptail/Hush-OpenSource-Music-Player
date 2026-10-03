@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.hush.core.designsystem"
+    namespace = "com.gamut.core.designsystem"
     compileSdk = 35
     defaultConfig { minSdk = 26 }
     buildFeatures { compose = true }

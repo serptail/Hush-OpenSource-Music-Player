@@ -1,6 +1,6 @@
-# Hush
+# Gamut
 
-Hush is a native Kotlin/Jetpack Compose music application organized as a multi-module Clean Architecture project.
+Gamut is a native Kotlin/Jetpack Compose music application organized as a multi-module Clean Architecture project.
 
 ## Modules
 
@@ -47,14 +47,14 @@ $env:JAVA_HOME = "C:\Users\Yugen\.jdks\ms-21.0.12.1"
 adb install -r .\app\build\outputs\apk\debug\app-debug.apk
 ```
 
-Or open the `Hush` folder in Android Studio, select the `app` run configuration, choose your emulator, and press Run. Keep the backend terminal running separately.
+Or open the `Gamut` folder in Android Studio, select the `app` run configuration, choose your emulator, and press Run. Keep the backend terminal running separately.
 
 ### Production deployment
 
 The terminal is only needed for local development. For real devices, deploy `sync/Dockerfile` to a small VPS, container host, or home server with a stable HTTPS domain. The container includes Java, Ktor, Python, and auto-updating yt-dlp. Then build the APK with that backend URL:
 
 ```powershell
-.\gradlew.bat :app:assembleDebug -PsyncBaseUrl=https://hush-api.example.com/
+.\gradlew.bat :app:assembleDebug -PsyncBaseUrl=https://gamut-api.example.com/
 ```
 
 The installed APK then calls the hosted service directly; users do not need Android Studio, Gradle, Python, yt-dlp, or a terminal. Use HTTPS in production and keep the emulator default `http://10.0.2.2:8080/` only for local development.
@@ -69,8 +69,8 @@ $env:YTDLP_PATH = "C:\Users\<you>\AppData\Local\Programs\Python\Python311\Script
 gradle :sync:run
 ```
 
-The bundled Android yt-dlp wrapper updates its binary in-app from the stable release channel. The backend remains available for optional shared resolution caching and server deployments, but normal users do not need a server, Docker, Python, yt-dlp, or a terminal. The wrapper is GPL-3.0 licensed; preserve its license and notices when distributing Hush.
+The bundled Android yt-dlp wrapper updates its binary in-app from the stable release channel. The backend remains available for optional shared resolution caching and server deployments, but normal users do not need a server, Docker, Python, yt-dlp, or a terminal. The wrapper is GPL-3.0 licensed; preserve its license and notices when distributing Gamut.
 
-Hush also uses NewPipe Extractor for YouTube Music search with yt-dlp as a fallback. NewPipe Extractor is GPL-3.0 licensed; preserve its license and required notices when distributing Hush.
+Gamut also uses NewPipe Extractor for YouTube Music search with yt-dlp as a fallback. NewPipe Extractor is GPL-3.0 licensed; preserve its license and required notices when distributing Gamut.
 
-When MusicBrainz does not return an ISRC, Hush uses a deterministic `fallback:<artist>|<title>|<duration>` key for local and remote resolution caching. This prevents blank ISRCs from colliding while keeping the fallback visibly distinguishable from a real ISRC.
+When MusicBrainz does not return an ISRC, Gamut uses a deterministic `fallback:<artist>|<title>|<duration>` key for local and remote resolution caching. This prevents blank ISRCs from colliding while keeping the fallback visibly distinguishable from a real ISRC.

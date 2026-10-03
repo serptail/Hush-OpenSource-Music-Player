@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.hush.core.player"
+    namespace = "com.gamut.core.player"
     compileSdk = 35
 }
 

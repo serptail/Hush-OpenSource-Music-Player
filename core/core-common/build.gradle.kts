@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.hush.core.common"
+    namespace = "com.gamut.core.common"
     compileSdk = 35
 }
 

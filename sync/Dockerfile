@@ -9,7 +9,7 @@ RUN apt-get update \
     && pip3 install --no-cache-dir --break-system-packages --upgrade yt-dlp \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /workspace/sync/build/install/sync/ /opt/hush-sync/
+COPY --from=build /workspace/sync/build/install/sync/ /opt/gamut-sync/
 ENV YTDLP_PATH=/usr/local/bin/yt-dlp
 EXPOSE 8080
-ENTRYPOINT ["/opt/hush-sync/bin/sync"]
+ENTRYPOINT ["/opt/gamut-sync/bin/sync"]

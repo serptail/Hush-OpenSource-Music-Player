@@ -4,10 +4,10 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <application android:name=".HushApplication" android:label="Hush" android:theme="@style/Theme.Hush" android:usesCleartextTraffic="true" android:enableOnBackInvokedCallback="true">
-        <activity android:name=".MainActivity" android:exported="true">
+    <application android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:name=".GamutApplication" android:label="Gamut" android:theme="@style/Theme.Gamut" android:usesCleartextTraffic="true" android:enableOnBackInvokedCallback="true">
+        <activity android:name=".MainActivity" android:exported="true" android:theme="@style/Theme.Gamut.Splash">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
-        <service android:name="com.hush.core.player.HushMediaSessionService" android:foregroundServiceType="mediaPlayback" android:exported="true" android:permission="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+        <service android:name="com.gamut.core.player.GamutMediaSessionService" android:foregroundServiceType="mediaPlayback" android:exported="true" android:permission="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     </application>
 </manifest>

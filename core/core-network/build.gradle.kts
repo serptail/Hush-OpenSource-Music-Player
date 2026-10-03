@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.hush.core.network"
+    namespace = "com.gamut.core.network"
     compileSdk = 35
     buildFeatures { buildConfig = true }
     defaultConfig {

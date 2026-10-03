@@ -1,6 +1,6 @@
 kotlin version: 2.0.21
 error message: org.jetbrains.kotlin.backend.common.BackendException: Backend Internal error: Exception during IR lowering
-File being compiled: C:/Users/Yugen/Hush/feature/feature-player-ui/src/main/kotlin/com/hush/feature/playerui/PlayerScreen.kt
+File being compiled: C:/Users/Yugen/Gamut/feature/feature-player-ui/src/main/kotlin/com/gamut/feature/playerui/PlayerScreen.kt
 The root cause java.lang.RuntimeException was thrown at: org.jetbrains.kotlin.backend.jvm.codegen.FunctionCodegen.generate(FunctionCodegen.kt:47)
 	at org.jetbrains.kotlin.backend.common.CodegenUtil.reportBackendException(CodegenUtil.kt:253)
 	at org.jetbrains.kotlin.backend.common.CodegenUtil.reportBackendException$default(CodegenUtil.kt:236)
@@ -49,74 +49,74 @@ The root cause java.lang.RuntimeException was thrown at: org.jetbrains.kotlin.ba
 	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
 	at java.base/java.lang.Thread.run(Thread.java:1583)
 Caused by: java.lang.RuntimeException: Exception while generating code for:
-FUN name:PlayerScreen visibility:public modality:FINAL <> (player:com.hush.core.player.MusicPlayer) returnType:kotlin.Unit
+FUN name:PlayerScreen visibility:public modality:FINAL <> (player:com.gamut.core.player.MusicPlayer) returnType:kotlin.Unit
   annotations:
     Composable
-  VALUE_PARAMETER name:player index:0 type:com.hush.core.player.MusicPlayer
+  VALUE_PARAMETER name:player index:0 type:com.gamut.core.player.MusicPlayer
   BLOCK_BODY
-    VAR PROPERTY_DELEGATE name:state$delegate type:androidx.compose.runtime.State<com.hush.core.model.PlaybackState> [val]
-      TYPE_OP type=androidx.compose.runtime.State<com.hush.core.model.PlaybackState> origin=IMPLICIT_CAST typeOperand=androidx.compose.runtime.State<com.hush.core.model.PlaybackState>
+    VAR PROPERTY_DELEGATE name:state$delegate type:androidx.compose.runtime.State<com.gamut.core.model.PlaybackState> [val]
+      TYPE_OP type=androidx.compose.runtime.State<com.gamut.core.model.PlaybackState> origin=IMPLICIT_CAST typeOperand=androidx.compose.runtime.State<com.gamut.core.model.PlaybackState>
         CALL 'public final fun collectAsState$default <T> (context: kotlin.coroutines.CoroutineContext?, $mask0: kotlin.Int, $handler: kotlin.Any?): androidx.compose.runtime.State<T of androidx.compose.runtime.SnapshotStateKt.collectAsState$default> declared in androidx.compose.runtime.SnapshotStateKt' type=androidx.compose.runtime.State<T of androidx.compose.runtime.SnapshotStateKt.collectAsState$default> origin=DEFAULT_DISPATCH_CALL
-          <T>: com.hush.core.model.PlaybackState
-          $receiver: CALL 'public abstract fun <get-playbackState> (): kotlinx.coroutines.flow.StateFlow<com.hush.core.model.PlaybackState> declared in com.hush.core.player.MusicPlayer' type=kotlinx.coroutines.flow.StateFlow<com.hush.core.model.PlaybackState> origin=GET_PROPERTY
-            $this: GET_VAR 'player: com.hush.core.player.MusicPlayer declared in com.hush.feature.playerui.PlayerScreenKt.PlayerScreen' type=com.hush.core.player.MusicPlayer origin=null
+          <T>: com.gamut.core.model.PlaybackState
+          $receiver: CALL 'public abstract fun <get-playbackState> (): kotlinx.coroutines.flow.StateFlow<com.gamut.core.model.PlaybackState> declared in com.gamut.core.player.MusicPlayer' type=kotlinx.coroutines.flow.StateFlow<com.gamut.core.model.PlaybackState> origin=GET_PROPERTY
+            $this: GET_VAR 'player: com.gamut.core.player.MusicPlayer declared in com.gamut.feature.playerui.PlayerScreenKt.PlayerScreen' type=com.gamut.core.player.MusicPlayer origin=null
           context: COMPOSITE type=kotlin.coroutines.CoroutineContext? origin=DEFAULT_VALUE
             CONST Null type=kotlin.coroutines.CoroutineContext? value=null
           $mask0: CONST Int type=kotlin.Int value=1
           $handler: CONST Null type=kotlin.Any? value=null
-    VAR name:track type:com.hush.core.model.Track? [val]
-      BLOCK type=com.hush.core.model.Track? origin=FOLDED_ELVIS
-        WHEN type=com.hush.core.model.Track? origin=FOLDED_ELVIS
+    VAR name:track type:com.gamut.core.model.Track? [val]
+      BLOCK type=com.gamut.core.model.Track? origin=FOLDED_ELVIS
+        WHEN type=com.gamut.core.model.Track? origin=FOLDED_ELVIS
           BRANCH
             if: CALL 'public final fun ANDAND (arg0: kotlin.Boolean, arg1: kotlin.Boolean): kotlin.Boolean declared in kotlin.internal.ir' type=kotlin.Boolean origin=null
               arg0: COMPOSITE type=kotlin.Boolean origin=null
-                VAR IR_TEMPORARY_VARIABLE name:tmp0_safe_receiver type:com.hush.core.model.PlaybackState.Playing? [val]
-                  BLOCK type=com.hush.core.model.PlaybackState.Playing? origin=SAFE_CALL
+                VAR IR_TEMPORARY_VARIABLE name:tmp0_safe_receiver type:com.gamut.core.model.PlaybackState.Playing? [val]
+                  BLOCK type=com.gamut.core.model.PlaybackState.Playing? origin=SAFE_CALL
                     VAR IR_TEMPORARY_VARIABLE name:tmp0 type:kotlin.Any? [val]
-                      CALL 'private final fun PlayerScreen$lambda$0 ($state$delegate: androidx.compose.runtime.State<com.hush.core.model.PlaybackState>): com.hush.core.model.PlaybackState declared in com.hush.feature.playerui.PlayerScreenKt' type=com.hush.core.model.PlaybackState origin=GET_LOCAL_PROPERTY
-                        $state$delegate: GET_VAR 'val state$delegate: androidx.compose.runtime.State<com.hush.core.model.PlaybackState> [val] declared in com.hush.feature.playerui.PlayerScreenKt.PlayerScreen' type=androidx.compose.runtime.State<com.hush.core.model.PlaybackState> origin=null
-                    WHEN type=com.hush.core.model.PlaybackState.Playing? origin=null
+                      CALL 'private final fun PlayerScreen$lambda$0 ($state$delegate: androidx.compose.runtime.State<com.gamut.core.model.PlaybackState>): com.gamut.core.model.PlaybackState declared in com.gamut.feature.playerui.PlayerScreenKt' type=com.gamut.core.model.PlaybackState origin=GET_LOCAL_PROPERTY
+                        $state$delegate: GET_VAR 'val state$delegate: androidx.compose.runtime.State<com.gamut.core.model.PlaybackState> [val] declared in com.gamut.feature.playerui.PlayerScreenKt.PlayerScreen' type=androidx.compose.runtime.State<com.gamut.core.model.PlaybackState> origin=null
+                    WHEN type=com.gamut.core.model.PlaybackState.Playing? origin=null
                       BRANCH
-                        if: TYPE_OP type=kotlin.Boolean origin=INSTANCEOF typeOperand=com.hush.core.model.PlaybackState.Playing
-                          GET_VAR 'val tmp0: kotlin.Any? [val] declared in com.hush.feature.playerui.PlayerScreenKt.PlayerScreen' type=kotlin.Any? origin=null
-                        then: GET_VAR 'val tmp0: kotlin.Any? [val] declared in com.hush.feature.playerui.PlayerScreenKt.PlayerScreen' type=kotlin.Any? origin=null
+                        if: TYPE_OP type=kotlin.Boolean origin=INSTANCEOF typeOperand=com.gamut.core.model.PlaybackState.Playing
+                          GET_VAR 'val tmp0: kotlin.Any? [val] declared in com.gamut.feature.playerui.PlayerScreenKt.PlayerScreen' type=kotlin.Any? origin=null
+                        then: GET_VAR 'val tmp0: kotlin.Any? [val] declared in com.gamut.feature.playerui.PlayerScreenKt.PlayerScreen' type=kotlin.Any? origin=null
                       BRANCH
                         if: CONST Boolean type=kotlin.Boolean value=true
-                        then: CONST Null type=com.hush.core.model.PlaybackState.Playing? value=null
+                        then: CONST Null type=com.gamut.core.model.PlaybackState.Playing? value=null
                 CALL 'public final fun not (): kotlin.Boolean [operator] declared in kotlin.Boolean' type=kotlin.Boolean origin=null
                   $this: CALL 'public final fun EQEQ (arg0: kotlin.Any?, arg1: kotlin.Any?): kotlin.Boolean declared in kotlin.internal.ir' type=kotlin.Boolean origin=null
-                    arg0: GET_VAR 'val tmp0_safe_receiver: com.hush.core.model.PlaybackState.Playing? [val] declared in com.hush.feature.playerui.PlayerScreenKt.PlayerScreen' type=com.hush.core.model.PlaybackState.Playing? origin=null
+                    arg0: GET_VAR 'val tmp0_safe_receiver: com.gamut.core.model.PlaybackState.Playing? [val] declared in com.gamut.feature.playerui.PlayerScreenKt.PlayerScreen' type=com.gamut.core.model.PlaybackState.Playing? origin=null
                     arg1: CONST Null type=kotlin.Nothing? value=null
               arg1: COMPOSITE type=kotlin.Boolean origin=null
-                VAR IR_TEMPORARY_VARIABLE name:tmp1_elvis_lhs type:com.hush.core.model.Track [val]
-                  CALL 'public final fun <get-track> (): com.hush.core.model.Track declared in com.hush.core.model.PlaybackState.Playing' type=com.hush.core.model.Track origin=GET_PROPERTY
-                    $this: GET_VAR 'val tmp0_safe_receiver: com.hush.core.model.PlaybackState.Playing? [val] declared in com.hush.feature.playerui.PlayerScreenKt.PlayerScreen' type=com.hush.core.model.PlaybackState.Playing? origin=null
+                VAR IR_TEMPORARY_VARIABLE name:tmp1_elvis_lhs type:com.gamut.core.model.Track [val]
+                  CALL 'public final fun <get-track> (): com.gamut.core.model.Track declared in com.gamut.core.model.PlaybackState.Playing' type=com.gamut.core.model.Track origin=GET_PROPERTY
+                    $this: GET_VAR 'val tmp0_safe_receiver: com.gamut.core.model.PlaybackState.Playing? [val] declared in com.gamut.feature.playerui.PlayerScreenKt.PlayerScreen' type=com.gamut.core.model.PlaybackState.Playing? origin=null
                 CALL 'public final fun not (): kotlin.Boolean [operator] declared in kotlin.Boolean' type=kotlin.Boolean origin=null
                   $this: CALL 'public final fun EQEQ (arg0: kotlin.Any?, arg1: kotlin.Any?): kotlin.Boolean declared in kotlin.internal.ir' type=kotlin.Boolean origin=null
-                    arg0: GET_VAR 'val tmp1_elvis_lhs: com.hush.core.model.Track [val] declared in com.hush.feature.playerui.PlayerScreenKt.PlayerScreen' type=com.hush.core.model.Track origin=null
+                    arg0: GET_VAR 'val tmp1_elvis_lhs: com.gamut.core.model.Track [val] declared in com.gamut.feature.playerui.PlayerScreenKt.PlayerScreen' type=com.gamut.core.model.Track origin=null
                     arg1: CONST Null type=kotlin.Nothing? value=null
-            then: GET_VAR 'val tmp1_elvis_lhs: com.hush.core.model.Track [val] declared in com.hush.feature.playerui.PlayerScreenKt.PlayerScreen' type=com.hush.core.model.Track origin=null
+            then: GET_VAR 'val tmp1_elvis_lhs: com.gamut.core.model.Track [val] declared in com.gamut.feature.playerui.PlayerScreenKt.PlayerScreen' type=com.gamut.core.model.Track origin=null
           BRANCH
             if: COMPOSITE type=kotlin.Boolean origin=null
-              VAR IR_TEMPORARY_VARIABLE name:tmp2_safe_receiver type:com.hush.core.model.PlaybackState.Paused? [val]
-                BLOCK type=com.hush.core.model.PlaybackState.Paused? origin=SAFE_CALL
+              VAR IR_TEMPORARY_VARIABLE name:tmp2_safe_receiver type:com.gamut.core.model.PlaybackState.Paused? [val]
+                BLOCK type=com.gamut.core.model.PlaybackState.Paused? origin=SAFE_CALL
                   VAR IR_TEMPORARY_VARIABLE name:tmp1 type:kotlin.Any? [val]
-                    CALL 'private final fun PlayerScreen$lambda$0 ($state$delegate: androidx.compose.runtime.State<com.hush.core.model.PlaybackState>): com.hush.core.model.PlaybackState declared in com.hush.feature.playerui.PlayerScreenKt' type=com.hush.core.model.PlaybackState origin=GET_LOCAL_PROPERTY
-                      $state$delegate: GET_VAR 'val state$delegate: androidx.compose.runtime.State<com.hush.core.model.PlaybackState> [val] declared in com.hush.feature.playerui.PlayerScreenKt.PlayerScreen' type=androidx.compose.runtime.State<com.hush.core.model.PlaybackState> origin=null
-                  WHEN type=com.hush.core.model.PlaybackState.Paused? origin=null
+                    CALL 'private final fun PlayerScreen$lambda$0 ($state$delegate: androidx.compose.runtime.State<com.gamut.core.model.PlaybackState>): com.gamut.core.model.PlaybackState declared in com.gamut.feature.playerui.PlayerScreenKt' type=com.gamut.core.model.PlaybackState origin=GET_LOCAL_PROPERTY
+                      $state$delegate: GET_VAR 'val state$delegate: androidx.compose.runtime.State<com.gamut.core.model.PlaybackState> [val] declared in com.gamut.feature.playerui.PlayerScreenKt.PlayerScreen' type=androidx.compose.runtime.State<com.gamut.core.model.PlaybackState> origin=null
+                  WHEN type=com.gamut.core.model.PlaybackState.Paused? origin=null
                     BRANCH
-                      if: TYPE_OP type=kotlin.Boolean origin=INSTANCEOF typeOperand=com.hush.core.model.PlaybackState.Paused
-                        GET_VAR 'val tmp1: kotlin.Any? [val] declared in com.hush.feature.playerui.PlayerScreenKt.PlayerScreen' type=kotlin.Any? origin=null
-                      then: GET_VAR 'val tmp1: kotlin.Any? [val] declared in com.hush.feature.playerui.PlayerScreenKt.PlayerScreen' type=kotlin.Any? origin=null
+                      if: TYPE_OP type=kotlin.Boolean origin=INSTANCEOF typeOperand=com.gamut.core.model.PlaybackState.Paused
+                        GET_VAR 'val tmp1: kotlin.Any? [val] declared in com.gamut.feature.playerui.PlayerScreenKt.PlayerScreen' type=kotlin.Any? origin=null
+                      then: GET_VAR 'val tmp1: kotlin.Any? [val] declared in com.gamut.feature.playerui.PlayerScreenKt.PlayerScreen' type=kotlin.Any? origin=null
                     BRANCH
                       if: CONST Boolean type=kotlin.Boolean value=true
-                      then: CONST Null type=com.hush.core.model.PlaybackState.Paused? value=null
+                      then: CONST Null type=com.gamut.core.model.PlaybackState.Paused? value=null
               CALL 'public final fun not (): kotlin.Boolean [operator] declared in kotlin.Boolean' type=kotlin.Boolean origin=null
                 $this: CALL 'public final fun EQEQ (arg0: kotlin.Any?, arg1: kotlin.Any?): kotlin.Boolean declared in kotlin.internal.ir' type=kotlin.Boolean origin=null
-                  arg0: GET_VAR 'val tmp2_safe_receiver: com.hush.core.model.PlaybackState.Paused? [val] declared in com.hush.feature.playerui.PlayerScreenKt.PlayerScreen' type=com.hush.core.model.PlaybackState.Paused? origin=null
+                  arg0: GET_VAR 'val tmp2_safe_receiver: com.gamut.core.model.PlaybackState.Paused? [val] declared in com.gamut.feature.playerui.PlayerScreenKt.PlayerScreen' type=com.gamut.core.model.PlaybackState.Paused? origin=null
                   arg1: CONST Null type=kotlin.Nothing? value=null
-            then: CALL 'public final fun <get-track> (): com.hush.core.model.Track declared in com.hush.core.model.PlaybackState.Paused' type=com.hush.core.model.Track origin=GET_PROPERTY
-              $this: GET_VAR 'val tmp2_safe_receiver: com.hush.core.model.PlaybackState.Paused? [val] declared in com.hush.feature.playerui.PlayerScreenKt.PlayerScreen' type=com.hush.core.model.PlaybackState.Paused? origin=null
+            then: CALL 'public final fun <get-track> (): com.gamut.core.model.Track declared in com.gamut.core.model.PlaybackState.Paused' type=com.gamut.core.model.Track origin=GET_PROPERTY
+              $this: GET_VAR 'val tmp2_safe_receiver: com.gamut.core.model.PlaybackState.Paused? [val] declared in com.gamut.feature.playerui.PlayerScreenKt.PlayerScreen' type=com.gamut.core.model.PlaybackState.Paused? origin=null
           BRANCH
             if: CONST Boolean type=kotlin.Boolean value=true
             then: CONST Null type=kotlin.Nothing? value=null
@@ -133,10 +133,10 @@ FUN name:PlayerScreen visibility:public modality:FINAL <> (player:com.hush.core.
         $this: GET_FIELD 'FIELD FIELD_FOR_OBJECT_INSTANCE name:Companion type:androidx.compose.ui.Alignment.Companion visibility:public [final,static] declared in androidx.compose.ui.Alignment' type=androidx.compose.ui.Alignment.Companion origin=null
       content: BLOCK type=@[ExtensionFunctionType] kotlin.Function1<androidx.compose.foundation.layout.ColumnScope, kotlin.Unit> origin=LAMBDA
         COMPOSITE type=kotlin.Unit origin=null
-        FUNCTION_REFERENCE 'private final fun PlayerScreen$lambda$3 ($track: com.hush.core.model.Track?, $player: com.hush.core.player.MusicPlayer, $state$delegate: androidx.compose.runtime.State<com.hush.core.model.PlaybackState>): kotlin.Unit declared in com.hush.feature.playerui.PlayerScreenKt' type=@[ExtensionFunctionType] kotlin.Function1<androidx.compose.foundation.layout.ColumnScope, kotlin.Unit> origin=INLINE_LAMBDA reflectionTarget=null
-          $track: GET_VAR 'val track: com.hush.core.model.Track? [val] declared in com.hush.feature.playerui.PlayerScreenKt.PlayerScreen' type=com.hush.core.model.Track? origin=null
-          $player: GET_VAR 'player: com.hush.core.player.MusicPlayer declared in com.hush.feature.playerui.PlayerScreenKt.PlayerScreen' type=com.hush.core.player.MusicPlayer origin=null
-          $state$delegate: GET_VAR 'val state$delegate: androidx.compose.runtime.State<com.hush.core.model.PlaybackState> [val] declared in com.hush.feature.playerui.PlayerScreenKt.PlayerScreen' type=androidx.compose.runtime.State<com.hush.core.model.PlaybackState> origin=null
+        FUNCTION_REFERENCE 'private final fun PlayerScreen$lambda$3 ($track: com.gamut.core.model.Track?, $player: com.gamut.core.player.MusicPlayer, $state$delegate: androidx.compose.runtime.State<com.gamut.core.model.PlaybackState>): kotlin.Unit declared in com.gamut.feature.playerui.PlayerScreenKt' type=@[ExtensionFunctionType] kotlin.Function1<androidx.compose.foundation.layout.ColumnScope, kotlin.Unit> origin=INLINE_LAMBDA reflectionTarget=null
+          $track: GET_VAR 'val track: com.gamut.core.model.Track? [val] declared in com.gamut.feature.playerui.PlayerScreenKt.PlayerScreen' type=com.gamut.core.model.Track? origin=null
+          $player: GET_VAR 'player: com.gamut.core.player.MusicPlayer declared in com.gamut.feature.playerui.PlayerScreenKt.PlayerScreen' type=com.gamut.core.player.MusicPlayer origin=null
+          $state$delegate: GET_VAR 'val state$delegate: androidx.compose.runtime.State<com.gamut.core.model.PlaybackState> [val] declared in com.gamut.feature.playerui.PlayerScreenKt.PlayerScreen' type=androidx.compose.runtime.State<com.gamut.core.model.PlaybackState> origin=null
 
 	at org.jetbrains.kotlin.backend.jvm.codegen.FunctionCodegen.generate(FunctionCodegen.kt:47)
 	at org.jetbrains.kotlin.backend.jvm.codegen.FunctionCodegen.generate$default(FunctionCodegen.kt:40)

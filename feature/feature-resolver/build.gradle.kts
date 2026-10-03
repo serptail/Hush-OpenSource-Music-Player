@@ -1,6 +1,6 @@
 plugins { alias(libs.plugins.android.library); alias(libs.plugins.kotlin.android); alias(libs.plugins.kotlin.serialization); alias(libs.plugins.hilt); alias(libs.plugins.ksp) }
 android {
-    namespace = "com.hush.feature.resolver"
+    namespace = "com.gamut.feature.resolver"
     compileSdk = 35
     compileOptions { isCoreLibraryDesugaringEnabled = true }
     defaultConfig { multiDexEnabled = true }

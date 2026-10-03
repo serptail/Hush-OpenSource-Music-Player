@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.hush.core.database"
+    namespace = "com.gamut.core.database"
     compileSdk = 35
 }
 

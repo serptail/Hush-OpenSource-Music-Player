@@ -22,6 +22,7 @@ coil = "2.7.0"
 youtubedl-android = "0.18.1"
 newpipe-extractor = "v0.26.5"
 desugar-jdk-libs = "2.1.2"
+core-splashscreen = "1.0.1"
 # --- new: dynamic color extraction ---
 palette-ktx = "1.0.0"               # dominant-color extraction from bitmaps
 phosphor-icon = "1.0.0"             # thin, minimal icon set (Compose Multiplatform port)
@@ -63,6 +64,7 @@ logback = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
 youtubedl-android = { module = "io.github.junkfood02.youtubedl-android:library", version.ref = "youtubedl-android" }
 newpipe-extractor = { module = "com.github.teamnewpipe:NewPipeExtractor", version.ref = "newpipe-extractor" }
+androidx-core-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "core-splashscreen" }
 desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugar-jdk-libs" }
 # --- new ---
 androidx-palette-ktx = { module = "androidx.palette:palette-ktx", version.ref = "palette-ktx" }

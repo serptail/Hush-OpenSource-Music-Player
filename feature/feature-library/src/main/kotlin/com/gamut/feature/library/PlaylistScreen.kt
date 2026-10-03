@@ -1,0 +1,187 @@
+package com.gamut.feature.library
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.adamglin.PhosphorIcons
+import com.adamglin.phosphoricons.Fill
+import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.fill.Heart
+import com.adamglin.phosphoricons.fill.Play
+import com.adamglin.phosphoricons.light.ArrowLeft
+import com.adamglin.phosphoricons.light.VinylRecord
+import com.gamut.core.designsystem.AcrylicCircleButton
+import com.gamut.core.designsystem.AcrylicHost
+import com.gamut.core.designsystem.AcrylicScrim
+import com.gamut.core.designsystem.acrylicSource
+import com.gamut.core.designsystem.CoverTheme
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.TransparentStatusBar
+import com.gamut.core.designsystem.glass
+import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.pressScale
+import com.gamut.core.model.Track
+
+private val TileShape = RoundedCornerShape(10.dp)
+
+/**
+ * A playlist. The first song's cover fills the top edge to edge, running under the status bar, and fades
+ * into the flowing background. Title, counts and the play button sit on the fade. Songs scroll below.
+ */
+@Composable
+fun PlaylistScreen(
+    playlistId: String,
+    onBack: () -> Unit,
+    onTrackSelected: (Track) -> Unit = {},
+    viewModel: PlaylistViewModel = viewModel(),
+    nowPlaying: @Composable () -> Unit = {},
+) {
+    val songs by viewModel.tracks.collectAsStateWithLifecycle()
+    val first = songs.firstOrNull()
+
+    val palette = LocalCoverPalette.current
+    // The hero image sits under the status bar, so light icons regardless of the cover palette.
+    TransparentStatusBar(darkIcons = if (first != null) false else palette.isLight)
+
+    CoverTheme(palette) {
+        AcrylicHost(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize()) {
+                LazyColumn(
+                    Modifier.weight(1f).fillMaxWidth(),
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                ) {
+                    item(key = "hero") {
+                        Box(Modifier.fillMaxWidth()) {
+                            if (first != null) {
+                                CoverImage(first.albumArtUrl.orEmpty(), Modifier.fillMaxWidth().aspectRatio(1f).fadeBottom().acrylicSource())
+                                // Progressive blur behind the status bar: keeps the icons readable on bright covers without a dark band.
+                                AcrylicScrim(Modifier.fillMaxWidth().height(110.dp))
+                            } else {
+                                Box(Modifier.fillMaxWidth().height(200.dp))
+                            }
+
+                            AcrylicCircleButton(
+                                onClick = onBack,
+                                modifier = Modifier.statusBarsPadding().padding(start = 20.dp, top = 12.dp),
+                                size = 44.dp,
+                            ) {
+                                Icon(PhosphorIcons.Light.ArrowLeft, "Back", tint = Color.White, modifier = Modifier.size(22.dp))
+                            }
+
+                            Row(
+                                Modifier
+                                    .align(Alignment.BottomStart)
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(
+                                    Modifier.size(48.dp).glass(TileShape),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    val icon: ImageVector =
+                                        PhosphorIcons.Light.VinylRecord
+                                    Icon(icon, null, tint = ink(), modifier = Modifier.size(22.dp))
+                                }
+                                Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
+                                    Text(
+                                        "Playlist",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = ink(),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    val artists = songs.map { it.artist }.distinct().size
+                                    Text(
+                                        "${songs.size} songs \u2022 $artists artists",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = ink(0.6f),
+                                    )
+                                }
+                                AcrylicCircleButton(onClick = { first?.let(onTrackSelected) }, size = 56.dp) {
+                                    Icon(PhosphorIcons.Fill.Play, "Play", tint = Color.White, modifier = Modifier.size(24.dp))
+                                }
+                            }
+                        }
+                    }
+
+                    if (songs.isEmpty()) {
+                        item(key = "empty") {
+                            Text(
+                                "Nothing here yet. Add songs from Discover.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ink(0.6f),
+                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp),
+                            )
+                        }
+                    }
+
+                    items(songs, key = { it.isrc }) { song ->
+                        PlaylistTrackRow(song, onClick = { onTrackSelected(song) }, modifier = Modifier.padding(horizontal = 24.dp))
+                    }
+
+                    item(key = "nav-space") { Box(Modifier.navigationBarsPadding()) }
+                }
+                nowPlaying()
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaylistTrackRow(track: Track, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().pressScale(onClick = onClick, scaleDown = 0.98f).padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CoverImage(track.albumArtUrl.orEmpty(), Modifier.size(54.dp).softCover())
+        Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
+            Text(track.title, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Icon(PhosphorIcons.Light.VinylRecord, null, tint = ink(0.5f), modifier = Modifier.size(20.dp))
+    }
+}
+
+/** Fades the bottom of a layer to transparent so whatever is behind (the flowing background) shows through. */
+private fun Modifier.fadeBottom(): Modifier = this
+    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+    .drawWithContent {
+        drawContent()
+        drawRect(
+            brush = Brush.verticalGradient(0.55f to Color.Black, 1f to Color.Transparent),
+            blendMode = BlendMode.DstIn,
+        )
+    }

@@ -15,7 +15,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Hush"
+rootProject.name = "Gamut"
 
 include(":app")
 include(":core:core-common")
