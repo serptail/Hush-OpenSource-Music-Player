@@ -44,6 +44,7 @@ import com.adamglin.phosphoricons.light.ArrowLeft
 import com.adamglin.phosphoricons.light.VinylRecord
 import com.hush.core.designsystem.AcrylicCircleButton
 import com.hush.core.designsystem.AcrylicHost
+import com.hush.core.designsystem.AcrylicScrim
 import com.hush.core.designsystem.acrylicSource
 import com.hush.core.designsystem.CoverTheme
 import com.hush.core.designsystem.LocalCoverPalette
@@ -85,13 +86,8 @@ fun PlaylistScreen(
                         Box(Modifier.fillMaxWidth()) {
                             if (first != null) {
                                 CoverImage(first.albumArtUrl.orEmpty(), Modifier.fillMaxWidth().aspectRatio(1f).fadeBottom().acrylicSource())
-                                // Keeps the status bar icons readable on bright covers.
-                                Box(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .height(110.dp)
-                                        .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.45f), Color.Transparent))),
-                                )
+                                // Progressive blur behind the status bar: keeps the icons readable on bright covers without a dark band.
+                                AcrylicScrim(Modifier.fillMaxWidth().height(110.dp))
                             } else {
                                 Box(Modifier.fillMaxWidth().height(200.dp))
                             }

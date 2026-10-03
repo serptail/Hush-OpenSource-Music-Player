@@ -126,7 +126,11 @@ import com.adamglin.phosphoricons.light.Shuffle
 import com.adamglin.phosphoricons.light.SkipBack
 import com.adamglin.phosphoricons.light.SkipForward
 import com.adamglin.phosphoricons.light.SpeakerHigh
+import com.hush.core.designsystem.AcrylicHost
+import com.hush.core.designsystem.AcrylicMaterials
+import com.hush.core.designsystem.AcrylicSurface
 import com.hush.core.designsystem.CoverPalette
+import com.hush.core.designsystem.acrylicSource
 import com.hush.core.model.PlaybackState
 import com.hush.core.model.Track
 import com.hush.core.player.MusicPlayer
@@ -234,7 +238,6 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
     val coverUrl = remember(rawArt) { squareArtUrl(rawArt) }   // the cover itself
     val accent = rememberCoverAccent(artUrl)
     val waveform = rememberWaveform(track)
-    var rootSize by remember { mutableStateOf(IntSize.Zero) } // lets the lyrics card line its blurred art up with the screen background
 
     // Fetch lyrics when track changes
     LaunchedEffect(track?.isrc) {
@@ -250,7 +253,7 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
     // Base = the same flat fill as Discover / Library. With a track loaded, an acrylic surface goes on top of
     // it: the cover heavily blurred, a frosted tint in the base color, a faint white veil, and a diagonal
     // sheen. Nothing loaded: none of those layers are drawn, so it is just the flat fill.
-    Box(Modifier.fillMaxSize().onSizeChanged { rootSize = it }.background(CoverPalette.Neutral.base)) {
+    AcrylicHost(Modifier.fillMaxSize().background(CoverPalette.Neutral.base)) {
         if (artUrl != null) {
             AsyncImage(
                 model = rememberFadeRequest(artUrl),
@@ -258,6 +261,7 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
+                    .acrylicSource()   // the lyrics card frosts this layer
                     .graphicsLayer { scaleX = 1.3f; scaleY = 1.3f }   // overscan, so the blur never shows an edge
                     .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(BackgroundBlur) else Modifier),
             )
@@ -290,7 +294,7 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
         // middle of the flat background. As soon as a track arrives the real player takes over.
         if (track == null) {
             LoadingVinyl(Modifier.align(Alignment.Center))
-            return@Box
+            return@AcrylicHost
         }
 
         Column(
@@ -362,8 +366,6 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
                 accent = accent,
                 expanded = lyricsExpanded,
                 onToggle = { lyricsExpanded = !lyricsExpanded },
-                backdropUrl = artUrl,
-                backdropSize = rootSize,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
@@ -1267,11 +1269,7 @@ fun LyricsSection(
     expanded: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
-    /** Cover art + the size of the screen it is blurred across, so the card can show the same art, blurred harder, in the right place. */
-    backdropUrl: String? = null,
-    backdropSize: IntSize = IntSize.Zero,
 ) {
-    var cardOrigin by remember { mutableStateOf(Offset.Zero) }
     BoxWithConstraints(modifier) {
         val fullHeight = maxHeight
         val expandedCardHeight = (fullHeight - LyricsTitleHeight).coerceAtLeast(0.dp)
@@ -1303,7 +1301,8 @@ fun LyricsSection(
                 )
             }
 
-            Box(
+            // Real frosted glass: blurs the screen's cover backdrop (see acrylicSource above) behind the card.
+            AcrylicSurface(
                 Modifier
                     .fillMaxWidth()
                     .height(cardHeight)
@@ -1314,12 +1313,11 @@ fun LyricsSection(
                         spotColor = Color.Black.copy(alpha = 0.45f),
                         clip = false,
                     )
-                    .clip(LyricsCardShape)
-                    .onGloballyPositioned { cardOrigin = it.positionInRoot() }
                     // Folded, tapping anywhere on the snippet opens it.
                     .tapTarget { if (!expanded) onToggle() },
+                shape = LyricsCardShape,
+                material = AcrylicMaterials.Thick,
             ) {
-                AcrylicBackdrop(backdropUrl, backdropSize) { cardOrigin }
                 Crossfade(targetState = expanded, animationSpec = tween(250), label = "lyrics-content") { isExpanded ->
                     if (!isExpanded) {
                         LyricsPreview(lyricsState)
@@ -1350,57 +1348,6 @@ fun LyricsSection(
                 }
             }
         }
-    }
-}
-
-/**
- * Acrylic / frosted-glass surface for the lyrics card. Compose can't blur "whatever is behind" a
- * composable, so this draws the same cover art the screen background uses, at the same size and
- * position (shifted by the card's own position), blurred much harder, then adds the glass tint,
- * a light sheen and a bright rim (brighter top-left, plus a faint inner ring).
- * Below Android 12 there is no blur, so it falls back to the tint + rim only.
- */
-@Composable
-private fun AcrylicBackdrop(url: String?, rootSize: IntSize, origin: () -> Offset) {
-    val density = LocalDensity.current
-    Box(Modifier.fillMaxSize().background(CoverPalette.Neutral.base)) {
-        if (url != null && rootSize.width > 0 && rootSize.height > 0) {
-            AsyncImage(
-                model = rememberFadeRequest(url),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    // Let the image be screen-sized inside the small card, anchored at the card's top-left...
-                    .wrapContentSize(Alignment.TopStart, unbounded = true)
-                    .size(
-                        with(density) { rootSize.width.toDp() },
-                        with(density) { rootSize.height.toDp() },
-                    )
-                    // ...then slide it back so it lines up with the screen background behind the card.
-                    .offset { origin().let { IntOffset(-it.x.roundToInt(), -it.y.roundToInt()) } }
-                    .graphicsLayer { scaleX = 1.3f; scaleY = 1.3f }   // same overscan as the screen background, so the art lines up
-                    .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(AcrylicBlur) else Modifier),
-            )
-        }
-        // Dark tint over the blurred art. Kept light (about 40%) so the card reads as see-through;
-        // raise the alpha (0x66) if lyrics get hard to read over a bright cover.
-        Box(Modifier.fillMaxSize().background(Color(0x66100E12)))
-        // A faint lift with white, brightest where light would hit (top-left).
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.linearGradient(
-                    listOf(Color.White.copy(alpha = 0.10f), Color.White.copy(alpha = 0.03f), Color.White.copy(alpha = 0.05f)),
-                ),
-            ),
-        )
-        // Rim, like the edge of a glass slab.
-        Box(
-            Modifier.fillMaxSize().border(
-                1.dp,
-                Brush.linearGradient(listOf(Color.White.copy(alpha = 0.55f), Color.White.copy(alpha = 0.10f), Color.White.copy(alpha = 0.28f))),
-                LyricsCardShape,
-            ),
-        )
     }
 }
 

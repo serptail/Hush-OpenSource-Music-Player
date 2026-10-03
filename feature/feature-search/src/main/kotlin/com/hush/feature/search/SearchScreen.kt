@@ -1,5 +1,12 @@
 package com.hush.feature.search
 
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import com.hush.core.designsystem.AcrylicHost
+import com.hush.core.designsystem.LocalAcrylicState
+import dev.chrisbanes.haze.HazeState
+import com.hush.core.designsystem.acrylicSource
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -55,9 +62,12 @@ import com.adamglin.phosphoricons.light.X
 import com.hush.core.designsystem.BottomBarItem
 import com.hush.core.designsystem.CoverTheme
 import com.hush.core.designsystem.HushBottomBar
+import com.hush.core.designsystem.HushBottomBarTabsHeight
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import com.hush.core.designsystem.LocalCoverPalette
 import com.hush.core.designsystem.TransparentStatusBar
-import com.hush.core.designsystem.fadeEdges
 import com.hush.core.designsystem.glass
 import com.hush.core.designsystem.ink
 import com.hush.core.designsystem.pressScale
@@ -102,9 +112,14 @@ fun SearchScreen(
 
     CoverTheme(palette) {
         val accent = MaterialTheme.colorScheme.primary
-        Box(Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize().statusBarsPadding()) {
-                Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 24.dp)) {
+        val density = LocalDensity.current
+        val showingDiscover = state.tracks.isEmpty() && state.query.isBlank()
+        val discoverListState = rememberLazyListState()
+        val resultsListState = rememberLazyListState()
+        // Title + search scroll with the content as the first list item (they are not pinned): scroll down and they
+        // leave the screen, scroll back up to reach them. Only the bottom bar stays.
+        val header: @Composable (Modifier) -> Unit = { m ->
+            Column(m.fillMaxWidth().statusBarsPadding()) {
                     Row(Modifier.fillMaxWidth().padding(top = 22.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             "Discover",
@@ -119,7 +134,7 @@ fun SearchScreen(
 
                     Spacer(Modifier.height(22.dp))
                     SearchField(query = state.query, onQueryChange = viewModel::updateQuery, accent = accent)
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(14.dp))
 
                     AnimatedVisibility(state.isLoading) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
@@ -134,21 +149,39 @@ fun SearchScreen(
                     resolutionMessage?.let {
                         Text(it, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, modifier = Modifier.padding(bottom = 8.dp))
                     }
+                    Spacer(Modifier.height(6.dp))
+            }
+        }
+        // Lists run to the bottom of the screen and scroll under the bar; the mini player strip frosts what passes behind it.
+        var barHeight by remember { mutableStateOf(0.dp) }
+        // The tab row is transparent, so nothing may scroll behind it: the list ends where the tabs begin. Only the
+        // mini player strip (frosted) overlaps the list, so the list just needs room for the strip at its end.
+        val tabsHeight = HushBottomBarTabsHeight + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        val stripHeight = maxOf(0.dp, barHeight - tabsHeight)
 
-                    if (state.tracks.isEmpty() && state.query.isBlank()) {
+        // Reuse the app-wide acrylic state when there is one (MainActivity marks the flowing background as a source
+        // on it), so the mini player frosts the very same adaptive background instead of a copy of it.
+        AcrylicHost(Modifier.fillMaxSize(), state = LocalAcrylicState.current ?: remember { HazeState() }) {
+            Box(Modifier.fillMaxSize().padding(start = 24.dp, end = 24.dp, bottom = tabsHeight).acrylicSource()) {
+                    if (showingDiscover) {
                         DiscoverContent(
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            modifier = Modifier.fillMaxSize(),
                             state = discover,
                             onTrackClick = onTrackSelected,
                             onArtistClick = onArtistSelected,
                             onAlbumClick = onAlbumSelected,
+                            listState = discoverListState,
+                            contentPadding = PaddingValues(bottom = stripHeight),
+                            header = { header(Modifier.padding(horizontal = 24.dp)) },
                         )
                     } else {
                         LazyColumn(
-                            modifier = Modifier.weight(1f).fadeEdges(),
-                            contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+                            state = resultsListState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = stripHeight + 24.dp),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
+                            item(key = "header") { header(Modifier) }
                             artistHit?.let { hit ->
                                 item(key = "artist-hit") { ArtistHit(hit, accent, onArtistSelected) }
                             }
@@ -165,16 +198,19 @@ fun SearchScreen(
                             }
                         }
                     }
-                }
-
-                HushBottomBar(
-                    listOf(
-                        BottomBarItem("Discover", PhosphorIcons.Light.MagnifyingGlass, selected = true),
-                        BottomBarItem("Library", PhosphorIcons.Light.VinylRecord, onClick = onLibrary),
-                    ),
-                    nowPlaying = nowPlaying,
-                )
             }
+
+            // Bottom bar (flat) with the frosted mini player strip docked on top of it.
+            HushBottomBar(
+                items = listOf(
+                    BottomBarItem("Discover", PhosphorIcons.Light.MagnifyingGlass, selected = true),
+                    BottomBarItem("Library", PhosphorIcons.Light.VinylRecord, onClick = onLibrary),
+                ),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .onSizeChanged { barHeight = with(density) { it.height.toDp() } },
+                nowPlaying = nowPlaying,
+            )
         }
     }
 }

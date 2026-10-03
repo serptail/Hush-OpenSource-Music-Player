@@ -27,6 +27,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/** Height of the tab row (without the system navigation inset or any docked strip). Screens use it to end their list above the tabs. */
+val HushBottomBarTabsHeight = 54.dp
+
 /** One destination in [HushBottomBar]. A null [onClick] means "you are already here". */
 data class BottomBarItem(
     val label: String,
@@ -37,8 +40,8 @@ data class BottomBarItem(
 
 /**
  * The app's bottom navigation. Not a floating element: it is a flat, full-width strip that grows out of the
- * bottom edge of the window (it also fills the system navigation area underneath). A faint ink tint and a
- * single hairline on top separate it from the page; the current destination is marked by a short bar on
+ * bottom edge of the window (it also fills the system navigation area underneath). A
+ * single hairline on top separate it from the page (transparent, no glass; only the docked [MiniPlayerStrip] is frosted); the current destination is marked by a short bar on
  * that hairline and full-strength ink. No pills, no shadows. Must be inside [CoverTheme] (uses [ink]).
  */
 @Composable
@@ -49,23 +52,26 @@ fun HushBottomBar(
     nowPlaying: @Composable () -> Unit = {},
 ) {
     val hairline = ink(0.08f)
-    Column(
-        modifier
-            .fillMaxWidth()
-            .background(ink(0.04f))
-            .navigationBarsPadding(),
-    ) {
+    // The tab strip is fully transparent (no fill, no glass): the flowing background shows through. The only
+    // glass is the mini player strip docked above it.
+    Column(modifier.fillMaxWidth()) {
         nowPlaying()
-        Row(
+        Column(
             Modifier
                 .fillMaxWidth()
-                .height(54.dp)
-                .drawBehind {
-                    val y = 0.5.dp.toPx()
-                    drawLine(hairline, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
-                },
+                .navigationBarsPadding(),
         ) {
-            items.forEach { item -> BottomBarTab(item, Modifier.weight(1f)) }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(HushBottomBarTabsHeight)
+                    .drawBehind {
+                        val y = 0.5.dp.toPx()
+                        drawLine(hairline, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
+                    },
+            ) {
+                items.forEach { item -> BottomBarTab(item, Modifier.weight(1f)) }
+            }
         }
     }
 }

@@ -1,5 +1,11 @@
 package com.hush.feature.search
 
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.hush.core.designsystem.AcrylicHost
+import com.hush.core.designsystem.AcrylicMaterials
+import com.hush.core.designsystem.AcrylicSurface
+import com.hush.core.designsystem.acrylicSource
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -53,7 +59,6 @@ import com.adamglin.phosphoricons.light.DotsThreeVertical
 import com.adamglin.phosphoricons.light.MusicNote
 import com.adamglin.phosphoricons.light.Play
 import com.hush.core.designsystem.HushDisplayFont
-import com.hush.core.designsystem.fadeEdges
 import com.hush.core.designsystem.ink
 import com.hush.core.designsystem.pressScale
 
@@ -77,29 +82,46 @@ internal fun DiscoverContent(
     onTrackClick: (com.hush.core.model.Track) -> Unit,
     onArtistClick: (Long) -> Unit,
     onAlbumClick: (DiscoverItem) -> Unit,
+    /** Scroll state of the list, so the screen's floating header can frost up as content slides under it. */
+    listState: LazyListState = rememberLazyListState(),
+    /** Extra room at the top / bottom so content starts below the floating header and bar but scrolls under them. */
+    contentPadding: PaddingValues = PaddingValues(),
+    /** Scrolls with the list as its first item (title + search). Receives full screen width; pad it yourself. */
+    header: @Composable () -> Unit = {},
 ) {
     var selected by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val albums = state.albums
     val artists = state.artists
     val tabs = state.tabs
     if (state.isLoading && tabs.isEmpty()) {
-        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = ink(), strokeWidth = 2.dp)
+        Column(modifier.fillMaxSize()) {
+            Box(Modifier.bleedSides(24.dp)) { header() }
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = ink(), strokeWidth = 2.dp)
+            }
         }
         return
     }
     if (tabs.isEmpty()) {
-        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(state.error ?: "Discover is unavailable", color = ink(0.65f))
+        Column(modifier.fillMaxSize()) {
+            Box(Modifier.bleedSides(24.dp)) { header() }
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text(state.error ?: "Discover is unavailable", color = ink(0.65f))
+            }
         }
         return
     }
     // The parent screen pads 24dp on both sides; Discover is allowed to use the full screen width, so the
     // card rows scroll edge to edge. Sections add their own 24dp padding back where they need it.
     LazyColumn(
-        modifier = modifier.bleedSides(24.dp).fadeEdges(),
-        contentPadding = PaddingValues(top = 6.dp, bottom = 20.dp),
+        state = listState,
+        modifier = modifier.bleedSides(24.dp),
+        contentPadding = PaddingValues(
+            top = contentPadding.calculateTopPadding(),
+            bottom = 20.dp + contentPadding.calculateBottomPadding(),
+        ),
     ) {
+        item(key = "header") { header() }
         item { SectionTitle("Top albums") }
         item {
             LazyRow(
@@ -159,7 +181,8 @@ private fun SectionTitle(text: String, startPadding: Dp = 24.dp) {
 /** Big rounded cover card: art fills it, dark fade at the bottom carries the title, small play badge. */
 @Composable
 private fun AlbumCard(item: DiscoverItem, onTrackClick: (com.hush.core.model.Track) -> Unit, onAlbumClick: (DiscoverItem) -> Unit) {
-    Box(
+    // Each card is its own little acrylic host: the play badge frosts this card's cover.
+    AcrylicHost(
         Modifier
             .size(CardWidth, CardHeight)
             .pressScale(onClick = { item.track?.let(onTrackClick) ?: onAlbumClick(item) }, scaleDown = 0.97f)
@@ -169,7 +192,7 @@ private fun AlbumCard(item: DiscoverItem, onTrackClick: (com.hush.core.model.Tra
         SubcomposeAsyncImage(
             model = item.imageUrl,
             contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().acrylicSource(),
             contentScale = ContentScale.Crop,
             loading = { CoverPlaceholder() },
             error = { CoverPlaceholder() },
@@ -195,13 +218,10 @@ private fun AlbumCard(item: DiscoverItem, onTrackClick: (com.hush.core.model.Tra
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Box(
-            Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = 16.dp)
-                .size(38.dp)
-                .background(Color.White.copy(alpha = 0.22f), CircleShape),
-            contentAlignment = Alignment.Center,
+        AcrylicSurface(
+            Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp).size(38.dp),
+            shape = CircleShape,
+            material = AcrylicMaterials.UltraThin,
         ) {
             Icon(PhosphorIcons.Light.Play, "Play", tint = Color.White, modifier = Modifier.size(18.dp))
         }

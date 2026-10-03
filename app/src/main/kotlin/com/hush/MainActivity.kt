@@ -30,6 +30,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import com.hush.core.designsystem.AcrylicHost
+import com.hush.core.designsystem.acrylicSource
 import com.hush.core.designsystem.HushBackdrop
 import com.hush.core.designsystem.FlowingBackground
 import com.hush.core.designsystem.HushTheme
@@ -99,7 +103,15 @@ private fun HushApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSourceU
     }
     HushTheme {
         HushBackdrop {
-            FlowingBackground(palette = palette, isPlaying = playback is PlaybackState.Playing, visible = backgroundVisible)
+            // One shared acrylic state for the whole app. The flowing background is registered as a source on it
+            // (beneath everything, zIndex -1), so any glass in the app (the mini player) frosts that same background.
+            AcrylicHost(Modifier.fillMaxSize()) {
+            FlowingBackground(
+                palette = palette,
+                isPlaying = playback is PlaybackState.Playing,
+                visible = backgroundVisible,
+                modifier = Modifier.fillMaxSize().acrylicSource(zIndex = -1f),
+            )
             CompositionLocalProvider(LocalCoverPalette provides palette) {
                 // The strip docks onto the bottom bar of Search and Library (their `nowPlaying` slot).
                 val openPlayer = { nav.navigate("player") { launchSingleTop = true }; Unit }
@@ -221,6 +233,7 @@ private fun HushApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSourceU
                         popExitTransition = { slideOutVertically(tween(280, easing = FastOutSlowInEasing)) { it } },
                     ) { PlayerScreen(player, onBack = { nav.popBackStack() }) }
                 }
+            }
             }
         }
     }

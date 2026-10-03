@@ -1,6 +1,8 @@
 package com.hush.core.designsystem
 
 import android.util.Log
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -18,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -28,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeProgressive
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
@@ -69,10 +73,13 @@ fun AcrylicHost(
     }
 }
 
-/** Marks this layer as the content acrylic surfaces blur. */
+/**
+ * Marks this layer as the content acrylic surfaces blur. Give the app-wide flowing background a negative
+ * [zIndex] so it always sits beneath the content sources (rows, covers) in the blur.
+ */
 @Composable
-fun Modifier.acrylicSource(state: HazeState? = LocalAcrylicState.current): Modifier =
-    if (state == null) this else hazeSource(state)
+fun Modifier.acrylicSource(state: HazeState? = LocalAcrylicState.current, zIndex: Float = 0f): Modifier =
+    if (state == null) this else hazeSource(state, zIndex = zIndex)
 
 /* ------------------------------- Materials -------------------------------- */
 
@@ -93,6 +100,9 @@ data class AcrylicMaterial(
 )
 
 object AcrylicMaterials {
+    /** Soft blur that fades out along one edge (status bar / bottom bar scrims). Used with [AcrylicScrim]. */
+    val Scrim = AcrylicMaterial(22.dp, 0.28f, 0f, 0f, 0f, 0.40f)
+
     /** Barest frost: soft blur, whisper of tint, no sheen, no outline. Default for small floating buttons. */
     val UltraThin = AcrylicMaterial(14.dp, 0.10f, 0.015f, 0f, 0f, 0.40f)
 
@@ -113,6 +123,17 @@ private val DarkBase = Color(0xFF0B0D12)
 private val LightBase = Color(0xFFF4F6FA)
 
 private fun AcrylicTone.base(): Color = if (this == AcrylicTone.Dark) DarkBase else LightBase
+
+/**
+ * Glass tint color: follows the cover's base color (animated in step with [FlowingBackground]) so the glass
+ * is colored by the adaptive background instead of painting a fixed navy over it.
+ */
+@Composable
+private fun rememberGlassBase(): Color {
+    val target = LocalCoverPalette.current.base
+    val animated by animateColorAsState(target, tween(1400), label = "acrylic-base")
+    return animated
+}
 
 /* -------------------------------- Surface --------------------------------- */
 
@@ -135,16 +156,8 @@ fun AcrylicSurface(
             Log.w("Acrylic", "No HazeState found. Wrap the screen in AcrylicHost and put Modifier.acrylicSource() on the layer behind the glass.")
         }
     }
-    val base = tone.base()
-    val style = remember(material, tone) {
-        HazeStyle(
-            backgroundColor = base,
-            tints = listOf(HazeTint(base.copy(alpha = material.tintAlpha))),
-            blurRadius = material.blurRadius,
-            noiseFactor = material.noise,
-            fallbackTint = HazeTint(base.copy(alpha = material.fallbackAlpha)),
-        )
-    }
+    val base = rememberGlassBase()
+    val style = remember(material, base) { material.hazeStyle(base) }
     val highlight = Color.White
     val sheen = remember(material, tone) {
         // Soft light falling from the top-left; fades out so it never reads as a gradient fill.
@@ -247,5 +260,78 @@ fun AcrylicCard(
         material = material,
         tone = tone,
         content = content,
+    )
+}
+
+private fun AcrylicMaterial.hazeStyle(base: Color) = HazeStyle(
+    // Must be opaque: the blur of the rows is partly see-through, so without a solid backing the sharp rows show
+    // straight through the glass. [base] is the cover's base color, so it matches the flowing background.
+    backgroundColor = base,
+    tints = listOf(HazeTint(base.copy(alpha = tintAlpha))),
+    blurRadius = blurRadius,
+    noiseFactor = noise,
+    fallbackTint = HazeTint(base.copy(alpha = fallbackAlpha)),
+)
+
+/**
+ * Acrylic as a plain background modifier, for full-bleed strips (bottom bar, floating header) that
+ * don't need a shape, rim or sheen. [intensity] is read while drawing (0..1), so it can follow scroll
+ * state without recomposing: a header can be clear at rest and frost up as content slides under it.
+ * Without a HazeState it falls back to a flat tint.
+ */
+@Composable
+fun Modifier.acrylicFill(
+    material: AcrylicMaterial = AcrylicMaterials.Regular,
+    tone: AcrylicTone = AcrylicTone.Dark,
+    state: HazeState? = LocalAcrylicState.current,
+    intensity: () -> Float = { 1f },
+): Modifier {
+    val base = rememberGlassBase()
+    val style = remember(material, base) { material.hazeStyle(base) }
+    return if (state != null) {
+        this.hazeEffect(state = state, style = style) { alpha = intensity() }
+    } else {
+        this.background(base.copy(alpha = material.fallbackAlpha))
+    }
+}
+
+enum class AcrylicEdge { Top, Bottom }
+
+/**
+ * A strip of blur that is strongest at one edge of the screen and fades to nothing toward the middle
+ * (progressive blur). Use it instead of a dark gradient scrim behind status-bar icons or under a bar.
+ * Needs content marked with [acrylicSource] behind it (a sibling, not a parent).
+ */
+@Composable
+fun AcrylicScrim(
+    modifier: Modifier = Modifier,
+    edge: AcrylicEdge = AcrylicEdge.Top,
+    material: AcrylicMaterial = AcrylicMaterials.Scrim,
+    tone: AcrylicTone = AcrylicTone.Dark,
+    state: HazeState? = LocalAcrylicState.current,
+) {
+    val base = rememberGlassBase()
+    val style = remember(material, base) { material.hazeStyle(base) }
+    val top = edge == AcrylicEdge.Top
+    val fade = remember(edge) {
+        Brush.verticalGradient(if (top) listOf(Color.Black, Color.Transparent) else listOf(Color.Transparent, Color.Black))
+    }
+    Box(
+        if (state != null) {
+            modifier.hazeEffect(state = state, style = style) {
+                progressive = HazeProgressive.verticalGradient(
+                    startIntensity = if (top) 1f else 0f,
+                    endIntensity = if (top) 0f else 1f,
+                )
+                mask = fade
+            }
+        } else {
+            modifier.background(
+                Brush.verticalGradient(
+                    if (top) listOf(base.copy(alpha = material.fallbackAlpha), Color.Transparent)
+                    else listOf(Color.Transparent, base.copy(alpha = material.fallbackAlpha)),
+                ),
+            )
+        },
     )
 }

@@ -36,7 +36,7 @@ import coil.compose.AsyncImage
 
 /**
  * The now-playing strip that docks onto [HushBottomBar] (pass it as the bar's `nowPlaying` slot). It is part of
- * the bar, not a separate floating card: same ink tint underneath, no shadow, flat. A thin progress line runs
+ * the bar, not a separate floating card: no shadow, flat, but frosted glass over the list scrolling behind it (the only acrylic in the bar). A thin progress line runs
  * along its top edge in the cover's accent. Tap the strip to open the player. Icons are drawn here, so this
  * file needs nothing but Coil. Must be inside [CoverTheme] (uses [ink] and the accent).
  */
@@ -56,11 +56,13 @@ fun MiniPlayerStrip(
     dockedToEdge: Boolean = false,
 ) {
     val accent = MaterialTheme.colorScheme.primary
+    val acrylicFillStrip = Modifier.acrylicFill(AcrylicMaterials.Thick, if (LocalCoverPalette.current.isLight) AcrylicTone.Light else AcrylicTone.Dark)
     Column(
         modifier
             .fillMaxWidth()
-            .background(ink(0.05f))
-            .then(if (dockedToEdge) Modifier.navigationBarsPadding() else Modifier)
+            // Inside HushBottomBar the bar's own (acrylic) fill shows through; alone at the edge it needs its own tint.
+            // Standalone at the edge: flat tint. Inside HushBottomBar: the app's one acrylic surface, frosting the list behind it.
+            .then(if (dockedToEdge) Modifier.background(ink(0.05f)).navigationBarsPadding() else acrylicFillStrip)
             .pressScale(onClick = onOpen, scaleDown = 0.99f),
     ) {
         // Progress line on the top edge: faint track, accent fill.
