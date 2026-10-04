@@ -158,6 +158,9 @@ class AndroidYtDlpEngine @Inject constructor(
      * A 12s overall timeout also means a stuck/blocked resolution fails fast with a clear
      * error instead of leaving the UI hanging indefinitely.
      */
+    /** Drops the cached stream URL for [videoId], so the next [audioUrl] resolves a fresh one. */
+    fun forget(videoId: String) { streamCache.remove(videoId) }
+
     suspend fun audioUrl(videoId: String): Result<String> {
         streamCache[videoId]?.takeIf { it.expiresAtMs > System.currentTimeMillis() }?.let {
             return Result.success(it.url)

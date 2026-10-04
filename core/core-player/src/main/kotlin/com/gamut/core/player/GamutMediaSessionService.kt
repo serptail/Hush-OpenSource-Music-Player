@@ -9,7 +9,9 @@ import dagger.hilt.android.AndroidEntryPoint
 class GamutMediaSessionService : MediaSessionService() {
     @Inject lateinit var musicPlayer: MusicPlayer
     private var session: MediaSession? = null
-    override fun onCreate() { super.onCreate(); session = MediaSession.Builder(this, (musicPlayer as Media3MusicPlayer).sessionPlayer).build() }
+    // mediaSessionPlayer (not sessionPlayer): routes notification / lock-screen / Bluetooth next + previous
+    // through the queue logic in Media3MusicPlayer instead of ExoPlayer's single-item playlist.
+    override fun onCreate() { super.onCreate(); session = MediaSession.Builder(this, (musicPlayer as Media3MusicPlayer).mediaSessionPlayer).build() }
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = session
     override fun onDestroy() { session?.release(); session = null; super.onDestroy() }
 }

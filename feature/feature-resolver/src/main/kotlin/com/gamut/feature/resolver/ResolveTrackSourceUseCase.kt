@@ -28,7 +28,10 @@ class YoutubeCandidateRepositoryImpl @Inject constructor(private val source: You
     override suspend fun broad(track: Track) = source.searchBroad("${track.artist} ${track.title}")
 }
 
-interface AudioSourceRepository { suspend fun audioUrl(videoId: String): Result<String> }
+interface AudioSourceRepository {
+    /** [forceRefresh] drops any cached stream URL first (YouTube URLs expire and are tied to the client's IP). */
+    suspend fun audioUrl(videoId: String, forceRefresh: Boolean = false): Result<String>
+}
 
 class AudioSourceRepositoryImpl @Inject constructor(
     private val engine: AndroidYtDlpEngine,
@@ -38,7 +41,11 @@ class AudioSourceRepositoryImpl @Inject constructor(
     private val cache = java.util.concurrent.ConcurrentHashMap<String, CachedAudio>()
     private val inFlight = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Deferred<Result<String>>>()
 
-    override suspend fun audioUrl(videoId: String): Result<String> {
+    override suspend fun audioUrl(videoId: String, forceRefresh: Boolean): Result<String> {
+        if (forceRefresh) {
+            cache.remove(videoId)
+            engine.forget(videoId)
+        }
         cache[videoId]?.takeIf { it.expiresAtMs > System.currentTimeMillis() }?.let {
             return Result.success(it.url)
         }

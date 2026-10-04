@@ -122,6 +122,7 @@ import com.adamglin.phosphoricons.light.Pause
 import com.adamglin.phosphoricons.light.Play
 import com.adamglin.phosphoricons.light.Queue
 import com.adamglin.phosphoricons.light.Repeat
+import com.adamglin.phosphoricons.light.RepeatOnce
 import com.adamglin.phosphoricons.light.Shuffle
 import com.adamglin.phosphoricons.light.SkipBack
 import com.adamglin.phosphoricons.light.SkipForward
@@ -132,6 +133,7 @@ import com.gamut.core.designsystem.AcrylicSurface
 import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.designsystem.acrylicSource
 import com.gamut.core.model.PlaybackState
+import com.gamut.core.model.RepeatMode as PlaybackRepeatMode
 import com.gamut.core.model.Track
 import com.gamut.core.player.MusicPlayer
 import kotlinx.coroutines.Dispatchers
@@ -142,6 +144,9 @@ import kotlin.math.hypot
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -169,7 +174,7 @@ import coil.request.SuccessResult
 // ---- Sizing (no dynamic-palette dependency) ----
 private val CoverShape = RoundedCornerShape(30.dp)
 private val CoverCornerRadius = 30.dp   // same corner as the album cards on Discover
-private val BackgroundBlur = 56.dp   // how hard the cover is blurred behind the screen (acrylic wants it soft, not recognisable)
+private val BackgroundBlur = 24.dp   // how hard the cover is blurred behind the screen (acrylic wants it soft, not recognisable)
 private val MaxCoverSize = 360.dp   // upper bound only; the real size comes from the space available (the width between prev / next)
 private val RingGap = 3.5.dp     // same gap distance as before, now measured outward instead of inward
 private val RingStrokeWidth = 1.5.dp
@@ -187,17 +192,31 @@ private val WaveMaxLength = 10.dp        // tallest bar; base + length + cap (~1
 private val ScrubKnobRadius = 4.dp
 private val ScrubDashHalfLength = 3.dp
 private val ScrubDashWidth = 2.dp
+private val FavoriteColor = Color(0xFFFF4D6D)   // the heart when the track is a favorite
 private val RingClearance = 36.dp     // total (both sides) room for gap + stroke + waveform outside the cover
 private val RingInset = RingClearance / 2  // the same room, per side
 
 @Composable
-fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
+fun PlayerScreen(
+    player: MusicPlayer,
+    onBack: () -> Unit = {},
+    /** ISRCs of the favorited tracks; the heart is filled in when the current track is in this set. */
+    favoriteIsrcs: Set<String> = emptySet(),
+    onToggleFavorite: (Track) -> Unit = {},
+    /** The "more" (three dots) button: e.g. open the add-to-playlist sheet for this track. */
+    onMore: (Track) -> Unit = {},
+) {
     TransparentStatusBar()
     val state by player.playbackState.collectAsState()
     val track = (state as? PlaybackState.Playing)?.track ?: (state as? PlaybackState.Paused)?.track
     val position = (state as? PlaybackState.Playing)?.positionMs ?: (state as? PlaybackState.Paused)?.positionMs ?: 0L
     val isPlaying = state is PlaybackState.Playing
+    val loadProgress by player.loadProgress.collectAsState()
     val duration = (track?.durationMs ?: 0L).coerceAtLeast(1L)
+    val shuffleOn by player.shuffleEnabled.collectAsState()
+    val repeatMode by player.repeatMode.collectAsState()
+    val queueState by player.queue.collectAsState()
+    var showQueue by remember { mutableStateOf(false) }
 
     // Smooth, continuous progress: the player's `position` only ticks
     // periodically (e.g., once a second), which caused a visible stutter.
@@ -255,13 +274,15 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
     // sheen. Nothing loaded: none of those layers are drawn, so it is just the flat fill.
     AcrylicHost(Modifier.fillMaxSize().background(CoverPalette.Neutral.base)) {
         if (artUrl != null) {
+            // One backdrop (art + tint + veil + sheen) is the acrylic source, so the lyrics card frosts exactly what
+            // is behind it instead of the raw, un-tinted art.
+            Box(Modifier.fillMaxSize().acrylicSource()) {
             AsyncImage(
                 model = rememberFadeRequest(artUrl),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .acrylicSource()   // the lyrics card frosts this layer
                     .graphicsLayer { scaleX = 1.3f; scaleY = 1.3f }   // overscan, so the blur never shows an edge
                     .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(BackgroundBlur) else Modifier),
             )
@@ -288,19 +309,20 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
                     ),
                 ),
             )
+            }
         }
 
         // Nothing playing (or still loading): no controls, no text, just a black record turning in the
         // middle of the flat background. As soon as a track arrives the real player takes over.
         if (track == null) {
-            LoadingVinyl(Modifier.align(Alignment.Center))
+            LoadingVinyl(if (state is PlaybackState.Loading) loadProgress else null, Modifier.align(Alignment.Center))
             return@AcrylicHost
         }
 
         Column(
             Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp),
         ) {
-            TopBar(onBack, Modifier.fillMaxWidth())
+            TopBar(onBack, onMore = { onMore(track) }, modifier = Modifier.fillMaxWidth())
 
             Spacer(Modifier.height(20.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
@@ -317,7 +339,14 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
                         color = Color.White.copy(alpha = 0.65f),
                     )
                 }
-                DepthIcon(PhosphorIcons.Light.Heart, "Favorite", Modifier.bounceTap(onClick = {}).padding(4.dp), size = 26.dp)
+                val isFavorite = track.isrc in favoriteIsrcs
+                DepthIcon(
+                    PhosphorIcons.Light.Heart,
+                    if (isFavorite) "Remove from favorites" else "Add to favorites",
+                    Modifier.bounceTap(onClick = { onToggleFavorite(track) }).padding(4.dp),
+                    tint = if (isFavorite) FavoriteColor else Color.White,
+                    size = 26.dp,
+                )
             }
 
             // Gap between the title row and the cover: bigger = cover + controls sit lower / more central.
@@ -352,9 +381,33 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
 
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                DepthIcon(PhosphorIcons.Light.Shuffle, "Shuffle", Modifier.bounceTap(onClick = {}).padding(8.dp), tint = Color.White.copy(alpha = 0.85f), size = 22.dp)
-                DepthIcon(PhosphorIcons.Light.Repeat, "Repeat", Modifier.bounceTap(onClick = {}).padding(8.dp), tint = Color.White.copy(alpha = 0.85f), size = 22.dp)
-                DepthIcon(PhosphorIcons.Light.Queue, "Queue", Modifier.bounceTap(onClick = {}).padding(8.dp), tint = Color.White.copy(alpha = 0.85f), size = 22.dp)
+                DepthIcon(
+                    PhosphorIcons.Light.Shuffle,
+                    if (shuffleOn) "Shuffle on" else "Shuffle off",
+                    Modifier.bounceTap(onClick = { player.setShuffle(!shuffleOn) }).padding(8.dp),
+                    tint = if (shuffleOn) accent else Color.White.copy(alpha = 0.85f),
+                    size = 22.dp,
+                )
+                DepthIcon(
+                    if (repeatMode == PlaybackRepeatMode.ONE) PhosphorIcons.Light.RepeatOnce else PhosphorIcons.Light.Repeat,
+                    when (repeatMode) {
+                        PlaybackRepeatMode.OFF -> "Repeat off"
+                        PlaybackRepeatMode.ALL -> "Repeat all"
+                        PlaybackRepeatMode.ONE -> "Repeat one"
+                    },
+                    Modifier.bounceTap(onClick = {
+                        player.setRepeatMode(
+                            when (repeatMode) {
+                                PlaybackRepeatMode.OFF -> PlaybackRepeatMode.ALL
+                                PlaybackRepeatMode.ALL -> PlaybackRepeatMode.ONE
+                                PlaybackRepeatMode.ONE -> PlaybackRepeatMode.OFF
+                            },
+                        )
+                    }).padding(8.dp),
+                    tint = if (repeatMode != PlaybackRepeatMode.OFF) accent else Color.White.copy(alpha = 0.85f),
+                    size = 22.dp,
+                )
+                DepthIcon(PhosphorIcons.Light.Queue, "Queue", Modifier.bounceTap(onClick = { showQueue = true }).padding(8.dp), tint = Color.White.copy(alpha = 0.85f), size = 22.dp)
             }
 
             Spacer(Modifier.height(16.dp))
@@ -372,17 +425,27 @@ fun PlayerScreen(player: MusicPlayer, onBack: () -> Unit = {}) {
                     .padding(bottom = 16.dp),
             )
         }
+
+        if (showQueue) {
+            QueueSheet(
+                queue = queueState,
+                accent = accent,
+                onDismiss = { showQueue = false },
+                onPlay = player::skipTo,
+                onRemove = player::removeFromQueue,
+            )
+        }
     }
 }
 
 @Composable
-private fun TopBar(onBack: () -> Unit, modifier: Modifier = Modifier) {
+private fun TopBar(onBack: () -> Unit, onMore: () -> Unit, modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         DepthIcon(PhosphorIcons.Light.CaretDown, "Collapse", Modifier.tapTarget(onClick = onBack).padding(8.dp))
         Spacer(Modifier.weight(1f))
         DepthIcon(PhosphorIcons.Light.SpeakerHigh, "Volume", Modifier.tapTarget(onClick = {}).padding(8.dp))
         DepthIcon(PhosphorIcons.Light.Equalizer, "Equalizer", Modifier.tapTarget(onClick = {}).padding(8.dp))
-        DepthIcon(PhosphorIcons.Light.DotsThreeVertical, "More", Modifier.tapTarget(onClick = {}).padding(8.dp))
+        DepthIcon(PhosphorIcons.Light.DotsThreeVertical, "More", Modifier.tapTarget(onClick = onMore).padding(8.dp))
     }
 }
 
@@ -818,18 +881,36 @@ private fun rememberWaveform(track: Track?): FloatArray {
 }
 
 /**
- * The "no song yet" / loading screen: a plain black record, centered, turning at a steady pace until
- * a track loads. Black grooves alone would look still when rotated, so the light glints and the hairline
- * on the label turn with the disc; they are what makes the spin readable.
+ * The "no song yet" / loading screen: one small black record turning in the exact middle of the flat background,
+ * with a thin progress bar under it while a track is loading ([progress] null = no bar). The bar shows real
+ * progress (see MusicPlayer.loadProgress), animated smoothly between updates.
  */
 @Composable
-private fun LoadingVinyl(modifier: Modifier = Modifier) {
+private fun LoadingVinyl(progress: Float?, modifier: Modifier = Modifier) {
+    Box(modifier.size(104.dp), contentAlignment = Alignment.Center) {
+        VinylDisc(Modifier.fillMaxSize())
+        if (progress != null) {
+            // Hangs below the record, so the record itself stays dead center.
+            LoadingBar(progress, Modifier.align(Alignment.BottomCenter).offset(y = 29.dp).width(72.dp))
+        }
+    }
+}
+
+@Composable
+private fun LoadingBar(progress: Float, modifier: Modifier = Modifier) {
+    val shown by animateFloatAsState(
+        targetValue = progress.coerceIn(0f, 1f),
+        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+        label = "loading-progress",
+    )
     Box(
-        modifier.fillMaxWidth(0.74f).widthIn(max = 330.dp).aspectRatio(1f),
-        contentAlignment = Alignment.Center,
+        modifier
+            .height(3.dp)
+            .clip(CircleShape)
+            .background(Color.White.copy(alpha = 0.14f))
+            .semantics { contentDescription = "Loading" },
     ) {
-        PlayerSpinner(Modifier.fillMaxSize(), Color.White.copy(alpha = 0.6f), strokeWidth = 1.5.dp)
-        VinylDisc(Modifier.fillMaxSize(0.84f))
+        Box(Modifier.fillMaxHeight().fillMaxWidth(shown).background(Color.White.copy(alpha = 0.85f)))
     }
 }
 
@@ -1316,7 +1397,7 @@ fun LyricsSection(
                     // Folded, tapping anywhere on the snippet opens it.
                     .tapTarget { if (!expanded) onToggle() },
                 shape = LyricsCardShape,
-                material = AcrylicMaterials.Thick,
+                material = AcrylicMaterials.UltraThin,
             ) {
                 Crossfade(targetState = expanded, animationSpec = tween(250), label = "lyrics-content") { isExpanded ->
                     if (!isExpanded) {

@@ -1,5 +1,7 @@
 package com.gamut.feature.library
 
+import com.gamut.core.database.FavoriteDao
+import com.gamut.core.database.FavoriteEntity
 import com.gamut.core.database.PlaylistDao
 import com.gamut.core.database.PlaylistEntity
 import com.gamut.core.database.PlaylistTrackCrossRef
@@ -23,9 +25,15 @@ interface LibraryRepository {
     suspend fun createPlaylist(name: String): Long
     suspend fun addTrack(playlistId: Long, track: Track, position: Int)
     suspend fun removeTrack(playlistId: Long, isrc: String)
+    /** Adds [track] at the end of the playlist; does nothing if it is already in it. */
+    suspend fun appendTrack(playlistId: Long, track: Track)
+    fun observeFavoriteIsrcs(): Flow<Set<String>>
+    /** Favorited tracks, most recently liked first. */
+    fun observeFavorites(): Flow<List<Track>>
+    suspend fun toggleFavorite(track: Track)
 }
 
-class LibraryRepositoryImpl @Inject constructor(private val playlists: PlaylistDao, private val tracks: PlaylistTrackDao, private val trackDao: TrackDao) : LibraryRepository {
+class LibraryRepositoryImpl @Inject constructor(private val playlists: PlaylistDao, private val tracks: PlaylistTrackDao, private val trackDao: TrackDao, private val favorites: FavoriteDao) : LibraryRepository {
     override fun observePlaylists() = playlists.observeAll().map { list -> list.map { Playlist(it.id, it.name, it.createdAtEpochMs) } }
     override fun observeTracks(playlistId: Long) = tracks.observeTracks(playlistId).map { list -> list.map { it.toDomain() } }
     override suspend fun createPlaylist(name: String) = playlists.insert(PlaylistEntity(name = name, createdAtEpochMs = System.currentTimeMillis()))
@@ -34,6 +42,21 @@ class LibraryRepositoryImpl @Inject constructor(private val playlists: PlaylistD
         tracks.upsert(PlaylistTrackCrossRef(playlistId, track.isrc, position))
     }
     override suspend fun removeTrack(playlistId: Long, isrc: String) = tracks.remove(playlistId, isrc)
+    override suspend fun appendTrack(playlistId: Long, track: Track) {
+        if (tracks.contains(playlistId, track.isrc)) return
+        trackDao.upsert(track.toEntity())
+        tracks.upsert(PlaylistTrackCrossRef(playlistId, track.isrc, tracks.nextPosition(playlistId)))
+    }
+    override fun observeFavoriteIsrcs() = favorites.observeIsrcs().map { it.toSet() }
+    override fun observeFavorites() = favorites.observeTracks().map { list -> list.map { it.toDomain() } }
+    override suspend fun toggleFavorite(track: Track) {
+        if (favorites.isFavorite(track.isrc)) {
+            favorites.remove(track.isrc)
+        } else {
+            trackDao.upsert(track.toEntity())
+            favorites.add(FavoriteEntity(track.isrc, System.currentTimeMillis()))
+        }
+    }
 }
 
 @Module

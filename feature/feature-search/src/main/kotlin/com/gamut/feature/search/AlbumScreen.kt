@@ -102,7 +102,8 @@ class AlbumViewModel @Inject constructor(
 fun AlbumScreen(
     viewModel: AlbumViewModel,
     onBack: () -> Unit,
-    onTrackSelected: (Track) -> Unit,
+    /** The picked track plus the list it was picked from (the queue). */
+    onTrackSelected: (Track, List<Track>) -> Unit,
     nowPlaying: @Composable () -> Unit = {},
 ) {
     val album by viewModel.state.collectAsStateWithLifecycle()
@@ -126,11 +127,11 @@ fun AlbumScreen(
                                     album = value,
                                     artistImageUrl = artistImage,
                                     onBack = onBack,
-                                    onPlay = { value.tracks.firstOrNull()?.let(onTrackSelected) },
+                                    onPlay = { value.tracks.firstOrNull()?.let { onTrackSelected(it, value.tracks) } },
                                 )
                             }
                             items(value.tracks, key = { it.isrc }) { track ->
-                                Box(Modifier.padding(horizontal = 24.dp)) { AlbumTrackRow(track, onTrackSelected) }
+                                Box(Modifier.padding(horizontal = 24.dp)) { AlbumTrackRow(track) { picked -> onTrackSelected(picked, value.tracks) } }
                             }
                             item(key = "nav-space") { Box(Modifier.navigationBarsPadding()) }
                         }

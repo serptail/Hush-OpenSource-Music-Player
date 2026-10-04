@@ -89,7 +89,8 @@ class ArtistViewModel @Inject constructor(
 fun ArtistScreen(
     viewModel: ArtistViewModel = viewModel(),
     onBack: () -> Unit,
-    onTrackSelected: (Track) -> Unit,
+    /** The picked track plus the list it was picked from (the queue). */
+    onTrackSelected: (Track, List<Track>) -> Unit,
     onAlbumSelected: (DiscoverItem) -> Unit = {},
     nowPlaying: @Composable () -> Unit = {},
 ) {
@@ -133,10 +134,10 @@ fun ArtistScreen(
                 )
                 Crossfade(selectedTab, label = "artist-tab", modifier = Modifier.weight(1f)) { tab ->
                     when (tab) {
-                        0 -> ArtistOverview(value, onTrackSelected, onAlbumSelected, onViewAll = { selectedTab = 1 })
-                        1 -> TrackList(value.songs, onTrackSelected)
+                        0 -> ArtistOverview(value, { picked -> onTrackSelected(picked, value.popular) }, onAlbumSelected, onViewAll = { selectedTab = 1 })
+                        1 -> TrackList(value.songs) { picked -> onTrackSelected(picked, value.songs) }
                         2 -> AlbumGrid(value.albums, onAlbumSelected)
-                        else -> TrackList(value.latestSongs, onTrackSelected)
+                        else -> TrackList(value.latestSongs) { picked -> onTrackSelected(picked, value.latestSongs) }
                     }
                 }
             }

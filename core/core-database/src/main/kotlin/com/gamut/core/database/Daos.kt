@@ -36,6 +36,8 @@ interface PlaylistTrackDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(ref: PlaylistTrackCrossRef)
     @Query("DELETE FROM playlisttrackcrossref WHERE playlistId = :playlistId AND isrc = :isrc") suspend fun remove(playlistId: Long, isrc: String)
     @Query("SELECT t.* FROM tracks t INNER JOIN playlisttrackcrossref r ON t.isrc = r.isrc WHERE r.playlistId = :playlistId ORDER BY r.position") fun observeTracks(playlistId: Long): Flow<List<TrackEntity>>
+    @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM playlisttrackcrossref WHERE playlistId = :playlistId") suspend fun nextPosition(playlistId: Long): Int
+    @Query("SELECT EXISTS(SELECT 1 FROM playlisttrackcrossref WHERE playlistId = :playlistId AND isrc = :isrc)") suspend fun contains(playlistId: Long, isrc: String): Boolean
 }
 
 @Dao
@@ -50,4 +52,13 @@ interface ArtworkCacheDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(entry: ArtworkCacheEntity)
     @Query("SELECT * FROM artwork_cache WHERE releaseId = :releaseId") suspend fun get(releaseId: String): ArtworkCacheEntity?
     @Query("SELECT * FROM artwork_cache WHERE releaseId IN (:releaseIds)") suspend fun getAll(releaseIds: List<String>): List<ArtworkCacheEntity>
+}
+
+@Dao
+interface FavoriteDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun add(favorite: FavoriteEntity)
+    @Query("DELETE FROM favorites WHERE isrc = :isrc") suspend fun remove(isrc: String)
+    @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE isrc = :isrc)") suspend fun isFavorite(isrc: String): Boolean
+    @Query("SELECT isrc FROM favorites") fun observeIsrcs(): Flow<List<String>>
+    @Query("SELECT t.* FROM tracks t INNER JOIN favorites f ON t.isrc = f.isrc ORDER BY f.addedAtEpochMs DESC") fun observeTracks(): Flow<List<TrackEntity>>
 }

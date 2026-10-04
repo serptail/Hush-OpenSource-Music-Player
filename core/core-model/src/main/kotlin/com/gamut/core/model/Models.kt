@@ -52,3 +52,15 @@ sealed interface PlaybackState {
     data class Paused(val positionMs: Long, val track: Track) : PlaybackState
     data class Error(val message: String) : PlaybackState
 }
+
+/** OFF = stop after the last track, ALL = loop the whole queue, ONE = loop the current track. */
+enum class RepeatMode { OFF, ALL, ONE }
+
+/**
+ * The queue in *play order* (already shuffled when shuffle is on), so a UI can render it as is.
+ * [currentIndex] is the position of the current track inside [tracks], or -1 if nothing is current.
+ */
+data class QueueState(
+    val tracks: List<Track> = emptyList(),
+    val currentIndex: Int = -1,
+)

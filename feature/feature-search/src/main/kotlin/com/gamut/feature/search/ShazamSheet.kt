@@ -1,0 +1,360 @@
+package com.gamut.feature.search
+
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import com.adamglin.PhosphorIcons
+import com.adamglin.phosphoricons.Fill
+import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.fill.Heart
+import com.adamglin.phosphoricons.light.Heart
+import com.adamglin.phosphoricons.light.Waveform
+import com.gamut.core.designsystem.CoverPalette
+import com.gamut.core.model.Playlist
+import com.gamut.core.model.Track
+
+private val FavoriteRed = Color(0xFFFF4D6D)
+
+/**
+ * The "what's this song?" sheet. It shows what the app is doing (listening, identifying), and when a song is found,
+ * the result with the cover art and ways to keep it: play it, favorite it, queue it, or put it in a playlist.
+ * Pure UI: the caller decides what each action does, and the sheet stays open after saving so a song can go to
+ * several places. Dismissing it (swipe down, tap outside) stops listening.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ShazamSheet(
+    state: ShazamState,
+    level: Float,
+    favoriteIsrcs: Set<String>,
+    playlists: List<Playlist>,
+    onDismiss: () -> Unit,
+    onRetry: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onPlay: (Track) -> Unit,
+    onToggleFavorite: (Track) -> Unit,
+    onAddToQueue: (Track) -> Unit,
+    onAddToPlaylist: (Playlist, Track) -> Unit,
+    onCreatePlaylist: (String, Track) -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = CoverPalette.Neutral.base,
+        contentColor = Color.White,
+    ) {
+        when (state) {
+            is ShazamState.Listening -> ListeningContent(level, state.searching, onDismiss)
+            is ShazamState.Found -> FoundContent(
+                track = state.track,
+                isFavorite = state.track.isrc in favoriteIsrcs,
+                playlists = playlists,
+                onPlay = onPlay,
+                onToggleFavorite = onToggleFavorite,
+                onAddToQueue = onAddToQueue,
+                onAddToPlaylist = onAddToPlaylist,
+                onCreatePlaylist = onCreatePlaylist,
+            )
+            ShazamState.NotFound -> MessageContent(
+                title = "Couldn't recognize this one",
+                message = "Move closer to the speaker and try again.",
+                action = "Try again",
+                onAction = onRetry,
+            )
+            is ShazamState.Failed -> MessageContent(
+                title = "Something went wrong",
+                message = state.message,
+                action = "Try again",
+                onAction = onRetry,
+            )
+            ShazamState.PermissionDenied -> MessageContent(
+                title = "Microphone access is off",
+                message = "Turn it on in the app settings so Gamut can listen to the music around you.",
+                action = "Open settings",
+                onAction = onOpenSettings,
+            )
+            ShazamState.Idle -> Unit
+        }
+    }
+}
+
+@Composable
+private fun ListeningContent(level: Float, searching: Boolean, onCancel: () -> Unit) {
+    val pulse = rememberInfiniteTransition(label = "shazam-pulse").animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1800, easing = LinearEasing), RepeatMode.Restart),
+        label = "pulse",
+    )
+    val smoothLevel = animateFloatAsState(level, tween(120), label = "level")
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.size(200.dp), contentAlignment = Alignment.Center) {
+            // Two rings that grow and fade (time based), and a core that swells with the sound. Everything animated
+            // here is read inside graphicsLayer, so it never recomposes: only the draw step runs.
+            for (offset in floatArrayOf(0f, 0.5f)) {
+                Box(
+                    Modifier
+                        .size(200.dp)
+                        .graphicsLayer {
+                            val p = (pulse.value + offset) % 1f
+                            scaleX = 0.5f + 0.5f * p
+                            scaleY = 0.5f + 0.5f * p
+                            alpha = (1f - p) * 0.35f
+                        }
+                        .border(2.dp, Color.White, CircleShape),
+                )
+            }
+            Box(
+                Modifier
+                    .size(104.dp)
+                    .graphicsLayer {
+                        val s = 1f + 0.3f * smoothLevel.value
+                        scaleX = s
+                        scaleY = s
+                    }
+                    .background(Color.White.copy(alpha = 0.14f), CircleShape),
+            )
+            Box(Modifier.size(76.dp).background(Color.White, CircleShape), contentAlignment = Alignment.Center) {
+                Icon(PhosphorIcons.Light.Waveform, null, tint = CoverPalette.Neutral.base, modifier = Modifier.size(34.dp))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            if (searching) "Identifying\u2026" else "Listening\u2026",
+            style = MaterialTheme.typography.titleLarge,
+            color = Color.White,
+        )
+        Text(
+            "Hold your phone near the music",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.White.copy(alpha = 0.6f),
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        TextButton(onClick = onCancel, modifier = Modifier.padding(top = 12.dp)) { Text("Cancel", color = Color.White.copy(alpha = 0.8f)) }
+    }
+}
+
+@Composable
+private fun MessageContent(title: String, message: String, action: String, onAction: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 8.dp, bottom = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(title, style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.Center)
+        Text(
+            message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.White.copy(alpha = 0.6f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 8.dp, bottom = 20.dp),
+        )
+        Box(
+            Modifier
+                .height(48.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color.White)
+                .clickable(onClick = onAction)
+                .padding(horizontal = 28.dp),
+            contentAlignment = Alignment.Center,
+        ) { Text(action, style = MaterialTheme.typography.labelLarge, color = CoverPalette.Neutral.base) }
+    }
+}
+
+@Composable
+private fun FoundContent(
+    track: Track,
+    isFavorite: Boolean,
+    playlists: List<Playlist>,
+    onPlay: (Track) -> Unit,
+    onToggleFavorite: (Track) -> Unit,
+    onAddToQueue: (Track) -> Unit,
+    onAddToPlaylist: (Playlist, Track) -> Unit,
+    onCreatePlaylist: (String, Track) -> Unit,
+) {
+    var creating by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("") }
+    // What the last action did, so tapping "Add to queue" or a playlist visibly worked without closing the sheet.
+    var note by remember { mutableStateOf<String?>(null) }
+    val submitNew = {
+        if (name.isNotBlank()) {
+            onCreatePlaylist(name.trim(), track)
+            note = "Saved to the new playlist \u201C${name.trim()}\u201D"
+            creating = false
+            name = ""
+        }
+    }
+
+    LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
+        item {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                AsyncImage(
+                    model = track.albumArtUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(104.dp).clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = 0.08f)),
+                )
+                Column(Modifier.weight(1f).padding(start = 16.dp)) {
+                    Text(track.title, style = MaterialTheme.typography.titleLarge, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(track.artist, style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    track.album?.let {
+                        Text(it, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.5f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+        item {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color.White)
+                        .clickable { onPlay(track) },
+                    contentAlignment = Alignment.Center,
+                ) { Text("Play", style = MaterialTheme.typography.labelLarge, color = CoverPalette.Neutral.base) }
+                Spacer(Modifier.width(12.dp))
+                Box(
+                    Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.12f))
+                        .clickable {
+                            note = if (isFavorite) "Removed from favorites" else "Added to favorites"
+                            onToggleFavorite(track)
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (isFavorite) PhosphorIcons.Fill.Heart else PhosphorIcons.Light.Heart,
+                        if (isFavorite) "Remove from favorites" else "Add to favorites",
+                        tint = if (isFavorite) FavoriteRed else Color.White,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            }
+        }
+        note?.let { message ->
+            item {
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+                )
+            }
+        }
+        item { ActionRow("Add to queue") { onAddToQueue(track); note = "Added to the queue" } }
+        item {
+            Text(
+                "Add to playlist",
+                style = MaterialTheme.typography.labelLarge,
+                color = Color.White.copy(alpha = 0.6f),
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 4.dp),
+            )
+        }
+        item {
+            if (creating) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                    ) {
+                        if (name.isEmpty()) {
+                            Text("Playlist name", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.bodyLarge)
+                        }
+                        BasicTextField(
+                            value = name,
+                            onValueChange = { name = it },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyLarge.merge(TextStyle(color = Color.White)),
+                            cursorBrush = SolidColor(Color.White),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { submitNew() }),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = { submitNew() }, enabled = name.isNotBlank()) { Text("Create") }
+                }
+            } else {
+                ActionRow("New playlist\u2026") { creating = true }
+            }
+        }
+        items(playlists, key = { it.id }) { playlist ->
+            ActionRow(playlist.name) {
+                onAddToPlaylist(playlist, track)
+                note = "Added to \u201C${playlist.name}\u201D"
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActionRow(label: String, onClick: () -> Unit) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.bodyLarge,
+        color = Color.White,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 14.dp),
+    )
+}

@@ -6,12 +6,14 @@ import com.gamut.core.network.isValidYoutubeVideoId
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request as OkHttpRequest
+import org.schabi.newpipe.extractor.MediaFormat
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.search.SearchInfo
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
+import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import javax.inject.Inject
@@ -29,7 +31,9 @@ class NewPipeYoutubeSource @Inject constructor(
                 .audioStreams
                 .asSequence()
                 .filter { it.isUrl }
-                .sortedByDescending { it.averageBitrate }
+                // AAC/m4a first (same preference as the yt-dlp path: cheaper to decode, plays natively in ExoPlayer),
+                // then the highest bitrate within that format.
+                .sortedWith(compareByDescending<AudioStream> { it.format == MediaFormat.M4A }.thenByDescending { it.averageBitrate })
                 .map { it.content }
                 .firstOrNull { it.isNotBlank() }
                 ?: error("NewPipe returned no direct audio stream")

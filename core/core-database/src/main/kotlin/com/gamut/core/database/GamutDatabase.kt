@@ -13,8 +13,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PlaylistTrackCrossRef::class,
         DownloadEntity::class,
         ArtworkCacheEntity::class,
+        FavoriteEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class GamutDatabase : RoomDatabase() {
@@ -24,6 +25,7 @@ abstract class GamutDatabase : RoomDatabase() {
     abstract fun playlistTrackDao(): PlaylistTrackDao
     abstract fun downloadDao(): DownloadDao
     abstract fun artworkCacheDao(): ArtworkCacheDao
+    abstract fun favoriteDao(): FavoriteDao
 }
 
 val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -40,6 +42,15 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         database.execSQL(
             "CREATE TABLE IF NOT EXISTS artwork_cache (" +
                 "releaseId TEXT NOT NULL PRIMARY KEY, artworkUrl TEXT NOT NULL, cachedAtEpochMs INTEGER NOT NULL)",
+        )
+    }
+}
+
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL(
+            "CREATE TABLE IF NOT EXISTS favorites (" +
+                "isrc TEXT NOT NULL, addedAtEpochMs INTEGER NOT NULL, PRIMARY KEY(isrc))",
         )
     }
 }

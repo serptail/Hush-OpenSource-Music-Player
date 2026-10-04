@@ -11,11 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -37,7 +34,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -70,8 +66,8 @@ private val PanelShape = RoundedCornerShape(12.dp)
 private val ButtonShape = RoundedCornerShape(8.dp)
 
 /**
- * Library: Liked songs, the artists you follow, and your playlists.
- * Tapping a playlist or artist calls [onOpenPlaylist] / [onOpenArtist] (navigation lives in the NavHost).
+ * Library: Liked songs and your playlists.
+ * Tapping one calls [onOpenPlaylist] (navigation lives in the NavHost); Liked songs passes the id "liked".
  */
 @Composable
 fun LibraryScreen(
@@ -82,15 +78,13 @@ fun LibraryScreen(
     onBack: () -> Unit,
     nowPlaying: @Composable () -> Unit = {},
     onOpenPlaylist: (String) -> Unit,
-    onOpenArtist: (String) -> Unit,
 ) {
     val userPlaylists by viewModel.playlists.collectAsStateWithLifecycle()
+    val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     var showCreate by remember { mutableStateOf(false) }
 
     val palette = LocalCoverPalette.current
     TransparentStatusBar(darkIcons = palette.isLight)
-
-    val followed = LibraryMock.followedIds.mapNotNull { LibraryMock.artist(it) }
 
     CoverTheme(palette) {
         val accent = MaterialTheme.colorScheme.primary
@@ -114,29 +108,13 @@ fun LibraryScreen(
                         contentPadding = PaddingValues(top = 22.dp, bottom = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        if (followed.isNotEmpty()) {
-                            item(key = "followed-header") { SectionTitle("Artists you follow") }
-                            item(key = "followed-row") {
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                                    items(followed, key = { it.id }) { artist ->
-                                        Column(
-                                            Modifier.width(76.dp).pressScale(onClick = { onOpenArtist(artist.id) }),
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                        ) {
-                                            CoverImage(artist.imageUrl, Modifier.size(68.dp).softCover(CircleShape))
-                                            Text(
-                                                artist.name,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = TextPrimary,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                textAlign = TextAlign.Center,
-                                                modifier = Modifier.padding(top = 8.dp),
-                                            )
-                                        }
-                                    }
-                                }
-                            }
+                        item(key = "liked") {
+                            LibraryRow(
+                                title = "Liked songs",
+                                subtitle = "${favorites.size} songs",
+                                onClick = { onOpenPlaylist("liked") },
+                                cover = { TileCover(PhosphorIcons.Fill.Heart) },
+                            )
                         }
 
                         item(key = "playlists-header") { SectionTitle("Your playlists") }

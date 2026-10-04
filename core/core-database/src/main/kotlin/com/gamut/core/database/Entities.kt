@@ -57,3 +57,10 @@ data class ArtworkCacheEntity(
     val artworkUrl: String,
     val cachedAtEpochMs: Long,
 )
+
+/** A track the user has liked. One row per track; the track itself lives in [TrackEntity]. */
+@Entity(tableName = "favorites")
+data class FavoriteEntity(
+    @PrimaryKey val isrc: String,
+    val addedAtEpochMs: Long,
+)

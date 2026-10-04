@@ -46,6 +46,7 @@ import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.glass
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
+import com.gamut.core.model.Track
 import kotlin.math.abs
 import kotlin.math.asin
 import kotlin.math.cos
@@ -71,12 +72,15 @@ private val PillInset = 10.dp   // pill edge to cover
  */
 @Composable
 fun FavoritesScreen(
+    tracks: List<Track>,
     onBack: () -> Unit,
-    onPlayer: () -> Unit = {},
+    /** The picked track plus the list it was picked from (the queue). */
+    onTrackSelected: (Track, List<Track>) -> Unit,
+    /** Shuffle button: play [tracks] in random order. */
+    onShuffle: (List<Track>) -> Unit = {},
     nowPlaying: @Composable () -> Unit = {},
 ) {
-    val playlist = remember { LibraryMock.playlists.firstOrNull { it.isLiked } }
-    val songs = playlist?.songs.orEmpty()
+    val songs = tracks
 
     val palette = LocalCoverPalette.current
     TransparentStatusBar(darkIcons = palette.isLight)
@@ -109,7 +113,7 @@ fun FavoritesScreen(
                     Text("${songs.size} songs", style = MaterialTheme.typography.bodyMedium, color = ink(0.6f))
                 }
                 Row(
-                    Modifier.pressScale(onClick = onPlayer).glass(ShufflePill).padding(horizontal = 16.dp, vertical = 9.dp),
+                    Modifier.pressScale(onClick = { if (songs.isNotEmpty()) onShuffle(songs) }).glass(ShufflePill).padding(horizontal = 16.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(PhosphorIcons.Light.Shuffle, null, tint = ink(), modifier = Modifier.size(16.dp))
@@ -131,7 +135,7 @@ fun FavoritesScreen(
                     )
                 }
             } else {
-                SongWheel(songs, onPlayer, Modifier.weight(1f).fillMaxWidth())
+                SongWheel(songs, onTrackSelected, Modifier.weight(1f).fillMaxWidth())
             }
 
             nowPlaying()
@@ -140,7 +144,7 @@ fun FavoritesScreen(
 }
 
 @Composable
-private fun SongWheel(songs: List<LibSong>, onPlayer: () -> Unit, modifier: Modifier = Modifier) {
+private fun SongWheel(songs: List<Track>, onTrackSelected: (Track, List<Track>) -> Unit, modifier: Modifier = Modifier) {
     BoxWithConstraints(modifier) {
         // One slot is a fifth of the free height, so exactly five songs are on the wheel.
         val itemHeight = (maxHeight / VisibleSlots).coerceIn(84.dp, 140.dp)
@@ -159,17 +163,18 @@ private fun SongWheel(songs: List<LibSong>, onPlayer: () -> Unit, modifier: Modi
             contentPadding = PaddingValues(vertical = pad),
         ) {
             items(count = Int.MAX_VALUE, key = { it }) { index ->
+                val song = songs[index % songs.size]
                 WheelRow(
-                    song = songs[index % songs.size],
+                    song = song,
                     index = index,
                     itemHeight = itemHeight,
                     state = state,
                     onClick = {
                         // The centered song plays, any other song rolls to the center first.
-                        if (state.focusOf(index) > 0.5f) onPlayer()
+                        if (state.focusOf(index) > 0.5f) onTrackSelected(song, songs)
                         else scope.launch { state.animateScrollToItem(index) }
                     },
-                    onPlay = { if (state.focusOf(index) > 0.5f) onPlayer() },
+                    onPlay = { if (state.focusOf(index) > 0.5f) onTrackSelected(song, songs) },
                 )
             }
         }
@@ -178,7 +183,7 @@ private fun SongWheel(songs: List<LibSong>, onPlayer: () -> Unit, modifier: Modi
 
 @Composable
 private fun WheelRow(
-    song: LibSong,
+    song: Track,
     index: Int,
     itemHeight: Dp,
     state: LazyListState,
@@ -211,7 +216,7 @@ private fun WheelRow(
             Modifier.fillMaxWidth().padding(horizontal = SideInset + PillInset),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CoverImage(song.imageUrl, Modifier.size(coverSize).softCover(WheelCoverShape))
+            CoverImage(song.albumArtUrl.orEmpty(), Modifier.size(coverSize).softCover(WheelCoverShape))
             Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
                 Text(
                     song.title,

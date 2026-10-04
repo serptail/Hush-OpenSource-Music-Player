@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.SubcomposeAsyncImage
 import com.adamglin.PhosphorIcons
@@ -58,6 +59,7 @@ import com.adamglin.phosphoricons.light.MagnifyingGlass
 import com.adamglin.phosphoricons.light.MusicNote
 import com.adamglin.phosphoricons.light.User
 import com.adamglin.phosphoricons.light.VinylRecord
+import com.adamglin.phosphoricons.light.Waveform
 import com.adamglin.phosphoricons.light.X
 import com.gamut.core.designsystem.BottomBarItem
 import com.gamut.core.designsystem.CoverTheme
@@ -96,10 +98,13 @@ fun SearchScreen(
     viewModel: SearchViewModel,
     resolvingIsrc: String?,
     resolutionMessage: String?,
-    onTrackSelected: (Track) -> Unit,
+    /** The picked track plus the list it was picked from (the queue); empty = just this track. */
+    onTrackSelected: (Track, List<Track>) -> Unit,
     onArtistSelected: (Long) -> Unit,
     onAlbumSelected: (DiscoverItem) -> Unit,
     onLibrary: () -> Unit,
+    /** The round "what's this song?" button next to the profile icon. */
+    onShazam: () -> Unit,
     nowPlaying: @Composable () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -127,6 +132,15 @@ fun SearchScreen(
                             color = TextPrimary,
                             modifier = Modifier.weight(1f),
                         )
+                        Box(Modifier.size(44.dp).pressScale(onClick = onShazam).glass(CircleShape), contentAlignment = Alignment.Center) {
+                            Icon(
+    painterResource(com.gamut.core.designsystem.R.drawable.ic_shazam),
+    "Identify a song",
+    tint = ink(0.9f),
+    modifier = Modifier.size(22.dp),
+)
+                        }
+                        Spacer(Modifier.width(8.dp))
                         Box(Modifier.size(44.dp).pressScale(onClick = {}), contentAlignment = Alignment.Center) {
                             Icon(PhosphorIcons.Light.User, "Profile", tint = ink(0.85f), modifier = Modifier.size(24.dp))
                         }
@@ -167,7 +181,7 @@ fun SearchScreen(
                         DiscoverContent(
                             modifier = Modifier.fillMaxSize(),
                             state = discover,
-                            onTrackClick = onTrackSelected,
+                            onTrackClick = { track -> onTrackSelected(track, emptyList()) },
                             onArtistClick = onArtistSelected,
                             onAlbumClick = onAlbumSelected,
                             listState = discoverListState,
@@ -194,7 +208,7 @@ fun SearchScreen(
                                 )
                             }
                             items(state.tracks, key = { it.isrc }) { track ->
-                                TrackResultRow(track, resolvingIsrc == track.isrc, accent, onTrackSelected)
+                                TrackResultRow(track, resolvingIsrc == track.isrc, accent) { picked -> onTrackSelected(picked, state.tracks) }
                             }
                         }
                     }

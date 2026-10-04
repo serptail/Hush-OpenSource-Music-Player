@@ -2,7 +2,15 @@ package com.gamut
 
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.EnterTransition
@@ -51,11 +59,15 @@ import com.gamut.feature.library.LibraryScreen
 import com.gamut.feature.library.LibraryViewModel
 import com.gamut.feature.library.PlaylistScreen
 import com.gamut.feature.playerui.PlayerScreen
+import com.gamut.feature.playerui.TrackActionsSheet
 import com.gamut.feature.resolver.ResolveTrackSourceUseCase
 import com.gamut.feature.resolver.ResolveFailure
 import com.gamut.feature.resolver.AudioSourceRepository
 import com.gamut.feature.search.SearchScreen
 import com.gamut.feature.search.SearchViewModel
+import com.gamut.feature.search.ShazamSheet
+import com.gamut.feature.search.ShazamState
+import com.gamut.feature.search.ShazamViewModel
 import com.gamut.feature.search.ArtistScreen as DiscoverArtistScreen
 import com.gamut.feature.search.ArtistViewModel
 import com.gamut.feature.search.AlbumScreen
@@ -103,6 +115,33 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
     // Whatever is loaded in the player (playing or paused) colors the search background.
     val playback by player.playbackState.collectAsState()
     val loadedTrack = (playback as? PlaybackState.Playing)?.track ?: (playback as? PlaybackState.Paused)?.track
+
+    // --- "What's this song?": listens to the microphone, then offers to save / play what it found ---
+    val shazamVm = hiltViewModel<ShazamViewModel>()
+    val shazamState by shazamVm.state.collectAsState()
+    val appLibraryVm = hiltViewModel<LibraryViewModel>()
+    val context = LocalContext.current
+    var resumeAfterShazam by remember { mutableStateOf(false) }
+    val startShazam = {
+        // The microphone would hear this app itself, so the music pauses while listening.
+        resumeAfterShazam = playback is PlaybackState.Playing
+        if (resumeAfterShazam) player.pause()
+        shazamVm.start()
+    }
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) startShazam() else shazamVm.permissionDenied()
+    }
+    val onShazam = {
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        if (granted) startShazam() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+    }
+    // The microphone is only needed while listening: the music comes back as soon as that is over.
+    LaunchedEffect(shazamState) {
+        if (shazamState !is ShazamState.Listening && resumeAfterShazam) {
+            resumeAfterShazam = false
+            player.resume()
+        }
+    }
     // One palette and ONE flowing background for the whole app: it lives behind the NavHost, so Search and
     // Library are drawn on the same canvas (same colors, same animation state) and navigating never restarts it.
     val artUrl = remember(loadedTrack?.albumArtUrl) { squareArtUrl(loadedTrack?.albumArtUrl, 200) }
@@ -131,7 +170,9 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                         val nowPlaying: @Composable () -> Unit = { NowPlayingStrip(player, docked = false, onOpen = openPlayer, onArtistClick = openArtist) }
                         // Screens without a bottom bar (playlist, artist): the strip sits alone at the bottom edge.
                         val nowPlayingDocked: @Composable () -> Unit = { NowPlayingStrip(player, docked = true, onOpen = openPlayer, onArtistClick = openArtist) }
-                        val playTrack: (Track) -> Unit = { track ->
+                        // [queue] is the list the track was picked from (so next / shuffle / the queue sheet have something
+                        // to work with); empty = just this one track.
+                        val playTrackWithQueue: (Track, List<Track>) -> Unit = { track, queue ->
                             selectedTrack = track
                             resolvingIsrc = track.isrc
                             resolutionMessage = null
@@ -139,7 +180,13 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                 resolveTrackSource(track).fold(
                                     onSuccess = { source ->
                                         audioSources.audioUrl(source.youtubeVideoId).fold(
-                                            onSuccess = { audioUrl -> player.play(track, audioUrl); resolutionMessage = null; nav.navigate("player") },
+                                            onSuccess = { audioUrl ->
+                                                val startIndex = queue.indexOfFirst { it.isrc == track.isrc }
+                                                if (startIndex >= 0) player.setQueue(queue, startIndex)
+                                                player.play(track, audioUrl)
+                                                resolutionMessage = null
+                                                nav.navigate("player")
+                                            },
                                             onFailure = { error -> resolutionMessage = error.message ?: "No playable audio stream was found" },
                                         )
                                     },
@@ -168,10 +215,11 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                     viewModel = searchVm,
                                     resolvingIsrc = resolvingIsrc,
                                     resolutionMessage = resolutionMessage,
-                                    onTrackSelected = playTrack,
+                                    onTrackSelected = playTrackWithQueue,
                                     onArtistSelected = { artistId -> nav.navigate("artist-real/$artistId") },
                                     onAlbumSelected = { item -> nav.navigate(albumRoute(item)) },
                                     onLibrary = { nav.navigate("library") },
+                                    onShazam = onShazam,
                                     nowPlaying = nowPlaying,
                                 )
                             }
@@ -182,22 +230,30 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                     onBack = { nav.navigate("search") { popUpTo("search") { inclusive = false }; launchSingleTop = true } },
                                     nowPlaying = nowPlaying,
                                     onOpenPlaylist = { id -> nav.navigate(if (id == "liked") "favorites" else "playlist/$id") },
-                                    onOpenArtist = { id -> nav.navigate("artist/$id") },
                                 )
                             }
                             composable("favorites") {
+                                val libraryVm = hiltViewModel<LibraryViewModel>()
+                                val favorites by libraryVm.favorites.collectAsState()
                                 FavoritesScreen(
+                                    tracks = favorites,
                                     onBack = { nav.popBackStack() },
-                                    onPlayer = { nav.navigate("player") },
+                                    onTrackSelected = playTrackWithQueue,
+                                    onShuffle = { list ->
+                                        player.setShuffle(true)
+                                        list.randomOrNull()?.let { playTrackWithQueue(it, list) }
+                                    },
                                     nowPlaying = nowPlayingDocked,
                                 )
                             }
                             composable("playlist/{id}") { entry ->
+                                val playlistVm = hiltViewModel<com.gamut.feature.library.PlaylistViewModel>()
+                                val playlistTracks by playlistVm.tracks.collectAsState()
                                 PlaylistScreen(
                                     playlistId = entry.arguments?.getString("id").orEmpty(),
                                     onBack = { nav.popBackStack() },
-                                    onTrackSelected = playTrack,
-                                    viewModel = hiltViewModel<com.gamut.feature.library.PlaylistViewModel>(),
+                                    onTrackSelected = { track -> playTrackWithQueue(track, playlistTracks) },
+                                    viewModel = playlistVm,
                                     nowPlaying = nowPlayingDocked,
                                 )
                             }
@@ -205,7 +261,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                 DiscoverArtistScreen(
                                     viewModel = hiltViewModel<ArtistViewModel>(),
                                     onBack = { nav.popBackStack() },
-                                    onTrackSelected = playTrack,
+                                    onTrackSelected = playTrackWithQueue,
                                     onAlbumSelected = { item -> nav.navigate(albumRoute(item)) },
                                     nowPlaying = nowPlayingDocked,
                                 )
@@ -214,7 +270,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                 DiscoverArtistScreen(
                                     viewModel = hiltViewModel<ArtistViewModel>(),
                                     onBack = { nav.popBackStack() },
-                                    onTrackSelected = playTrack,
+                                    onTrackSelected = playTrackWithQueue,
                                     onAlbumSelected = { item -> nav.navigate(albumRoute(item)) },
                                     nowPlaying = nowPlayingDocked,
                                 )
@@ -223,7 +279,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                 DiscoverArtistScreen(
                                     viewModel = hiltViewModel<ArtistViewModel>(),
                                     onBack = { nav.popBackStack() },
-                                    onTrackSelected = playTrack,
+                                    onTrackSelected = playTrackWithQueue,
                                     onAlbumSelected = { item -> nav.navigate(albumRoute(item)) },
                                     nowPlaying = nowPlayingDocked,
                                 )
@@ -235,7 +291,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                 AlbumScreen(
                                     viewModel = hiltViewModel<AlbumViewModel>(),
                                     onBack = { nav.popBackStack() },
-                                    onTrackSelected = playTrack,
+                                    onTrackSelected = playTrackWithQueue,
                                     nowPlaying = nowPlayingDocked,
                                 )
                             }
@@ -243,7 +299,53 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                 "player",
                                 enterTransition = { slideInVertically(tween(320, easing = FastOutSlowInEasing)) { it } },
                                 popExitTransition = { slideOutVertically(tween(280, easing = FastOutSlowInEasing)) { it } },
-                            ) { PlayerScreen(player, onBack = { nav.popBackStack() }) }
+                            ) {
+                                val libraryVm = hiltViewModel<LibraryViewModel>()
+                                val favoriteIsrcs by libraryVm.favoriteIsrcs.collectAsState()
+                                val playlists by libraryVm.playlists.collectAsState()
+                                var actionsTrack by remember { mutableStateOf<Track?>(null) }
+                                PlayerScreen(
+                                    player,
+                                    onBack = { nav.popBackStack() },
+                                    favoriteIsrcs = favoriteIsrcs,
+                                    onToggleFavorite = libraryVm::toggleFavorite,
+                                    onMore = { actionsTrack = it },
+                                )
+                                actionsTrack?.let { track ->
+                                    TrackActionsSheet(
+                                        track = track,
+                                        playlists = playlists,
+                                        onDismiss = { actionsTrack = null },
+                                        onPlayNext = { player.addToQueue(track, playNext = true) },
+                                        onAddToQueue = { player.addToQueue(track) },
+                                        onAddToPlaylist = { playlist -> libraryVm.addTrack(playlist.id, track) },
+                                        onCreatePlaylist = { name -> libraryVm.createPlaylistAndAdd(name, track) },
+                                    )
+                                }
+                            }
+                        }
+                        if (shazamState !is ShazamState.Idle) {
+                            val shazamLevel by shazamVm.level.collectAsState()
+                            val favoriteIsrcs by appLibraryVm.favoriteIsrcs.collectAsState()
+                            val playlists by appLibraryVm.playlists.collectAsState()
+                            ShazamSheet(
+                                state = shazamState,
+                                level = shazamLevel,
+                                favoriteIsrcs = favoriteIsrcs,
+                                playlists = playlists,
+                                onDismiss = shazamVm::dismiss,
+                                onRetry = onShazam,
+                                onOpenSettings = {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
+                                    )
+                                },
+                                onPlay = { track -> shazamVm.dismiss(); playTrackWithQueue(track, emptyList()) },
+                                onToggleFavorite = appLibraryVm::toggleFavorite,
+                                onAddToQueue = { track -> player.addToQueue(track) },
+                                onAddToPlaylist = { playlist, track -> appLibraryVm.addTrack(playlist.id, track) },
+                                onCreatePlaylist = { name, track -> appLibraryVm.createPlaylistAndAdd(name, track) },
+                            )
                         }
                     }
                 }
