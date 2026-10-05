@@ -53,7 +53,6 @@ import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.fadeEdges
-import com.gamut.core.designsystem.glass
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.model.Track
@@ -75,24 +74,25 @@ fun LibraryScreen(
     viewModel: LibraryViewModel,
     /** The track picked in search that is waiting to be added to a playlist, or null. */
     selectedTrack: Track?,
-    /** Back to Discover (the search screen). */
-    onBack: () -> Unit,
-    nowPlaying: @Composable () -> Unit = {},
     onOpenPlaylist: (String) -> Unit,
+    /** The "+" button: opens the New playlist screen (navigation lives in the NavHost). */
+    onCreatePlaylist: () -> Unit,
+    /** Height of the shared bottom bar + mini player strip (owned by HomeTabs in MainActivity). */
+    barHeight: androidx.compose.ui.unit.Dp,
 ) {
     val userPlaylists by viewModel.playlists.collectAsStateWithLifecycle()
     // Count only: collecting the full favorites list here mapped every liked track just to show a number.
     val favoriteCount by viewModel.favoriteCount.collectAsStateWithLifecycle()
-    var showCreate by remember { mutableStateOf(false) }
+    val playlistInfo by viewModel.playlistInfo.collectAsStateWithLifecycle()
     val notifier = LocalNotifier.current
 
     val palette = LocalCoverPalette.current
-    TransparentStatusBar(darkIcons = palette.isLight)
+    // Status bar icons are set by HomeTabs (only while this layer is visible).
 
     CoverTheme(palette) {
         val accent = MaterialTheme.colorScheme.primary
         Box(Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize().statusBarsPadding()) {
+            Column(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = barHeight)) {
                 Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 24.dp)) {
                     Row(Modifier.fillMaxWidth().padding(top = 22.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -101,7 +101,7 @@ fun LibraryScreen(
                             color = TextPrimary,
                             modifier = Modifier.weight(1f),
                         )
-                        Box(Modifier.size(44.dp).pressScale(onClick = { showCreate = true }), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(44.dp).pressScale(onClick = onCreatePlaylist), contentAlignment = Alignment.Center) {
                             Icon(PhosphorIcons.Light.Plus, "Create playlist", tint = ink(0.85f), modifier = Modifier.size(24.dp))
                         }
                     }
@@ -114,9 +114,9 @@ fun LibraryScreen(
                         item(key = "liked") {
                             LibraryRow(
                                 title = "Liked songs",
-                                subtitle = "$favoriteCount songs",
+                                subtitle = songCountLabel(favoriteCount),
                                 onClick = { onOpenPlaylist("liked") },
-                                cover = { TileCover(PhosphorIcons.Fill.Heart) },
+                                cover = { RowCover(null, PhosphorIcons.Fill.Heart) },
                             )
                         }
 
@@ -124,9 +124,10 @@ fun LibraryScreen(
                         items(userPlaylists, key = { "v-${it.id}" }, contentType = { "playlist" }) { playlist ->
                             LibraryRow(
                                 title = playlist.name,
-                                subtitle = "Your collection",
+                                subtitle = songCountLabel(playlistInfo[playlist.id]?.songCount ?: 0),
                                 onClick = { onOpenPlaylist(playlist.id.toString()) },
-                                cover = { TileCover(PhosphorIcons.Light.VinylRecord) },
+                                // A cover the user picked always wins over the art of the last song.
+                                cover = { RowCover(playlist.coverUri ?: playlistInfo[playlist.id]?.coverUrl, PhosphorIcons.Light.VinylRecord) },
                                 trailing = {
                                     if (selectedTrack != null) {
                                         Text(
@@ -135,7 +136,7 @@ fun LibraryScreen(
                                             color = TextPrimary,
                                             modifier = Modifier
                                                 .pressScale(onClick = { viewModel.addTrack(playlist.id, selectedTrack); notifier.success("Added to ${playlist.name}") })
-                                                .glass(ButtonShape)
+                                                .background(ink(0.12f), ButtonShape)
                                                 .padding(horizontal = 16.dp, vertical = 8.dp),
                                         )
                                     } else {
@@ -151,7 +152,7 @@ fun LibraryScreen(
                             Modifier
                                 .fillMaxWidth()
                                 .padding(top = 4.dp)
-                                .glass(PanelShape)
+                                .background(ink(0.07f), PanelShape)
                                 .padding(horizontal = 18.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -167,23 +168,7 @@ fun LibraryScreen(
                         }
                     }
                 }
-
-                GamutBottomBar(
-                    listOf(
-                        BottomBarItem("Discover", PhosphorIcons.Light.MagnifyingGlass, onClick = onBack),
-                        BottomBarItem("Library", PhosphorIcons.Light.VinylRecord, selected = true),
-                    ),
-                    nowPlaying = nowPlaying,
-                )
             }
-        }
-        if (showCreate) {
-            CreatePlaylistDialog(
-                accent = accent,
-                isLight = palette.isLight,
-                onDismiss = { showCreate = false },
-                onCreate = { viewModel.createPlaylist(it); showCreate = false; notifier.success("Playlist \u201c${it.trim()}\u201d created") },
-            )
         }
     }
 }
@@ -203,15 +188,26 @@ private fun ChevronIcon() {
     Icon(PhosphorIcons.Light.CaretRight, null, tint = ink(0.45f), modifier = Modifier.size(18.dp))
 }
 
-/** Flat tinted square with a centered icon, for collections that have no cover (Liked songs, empty playlists). */
+/**
+ * The cover slot of a Library row: the cover of the last song added when there is one, otherwise JUST the icon with
+ * nothing behind it. (The old tinted tile sat on top of softCover's drop shadow, which showed through the
+ * translucent fill as a dark inner box.)
+ */
 @Composable
-private fun TileCover(icon: ImageVector) {
-    Box(
-        Modifier.size(58.dp).softCover().background(ink(0.10f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, null, tint = ink(0.7f), modifier = Modifier.size(24.dp))
+private fun RowCover(coverUrl: String?, icon: ImageVector) {
+    if (!coverUrl.isNullOrBlank()) {
+        CoverImage(remember(coverUrl) { resolveCoverUrl(coverUrl, 200) }, Modifier.size(58.dp).softCover())
+    } else {
+        Box(Modifier.size(58.dp), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = ink(0.8f), modifier = Modifier.size(28.dp))
+        }
     }
+}
+
+private fun songCountLabel(n: Int) = when (n) {
+    0 -> "Empty"
+    1 -> "1 song"
+    else -> "$n songs"
 }
 
 /** Flat list row: cover, title, quiet subtitle, trailing chevron (or a custom trailing action). */
@@ -234,51 +230,4 @@ private fun LibraryRow(
         }
         trailing()
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun CreatePlaylistDialog(accent: Color, isLight: Boolean, onDismiss: () -> Unit, onCreate: (String) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    // The dialog sits above the flow, so it gets a solid neutral surface that matches the cover's light/dark.
-    val container = if (isLight) Color(0xFFF3F3F3) else Color(0xFF1C1C1C)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = container,
-        titleContentColor = TextPrimary,
-        textContentColor = TextSecondary,
-        shape = PanelShape,
-        title = { Text("New playlist") },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Name") },
-                singleLine = true,
-                shape = RoundedCornerShape(8.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = TextPrimary,
-                    unfocusedTextColor = TextPrimary,
-                    focusedBorderColor = accent.copy(alpha = 0.7f),
-                    unfocusedBorderColor = ink(0.2f),
-                    focusedLabelColor = TextSecondary,
-                    unfocusedLabelColor = ink(0.4f),
-                    cursorColor = accent,
-                ),
-            )
-        },
-        confirmButton = {
-            Button(
-                onClick = { onCreate(name) },
-                enabled = name.isNotBlank(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ink(),
-                    contentColor = container,
-                    disabledContainerColor = ink(0.12f),
-                    disabledContentColor = ink(0.3f),
-                ),
-            ) { Text("Create") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = ink(0.7f)) } },
-    )
 }

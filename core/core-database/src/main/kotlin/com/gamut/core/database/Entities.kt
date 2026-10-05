@@ -1,5 +1,6 @@
 package com.gamut.core.database
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -33,6 +34,10 @@ data class PlaylistEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val createdAtEpochMs: Long,
+    /** User-picked cover (`file:` URI), null = fall back to the last song's art. */
+    val coverUri: String? = null,
+    /** Tags joined with "\n" (see LibraryRepository). */
+    @ColumnInfo(defaultValue = "''") val tags: String = "",
 )
 
 @Entity(primaryKeys = ["playlistId", "isrc"], indices = [Index("isrc")])

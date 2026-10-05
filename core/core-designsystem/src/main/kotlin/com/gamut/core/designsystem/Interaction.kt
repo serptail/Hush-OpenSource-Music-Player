@@ -1,5 +1,6 @@
 package com.gamut.core.designsystem
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -7,13 +8,11 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.HoverInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -40,40 +40,54 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.collectLatest
 
 /**
- * REPLACES your existing pressScale (same name, same parameters, so no call site changes).
+ * THE pressScale (delete the one in GamutTheme.kt): your draw-phase version (the animation runs in a coroutine and is
+ * only READ inside graphicsLayer, so pressing a row never recomposes it) plus hover and a haptic tick.
  *
  *  - press:   shrinks fast and firm (critically damped, no wobble while the finger is down)
- *  - release: springs back with a small overshoot, which is the "soft bounce"
- *  - hover:   mouse / stylus / trackpad (ChromeOS, tablets, desktop mode) gets a gentle lift; touch ignores it
+ *  - release: springs back with a small overshoot, which is the soft bounce
+ *  - hover:   mouse / stylus / trackpad (ChromeOS, tablets, desktop mode) gets a gentle lift; touch never hovers
  *  - a light haptic tick on click
  */
 fun Modifier.pressScale(
     onClick: () -> Unit,
-    scaleDown: Float = 0.96f,
+    scaleDown: Float = 0.94f,
     hoverScale: Float = 1.02f,
     enabled: Boolean = true,
     haptics: Boolean = true,
 ): Modifier = composed {
-    val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    val hovered by source.collectIsHoveredAsState()
+    val interaction = remember { MutableInteractionSource() }
+    val scale = remember { Animatable(1f) }
     val haptic = LocalHapticFeedback.current
-    val scale by animateFloatAsState(
-        targetValue = when {
-            pressed -> scaleDown
-            hovered -> hoverScale
-            else -> 1f
-        },
-        animationSpec = if (pressed) spring(dampingRatio = 1f, stiffness = 900f)
-        else spring(dampingRatio = 0.42f, stiffness = 420f),
-        label = "press-scale",
-    )
+    LaunchedEffect(interaction, scaleDown, hoverScale) {
+        val pressSpec = spring<Float>(dampingRatio = 1f, stiffness = 900f)
+        val releaseSpec = spring<Float>(dampingRatio = 0.42f, stiffness = 420f)
+        var pressed = false
+        var hovered = false
+        interaction.interactions.collectLatest { event ->
+            when (event) {
+                is PressInteraction.Press -> pressed = true
+                is PressInteraction.Release, is PressInteraction.Cancel -> pressed = false
+                is HoverInteraction.Enter -> hovered = true
+                is HoverInteraction.Exit -> hovered = false
+            }
+            val target = when {
+                pressed -> scaleDown
+                hovered -> hoverScale
+                else -> 1f
+            }
+            scale.animateTo(target, if (pressed) pressSpec else releaseSpec)
+        }
+    }
     this
-        .graphicsLayer { scaleX = scale; scaleY = scale }
-        .hoverable(source, enabled)
-        .clickable(interactionSource = source, indication = null, enabled = enabled) {
+        .graphicsLayer {
+            scaleX = scale.value
+            scaleY = scale.value
+        }
+        .hoverable(interaction, enabled)
+        .clickable(interactionSource = interaction, indication = null, enabled = enabled) {
             if (haptics) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             onClick()
         }

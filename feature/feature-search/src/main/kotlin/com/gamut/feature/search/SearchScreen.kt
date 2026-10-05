@@ -106,10 +106,10 @@ fun SearchScreen(
     onTrackSelected: (Track, List<Track>) -> Unit,
     onArtistSelected: (Long) -> Unit,
     onAlbumSelected: (DiscoverItem) -> Unit,
-    onLibrary: () -> Unit,
     /** The round "what's this song?" button next to the profile icon. */
     onShazam: () -> Unit,
-    nowPlaying: @Composable () -> Unit = {},
+    /** Height of the shared bottom bar + mini player strip (owned by HomeTabs in MainActivity). */
+    barHeight: androidx.compose.ui.unit.Dp,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val discover by viewModel.discover.collectAsStateWithLifecycle()
@@ -117,7 +117,7 @@ fun SearchScreen(
 
     // The flowing background is drawn once, behind the NavHost (see MainActivity); this is only its palette.
     val palette = LocalCoverPalette.current
-    TransparentStatusBar(darkIcons = palette.isLight)
+    // Status bar icons are set by HomeTabs (only while this layer is visible).
 
     CoverTheme(palette) {
         val accent = MaterialTheme.colorScheme.primary
@@ -164,8 +164,6 @@ fun SearchScreen(
         // Lists run to the bottom of the screen and scroll under the bar; the mini player strip frosts what passes behind it.
         // Saved across navigation, so returning to this screen lays out the list correctly on the FIRST frame
         // (starting from 0 made the list re-layout once the bar had been measured: a visible pop).
-        var barHeightDp by rememberSaveable { mutableStateOf(0f) }
-        val barHeight = barHeightDp.dp
         // The tab row is transparent, so nothing may scroll behind it: the list ends where the tabs begin. Only the
         // mini player strip (frosted) overlaps the list, so the list just needs room for the strip at its end.
         val tabsHeight = GamutBottomBarTabsHeight + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -221,18 +219,6 @@ fun SearchScreen(
                     }
                 }
             }
-
-            // Bottom bar (flat) with the frosted mini player strip docked on top of it.
-            GamutBottomBar(
-                items = listOf(
-                    BottomBarItem("Discover", PhosphorIcons.Light.MagnifyingGlass, selected = true),
-                    BottomBarItem("Library", PhosphorIcons.Light.VinylRecord, onClick = onLibrary),
-                ),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .onSizeChanged { barHeightDp = with(density) { it.height.toDp() }.value },
-                nowPlaying = nowPlaying,
-            )
         }
     }
 }

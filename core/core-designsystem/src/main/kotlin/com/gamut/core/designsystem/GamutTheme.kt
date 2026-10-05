@@ -166,35 +166,6 @@ fun BoxScope.AcrylicGloss(shape: Shape = ArtworkShape, alpha: Float = 0.16f) {
 }
 
 /**
- * Gentle spring-based press feedback for any clickable element — scales down
- * slightly on press, springs back on release. Use this instead of a bare
- * `.clickable {}` anywhere the person taps, so every interaction feels soft
- * and alive rather than an instant Material snap.
- */
-fun Modifier.pressScale(onClick: () -> Unit, scaleDown: Float = 0.94f): Modifier = composed {
-    val interaction = remember { MutableInteractionSource() }
-    val scale = remember { Animatable(1f) }
-    // The press animation runs in a coroutine and is only READ in graphicsLayer (draw phase), so pressing a row
-    // never recomposes it. Previously the animated value was read during composition, which recomposed the whole
-    // host composable on every animation frame of every tap.
-    LaunchedEffect(interaction, scaleDown) {
-        val spec = spring<Float>(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
-        interaction.interactions.collectLatest { event ->
-            when (event) {
-                is PressInteraction.Press -> scale.animateTo(scaleDown, spec)
-                is PressInteraction.Release, is PressInteraction.Cancel -> scale.animateTo(1f, spec)
-            }
-        }
-    }
-    this
-        .graphicsLayer {
-            scaleX = scale.value
-            scaleY = scale.value
-        }
-        .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-}
-
-/**
  * Three-stop adaptive gradient behind the full-screen player — colors are
  * expected to already be pre-animated (see rememberDynamicAccent), so this
  * itself needs no animation logic. Diagonal rather than vertical reads

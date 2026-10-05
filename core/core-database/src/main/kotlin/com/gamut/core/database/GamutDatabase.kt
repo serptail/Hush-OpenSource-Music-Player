@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ArtworkCacheEntity::class,
         FavoriteEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class GamutDatabase : RoomDatabase() {
@@ -52,5 +52,12 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
             "CREATE TABLE IF NOT EXISTS favorites (" +
                 "isrc TEXT NOT NULL, addedAtEpochMs INTEGER NOT NULL, PRIMARY KEY(isrc))",
         )
+    }
+}
+
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("ALTER TABLE playlists ADD COLUMN coverUri TEXT")
+        database.execSQL("ALTER TABLE playlists ADD COLUMN tags TEXT NOT NULL DEFAULT ''")
     }
 }

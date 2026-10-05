@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -29,15 +30,26 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists ORDER BY createdAtEpochMs DESC") fun observeAll(): Flow<List<PlaylistEntity>>
     @Query("SELECT * FROM playlists WHERE id = :id") suspend fun get(id: Long): PlaylistEntity?
     @Query("DELETE FROM playlists WHERE id = :id") suspend fun delete(id: Long)
+    @Query("UPDATE playlists SET name = :name, tags = :tags, coverUri = :coverUri WHERE id = :id")
+    suspend fun update(id: Long, name: String, tags: String, coverUri: String?)
 }
 
+// An abstract class (not an interface) so it can hold the @Transaction method below.
 @Dao
-interface PlaylistTrackDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(ref: PlaylistTrackCrossRef)
-    @Query("DELETE FROM playlisttrackcrossref WHERE playlistId = :playlistId AND isrc = :isrc") suspend fun remove(playlistId: Long, isrc: String)
-    @Query("SELECT t.* FROM tracks t INNER JOIN playlisttrackcrossref r ON t.isrc = r.isrc WHERE r.playlistId = :playlistId ORDER BY r.position") fun observeTracks(playlistId: Long): Flow<List<TrackEntity>>
-    @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM playlisttrackcrossref WHERE playlistId = :playlistId") suspend fun nextPosition(playlistId: Long): Int
-    @Query("SELECT EXISTS(SELECT 1 FROM playlisttrackcrossref WHERE playlistId = :playlistId AND isrc = :isrc)") suspend fun contains(playlistId: Long, isrc: String): Boolean
+abstract class PlaylistTrackDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE) abstract suspend fun upsert(ref: PlaylistTrackCrossRef)
+    @Query("DELETE FROM playlisttrackcrossref WHERE playlistId = :playlistId AND isrc = :isrc") abstract suspend fun remove(playlistId: Long, isrc: String)
+    @Query("SELECT t.* FROM tracks t INNER JOIN playlisttrackcrossref r ON t.isrc = r.isrc WHERE r.playlistId = :playlistId ORDER BY r.position") abstract fun observeTracks(playlistId: Long): Flow<List<TrackEntity>>
+    @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM playlisttrackcrossref WHERE playlistId = :playlistId") abstract suspend fun nextPosition(playlistId: Long): Int
+    @Query("SELECT EXISTS(SELECT 1 FROM playlisttrackcrossref WHERE playlistId = :playlistId AND isrc = :isrc)") abstract suspend fun contains(playlistId: Long, isrc: String): Boolean
+    @Query("DELETE FROM playlisttrackcrossref WHERE playlistId = :playlistId") abstract suspend fun clear(playlistId: Long)
+
+    /** Rewrites the playlist's songs in exactly this order (positions 0..n-1), atomically, so observers see one change. */
+    @Transaction
+    open suspend fun replaceAll(playlistId: Long, isrcs: List<String>) {
+        clear(playlistId)
+        isrcs.distinct().forEachIndexed { index, isrc -> upsert(PlaylistTrackCrossRef(playlistId, isrc, index)) }
+    }
 }
 
 @Dao

@@ -13,6 +13,7 @@ import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
@@ -24,7 +25,10 @@ import androidx.media3.datasource.cache.CacheWriter
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.gamut.core.model.PlaybackState
 import com.gamut.core.model.QueueState
@@ -82,10 +86,22 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)   // a broken cache must never break playback
     }
 
+    // Reverb / low-pass / wobble / vinyl / bass. Sits before ExoPlayer's speed stage (see applyMod).
+    private val modProcessor = ModAudioProcessor()
+
+    private val renderersFactory = object : DefaultRenderersFactory(context) {
+        override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
+            DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                .setAudioProcessors(arrayOf(modProcessor))
+                .build()
+    }
+
     // Lazy: ExoPlayer is no longer built on the main thread inside onCreate. It is created by warmUp() once the
     // loading screen is gone, or by the first playback call if that comes first.
     private val player: ExoPlayer by lazy {
-        ExoPlayer.Builder(context)
+        ExoPlayer.Builder(context, renderersFactory)
         .setMediaSourceFactory(DefaultMediaSourceFactory(DataSource.Factory { cacheFactory.createDataSource() }))
         // Start quickly, but download in long bursts rather than a constant trickle: fewer radio wake-ups.
         .setLoadControl(
@@ -199,7 +215,15 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
     private var recoveries = 0
 
     private fun attachPlayerListener(exo: ExoPlayer) {
+        // Equalizer: the effects live on ExoPlayer's audio session, which can change (e.g. audio sink re-created).
+        val equalizer = EqualizerController.get(context)
+        equalizer.attach(exo.audioSessionId)
+        // Mod: speed + pitch go through ExoPlayer's playback parameters, the rest into the mod processor. Takes `exo`
+        // (not `player`): this runs inside player's lazy initializer, and Main.immediate starts collecting right away.
+        scope.launch { ModController.state.collect { applyMod(exo, it.settings) } }
         exo.addListener(object : Player.Listener {
+            override fun onAudioSessionIdChanged(audioSessionId: Int) { equalizer.attach(audioSessionId) }
+
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (isPlaying) startPositionUpdates() else positionJob?.cancel()
                 val track = currentTrack ?: return
@@ -267,6 +291,23 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
                 state.value = PlaybackState.Error("Playback could not start")
             }
         })
+    }
+
+    private fun applyMod(exo: ExoPlayer, s: ModSettings) {
+        // speed == pitch ratio is the tape / 45-vs-33 RPM sound (nightcore, slowed). Unlinked keeps the key.
+        exo.playbackParameters = PlaybackParameters(s.speed, s.pitchRatio)
+        // The processor runs BEFORE the speed/pitch stage, so what it produces is then played `speed`x as fast and
+        // `pitchRatio`x as high. Pre-compensate times and cutoffs so the panel's numbers are what you hear.
+        modProcessor.apply {
+            reverbMix = s.reverbMix
+            reverbDecaySec = s.reverbDecaySec * s.speed
+            reverbPreDelayMs = s.reverbPreDelayMs * s.speed
+            reverbDamping = s.reverbDamping
+            lowPassHz = if (s.lowPassHz >= 20_000f) 20_000f else s.lowPassHz / s.pitchRatio
+            vinyl = s.vinylNoise
+            bassDb = s.bassDb
+            wobbleCents = s.wobbleCents
+        }
     }
 
     // ---- Transport ----

@@ -3,16 +3,7 @@ package com.gamut.feature.resolver
 import com.gamut.core.network.YoutubeCandidate
 import com.gamut.core.network.YoutubeMusicSearchSource
 import com.gamut.core.network.isValidYoutubeVideoId
-import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request as OkHttpRequest
@@ -34,34 +25,26 @@ import javax.inject.Singleton
 class NewPipeYoutubeSource @Inject constructor(
     @Named("youtube") private val client: OkHttpClient,
 ) : YoutubeMusicSearchSource {
-    // One extraction (visitor_id, reel_item_watch, player x2, next: ~7 requests, ~2 s) per video, not one per caller.
-    // It runs in its own scope so that a caller that gives up (the user tapped another song) does not abort it for the
-    // next caller, and the finished URL is cached.
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val cache = StreamUrlCache()
-    private val inFlight = ConcurrentHashMap<String, Deferred<String>>()
-
     /**
-     * A direct audio URL for [videoId].
-     *  - Cached for a while (never past the URL's own `expire`), so verifying a match and then playing it, or tapping the
-     *    same song twice, extracts only once.
-     *  - Concurrent calls for the same video share one extraction.
-     *  - [forceRefresh]: drop the cached URL first (the player says the one it has stopped working).
-     * Cancelling the caller cancels only its wait, and is rethrown instead of being turned into a failed Result.
+     * Extracts a direct audio URL. No caching here: [AudioSourceRepositoryImpl] owns the cache, the in-flight sharing and
+     * forceRefresh (a cache down here would hand a dead URL back after a refresh).
+     * Cancellation is rethrown, not turned into a failed Result (runCatching swallowed it).
      */
-    suspend fun audioUrl(videoId: String, forceRefresh: Boolean = false): Result<String> {
-        if (forceRefresh) cache.remove(videoId) else cache.get(videoId)?.let { return Result.success(it) }
-        val created = scope.async(start = CoroutineStart.LAZY) {
-            try {
-                extractAudioUrl(videoId).also { cache.put(videoId, it) }
-            } finally {
-                inFlight.remove(videoId)
-            }
-        }
-        val job = inFlight.putIfAbsent(videoId, created) ?: created.also { it.start() }
-        if (job !== created) created.cancel()
-        return try {
-            Result.success(job.await())
+    suspend fun audioUrl(videoId: String): Result<String> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            ensureInitialized()
+            Result.success(
+                StreamInfo.getInfo("https://www.youtube.com/watch?v=$videoId")
+                    .audioStreams
+                    .asSequence()
+                    .filter { it.isUrl }
+                    // AAC/m4a first (same preference as the yt-dlp path: cheaper to decode, plays natively in ExoPlayer),
+                    // then the highest bitrate within that format.
+                    .sortedWith(compareByDescending<AudioStream> { it.format == MediaFormat.M4A }.thenByDescending { it.averageBitrate })
+                    .map { it.content }
+                    .firstOrNull { it.isNotBlank() }
+                    ?: error("NewPipe returned no direct audio stream"),
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -69,28 +52,8 @@ class NewPipeYoutubeSource @Inject constructor(
         }
     }
 
-    /** Fire and forget: warms the cache (e.g. for the next song in the queue) so the tap or skip finds the URL ready. */
-    fun prefetchAudioUrl(videoId: String) {
-        if (cache.get(videoId) != null || inFlight.containsKey(videoId)) return
-        scope.launch { audioUrl(videoId) }
-    }
-
-    private fun extractAudioUrl(videoId: String): String {
-        ensureInitialized()
-        return StreamInfo.getInfo("https://www.youtube.com/watch?v=$videoId")
-            .audioStreams
-            .asSequence()
-            .filter { it.isUrl }
-            // AAC/m4a first (same preference as the yt-dlp path: cheaper to decode, plays natively in ExoPlayer),
-            // then the highest bitrate within that format.
-            .sortedWith(compareByDescending<AudioStream> { it.format == MediaFormat.M4A }.thenByDescending { it.averageBitrate })
-            .map { it.content }
-            .firstOrNull { it.isNotBlank() }
-            ?: error("NewPipe returned no direct audio stream")
-    }
-
     override suspend fun searchSongs(query: String): List<YoutubeCandidate> =
-        withContext(Dispatchers.IO) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 ensureInitialized()
                 val service = NewPipe.getService("YouTube")
@@ -104,8 +67,8 @@ class NewPipeYoutubeSource @Inject constructor(
                     .mapNotNull { it.toCandidate() }
                     .take(25)
             } catch (e: CancellationException) {
-                // runCatching used to swallow this: a cancelled search came back as "no results", and HybridYoutubeMusicSearchSource
-                // then started a slow yt-dlp search for a query nobody is waiting for any more.
+                // runCatching used to swallow this: a cancelled search came back as "no results", and
+                // HybridYoutubeMusicSearchSource then started a slow yt-dlp search nobody was waiting for.
                 throw e
             } catch (e: Exception) {
                 emptyList()
@@ -143,40 +106,6 @@ class NewPipeYoutubeSource @Inject constructor(
     @Synchronized
     private fun ensureInitialized() {
         if (NewPipe.getDownloader() == null) NewPipe.init(OkHttpDownloader(client))
-    }
-}
-
-/**
- * Small in-memory cache of extracted stream URLs. googlevideo URLs carry an `expire` (epoch seconds, usually ~6 h);
- * an entry lives for at most [TTL_MS] and never past that expiry minus a safety margin.
- */
-private class StreamUrlCache {
-    private class Entry(val url: String, val expiresAt: Long)
-
-    private val map = object : LinkedHashMap<String, Entry>(16, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Entry>) = size > MAX_ENTRIES
-    }
-
-    fun get(videoId: String): String? = synchronized(map) {
-        val e = map[videoId] ?: return null
-        if (System.currentTimeMillis() >= e.expiresAt) { map.remove(videoId); null } else e.url
-    }
-
-    fun put(videoId: String, url: String) {
-        val now = System.currentTimeMillis()
-        val hardExpiry = EXPIRE_PARAM.find(url)?.groupValues?.get(1)?.toLongOrNull()?.times(1000L)?.minus(SAFETY_MARGIN_MS)
-        val expiresAt = minOf(now + TTL_MS, hardExpiry ?: Long.MAX_VALUE)
-        if (expiresAt <= now) return
-        synchronized(map) { map[videoId] = Entry(url, expiresAt) }
-    }
-
-    fun remove(videoId: String) { synchronized(map) { map.remove(videoId) } }
-
-    private companion object {
-        const val TTL_MS = 20 * 60_000L
-        const val SAFETY_MARGIN_MS = 2 * 60_000L
-        const val MAX_ENTRIES = 32
-        val EXPIRE_PARAM = Regex("[?&]expire=(\\d+)")
     }
 }
 

@@ -35,7 +35,14 @@ data class ResolvedSource(
 enum class ResolutionMethod { TOPIC_CHANNEL, HARD_FILTER, MANUAL, DIRECT }
 
 @Serializable
-data class Playlist(val id: Long, val name: String, val createdAtEpochMs: Long)
+data class Playlist(
+    val id: Long,
+    val name: String,
+    val createdAtEpochMs: Long,
+    /** A cover the user picked (a local `file:` URI). When set it always beats the art of the last song. */
+    val coverUri: String? = null,
+    val tags: List<String> = emptyList(),
+)
 
 @Serializable
 data class DownloadedTrack(

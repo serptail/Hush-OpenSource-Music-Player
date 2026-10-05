@@ -24,7 +24,11 @@ import dagger.hilt.components.SingletonComponent
 interface LibraryRepository {
     fun observePlaylists(): Flow<List<Playlist>>
     fun observeTracks(playlistId: Long): Flow<List<Track>>
-    suspend fun createPlaylist(name: String): Long
+    suspend fun createPlaylist(name: String, tags: List<String> = emptyList(), coverUri: String? = null): Long
+    /** Rename, retag and set (or clear, with null) the user-picked cover. */
+    suspend fun updatePlaylist(id: Long, name: String, tags: List<String>, coverUri: String?)
+    /** Replace the playlist's songs with [tracks], in this order. Used for remove and move up/down. */
+    suspend fun replaceTracks(playlistId: Long, tracks: List<Track>)
     suspend fun addTrack(playlistId: Long, track: Track, position: Int)
     suspend fun removeTrack(playlistId: Long, isrc: String)
     /** Adds [track] at the end of the playlist; does nothing if it is already in it. */
@@ -36,9 +40,14 @@ interface LibraryRepository {
 }
 
 class LibraryRepositoryImpl @Inject constructor(private val playlists: PlaylistDao, private val tracks: PlaylistTrackDao, private val trackDao: TrackDao, private val favorites: FavoriteDao) : LibraryRepository {
-    override fun observePlaylists() = playlists.observeAll().map { list -> list.map { Playlist(it.id, it.name, it.createdAtEpochMs) } }.flowOn(Dispatchers.Default)
+    override fun observePlaylists() = playlists.observeAll().map { list -> list.map { Playlist(it.id, it.name, it.createdAtEpochMs, it.coverUri, it.tags.toTagList()) } }.flowOn(Dispatchers.Default)
     override fun observeTracks(playlistId: Long) = tracks.observeTracks(playlistId).map { list -> list.map { it.toDomain() } }.flowOn(Dispatchers.Default)
-    override suspend fun createPlaylist(name: String) = playlists.insert(PlaylistEntity(name = name, createdAtEpochMs = System.currentTimeMillis()))
+    override suspend fun createPlaylist(name: String, tags: List<String>, coverUri: String?) =
+        playlists.insert(PlaylistEntity(name = name, createdAtEpochMs = System.currentTimeMillis(), coverUri = coverUri, tags = tags.toTagColumn()))
+    override suspend fun updatePlaylist(id: Long, name: String, tags: List<String>, coverUri: String?) =
+        playlists.update(id, name, tags.toTagColumn(), coverUri)
+    override suspend fun replaceTracks(playlistId: Long, tracks: List<Track>) =
+        this.tracks.replaceAll(playlistId, tracks.map { it.isrc })
     override suspend fun addTrack(playlistId: Long, track: Track, position: Int) {
         trackDao.upsert(track.toEntity())
         tracks.upsert(PlaylistTrackCrossRef(playlistId, track.isrc, position))
@@ -60,6 +69,10 @@ class LibraryRepositoryImpl @Inject constructor(private val playlists: PlaylistD
         }
     }
 }
+
+// Tags live in one TEXT column, one tag per line (tags are single-line, so "\n" can never be part of one).
+private fun String.toTagList(): List<String> = split('\n').filter { it.isNotBlank() }
+private fun List<String>.toTagColumn(): String = joinToString("\n") { it.trim() }
 
 @Module
 @InstallIn(SingletonComponent::class)

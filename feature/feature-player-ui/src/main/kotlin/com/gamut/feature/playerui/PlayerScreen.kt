@@ -1,5 +1,6 @@
 package com.gamut.feature.playerui
 
+import android.media.AudioManager
 import android.os.Build
 import android.os.SystemClock
 import androidx.compose.foundation.background
@@ -36,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -50,9 +52,10 @@ import com.adamglin.phosphoricons.light.Queue
 import com.adamglin.phosphoricons.light.Repeat
 import com.adamglin.phosphoricons.light.RepeatOnce
 import com.adamglin.phosphoricons.light.Shuffle
+import com.adamglin.phosphoricons.light.Sparkle
 import com.adamglin.phosphoricons.light.SkipBack
 import com.adamglin.phosphoricons.light.SkipForward
-import com.adamglin.phosphoricons.light.SpeakerHigh
+import com.adamglin.phosphoricons.light.Timer
 import com.gamut.core.designsystem.AcrylicHost
 import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.designsystem.LocalCoverPalette
@@ -60,12 +63,18 @@ import com.gamut.core.designsystem.acrylicSource
 import com.gamut.core.model.PlaybackState
 import com.gamut.core.model.RepeatMode as PlaybackRepeatMode
 import com.gamut.core.model.Track
+import com.gamut.core.player.EqualizerController
+import com.gamut.core.player.ModController
+import com.gamut.core.player.ModPreset
 import com.gamut.core.player.MusicPlayer
 import com.gamut.feature.playerui.components.ArtworkWithRing
 import com.gamut.feature.playerui.components.BouncingText
 import com.gamut.feature.playerui.components.DepthIcon
 import com.gamut.feature.playerui.components.LoadingVinyl
 import com.gamut.feature.playerui.components.TimeRow
+import com.gamut.feature.playerui.components.VolumeHud
+import com.gamut.feature.playerui.components.VolumeHudOverlay
+import com.gamut.feature.playerui.components.edgeVolumeGesture
 import com.gamut.feature.playerui.components.backdropArtUrl
 import com.gamut.feature.playerui.components.bounceTap
 import com.gamut.feature.playerui.components.rememberCoverAccent
@@ -109,9 +118,22 @@ fun PlayerScreen(
     val queueState by player.queue.collectAsState()
     var showQueue by remember { mutableStateOf(false) }
 
+    // Equalizer (app-wide singleton, attached to the audio session elsewhere), sleep timer, edge-hold volume.
+    val context = LocalContext.current
+    val eq = remember { EqualizerController.get(context) }
+    val eqState by eq.state.collectAsState()
+    var showEq by remember { mutableStateOf(false) }
+    var showSleep by remember { mutableStateOf(false) }
+    val modState by ModController.state.collectAsState()
+    var showMod by remember { mutableStateOf(false) }
+    val sleepEndsAt by SleepTimer.endsAt.collectAsState()
+    val haptic = LocalHapticFeedback.current
+    val volumeHud = remember { VolumeHud(context.getSystemService(AudioManager::class.java), haptic) }
+
     // Smooth progress clock (see PlayerClock). Everything below only reads it inside lambdas, so the per-frame
     // position invalidates the small pieces that draw it instead of recomposing the whole screen.
     val clock = remember { PlayerClock() }
+    LaunchedEffect(modState.settings.speed) { clock.setSpeed(modState.settings.speed) }   // media time runs at `speed` x wall time
     LaunchedEffect(player) { clock.follow(player) }
     LaunchedEffect(clock.live, duration) { if (clock.live) clock.tick(duration) }
 
@@ -144,7 +166,7 @@ fun PlayerScreen(
     // frame (back press, transition, re-record), the glass shows just that backing color: the flash. The player has
     // its own dark backdrop, so its glass is pinned to the neutral palette: the same color as the screen, and still.
     CompositionLocalProvider(LocalCoverPalette provides CoverPalette.Neutral) {
-    AcrylicHost(Modifier.fillMaxSize().background(CoverPalette.Neutral.base)) {
+    AcrylicHost(Modifier.fillMaxSize().background(CoverPalette.Neutral.base).edgeVolumeGesture(volumeHud)) {
         if (artUrl != null) PlayerBackdrop(artUrl)
 
         // Nothing playing (or still loading): just a black record turning in the middle of the flat background.
@@ -204,7 +226,13 @@ fun PlayerScreen(
                         },
                     )
                 },
+                eqActive = eqState.enabled,
+                modActive = modState.preset != ModPreset.ORIGINAL,
+                sleepActive = sleepEndsAt != null,
                 onQueue = { showQueue = true },
+                onSleep = { showSleep = true },
+                onEqualizer = { showEq = true },
+                onMod = { showMod = true },
             )
 
             Spacer(Modifier.height(16.dp))
@@ -217,6 +245,19 @@ fun PlayerScreen(
                 expanded = lyricsExpanded,
                 onToggle = { lyricsExpanded = !lyricsExpanded },
                 modifier = Modifier.fillMaxWidth().weight(1f).padding(bottom = 16.dp),
+            )
+        }
+
+        // Volume pill: drawn above everything, takes no touches.
+        VolumeHudOverlay(volumeHud)
+
+        if (showEq) EqualizerSheet(eq, accent, onDismiss = { showEq = false })
+        if (showMod) ModSheet(accent, onDismiss = { showMod = false })
+        if (showSleep) {
+            SleepTimerSheet(
+                onPick = { minutes -> SleepTimer.start(minutes) { player.pause() }; showSleep = false },
+                onTurnOff = { SleepTimer.cancel(); showSleep = false },
+                onDismiss = { showSleep = false },
             )
         }
 
@@ -238,8 +279,6 @@ private fun PlayerTopBar(onBack: () -> Unit, onMore: () -> Unit, modifier: Modif
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         DepthIcon(PhosphorIcons.Light.CaretDown, "Collapse", Modifier.tapTarget(onClick = onBack).padding(8.dp))
         Spacer(Modifier.weight(1f))
-        DepthIcon(PhosphorIcons.Light.SpeakerHigh, "Volume", Modifier.tapTarget(onClick = {}).padding(8.dp))
-        DepthIcon(PhosphorIcons.Light.Equalizer, "Equalizer", Modifier.tapTarget(onClick = {}).padding(8.dp))
         DepthIcon(PhosphorIcons.Light.DotsThreeVertical, "More", Modifier.tapTarget(onClick = onMore).padding(8.dp))
     }
 }
@@ -275,9 +314,15 @@ private fun ModeRow(
     shuffleOn: Boolean,
     repeatMode: PlaybackRepeatMode,
     accent: Color,
+    eqActive: Boolean,
+    modActive: Boolean,
+    sleepActive: Boolean,
     onShuffle: () -> Unit,
     onRepeat: () -> Unit,
     onQueue: () -> Unit,
+    onSleep: () -> Unit,
+    onEqualizer: () -> Unit,
+    onMod: () -> Unit,
 ) {
     val idle = Color.White.copy(alpha = 0.85f)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -300,6 +345,27 @@ private fun ModeRow(
             size = 22.dp,
         )
         DepthIcon(PhosphorIcons.Light.Queue, "Queue", Modifier.bounceTap(onClick = onQueue).padding(8.dp), tint = idle, size = 22.dp)
+        DepthIcon(
+            PhosphorIcons.Light.Timer,
+            if (sleepActive) "Sleep timer on" else "Sleep timer",
+            Modifier.bounceTap(onClick = onSleep).padding(8.dp),
+            tint = if (sleepActive) accent else idle,
+            size = 22.dp,
+        )
+        DepthIcon(
+            PhosphorIcons.Light.Equalizer,
+            "Equalizer",
+            Modifier.bounceTap(onClick = onEqualizer).padding(8.dp),
+            tint = if (eqActive) accent else idle,
+            size = 22.dp,
+        )
+        DepthIcon(
+            PhosphorIcons.Light.Sparkle,
+            if (modActive) "Mod on" else "Mod",
+            Modifier.bounceTap(onClick = onMod).padding(8.dp),
+            tint = if (modActive) accent else idle,
+            size = 22.dp,
+        )
     }
 }
 
@@ -325,6 +391,7 @@ private const val RESYNC_THRESHOLD_MS = 400L   // ignore tick differences smalle
 internal class PlayerClock {
     private var basePosition = 0L
     private var baseTimestamp = SystemClock.elapsedRealtime()
+    private var speed = 1f   // playback speed: the position advances this many ms per wall-clock ms
 
     /** True while audio is actually playing. */
     var live by mutableStateOf(false)
@@ -339,6 +406,13 @@ internal class PlayerClock {
         basePosition = positionMs
         baseTimestamp = SystemClock.elapsedRealtime()
         this.positionMs = positionMs.toFloat()
+    }
+
+    /** A mod changed the playback speed: re-anchor at the current position, then run at the new rate. */
+    fun setSpeed(value: Float) {
+        if (value == speed) return
+        anchor(positionMs.toLong())
+        speed = value
     }
 
     /** Listens to the player's own position reports. Never returns; cancel it by leaving the composition. */
@@ -356,7 +430,7 @@ internal class PlayerClock {
             val key = track.isrc.orEmpty() + "|" + track.title
             val nowLive = s is PlaybackState.Playing && !awaiting
             val now = SystemClock.elapsedRealtime()
-            val estimate = if (wasLive) basePosition + (now - baseTimestamp) else basePosition
+            val estimate = if (wasLive) basePosition + ((now - baseTimestamp) * speed).toLong() else basePosition
             if (!nowLive || key != lastTrackKey || nowLive != wasLive || abs(reported - estimate) > RESYNC_THRESHOLD_MS) {
                 anchor(reported)
             }
@@ -370,7 +444,7 @@ internal class PlayerClock {
     suspend fun tick(durationMs: Long) {
         while (true) {
             withFrameNanos {}
-            val elapsed = SystemClock.elapsedRealtime() - baseTimestamp
+            val elapsed = (SystemClock.elapsedRealtime() - baseTimestamp) * speed
             positionMs = (basePosition + elapsed).toFloat().coerceAtMost(durationMs.toFloat())
         }
     }
