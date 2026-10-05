@@ -18,6 +18,7 @@ dependencyResolutionManagement {
 rootProject.name = "Gamut"
 
 include(":app")
+include(":baselineprofile")
 include(":core:core-common")
 include(":core:core-database")
 include(":core:core-network")

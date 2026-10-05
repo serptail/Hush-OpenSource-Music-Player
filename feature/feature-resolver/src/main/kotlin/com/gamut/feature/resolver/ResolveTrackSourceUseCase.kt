@@ -7,6 +7,8 @@ import com.gamut.core.model.TrackSource
 import com.gamut.core.network.YoutubeCandidate
 import com.gamut.core.network.YoutubeMusicSearchSource
 import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
@@ -33,6 +35,9 @@ interface AudioSourceRepository {
     suspend fun audioUrl(videoId: String, forceRefresh: Boolean = false): Result<String>
 }
 
+// @Singleton: the cache and the in-flight map below only help if the tap path and the player's own next-track resolver
+// share ONE instance. Unscoped, Hilt gives every injection point its own copy (and its own empty cache).
+@Singleton
 class AudioSourceRepositoryImpl @Inject constructor(
     private val engine: AndroidYtDlpEngine,
     private val newPipe: NewPipeYoutubeSource,
@@ -44,6 +49,7 @@ class AudioSourceRepositoryImpl @Inject constructor(
     override suspend fun audioUrl(videoId: String, forceRefresh: Boolean): Result<String> {
         if (forceRefresh) {
             cache.remove(videoId)
+            inFlight.remove(videoId)
             engine.forget(videoId)
         }
         cache[videoId]?.takeIf { it.expiresAtMs > System.currentTimeMillis() }?.let {
@@ -51,21 +57,29 @@ class AudioSourceRepositoryImpl @Inject constructor(
         }
         val job = inFlight.computeIfAbsent(videoId) {
             appScope.async {
-                val result = kotlinx.coroutines.withTimeoutOrNull(AUDIO_PRIMARY_TIMEOUT_MS) { newPipe.audioUrl(videoId) }
-                    ?.fold(
-                        onSuccess = { Result.success(it) },
-                        onFailure = { engine.audioUrl(videoId) },
-                    )
-                    ?: engine.audioUrl(videoId)
-                result.onSuccess { url -> cache[videoId] = CachedAudio(url, expiryOf(url)) }
-                result
+                try {
+                    val result = kotlinx.coroutines.withTimeoutOrNull(AUDIO_PRIMARY_TIMEOUT_MS) { newPipe.audioUrl(videoId) }
+                        ?.fold(
+                            onSuccess = { Result.success(it) },
+                            onFailure = { engine.audioUrl(videoId) },
+                        )
+                        ?: engine.audioUrl(videoId)
+                    result.onSuccess { url -> cache[videoId] = CachedAudio(url, expiryOf(url)) }
+                    result
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // This job is shared by every caller. If the engine throws instead of returning a failed Result, the
+                    // exception would be rethrown out of await() into the tap handler (a crash) instead of "Couldn't play".
+                    Result.failure<String>(e)
+                }
             }
         }
-        return try {
-            job.await()
-        } finally {
-            if (job.isCompleted) inFlight.remove(videoId, job)
-        }
+        // Removed when the job itself completes, not when a caller happens to finish awaiting it: a caller that was
+        // cancelled mid-way (e.g. a prefetch) used to leave a finished job in the map, and every later request for
+        // this video then got that old (possibly failed or expired) result.
+        job.invokeOnCompletion { inFlight.remove(videoId, job) }
+        return job.await()
     }
 
     private fun expiryOf(url: String): Long = Regex("[?&]expire=(\\d+)").find(url)?.groupValues?.get(1)
@@ -83,17 +97,35 @@ class ResolveTrackSourceUseCase @Inject constructor(
     private val scorer: CandidateScorer,
     @ApplicationScope private val appScope: CoroutineScope,
 ) {
-    suspend operator fun invoke(track: Track): Result<ResolvedSource> = runCatching {
+    /** Never swallows cancellation (runCatching would), so cancelling a tap really stops the work. */
+    suspend operator fun invoke(track: Track): Result<ResolvedSource> =
+        try {
+            Result.success(resolveOrThrow(track))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+
+    private suspend fun resolveOrThrow(track: Track): ResolvedSource {
         val resolutionKey = track.resolutionKey()
-        sources.getLocal(resolutionKey)?.let { return@runCatching it }
-        sources.getRemote(resolutionKey)?.let { remote -> sources.saveLocal(remote); return@runCatching remote }
+        sources.getLocal(resolutionKey)?.let { return it }
+        // The shared sync server is only a shortcut: a slow or unreachable server must not delay (or fail) playback.
+        val remote = try {
+            withTimeoutOrNull(REMOTE_LOOKUP_TIMEOUT_MS) { sources.getRemote(resolutionKey) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+        remote?.let { sources.saveLocal(it); return it }
 
         val youtubeVideoId = track.youtubeVideoId
         if (track.source == TrackSource.YOUTUBE && !youtubeVideoId.isNullOrBlank()) {
             val direct = ResolvedSource(resolutionKey, youtubeVideoId, ResolutionMethod.DIRECT, 1.0f, 0)
             sources.saveLocal(direct)
             appScope.launch { sources.submitRemote(direct) }
-            return@runCatching direct
+            return direct
         }
 
         // yt-dlp's search can occasionally hang or get slow-walked by YouTube instead of
@@ -116,7 +148,7 @@ class ResolveTrackSourceUseCase @Inject constructor(
             sources.saveLocal(result)
             appScope.launch { sources.submitRemote(result) }
         }
-        result
+        return result
     }
 
     private fun strictBroadOk(candidate: YoutubeCandidate, track: Track): Boolean {
@@ -131,6 +163,7 @@ class ResolveTrackSourceUseCase @Inject constructor(
     private companion object {
         const val SEARCH_TIMEOUT_MS = 8_000L
         const val BROAD_TIMEOUT_MS = 6_000L
+        const val REMOTE_LOOKUP_TIMEOUT_MS = 1_500L
     }
 }
 

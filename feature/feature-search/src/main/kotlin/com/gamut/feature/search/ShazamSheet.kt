@@ -45,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -58,7 +59,10 @@ import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.fill.Heart
 import com.adamglin.phosphoricons.light.Heart
 import com.adamglin.phosphoricons.light.Waveform
+import com.gamut.core.designsystem.AlertTick
 import com.gamut.core.designsystem.CoverPalette
+import com.gamut.core.designsystem.ErrorTick
+import com.gamut.core.designsystem.pressScale
 import com.gamut.core.model.Playlist
 import com.gamut.core.model.Track
 
@@ -105,18 +109,21 @@ fun ShazamSheet(
                 onCreatePlaylist = onCreatePlaylist,
             )
             ShazamState.NotFound -> MessageContent(
+                icon = AlertTick,
                 title = "Couldn't recognize this one",
                 message = "Move closer to the speaker and try again.",
                 action = "Try again",
                 onAction = onRetry,
             )
             is ShazamState.Failed -> MessageContent(
+                icon = ErrorTick,
                 title = "Something went wrong",
                 message = state.message,
                 action = "Try again",
                 onAction = onRetry,
             )
             ShazamState.PermissionDenied -> MessageContent(
+                icon = AlertTick,
                 title = "Microphone access is off",
                 message = "Turn it on in the app settings so Gamut can listen to the music around you.",
                 action = "Open settings",
@@ -187,11 +194,13 @@ private fun ListeningContent(level: Float, searching: Boolean, onCancel: () -> U
 }
 
 @Composable
-private fun MessageContent(title: String, message: String, action: String, onAction: () -> Unit) {
+private fun MessageContent(icon: ImageVector, title: String, message: String, action: String, onAction: () -> Unit) {
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 8.dp, bottom = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        Icon(icon, null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(34.dp))
+        Spacer(Modifier.height(12.dp))
         Text(title, style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.Center)
         Text(
             message,
@@ -202,10 +211,10 @@ private fun MessageContent(title: String, message: String, action: String, onAct
         )
         Box(
             Modifier
+                .pressScale(onClick = onAction)
                 .height(48.dp)
                 .clip(RoundedCornerShape(24.dp))
                 .background(Color.White)
-                .clickable(onClick = onAction)
                 .padding(horizontal = 28.dp),
             contentAlignment = Alignment.Center,
         ) { Text(action, style = MaterialTheme.typography.labelLarge, color = CoverPalette.Neutral.base) }
@@ -259,22 +268,25 @@ private fun FoundContent(
                 Box(
                     Modifier
                         .weight(1f)
+                        .pressScale(onClick = { onPlay(track) })
                         .height(48.dp)
                         .clip(RoundedCornerShape(24.dp))
-                        .background(Color.White)
-                        .clickable { onPlay(track) },
+                        .background(Color.White),
                     contentAlignment = Alignment.Center,
                 ) { Text("Play", style = MaterialTheme.typography.labelLarge, color = CoverPalette.Neutral.base) }
                 Spacer(Modifier.width(12.dp))
                 Box(
                     Modifier
                         .size(48.dp)
+                        .pressScale(
+                            onClick = {
+                                note = if (isFavorite) "Removed from favorites" else "Added to favorites"
+                                onToggleFavorite(track)
+                            },
+                            scaleDown = 0.88f,
+                        )
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.12f))
-                        .clickable {
-                            note = if (isFavorite) "Removed from favorites" else "Added to favorites"
-                            onToggleFavorite(track)
-                        },
+                        .background(Color.White.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -354,7 +366,7 @@ private fun ActionRow(label: String, onClick: () -> Unit) {
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .pressScale(onClick = onClick, scaleDown = 0.98f)
             .padding(horizontal = 24.dp, vertical = 14.dp),
     )
 }

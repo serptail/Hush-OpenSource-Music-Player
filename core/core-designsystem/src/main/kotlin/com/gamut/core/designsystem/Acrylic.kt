@@ -58,6 +58,8 @@ import dev.chrisbanes.haze.hazeSource
 /** Provides the shared [HazeState] to every acrylic surface below it. */
 val LocalAcrylicState = staticCompositionLocalOf<HazeState?> { null }
 
+private var noHazeWarned = false
+
 /**
  * Root container for acrylic. Place the blurred content (marked with [acrylicSource])
  * and the glass surfaces as descendants. The source must be drawn *beneath* the glass.
@@ -153,7 +155,10 @@ fun AcrylicSurface(
     if (hazeState == null) {
         // Without a HazeState there is nothing to blur: only the dense fallback tint is drawn.
         SideEffect {
-            Log.w("Acrylic", "No HazeState found. Wrap the screen in AcrylicHost and put Modifier.acrylicSource() on the layer behind the glass.")
+            if (!noHazeWarned) {
+                noHazeWarned = true
+                Log.w("Acrylic", "No HazeState found. Wrap the screen in AcrylicHost and put Modifier.acrylicSource() on the layer behind the glass.")
+            }
         }
     }
     val base = rememberGlassBase()

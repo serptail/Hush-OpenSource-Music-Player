@@ -86,6 +86,8 @@ data class CoverPalette(
     }
 }
 
+private const val ThemeTransitionMs = 450
+
 /** The palette currently driving the UI; provided by [CoverTheme]. */
 val LocalCoverPalette = staticCompositionLocalOf { CoverPalette.Neutral }
 
@@ -96,16 +98,21 @@ val LocalCoverPalette = staticCompositionLocalOf { CoverPalette.Neutral }
  */
 @Composable
 fun CoverTheme(palette: CoverPalette, content: @Composable () -> Unit) {
-    val onBase by animateColorAsState(palette.onBase, tween(1400), label = "cover-onbase")
-    val accent by animateColorAsState(palette.accent, tween(1400), label = "cover-accent")
-    val scheme = MaterialTheme.colorScheme.copy(
-        background = Color.Transparent,
-        onBackground = onBase,
-        onSurface = onBase,
-        onSurfaceVariant = onBase.copy(alpha = 0.65f),
-        outline = onBase.copy(alpha = 0.30f),
-        primary = accent,
-    )
+    // Every frame of these two animations recomposes everything that reads ink() / the accent, so they are kept
+    // short (the flowing background itself still takes 1.4 s to cross-fade).
+    val onBase by animateColorAsState(palette.onBase, tween(ThemeTransitionMs), label = "cover-onbase")
+    val accent by animateColorAsState(palette.accent, tween(ThemeTransitionMs), label = "cover-accent")
+    val parent = MaterialTheme.colorScheme
+    val scheme = remember(parent, onBase, accent) {
+        parent.copy(
+            background = Color.Transparent,
+            onBackground = onBase,
+            onSurface = onBase,
+            onSurfaceVariant = onBase.copy(alpha = 0.65f),
+            outline = onBase.copy(alpha = 0.30f),
+            primary = accent,
+        )
+    }
     MaterialTheme(colorScheme = scheme) {
         CompositionLocalProvider(
             LocalContentColor provides onBase,
@@ -422,6 +429,9 @@ private const val LightStrength = 0.5f
 /** Speed multiplier while paused: the flow doesn't stop, it just breathes. */
 private const val PausedSpeed = 0.3f
 
+/** Minimum seconds between flow updates (about 30 per second). */
+private const val FlowFrameInterval = 0.030f
+
 /** Size of the fallback (Android 12 and below) glows relative to their natural radius. Lower = smaller. */
 private const val BlobScale = 0.33f
 
@@ -511,8 +521,12 @@ private fun rememberFlowClock(isPlaying: Boolean, running: Boolean): FloatState 
         while (true) {
             withFrameNanos { now ->
                 val dt = (now - last) / 1_000_000_000f
-                last = now
-                clock.floatValue += dt * FlowRate * speed
+                // The flow drifts over 15 to 30 s per cycle, so 30 updates a second look identical to 60 or 120,
+                // but halve the shader + blur work that competes with scrolling for the GPU.
+                if (dt >= FlowFrameInterval) {
+                    last = now
+                    clock.floatValue += dt * FlowRate * speed
+                }
             }
         }
     }
@@ -529,6 +543,10 @@ uniform float3 c2;
 uniform float3 c3;
 uniform float3 base;
 uniform float strength;
+uniform float2 pa;
+uniform float2 pb;
+uniform float2 pc;
+uniform float2 pd;
 
 float hash(float2 p) {
     p = fract(p * float2(123.34, 456.21));
@@ -555,11 +573,12 @@ half4 main(float2 fragCoord) {
     float2 w2 = float2(sin(q.y * 4.1 - t * 0.80 + w1.x * 1.6), cos(q.x * 3.7 + t * 1.00 + w1.y * 1.6));
     q += 0.04 * w2;
 
-    // Each center roams the whole screen (10% to 90% on both axes), never outside it.
-    float2 a = float2(aspect * (0.10 + 0.80 * (0.5 + 0.5 * sin(t * 0.37 + 0.0))), 0.10 + 0.80 * (0.5 + 0.5 * cos(t * 0.29 + 1.0)));
-    float2 b = float2(aspect * (0.10 + 0.80 * (0.5 + 0.5 * cos(t * 0.31 + 2.0))), 0.10 + 0.80 * (0.5 + 0.5 * sin(t * 0.41 + 3.0)));
-    float2 c = float2(aspect * (0.10 + 0.80 * (0.5 + 0.5 * sin(t * 0.43 + 4.0))), 0.10 + 0.80 * (0.5 + 0.5 * cos(t * 0.33 + 5.0)));
-    float2 d = float2(aspect * (0.10 + 0.80 * (0.5 + 0.5 * cos(t * 0.27 + 6.0))), 0.10 + 0.80 * (0.5 + 0.5 * sin(t * 0.47 + 7.0)));
+    // The four blob centers roam the whole screen (10% to 90% on both axes). They only depend on time, so they
+    // are computed once per frame on the CPU and arrive as uniforms (pa..pd) instead of 8 sin/cos per pixel.
+    float2 a = pa;
+    float2 b = pb;
+    float2 c = pc;
+    float2 d = pd;
 
     // Same strength everywhere on the screen.
     float fade = strength;
@@ -595,6 +614,13 @@ private fun MeshBackground(
         shader.setFloatUniform("c3", c3.red, c3.green, c3.blue)
         shader.setFloatUniform("base", base.red, base.green, base.blue)
         shader.setFloatUniform("strength", strength)
+        val aspect = size.width / size.height
+        val t = clock.floatValue
+        fun unit(v: Float) = 0.10f + 0.80f * (0.5f + 0.5f * v)
+        shader.setFloatUniform("pa", aspect * unit(sin(t * 0.37f)), unit(cos(t * 0.29f + 1.0f)))
+        shader.setFloatUniform("pb", aspect * unit(cos(t * 0.31f + 2.0f)), unit(sin(t * 0.41f + 3.0f)))
+        shader.setFloatUniform("pc", aspect * unit(sin(t * 0.43f + 4.0f)), unit(cos(t * 0.33f + 5.0f)))
+        shader.setFloatUniform("pd", aspect * unit(cos(t * 0.27f + 6.0f)), unit(sin(t * 0.47f + 7.0f)))
         drawRect(brush)
     }
 }

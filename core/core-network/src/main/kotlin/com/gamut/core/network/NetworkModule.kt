@@ -1,14 +1,18 @@
 package com.gamut.core.network
 
+import android.content.Context
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import java.io.File
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
 import kotlinx.serialization.json.Json
+import okhttp3.Cache
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -36,27 +40,38 @@ object NetworkModule {
     @Named("coverart")
     fun coverArtClient(): OkHttpClient = baseClient()
 
+    /**
+     * One on-disk HTTP cache shared by the catalogue clients (iTunes, Deezer, Apple charts). It survives restarts, so
+     * the same artist / album / photo lookups are not fetched again. Never used for YouTube: stream URLs expire.
+     */
+    @Provides
+    @Singleton
+    @Named("catalog-cache")
+    fun catalogCache(@ApplicationContext context: Context): Cache =
+        Cache(File(context.cacheDir, "http-catalog"), 20L * 1024 * 1024)
+
     @Provides
     @Singleton
     @Named("itunes")
-    fun itunesClient(): OkHttpClient = baseClient().newBuilder()
+    fun itunesClient(@Named("catalog-cache") cache: Cache): OkHttpClient = baseClient().newBuilder()
         // iTunes has no documented hard limit but empirically throttles around
         // ~20 requests/minute/IP and signals it with 403 rather than 429/5xx.
         // SearchRepositoryImpl's Semaphore(1) + 10-min result cache already keep us well
         // under that in normal typing; this interceptor is the safety net for the rare
         // case we do trip it, since plain BackoffInterceptor ignores 403 by design.
         .addInterceptor(ItunesBackoffInterceptor())
+        .cached(cache)
         .build()
 
     @Provides
     @Singleton
     @Named("deezer")
-    fun deezerClient(): OkHttpClient = baseClient()
+    fun deezerClient(@Named("catalog-cache") cache: Cache): OkHttpClient = baseClient().newBuilder().cached(cache).build()
 
     @Provides
     @Singleton
     @Named("apple")
-    fun appleClient(): OkHttpClient = baseClient()
+    fun appleClient(@Named("catalog-cache") cache: Cache): OkHttpClient = baseClient().newBuilder().cached(cache).build()
 
     @Provides
     @Singleton
@@ -119,6 +134,28 @@ object NetworkModule {
         }
     }.build()
 }
+
+/** How long a catalogue answer (artist, album list, chart, photo lookup) is reused without asking again. */
+private const val CATALOG_TTL_SECONDS = 3_600
+
+/**
+ * Caches successful GET answers on disk for [CATALOG_TTL_SECONDS], whatever the server's own cache headers say:
+ * iTunes and Deezer send none that are usable. Vary is dropped because these answers do not depend on request
+ * headers, and OkHttp refuses to cache a response that says "Vary: *". Failures (e.g. iTunes' 403) are never cached.
+ */
+private fun OkHttpClient.Builder.cached(cache: Cache): OkHttpClient.Builder = cache(cache)
+    .addNetworkInterceptor { chain ->
+        val response = chain.proceed(chain.request())
+        if (chain.request().method == "GET" && response.isSuccessful) {
+            response.newBuilder()
+                .removeHeader("Pragma")
+                .removeHeader("Vary")
+                .header("Cache-Control", "public, max-age=$CATALOG_TTL_SECONDS")
+                .build()
+        } else {
+            response
+        }
+    }
 
 private object UserAgentInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response = chain.proceed(

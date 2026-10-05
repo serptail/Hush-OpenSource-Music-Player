@@ -12,7 +12,9 @@ import com.gamut.core.database.toDomain
 import com.gamut.core.model.Playlist
 import com.gamut.core.model.Track
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import dagger.Binds
 import dagger.Module
@@ -34,8 +36,8 @@ interface LibraryRepository {
 }
 
 class LibraryRepositoryImpl @Inject constructor(private val playlists: PlaylistDao, private val tracks: PlaylistTrackDao, private val trackDao: TrackDao, private val favorites: FavoriteDao) : LibraryRepository {
-    override fun observePlaylists() = playlists.observeAll().map { list -> list.map { Playlist(it.id, it.name, it.createdAtEpochMs) } }
-    override fun observeTracks(playlistId: Long) = tracks.observeTracks(playlistId).map { list -> list.map { it.toDomain() } }
+    override fun observePlaylists() = playlists.observeAll().map { list -> list.map { Playlist(it.id, it.name, it.createdAtEpochMs) } }.flowOn(Dispatchers.Default)
+    override fun observeTracks(playlistId: Long) = tracks.observeTracks(playlistId).map { list -> list.map { it.toDomain() } }.flowOn(Dispatchers.Default)
     override suspend fun createPlaylist(name: String) = playlists.insert(PlaylistEntity(name = name, createdAtEpochMs = System.currentTimeMillis()))
     override suspend fun addTrack(playlistId: Long, track: Track, position: Int) {
         trackDao.upsert(track.toEntity())
@@ -47,8 +49,8 @@ class LibraryRepositoryImpl @Inject constructor(private val playlists: PlaylistD
         trackDao.upsert(track.toEntity())
         tracks.upsert(PlaylistTrackCrossRef(playlistId, track.isrc, tracks.nextPosition(playlistId)))
     }
-    override fun observeFavoriteIsrcs() = favorites.observeIsrcs().map { it.toSet() }
-    override fun observeFavorites() = favorites.observeTracks().map { list -> list.map { it.toDomain() } }
+    override fun observeFavoriteIsrcs() = favorites.observeIsrcs().map { it.toSet() }.flowOn(Dispatchers.Default)
+    override fun observeFavorites() = favorites.observeTracks().map { list -> list.map { it.toDomain() } }.flowOn(Dispatchers.Default)
     override suspend fun toggleFavorite(track: Track) {
         if (favorites.isFavorite(track.isrc)) {
             favorites.remove(track.isrc)

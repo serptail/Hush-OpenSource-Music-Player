@@ -47,12 +47,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
+import androidx.compose.foundation.lazy.itemsIndexed
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.light.ArrowLeft
 import com.adamglin.phosphoricons.light.MusicNote
 import com.gamut.core.designsystem.CoverTheme
+import com.gamut.core.designsystem.TrackRowSkeleton
+import com.gamut.core.designsystem.shimmer
+import androidx.compose.foundation.layout.Spacer
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.fadeEdges
@@ -66,6 +71,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @HiltViewModel
@@ -76,11 +82,21 @@ class ArtistViewModel @Inject constructor(
     private val artistId = savedStateHandle.get<String>("artistId")?.toLongOrNull()
     private val _state = MutableStateFlow<ArtistDetails?>(null)
     val state: StateFlow<ArtistDetails?> = _state.asStateFlow()
+    private val _failed = MutableStateFlow(false)
+    /** True when the artist could not be loaded at all (so the screen stops spinning). */
+    val failed: StateFlow<Boolean> = _failed.asStateFlow()
 
     init {
         viewModelScope.launch {
             val id = artistId ?: repository.findArtistId(savedStateHandle.get<String>("artistName").orEmpty())
-            _state.value = if (id == null) null else repository.artist(id)
+            val base = id?.let { repository.artistOverview(it) }
+            _state.value = base          // the page is usable here: top songs + albums
+            _failed.value = base == null
+            if (base == null || base.songsLoaded) return@launch
+            // Portrait and full discography load in the background and fill the page in.
+            launch { repository.artistPhoto(base)?.let { photo -> _state.update { it?.copy(imageUrl = photo) } } }
+            val full = repository.artistSongs(base)
+            _state.update { it?.copy(songs = full.songs, latestSongs = full.latestSongs, songsLoaded = true) }
         }
     }
 }
@@ -95,12 +111,27 @@ fun ArtistScreen(
     nowPlaying: @Composable () -> Unit = {},
 ) {
     val artist by viewModel.state.collectAsStateWithLifecycle()
+    val failed by viewModel.failed.collectAsStateWithLifecycle()
     val palette = LocalCoverPalette.current
     TransparentStatusBar(darkIcons = palette.isLight)
     CoverTheme(palette) {
         if (artist == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = ink(), strokeWidth = 2.dp)
+            Box(Modifier.fillMaxSize().statusBarsPadding()) {
+                if (!failed) {
+                    // Placeholder in the final layout (round portrait + song rows) instead of a lone spinner.
+                    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Spacer(Modifier.height(78.dp))
+                        Box(Modifier.fillMaxWidth(0.7f).aspectRatio(1f).clip(CircleShape).shimmer())
+                        Spacer(Modifier.height(28.dp))
+                        repeat(4) { TrackRowSkeleton() }
+                    }
+                }
+                Box(Modifier.padding(start = 10.dp, top = 14.dp).size(44.dp).pressScale(onClick = onBack), contentAlignment = Alignment.Center) {
+                    Icon(PhosphorIcons.Light.ArrowLeft, "Back", tint = ink(), modifier = Modifier.size(22.dp))
+                }
+                if (failed) {
+                    Text("Couldn't load this artist.", color = ink(0.6f), modifier = Modifier.align(Alignment.Center).padding(24.dp))
+                }
             }
             return@CoverTheme
         }
@@ -135,9 +166,9 @@ fun ArtistScreen(
                 Crossfade(selectedTab, label = "artist-tab", modifier = Modifier.weight(1f)) { tab ->
                     when (tab) {
                         0 -> ArtistOverview(value, { picked -> onTrackSelected(picked, value.popular) }, onAlbumSelected, onViewAll = { selectedTab = 1 })
-                        1 -> TrackList(value.songs) { picked -> onTrackSelected(picked, value.songs) }
+                        1 -> TrackList(value.songs, loading = !value.songsLoaded) { picked -> onTrackSelected(picked, value.songs) }
                         2 -> AlbumGrid(value.albums, onAlbumSelected)
-                        else -> TrackList(value.latestSongs) { picked -> onTrackSelected(picked, value.latestSongs) }
+                        else -> TrackList(value.latestSongs, loading = !value.songsLoaded) { picked -> onTrackSelected(picked, value.latestSongs) }
                     }
                 }
             }
@@ -169,7 +200,7 @@ private fun ArtistOverview(artist: ArtistDetails, onTrack: (Track) -> Unit, onAl
                 Text("View all", color = ink(0.6f), modifier = Modifier.pressScale(onClick = onViewAll).padding(vertical = 6.dp))
             }
         }
-        items(artist.popular.take(4), key = { it.isrc }) { TrackLine(it, onTrack) }
+        itemsIndexed(artist.popular.take(4), key = { i, t -> "${t.isrc}-$i" }) { _, t -> TrackLine(t, onTrack) }
         item {
             Text("Albums", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(top = 24.dp, bottom = 12.dp))
             BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -184,13 +215,19 @@ private fun ArtistOverview(artist: ArtistDetails, onTrack: (Track) -> Unit, onAl
 }
 
 @Composable
-private fun TrackList(tracks: List<Track>, onTrack: (Track) -> Unit) {
-    if (tracks.isEmpty()) {
+private fun TrackList(tracks: List<Track>, loading: Boolean = false, onTrack: (Track) -> Unit) {
+    if (tracks.isEmpty() && !loading) {
         Text("Nothing here yet.", color = ink(0.6f), modifier = Modifier.padding(16.dp))
         return
     }
     LazyColumn(Modifier.fillMaxSize().fadeEdges(), contentPadding = PaddingValues(start = 12.dp, end = 24.dp, bottom = 24.dp)) {
-        items(tracks, key = { it.isrc }) { TrackLine(it, onTrack) }
+        itemsIndexed(tracks, key = { i, t -> "${t.isrc}-$i" }) { _, t -> TrackLine(t, onTrack) }
+        // The rest of the discography is still arriving: show it instead of a list that looks finished.
+        if (loading) item(key = "loading") {
+            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = ink(), strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
+            }
+        }
     }
 }
 
@@ -210,13 +247,11 @@ private fun AlbumGrid(albums: List<DiscoverItem>, onAlbum: (DiscoverItem) -> Uni
 @Composable
 private fun AlbumCard(album: DiscoverItem, onClick: (DiscoverItem) -> Unit, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth().pressScale(onClick = { onClick(album) }, scaleDown = 0.97f)) {
-        SubcomposeAsyncImage(
+        AsyncImage(
             model = album.imageUrl,
             contentDescription = album.title,
-            modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(10.dp)),
+            modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(10.dp)).background(ink(0.08f)),
             contentScale = ContentScale.Crop,
-            loading = { ArtistPlaceholder() },
-            error = { ArtistPlaceholder() },
         )
         Text(album.title, color = ink(), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
         Text(album.subtitle, color = ink(0.6f), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -229,13 +264,11 @@ private fun TrackLine(track: Track, onClick: (Track) -> Unit) {
         Modifier.fillMaxWidth().pressScale(onClick = { onClick(track) }, scaleDown = 0.98f).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SubcomposeAsyncImage(
+        AsyncImage(
             model = track.albumArtUrl,
             contentDescription = null,
-            modifier = Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)),
+            modifier = Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)).background(ink(0.08f)),
             contentScale = ContentScale.Crop,
-            loading = { ArtistPlaceholder() },
-            error = { ArtistPlaceholder() },
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
             Text(track.title, color = ink(), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)

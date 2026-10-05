@@ -4,7 +4,10 @@ import com.gamut.core.model.PlaybackState
 import com.gamut.core.model.QueueState
 import com.gamut.core.model.RepeatMode
 import com.gamut.core.model.Track
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+
+private val NeverAwaiting = MutableStateFlow(false)
 
 /**
  * Turns a [Track] into a playable stream URL. The player owns the queue, so when the user skips
@@ -32,6 +35,13 @@ interface MusicPlayer {
      */
     val loadProgress: StateFlow<Float>
 
+    /**
+     * True while [playbackState] says Playing but no audio is actually coming out yet: the next track is still being
+     * resolved / buffered, or the stream is re-buffering. The UI must NOT advance its progress clock while this is
+     * true, otherwise the timer runs ahead of the sound and then jumps back when the audio really starts.
+     */
+    val awaitingAudio: StateFlow<Boolean> get() = NeverAwaiting
+
     /** Plays [track] from [sourceUrl]. If the track is part of the queue the queue position follows it. */
     fun play(track: Track, sourceUrl: String)
     fun pause()
@@ -53,4 +63,7 @@ interface MusicPlayer {
     fun removeFromQueue(index: Int)
 
     fun setSourceResolver(resolver: TrackSourceResolver?)
+
+    /** Builds the underlying engine ahead of the first [play], so the first tap does not pay for it. Optional. */
+    fun warmUp() {}
 }

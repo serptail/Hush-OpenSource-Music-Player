@@ -50,6 +50,7 @@ import com.gamut.core.designsystem.BottomBarItem
 import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.GamutBottomBar
 import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.fadeEdges
 import com.gamut.core.designsystem.glass
@@ -80,8 +81,10 @@ fun LibraryScreen(
     onOpenPlaylist: (String) -> Unit,
 ) {
     val userPlaylists by viewModel.playlists.collectAsStateWithLifecycle()
-    val favorites by viewModel.favorites.collectAsStateWithLifecycle()
+    // Count only: collecting the full favorites list here mapped every liked track just to show a number.
+    val favoriteCount by viewModel.favoriteCount.collectAsStateWithLifecycle()
     var showCreate by remember { mutableStateOf(false) }
+    val notifier = LocalNotifier.current
 
     val palette = LocalCoverPalette.current
     TransparentStatusBar(darkIcons = palette.isLight)
@@ -111,14 +114,14 @@ fun LibraryScreen(
                         item(key = "liked") {
                             LibraryRow(
                                 title = "Liked songs",
-                                subtitle = "${favorites.size} songs",
+                                subtitle = "$favoriteCount songs",
                                 onClick = { onOpenPlaylist("liked") },
                                 cover = { TileCover(PhosphorIcons.Fill.Heart) },
                             )
                         }
 
                         item(key = "playlists-header") { SectionTitle("Your playlists") }
-                        items(userPlaylists, key = { "v-${it.id}" }) { playlist ->
+                        items(userPlaylists, key = { "v-${it.id}" }, contentType = { "playlist" }) { playlist ->
                             LibraryRow(
                                 title = playlist.name,
                                 subtitle = "Your collection",
@@ -131,7 +134,7 @@ fun LibraryScreen(
                                             style = MaterialTheme.typography.labelLarge,
                                             color = TextPrimary,
                                             modifier = Modifier
-                                                .pressScale(onClick = { viewModel.addTrack(playlist.id, selectedTrack) })
+                                                .pressScale(onClick = { viewModel.addTrack(playlist.id, selectedTrack); notifier.success("Added to ${playlist.name}") })
                                                 .glass(ButtonShape)
                                                 .padding(horizontal = 16.dp, vertical = 8.dp),
                                         )
@@ -179,7 +182,7 @@ fun LibraryScreen(
                 accent = accent,
                 isLight = palette.isLight,
                 onDismiss = { showCreate = false },
-                onCreate = { viewModel.createPlaylist(it); showCreate = false },
+                onCreate = { viewModel.createPlaylist(it); showCreate = false; notifier.success("Playlist \u201c${it.trim()}\u201d created") },
             )
         }
     }

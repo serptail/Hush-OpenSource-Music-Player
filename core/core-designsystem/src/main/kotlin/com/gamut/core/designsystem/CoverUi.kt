@@ -8,10 +8,10 @@ import androidx.compose.foundation.border
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -44,20 +44,21 @@ fun Modifier.glass(
 /** Fades scrolled content out at the top and bottom edge instead of cutting it off. */
 fun Modifier.fadeEdges(fade: Dp = 18.dp): Modifier = this
     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-    .drawWithContent {
-        drawContent()
+    .drawWithCache {
+        // Built once per size instead of allocating a Brush + array on every scrolled frame.
         val f = (fade.toPx() / size.height).coerceIn(0f, 0.5f)
-        drawRect(
-            brush = Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0f to Color.Transparent,
-                    f to Color.Black,
-                    1f - f to Color.Black,
-                    1f to Color.Transparent,
-                ),
+        val brush = Brush.verticalGradient(
+            colorStops = arrayOf(
+                0f to Color.Transparent,
+                f to Color.Black,
+                1f - f to Color.Black,
+                1f to Color.Transparent,
             ),
-            blendMode = BlendMode.DstIn,
         )
+        onDrawWithContent {
+            drawContent()
+            drawRect(brush = brush, blendMode = BlendMode.DstIn)
+        }
     }
 
 /**
@@ -69,11 +70,15 @@ fun Modifier.fadeEdges(fade: Dp = 18.dp): Modifier = this
 fun TransparentStatusBar(darkIcons: Boolean) {
     val view = LocalView.current
     if (view.isInEditMode) return
-    SideEffect {
-        val window = view.context.findActivity()?.window ?: return@SideEffect
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        window.statusBarColor = android.graphics.Color.TRANSPARENT
-        WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = darkIcons
+    // Keyed: touches the window only when the icon color actually changes, not on every recomposition.
+    DisposableEffect(view, darkIcons) {
+        val window = view.context.findActivity()?.window
+        if (window != null) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            window.statusBarColor = android.graphics.Color.TRANSPARENT
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = darkIcons
+        }
+        onDispose { }
     }
 }
 

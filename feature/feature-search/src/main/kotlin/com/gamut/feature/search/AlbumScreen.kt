@@ -40,7 +40,9 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
+import androidx.compose.foundation.lazy.itemsIndexed
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Light
@@ -52,6 +54,7 @@ import com.gamut.core.designsystem.AcrylicHost
 import com.gamut.core.designsystem.AcrylicScrim
 import com.gamut.core.designsystem.acrylicSource
 import com.gamut.core.designsystem.CoverTheme
+import com.gamut.core.designsystem.HeroListSkeleton
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.glass
@@ -130,7 +133,8 @@ fun AlbumScreen(
                                     onPlay = { value.tracks.firstOrNull()?.let { onTrackSelected(it, value.tracks) } },
                                 )
                             }
-                            items(value.tracks, key = { it.isrc }) { track ->
+                            // Index in the key: duplicate ISRCs in one album would otherwise crash LazyColumn.
+                            itemsIndexed(value.tracks, key = { i, t -> "${t.isrc}-$i" }) { _, track ->
                                 Box(Modifier.padding(horizontal = 24.dp)) { AlbumTrackRow(track) { picked -> onTrackSelected(picked, value.tracks) } }
                             }
                             item(key = "nav-space") { Box(Modifier.navigationBarsPadding()) }
@@ -144,8 +148,9 @@ fun AlbumScreen(
                             )
                         }
                         else -> {
+                            // Shimmering placeholder in the final layout: the screen reacts on the very first frame of the tap.
+                            HeroListSkeleton()
                             BackButton(onBack)
-                            CircularProgressIndicator(color = ink(), strokeWidth = 2.dp, modifier = Modifier.align(Alignment.Center))
                         }
                     }
                 }
@@ -217,7 +222,7 @@ private fun AlbumTrackRow(track: Track, onClick: (Track) -> Unit) {
         Modifier.fillMaxWidth().pressScale(onClick = { onClick(track) }, scaleDown = 0.98f).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SubcomposeAsyncImage(
+        AsyncImage(
             model = track.albumArtUrl,
             contentDescription = null,
             modifier = Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)).background(ink(0.08f)),

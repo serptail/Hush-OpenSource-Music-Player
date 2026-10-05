@@ -82,7 +82,10 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)   // a broken cache must never break playback
     }
 
-    private val player = ExoPlayer.Builder(context)
+    // Lazy: ExoPlayer is no longer built on the main thread inside onCreate. It is created by warmUp() once the
+    // loading screen is gone, or by the first playback call if that comes first.
+    private val player: ExoPlayer by lazy {
+        ExoPlayer.Builder(context)
         .setMediaSourceFactory(DefaultMediaSourceFactory(DataSource.Factory { cacheFactory.createDataSource() }))
         // Start quickly, but download in long bursts rather than a constant trickle: fewer radio wake-ups.
         .setLoadControl(
@@ -104,13 +107,18 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
                 .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
                 .build()
         }
+        .also(::attachPlayerListener)
+    }
+
+    override fun warmUp() { player.playbackState }
+
     internal val sessionPlayer: ExoPlayer get() = player
 
     /**
      * Use THIS (instead of [sessionPlayer]) when building the MediaSession, so the notification /
      * lock-screen / Bluetooth next + previous buttons go through the queue logic below.
      */
-    internal val mediaSessionPlayer: Player = object : ForwardingPlayer(player) {
+    internal val mediaSessionPlayer: Player by lazy { object : ForwardingPlayer(player) {
         private val queueCommands = intArrayOf(
             COMMAND_SEEK_TO_NEXT,
             COMMAND_SEEK_TO_PREVIOUS,
@@ -135,7 +143,7 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
         override fun seekToPreviousMediaItem() = skipPrevious()
         override fun play() = resume()
         override fun pause() = this@Media3MusicPlayer.pause()
-    }
+    } }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val powerManager = context.getSystemService(PowerManager::class.java)
@@ -175,20 +183,29 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
     // True while moving to a track that ExoPlayer does not hold yet (skip without a preloaded next item, queue tap,
     // recovery): the UI already shows the new track as playing while its audio loads, instead of the loading screen.
     private var transitioning = false
+        set(value) { field = value; updateAwaiting() }
+
+    private val awaiting = MutableStateFlow(false)
+    override val awaitingAudio: StateFlow<Boolean> = awaiting
+
+    /** "Playing" on screen but silent: moving to a track ExoPlayer doesn't hold yet, loading, or re-buffering. */
+    private fun updateAwaiting() {
+        awaiting.value = transitioning || state.value is PlaybackState.Loading ||
+            (player.playWhenReady && player.playbackState == Player.STATE_BUFFERING)
+    }
     private var prefetchJob: Job? = null
     private var prefetchedFor: String? = null
     private var recoveringIsrc: String? = null
     private var recoveries = 0
 
-    init {
-        player.addListener(object : Player.Listener {
+    private fun attachPlayerListener(exo: ExoPlayer) {
+        exo.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (isPlaying) startPositionUpdates() else positionJob?.cancel()
                 val track = currentTrack ?: return
                 // While the next track is loading, ExoPlayer reporting "not playing" must not flash a Paused state.
                 if (!isPlaying && (transitioning || state.value is PlaybackState.Loading)) return
                 if (isPlaying) {
-                    transitioning = false
                     // First time this track plays: start looking ahead (after a pause, see PREFETCH_DELAY_MS).
                     if (prefetchedFor != track.isrc) {
                         prefetchedFor = track.isrc
@@ -197,16 +214,26 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
                 }
                 state.value = if (isPlaying) PlaybackState.Playing(player.currentPosition, track)
                 else PlaybackState.Paused(player.currentPosition, track)
+                if (isPlaying) transitioning = false   // after the real position is published, so the UI re-anchors to it
+                updateAwaiting()
             }
 
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) = updateAwaiting()
+
             override fun onPlaybackStateChanged(playbackState: Int) {
+                updateAwaiting()
                 when (playbackState) {
                     Player.STATE_ENDED -> onTrackEnded()
                     // Paused while it was still buffering: leave the Loading state.
                     Player.STATE_READY -> {
                         learnDuration()
-                        if (!player.playWhenReady && state.value is PlaybackState.Loading) {
-                            currentTrack?.let { state.value = PlaybackState.Paused(player.currentPosition, it) }
+                        val track = currentTrack
+                        if (!player.playWhenReady && track != null) {
+                            val loadedThis = loadedIsrc == track.isrc && player.currentMediaItem?.mediaId == track.isrc
+                            if (state.value is PlaybackState.Loading || (transitioning && loadedThis)) {
+                                transitioning = false
+                                state.value = PlaybackState.Paused(player.currentPosition, track)
+                            }
                         }
                     }
                 }
@@ -246,6 +273,7 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
 
     override fun play(track: Track, sourceUrl: String) {
         loadJob?.cancel()
+        positionJob?.cancel()   // else it keeps publishing the OLD item's position for the new track until ExoPlayer reports not-playing
         syncQueuePositionTo(track)
         beginLoad(startAt = 0f, bufferFrom = 0f)   // the URL is already resolved: the whole bar is buffering
         startMedia(track, sourceUrl)
@@ -260,6 +288,7 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
             currentTrack?.let { state.value = PlaybackState.Paused(0L, it) }
         }
         player.pause()
+        updateAwaiting()
     }
 
     override fun resume() {
@@ -475,6 +504,7 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
         player.prepare()
         player.play()
         trackBuffering()
+        updateAwaiting()
     }
 
     /** The stream stopped working: fetch a fresh URL and carry on from where it stopped. False = give up. */
@@ -532,8 +562,8 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
             val upcoming = upcomingTracks(if (isCharging()) 2 else 1)
             upcoming.forEachIndexed { index, track ->
                 val url = resolveUrl(track, forceRefresh = false) ?: return@forEachIndexed
+                if (index == 0) attachNext(track, url)   // in the playlist first: "next" is instant as soon as possible
                 warmCache(url)
-                if (index == 0) attachNext(track, url)
             }
         }
     }
@@ -696,7 +726,13 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
         positionJob?.cancel()
         positionJob = scope.launch {
             while (isActive) {
-                currentTrack?.let { state.value = PlaybackState.Playing(player.currentPosition, it) }
+                val track = currentTrack
+                // Never publish a position while the sound isn't actually running for THIS track.
+                if (track != null && !transitioning && state.value !is PlaybackState.Loading &&
+                    player.isPlaying && player.currentMediaItem?.mediaId == track.isrc
+                ) {
+                    state.value = PlaybackState.Playing(player.currentPosition, track)
+                }
                 delay(if (powerManager.isInteractive) 500L else 2_000L)
             }
         }
@@ -717,7 +753,7 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
         const val WARM_BYTES = 256L * 1024
 
         /** After a track starts, wait this long before looking ahead, so skipping through tracks costs nothing. */
-        const val PREFETCH_DELAY_MS = 4_000L
+        const val PREFETCH_DELAY_MS = 2_000L
         const val QUEUE_EDIT_PREFETCH_DELAY_MS = 500L
 
         /** Below this (and not charging) nothing is fetched ahead. */

@@ -6,18 +6,22 @@ import com.gamut.core.model.Track
 import com.gamut.feature.resolver.PrefetchCoordinator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class SearchUiState(
@@ -26,6 +30,10 @@ data class SearchUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
 )
+
+/** Only the first results are likely to be played; prefetching all of them wastes network and CPU. */
+private const val PREFETCH_LIMIT = 5
+private const val MIN_QUERY_LENGTH = 2
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -44,30 +52,55 @@ class SearchViewModel @Inject constructor(
     val artistHit: StateFlow<DiscoverItem?> = query
         .debounce(300)
         .distinctUntilChanged()
-        .mapLatest { value -> if (value.trim().length < 2) null else discoverRepository.artistHit(value) }
+        .mapLatest { value ->
+            if (value.trim().length < MIN_QUERY_LENGTH) null
+            else try {
+                discoverRepository.artistHit(value)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null // a failed lookup must not kill the flow
+            }
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     init {
-        viewModelScope.launch { _discover.value = discoverRepository.load() }
+        viewModelScope.launch {
+            try {
+                discoverRepository.discoverFlow().collect { _discover.value = it }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // keep the empty DiscoverState; the UI shows its empty state
+            }
+        }
         viewModelScope.launch {
             query.debounce(250).distinctUntilChanged().flatMapLatest { value ->
-                if (value.trim().length < 2) kotlinx.coroutines.flow.flowOf(SearchResult(emptyList(), true))
+                if (value.trim().length < MIN_QUERY_LENGTH) flowOf(SearchResult(emptyList(), true) to false)
                 else repository.search(value)
-            }.collect { result ->
-                _state.value = _state.value.copy(
-                    tracks = result.tracks,
-                    isLoading = !result.isFinal,
-                    error = null,
-                )
-                if (result.isFinal) prefetch.prefetch(result.tracks)
+                    .map { it to false }
+                    .catch { emit(SearchResult(emptyList(), true) to true) }
+            }.collect { (result, failed) ->
+                // A result for an older query can land after the box was cleared; never show it.
+                val stillSearching = query.value.trim().length >= MIN_QUERY_LENGTH
+                val tracks = if (stillSearching) result.tracks else emptyList()
+                _state.update {
+                    it.copy(
+                        tracks = tracks,
+                        isLoading = stillSearching && !result.isFinal,
+                        error = if (failed && stillSearching) "Search failed. Check your connection and try again." else null,
+                    )
+                }
+                if (result.isFinal && stillSearching && tracks.isNotEmpty()) {
+                    prefetch.prefetch(tracks.take(PREFETCH_LIMIT))
+                }
             }
         }
     }
 
     fun updateQuery(value: String) {
         query.value = value
-        _state.value = _state.value.copy(query = value, error = null)
-        if (value.isBlank()) _state.value = SearchUiState()
+        // Atomic update: the result collector writes to the same state from another coroutine.
+        _state.update { if (value.isBlank()) SearchUiState() else it.copy(query = value, error = null) }
     }
-
 }

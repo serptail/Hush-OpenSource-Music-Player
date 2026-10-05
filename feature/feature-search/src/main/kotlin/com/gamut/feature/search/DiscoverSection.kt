@@ -1,5 +1,6 @@
 package com.gamut.feature.search
 
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.gamut.core.designsystem.AcrylicHost
@@ -52,7 +53,8 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.SubcomposeAsyncImage
+import com.gamut.core.designsystem.ArtImage
+import androidx.compose.foundation.border
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.light.DotsThreeVertical
@@ -75,93 +77,74 @@ private val ThumbShape = RoundedCornerShape(14.dp)
 private val CardWidth = 228.dp
 private val CardHeight = 272.dp
 
-@Composable
-internal fun DiscoverContent(
-    modifier: Modifier = Modifier,
+/**
+ * The Discover sections as items of the CALLER's LazyColumn (they add their own 24dp side padding, the list itself is
+ * full width). The search screen puts its title + search field as the first item of that same list in every mode, so the
+ * field is never rebuilt when Discover gives way to results (a different list used to drop its focus after one letter).
+ */
+internal fun LazyListScope.discoverItems(
     state: DiscoverState,
+    selectedTab: Int,
+    onSelectTab: (Int) -> Unit,
     onTrackClick: (com.gamut.core.model.Track) -> Unit,
     onArtistClick: (Long) -> Unit,
     onAlbumClick: (DiscoverItem) -> Unit,
-    /** Scroll state of the list, so the screen's floating header can frost up as content slides under it. */
-    listState: LazyListState = rememberLazyListState(),
-    /** Extra room at the top / bottom so content starts below the floating header and bar but scrolls under them. */
-    contentPadding: PaddingValues = PaddingValues(),
-    /** Scrolls with the list as its first item (title + search). Receives full screen width; pad it yourself. */
-    header: @Composable () -> Unit = {},
 ) {
-    var selected by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val albums = state.albums
     val artists = state.artists
     val tabs = state.tabs
-    if (state.isLoading && tabs.isEmpty()) {
-        Column(modifier.fillMaxSize()) {
-            Box(Modifier.bleedSides(24.dp)) { header() }
-            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = ink(), strokeWidth = 2.dp)
-            }
-        }
-        return
-    }
     if (tabs.isEmpty()) {
-        Column(modifier.fillMaxSize()) {
-            Box(Modifier.bleedSides(24.dp)) { header() }
-            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text(state.error ?: "Discover is unavailable", color = ink(0.65f))
+        item(key = "discover-status") {
+            Box(Modifier.fillParentMaxWidth().height(260.dp), contentAlignment = Alignment.Center) {
+                if (state.isLoading) CircularProgressIndicator(color = ink(), strokeWidth = 2.dp)
+                else Text(state.error ?: "Discover is unavailable", color = ink(0.65f))
             }
         }
         return
     }
-    // The parent screen pads 24dp on both sides; Discover is allowed to use the full screen width, so the
-    // card rows scroll edge to edge. Sections add their own 24dp padding back where they need it.
-    LazyColumn(
-        state = listState,
-        modifier = modifier.bleedSides(24.dp),
-        contentPadding = PaddingValues(
-            top = contentPadding.calculateTopPadding(),
-            bottom = 20.dp + contentPadding.calculateBottomPadding(),
-        ),
-    ) {
-        item(key = "header") { header() }
-        item { SectionTitle("Top albums") }
-        item {
-            LazyRow(
-                contentPadding = PaddingValues(start = 24.dp, top = 14.dp, end = 24.dp, bottom = 26.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                items(albums, key = { it.id }) { AlbumCard(it, onTrackClick, onAlbumClick) }
+    item { SectionTitle("Top albums") }
+    item {
+        LazyRow(
+            contentPadding = PaddingValues(start = 24.dp, top = 14.dp, end = 24.dp, bottom = 26.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            items(albums, key = { it.id }) { AlbumCard(it, onTrackClick, onAlbumClick) }
+        }
+    }
+
+    item { SectionTitle("Artists in top songs") }
+    item {
+        LazyRow(
+            contentPadding = PaddingValues(start = 24.dp, top = 14.dp, end = 24.dp, bottom = 26.dp),
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            items(artists, key = { it.id }) { ArtistItem(it, onArtistClick) }
+            // Portraits arrive after the charts: hold the row's space with quiet circles until the first lands.
+            if (artists.isEmpty() && state.error == null) {
+                items(6) { Box(Modifier.size(92.dp).clip(CircleShape).background(ink(0.08f))) }
             }
         }
+    }
 
-        item { SectionTitle("Artists in top songs") }
-        item {
-            LazyRow(
-                contentPadding = PaddingValues(start = 24.dp, top = 14.dp, end = 24.dp, bottom = 26.dp),
-                horizontalArrangement = Arrangement.spacedBy(18.dp),
-            ) {
-                items(artists, key = { it.id }) { ArtistItem(it, onArtistClick) }
-            }
-        }
-
-        // The vertical tabs sit down here, beside the list they switch, well below the card rows.
-        item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                VerticalTabs(
-                    labels = tabs.map { it.label },
-                    selected = selected,
-                    onSelect = { selected = it },
-                    modifier = Modifier.padding(start = 10.dp),
-                )
-                Crossfade(
-                    targetState = selected,
-                    modifier = Modifier.weight(1f),
-                    animationSpec = tween(260),
-                    label = "discover-tab",
-                ) { index ->
-                    Column(Modifier.fillMaxWidth()) {
-                        SectionTitle(tabs[index].title, startPadding = 6.dp)
-                        Spacer(Modifier.height(6.dp))
-                        tabs[index].items.forEach { SongRow(it, onTrackClick) }
-                    }
+    // The vertical tabs sit down here, beside the list they switch, well below the card rows.
+    item {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            VerticalTabs(
+                labels = tabs.map { it.label },
+                selected = selectedTab,
+                onSelect = onSelectTab,
+                modifier = Modifier.padding(start = 10.dp),
+            )
+            Crossfade(
+                targetState = selectedTab,
+                modifier = Modifier.weight(1f),
+                animationSpec = tween(260),
+                label = "discover-tab",
+            ) { index ->
+                Column(Modifier.fillMaxWidth()) {
+                    SectionTitle(tabs[index].title, startPadding = 6.dp)
+                    Spacer(Modifier.height(6.dp))
+                    tabs[index].items.forEach { SongRow(it, onTrackClick) }
                 }
             }
         }
@@ -181,21 +164,19 @@ private fun SectionTitle(text: String, startPadding: Dp = 24.dp) {
 /** Big rounded cover card: art fills it, dark fade at the bottom carries the title, small play badge. */
 @Composable
 private fun AlbumCard(item: DiscoverItem, onTrackClick: (com.gamut.core.model.Track) -> Unit, onAlbumClick: (DiscoverItem) -> Unit) {
-    // Each card is its own little acrylic host: the play badge frosts this card's cover.
-    AcrylicHost(
+    // No per-card acrylic host any more: each card used to register a blur source and run a live blur pass just for
+    // the 38dp play badge. A translucent badge with a hairline looks the same on a cover and costs nothing per frame.
+    Box(
         Modifier
             .size(CardWidth, CardHeight)
             .pressScale(onClick = { item.track?.let(onTrackClick) ?: onAlbumClick(item) }, scaleDown = 0.97f)
             .shadow(14.dp, CardShape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
             .clip(CardShape),
     ) {
-        SubcomposeAsyncImage(
-            model = item.imageUrl,
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize().acrylicSource(),
-            contentScale = ContentScale.Crop,
-            loading = { CoverPlaceholder() },
-            error = { CoverPlaceholder() },
+        ArtImage(
+            url = item.imageUrl,
+            modifier = Modifier.fillMaxSize(),
+            fallback = { CoverFallbackIcon() },
         )
         Box(
             Modifier.fillMaxSize().background(
@@ -218,10 +199,14 @@ private fun AlbumCard(item: DiscoverItem, onTrackClick: (com.gamut.core.model.Tr
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        AcrylicSurface(
-            Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp).size(38.dp),
-            shape = CircleShape,
-            material = AcrylicMaterials.UltraThin,
+        Box(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = 16.dp)
+                .size(38.dp)
+                .background(Color.White.copy(alpha = 0.20f), CircleShape)
+                .border(0.75.dp, Color.White.copy(alpha = 0.35f), CircleShape),
+            contentAlignment = Alignment.Center,
         ) {
             Icon(PhosphorIcons.Light.Play, "Play", tint = Color.White, modifier = Modifier.size(18.dp))
         }
@@ -235,16 +220,13 @@ private fun ArtistItem(item: DiscoverItem, onArtistClick: (Long) -> Unit) {
         Modifier.width(92.dp).pressScale(onClick = { item.artistId?.let(onArtistClick) }, scaleDown = 0.96f),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        SubcomposeAsyncImage(
-            model = item.imageUrl,
-            contentDescription = null,
+        ArtImage(
+            url = item.imageUrl,
             modifier = Modifier
                 .size(92.dp)
                 .shadow(8.dp, CircleShape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
                 .clip(CircleShape),
-            contentScale = ContentScale.Crop,
-            loading = { CoverPlaceholder() },
-            error = { CoverPlaceholder() },
+            fallback = { CoverFallbackIcon() },
         )
         Spacer(Modifier.height(10.dp))
         Text(
@@ -267,16 +249,13 @@ private fun SongRow(item: DiscoverItem, onTrackClick: (com.gamut.core.model.Trac
             .padding(start = 6.dp, end = 24.dp, top = 9.dp, bottom = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SubcomposeAsyncImage(
-            model = item.imageUrl,
-            contentDescription = null,
+        ArtImage(
+            url = item.imageUrl,
             modifier = Modifier
                 .size(58.dp)
                 .shadow(4.dp, ThumbShape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
                 .clip(ThumbShape),
-            contentScale = ContentScale.Crop,
-            loading = { CoverPlaceholder() },
-            error = { CoverPlaceholder() },
+            fallback = { CoverFallbackIcon() },
         )
         Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
             Text(
@@ -299,10 +278,8 @@ private fun SongRow(item: DiscoverItem, onTrackClick: (com.gamut.core.model.Trac
 }
 
 @Composable
-private fun CoverPlaceholder() {
-    Box(Modifier.fillMaxSize().background(ink(0.08f)), contentAlignment = Alignment.Center) {
-        Icon(PhosphorIcons.Light.MusicNote, null, tint = ink(0.45f), modifier = Modifier.size(24.dp))
-    }
+private fun CoverFallbackIcon() {
+    Icon(PhosphorIcons.Light.MusicNote, null, tint = ink(0.45f), modifier = Modifier.size(24.dp))
 }
 
 /** Rotated tab labels down the left edge; the active one is solid ink with a small dot beside it. */

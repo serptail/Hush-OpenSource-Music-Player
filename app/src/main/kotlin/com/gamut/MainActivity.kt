@@ -44,6 +44,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import com.gamut.core.designsystem.GamutLoadingScreen
 import androidx.compose.ui.Modifier
 import com.gamut.core.designsystem.AcrylicHost
+import com.gamut.core.designsystem.CoverTheme
+import com.gamut.core.designsystem.LocalNotifier
+import com.gamut.core.designsystem.NoticeHost
+import com.gamut.core.designsystem.rememberNotifier
 import com.gamut.core.designsystem.acrylicSource
 import com.gamut.core.designsystem.GamutBackdrop
 import com.gamut.core.designsystem.FlowingBackground
@@ -63,6 +67,7 @@ import com.gamut.feature.playerui.TrackActionsSheet
 import com.gamut.feature.resolver.ResolveTrackSourceUseCase
 import com.gamut.feature.resolver.ResolveFailure
 import com.gamut.feature.resolver.AudioSourceRepository
+import com.gamut.feature.resolver.NewPipeYoutubeSource
 import com.gamut.feature.search.SearchScreen
 import com.gamut.feature.search.SearchViewModel
 import com.gamut.feature.search.ShazamSheet
@@ -76,6 +81,7 @@ import com.gamut.feature.search.DiscoverItem
 import androidx.navigation.navArgument
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
@@ -83,6 +89,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var player: MusicPlayer
     @Inject lateinit var resolveTrackSource: ResolveTrackSourceUseCase
     @Inject lateinit var audioSources: AudioSourceRepository
+    @Inject lateinit var newPipe: NewPipeYoutubeSource
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -92,13 +99,15 @@ class MainActivity : ComponentActivity() {
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
         window.setBackgroundDrawable(ColorDrawable(CoverPalette.Neutral.base.toArgb()))
-        setContent { GamutApp(player, resolveTrackSource, audioSources) }
+        setContent { GamutApp(player, resolveTrackSource, audioSources, newPipe) }
     }
 }
 
 @Composable
-private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSourceUseCase, audioSources: AudioSourceRepository) {
+private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSourceUseCase, audioSources: AudioSourceRepository, newPipe: NewPipeYoutubeSource) {
     val nav = rememberNavController()
+    // App-wide toast pill (top). Screens reach it with LocalNotifier.current.
+    val notifier = rememberNotifier()
     // Shared with the search screen so Discover loads once; also drives the startup loading screen.
     val searchVm = hiltViewModel<SearchViewModel>()
     val discover by searchVm.discover.collectAsState()
@@ -106,15 +115,22 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
     var forceReady by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { delay(10_000); forceReady = true } // never trap the user if Discover fails
     val dataReady = forceReady || discover.tabs.isNotEmpty() || (!discover.isLoading && discover.error != null)
+    // Warm-ups run only after the first screen is up, so they never compete with the startup requests or the
+    // first frames: NewPipe once Discover has its charts, ExoPlayer once the loading screen has gone.
+    LaunchedEffect(dataReady) { if (dataReady) { delay(500); newPipe.warmUp() } }
+    LaunchedEffect(showLoading) { if (!showLoading) { delay(300); player.warmUp() } }
     // The player draws its own opaque background, so the flowing one underneath is paused while it is open.
     val currentRoute = nav.currentBackStackEntryAsState().value?.destination?.route
     val scope = rememberCoroutineScope()
     var selectedTrack by remember { mutableStateOf<Track?>(null) }
     var resolvingIsrc by remember { mutableStateOf<String?>(null) }
-    var resolutionMessage by remember { mutableStateOf<String?>(null) }
+    var resolveJob by remember { mutableStateOf<Job?>(null) }
     // Whatever is loaded in the player (playing or paused) colors the search background.
     val playback by player.playbackState.collectAsState()
-    val loadedTrack = (playback as? PlaybackState.Playing)?.track ?: (playback as? PlaybackState.Paused)?.track
+    // The root composable must not read `playback` directly: it changes every position tick and would recompose
+    // the whole app (NavHost included) twice a second while music plays.
+    val loadedTrack by remember { derivedStateOf { (playback as? PlaybackState.Playing)?.track ?: (playback as? PlaybackState.Paused)?.track } }
+    val isPlayingNow by remember { derivedStateOf { playback is PlaybackState.Playing } }
 
     // --- "What's this song?": listens to the microphone, then offers to save / play what it found ---
     val shazamVm = hiltViewModel<ShazamViewModel>()
@@ -159,11 +175,11 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                 AcrylicHost(Modifier.fillMaxSize()) {
                     FlowingBackground(
                         palette = palette,
-                        isPlaying = playback is PlaybackState.Playing,
+                        isPlaying = isPlayingNow,
                         visible = backgroundVisible,
                         modifier = Modifier.fillMaxSize().acrylicSource(zIndex = -1f),
                     )
-                    CompositionLocalProvider(LocalCoverPalette provides palette) {
+                    CompositionLocalProvider(LocalCoverPalette provides palette, LocalNotifier provides notifier) {
                         // The strip docks onto the bottom bar of Search and Library (their `nowPlaying` slot).
                         val openPlayer = { nav.navigate("player") { launchSingleTop = true }; Unit }
                         val openArtist: (String) -> Unit = { artist -> nav.navigate("artist-name/${Uri.encode(artist)}") }
@@ -175,28 +191,36 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                         val playTrackWithQueue: (Track, List<Track>) -> Unit = { track, queue ->
                             selectedTrack = track
                             resolvingIsrc = track.isrc
-                            resolutionMessage = null
-                            scope.launch {
+                            // Tapping another song while one is still resolving must cancel it: otherwise the slower
+                            // (older) tap finishes last and starts playing the WRONG song.
+                            resolveJob?.cancel()
+                            resolveJob = scope.launch {
+                                // Instant feedback on the tap: the pill stays until the song starts or fails. A newer tap
+                                // replaces it (same key), and a stale dismiss(id) can never close the newer one.
+                                val noticeId = notifier.loading("Loading ${track.title}\u2026")
                                 resolveTrackSource(track).fold(
                                     onSuccess = { source ->
+                                        notifier.update(noticeId, "Getting audio\u2026")
                                         audioSources.audioUrl(source.youtubeVideoId).fold(
                                             onSuccess = { audioUrl ->
                                                 val startIndex = queue.indexOfFirst { it.isrc == track.isrc }
                                                 if (startIndex >= 0) player.setQueue(queue, startIndex)
                                                 player.play(track, audioUrl)
-                                                resolutionMessage = null
-                                                nav.navigate("player")
+                                                notifier.dismiss(noticeId)
+                                                nav.navigate("player") { launchSingleTop = true }
                                             },
-                                            onFailure = { error -> resolutionMessage = error.message ?: "No playable audio stream was found" },
+                                            onFailure = { notifier.error("Couldn\u2019t play this song") },
                                         )
                                     },
                                     onFailure = { error ->
-                                        resolutionMessage = when (error) {
-                                            is ResolveFailure.Timeout -> "Connection was slow. Try again."
-                                            is ResolveFailure.NoCandidates -> "No playable source was found."
-                                            is ResolveFailure.LowScore -> "No reliable match was found."
-                                            else -> error.message ?: "Could not verify a match"
-                                        }
+                                        notifier.error(
+                                            when (error) {
+                                                is ResolveFailure.Timeout -> "Connection was slow. Try again."
+                                                is ResolveFailure.NoCandidates -> "No playable source was found."
+                                                is ResolveFailure.LowScore -> "No reliable match was found."
+                                                else -> "Couldn\u2019t play this song"
+                                            },
+                                        )
                                     },
                                 )
                                 resolvingIsrc = null
@@ -214,7 +238,6 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                 SearchScreen(
                                     viewModel = searchVm,
                                     resolvingIsrc = resolvingIsrc,
-                                    resolutionMessage = resolutionMessage,
                                     onTrackSelected = playTrackWithQueue,
                                     onArtistSelected = { artistId -> nav.navigate("artist-real/$artistId") },
                                     onAlbumSelected = { item -> nav.navigate(albumRoute(item)) },
@@ -225,7 +248,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                             }
                             composable("library") {
                                 LibraryScreen(
-                                    viewModel = hiltViewModel<LibraryViewModel>(),
+                                    viewModel = appLibraryVm,
                                     selectedTrack = selectedTrack,
                                     onBack = { nav.navigate("search") { popUpTo("search") { inclusive = false }; launchSingleTop = true } },
                                     nowPlaying = nowPlaying,
@@ -233,8 +256,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                 )
                             }
                             composable("favorites") {
-                                val libraryVm = hiltViewModel<LibraryViewModel>()
-                                val favorites by libraryVm.favorites.collectAsState()
+                                val favorites by appLibraryVm.favorites.collectAsState()
                                 FavoritesScreen(
                                     tracks = favorites,
                                     onBack = { nav.popBackStack() },
@@ -300,7 +322,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                 enterTransition = { slideInVertically(tween(320, easing = FastOutSlowInEasing)) { it } },
                                 popExitTransition = { slideOutVertically(tween(280, easing = FastOutSlowInEasing)) { it } },
                             ) {
-                                val libraryVm = hiltViewModel<LibraryViewModel>()
+                                val libraryVm = appLibraryVm
                                 val favoriteIsrcs by libraryVm.favoriteIsrcs.collectAsState()
                                 val playlists by libraryVm.playlists.collectAsState()
                                 var actionsTrack by remember { mutableStateOf<Track?>(null) }
@@ -308,7 +330,10 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                     player,
                                     onBack = { nav.popBackStack() },
                                     favoriteIsrcs = favoriteIsrcs,
-                                    onToggleFavorite = libraryVm::toggleFavorite,
+                                    onToggleFavorite = { t ->
+                                        libraryVm.toggleFavorite(t)
+                                        if (t.isrc in favoriteIsrcs) notifier.info("Removed from Favorites") else notifier.success("Added to Favorites")
+                                    },
                                     onMore = { actionsTrack = it },
                                 )
                                 actionsTrack?.let { track ->
@@ -316,10 +341,10 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                         track = track,
                                         playlists = playlists,
                                         onDismiss = { actionsTrack = null },
-                                        onPlayNext = { player.addToQueue(track, playNext = true) },
-                                        onAddToQueue = { player.addToQueue(track) },
-                                        onAddToPlaylist = { playlist -> libraryVm.addTrack(playlist.id, track) },
-                                        onCreatePlaylist = { name -> libraryVm.createPlaylistAndAdd(name, track) },
+                                        onPlayNext = { player.addToQueue(track, playNext = true); notifier.success("Playing next") },
+                                        onAddToQueue = { player.addToQueue(track); notifier.success("Added to queue") },
+                                        onAddToPlaylist = { playlist -> libraryVm.addTrack(playlist.id, track); notifier.success("Added to ${playlist.name}") },
+                                        onCreatePlaylist = { name -> libraryVm.createPlaylistAndAdd(name, track); notifier.success("Added to \u201c$name\u201d") },
                                     )
                                 }
                             }
@@ -347,6 +372,8 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                 onCreatePlaylist = { name, track -> appLibraryVm.createPlaylistAndAdd(name, track) },
                             )
                         }
+                        // Last child = drawn above every screen. Needs its own CoverTheme (it is outside the screens').
+                        CoverTheme(palette) { NoticeHost() }
                     }
                 }
             }
@@ -361,8 +388,11 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
 @Composable
 private fun NowPlayingStrip(player: MusicPlayer, docked: Boolean, onOpen: () -> Unit, onArtistClick: (String) -> Unit) {
     val state by player.playbackState.collectAsState()
-    val track = (state as? PlaybackState.Playing)?.track ?: (state as? PlaybackState.Paused)?.track
-    val isPlaying = state is PlaybackState.Playing
+    val trackState by remember { derivedStateOf { (state as? PlaybackState.Playing)?.track ?: (state as? PlaybackState.Paused)?.track } }
+    val track: Track? = trackState
+    val isPlaying by remember { derivedStateOf { state is PlaybackState.Playing } }
+    val isLoading by remember { derivedStateOf { state is PlaybackState.Loading } }
+    val loadProgress by player.loadProgress.collectAsState()
     val position = (state as? PlaybackState.Playing)?.positionMs ?: (state as? PlaybackState.Paused)?.positionMs ?: 0L
     // Keep the last track around so the strip keeps its content while it slides away.
     var last by remember { mutableStateOf(track) }
@@ -371,11 +401,13 @@ private fun NowPlayingStrip(player: MusicPlayer, docked: Boolean, onOpen: () -> 
     // Position ticks about once a second; a linear tween of the same length makes the line glide.
     val progress by animateFloatAsState(
         targetValue = if (shown == null) 0f else (position.toFloat() / shown.durationMs.coerceAtLeast(1L)).coerceIn(0f, 1f),
-        animationSpec = tween(1000, easing = LinearEasing),
+        animationSpec = tween(500, easing = LinearEasing),
         label = "strip-progress",
     )
     AnimatedVisibility(
-        visible = track != null,
+        // While the next song loads (skip / track end) the state has no track: keep the strip, so it does not collapse
+        // and pop back on every skip.
+        visible = track != null || (isLoading && last != null),
         enter = expandVertically(tween(280)) + fadeIn(tween(220)),
         exit = shrinkVertically(tween(220)) + fadeOut(tween(160)),
     ) {
@@ -385,6 +417,8 @@ private fun NowPlayingStrip(player: MusicPlayer, docked: Boolean, onOpen: () -> 
                 artist = shown.artist,
                 artUrl = remember(shown.albumArtUrl) { squareArtUrl(shown.albumArtUrl, 200) },
                 isPlaying = isPlaying,
+                isLoading = isLoading,
+                loadProgress = loadProgress,
                 progress = progress,
                 onOpen = onOpen,
                 onTogglePlay = { if (isPlaying) player.pause() else player.resume() },

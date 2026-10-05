@@ -24,7 +24,12 @@ class AppleCatalogRepository @Inject constructor(
     private val itunes: ItunesApi,
     private val deezer: DeezerApi,
 ) {
-    private val cache = mutableMapOf<Long, ArtistDetails>()
+    /** Full artists (with every song). Concurrent: the overview and the song load run on different coroutines. */
+    private val cache = ConcurrentHashMap<Long, ArtistDetails>()
+    /** Overview-only artists (top songs + album list), so reopening a page is instant even before songs finish. */
+    private val overviewCache = ConcurrentHashMap<Long, ArtistDetails>()
+    /** Normalised artist name -> verified photo url, so the album screen reuses what Discover already verified. */
+    private val photoByName = ConcurrentHashMap<String, String>()
     /** lookup key -> verified Deezer photo url ("" = checked, none found). */
     private val photoCache = ConcurrentHashMap<String, String>()
 
@@ -70,8 +75,10 @@ class AppleCatalogRepository @Inject constructor(
         cachedPhoto("id:$appleId", name, appleAlbumTitles)
 
     /** Same verification, for screens that only know the artist by name plus one of their albums. */
-    suspend fun artistPhotoFor(name: String, albumTitle: String): String? =
-        cachedPhoto("n:${TextMatch.norm(name)}|${TextMatch.norm(albumTitle)}", name, listOf(albumTitle))
+    suspend fun artistPhotoFor(name: String, albumTitle: String): String? {
+        photoByName[TextMatch.norm(name)]?.let { return it }
+        return cachedPhoto("n:${TextMatch.norm(name)}|${TextMatch.norm(albumTitle)}", name, listOf(albumTitle))
+    }
 
     private suspend fun cachedPhoto(key: String, name: String, appleAlbumTitles: List<String>): String? {
         photoCache[key]?.let { return it.ifEmpty { null } }
@@ -80,7 +87,12 @@ class AppleCatalogRepository @Inject constructor(
             runCatching { findDeezerPhoto(name, appleAlbumTitles) }
                 .onFailure { if (it is CancellationException) throw it }
         } ?: return null
-        outcome.onSuccess { photoCache[key] = it.orEmpty() } // cache definitive answers only, not failures
+        outcome.onSuccess {
+            photoCache[key] = it.orEmpty() // cache definitive answers only, not failures
+            // Only a found photo goes in the name index: "none found" checked against one album must not block a
+            // better check from the artist page.
+            if (it != null) photoByName[TextMatch.norm(name)] = it
+        }
         return outcome.getOrNull()
     }
 
@@ -106,50 +118,28 @@ class AppleCatalogRepository @Inject constructor(
     private fun DeezerPhotoArtist.photo(): String? =
         (pictureXl ?: pictureBig)?.takeIf { it.isNotBlank() && !it.contains("/artist//") }
 
-    suspend fun artist(id: Long): ArtistDetails? {
-        cache[id]?.let { return it }
-        return withTimeoutOrNull(40_000) {
+    /**
+     * Fast path for the artist page: top songs + album list, two calls that run in parallel. The portrait and the
+     * full discography are loaded afterwards by [artistPhoto] and [artistSongs] so the page never waits for them.
+     */
+    suspend fun artistOverview(id: Long): ArtistDetails? {
+        (cache[id] ?: overviewCache[id])?.let { return it }
+        return withTimeoutOrNull(10_000) {
             runCatching {
                 coroutineScope {
                     val topJob = async { itunes.lookupAll(id.toString(), "song", 50).results }
                     val rows = itunes.lookupAll(id.toString(), "album", 200).results
-                    val name = rows.firstOrNull { it.wrapperType == "artist" }?.artistName.orEmpty()
                     val albums = rows.filter { it.wrapperType == "collection" && it.collectionId != null }
                         .distinctBy { TextMatch.norm(it.collectionName.orEmpty()) }
                         .sortedByDescending { it.releaseDate.orEmpty() }
-
-                    val photoJob = async {
-                        artistPhoto(
-                            appleId = id,
-                            name = name.ifBlank { topJob.await().firstOrNull()?.artistName.orEmpty() },
-                            appleAlbumTitles = albums.mapNotNull { it.collectionName }.take(40),
-                        )
-                    }
-
-                    val gate = Semaphore(2)
-                    val all = albums.chunked(4).map { batch ->
-                        async {
-                            gate.withPermit {
-                                runCatching {
-                                    itunes.lookupAll(batch.joinToString(",") { it.collectionId.toString() }, "song", 200).results
-                                }.getOrDefault(emptyList())
-                            }
-                        }
-                    }.awaitAll().flatten()
-
                     val top = topJob.await().filter { it.kind == "song" }
-                    val rest = all.filter { it.kind == "song" && it.artistId == id }
-                        .sortedByDescending { it.releaseDate.orEmpty() }
-                    val songs = (top + rest).distinctBy { TextMatch.norm(it.trackName.orEmpty()) }
-                    val latest = rest.distinctBy { TextMatch.norm(it.trackName.orEmpty()) }.take(30)
-
                     ArtistDetails(
                         id = id,
-                        name = name.ifBlank { top.firstOrNull()?.artistName.orEmpty() },
-                        imageUrl = photoJob.await() ?: (top.firstOrNull()?.artworkUrl100 ?: albums.firstOrNull()?.artworkUrl100).big(),
+                        name = rows.firstOrNull { it.wrapperType == "artist" }?.artistName
+                            ?: top.firstOrNull()?.artistName.orEmpty(),
+                        imageUrl = (top.firstOrNull()?.artworkUrl100 ?: albums.firstOrNull()?.artworkUrl100).big(),
                         popular = top.take(10).map { it.toTrack() },
-                        songs = songs.map { it.toTrack() },
-                        latestSongs = latest.map { it.toTrack() },
+                        songs = top.map { it.toTrack() },
                         albums = albums.map {
                             DiscoverItem(
                                 id = "apple-album:${it.collectionId}",
@@ -158,10 +148,45 @@ class AppleCatalogRepository @Inject constructor(
                                 imageUrl = it.artworkUrl100.big(),
                             )
                         },
+                        songsLoaded = false,
                     )
                 }
             }.getOrNull()
-        }?.also { cache[id] = it }
+        }?.also { overviewCache[id] = it }
+    }
+
+    /**
+     * The slow part: every song of every album. Albums are newest-first, so the newest songs come from the first
+     * batches. 6 albums per call (was 4) means fewer requests, which matters more than parallelism because iTunes
+     * rate-limits aggressively.
+     */
+    suspend fun artistSongs(base: ArtistDetails): ArtistDetails {
+        cache[base.id]?.let { return it }
+        val albumIds = base.albums.mapNotNull { it.id.removePrefix("apple-album:").toLongOrNull() }
+        val gate = Semaphore(2)
+        val all = withTimeoutOrNull(40_000) {
+            coroutineScope {
+                albumIds.chunked(6).map { batch ->
+                    async {
+                        gate.withPermit {
+                            runCatching {
+                                itunes.lookupAll(batch.joinToString(","), "song", 200).results
+                            }.getOrDefault(emptyList())
+                        }
+                    }
+                }.awaitAll().flatten()
+            }
+        }.orEmpty()
+        val rest = all.filter { it.kind == "song" && it.artistId == base.id }
+            .sortedByDescending { it.releaseDate.orEmpty() }
+        val restTracks = rest.map { it.toTrack() }
+        val full = base.copy(
+            songs = (base.songs + restTracks).distinctBy { TextMatch.norm(it.title) },
+            latestSongs = restTracks.distinctBy { TextMatch.norm(it.title) }.take(30),
+            songsLoaded = true,
+        )
+        if (all.isNotEmpty()) cache[base.id] = full // never cache a total failure
+        return full
     }
 
     private fun AppleLookupItem.toTrack() = Track(

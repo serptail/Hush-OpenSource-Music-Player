@@ -1,6 +1,7 @@
 package com.gamut.core.designsystem
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -16,9 +17,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +50,9 @@ fun MiniPlayerStrip(
     artUrl: String?,
     isPlaying: Boolean,
     progress: Float,
+    /** True while the next song is being resolved / buffered: the line shows [loadProgress] and the play button turns into a spinner. */
+    isLoading: Boolean = false,
+    loadProgress: Float = 0f,
     onOpen: () -> Unit,
     onTogglePlay: () -> Unit,
     onNext: () -> Unit,
@@ -67,7 +73,9 @@ fun MiniPlayerStrip(
     ) {
         // Progress line on the top edge: faint track, accent fill.
         Box(Modifier.fillMaxWidth().height(2.dp).background(ink(0.08f))) {
-            Box(Modifier.fillMaxHeight().fillMaxWidth(progress.coerceIn(0f, 1f)).background(accent))
+            val shown = if (isLoading) loadProgress.coerceIn(0.08f, 1f) else progress.coerceIn(0f, 1f)
+            val animated by animateFloatAsState(shown, tween(if (isLoading) 350 else 0), label = "mini-progress")
+            Box(Modifier.fillMaxHeight().fillMaxWidth(animated).background(accent))
         }
         Row(
             Modifier.fillMaxWidth().height(60.dp).padding(start = 14.dp, end = 4.dp),
@@ -86,7 +94,7 @@ fun MiniPlayerStrip(
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(title, color = ink(), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(title, color = ink(if (isLoading) 0.6f else 1f), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     artist,
                     color = ink(0.6f),
@@ -97,8 +105,12 @@ fun MiniPlayerStrip(
                 )
             }
             Box(Modifier.size(48.dp).pressScale(onClick = onTogglePlay, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
-                Crossfade(isPlaying, animationSpec = tween(160), label = "mini-play") { playing ->
-                    if (playing) GlyphPause(ink(), Modifier.size(24.dp)) else GlyphPlay(ink(), Modifier.size(24.dp))
+                Crossfade(if (isLoading) 2 else if (isPlaying) 1 else 0, animationSpec = tween(160), label = "mini-play") { s ->
+                    when (s) {
+                        2 -> CircularProgressIndicator(color = ink(), strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                        1 -> GlyphPause(ink(), Modifier.size(24.dp))
+                        else -> GlyphPlay(ink(), Modifier.size(24.dp))
+                    }
                 }
             }
             Box(Modifier.size(48.dp).pressScale(onClick = onNext, scaleDown = 0.88f), contentAlignment = Alignment.Center) {

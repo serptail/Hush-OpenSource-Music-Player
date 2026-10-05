@@ -37,6 +37,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.graphics.graphicsLayer
+import com.gamut.core.designsystem.TrackRowSkeleton
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -52,7 +55,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.SubcomposeAsyncImage
+import com.gamut.core.designsystem.ArtImage
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.light.MagnifyingGlass
@@ -97,7 +102,6 @@ private val ArtShape = RoundedCornerShape(8.dp)
 fun SearchScreen(
     viewModel: SearchViewModel,
     resolvingIsrc: String?,
-    resolutionMessage: String?,
     /** The picked track plus the list it was picked from (the queue); empty = just this track. */
     onTrackSelected: (Track, List<Track>) -> Unit,
     onArtistSelected: (Long) -> Unit,
@@ -119,8 +123,9 @@ fun SearchScreen(
         val accent = MaterialTheme.colorScheme.primary
         val density = LocalDensity.current
         val showingDiscover = state.tracks.isEmpty() && state.query.isBlank()
-        val discoverListState = rememberLazyListState()
-        val resultsListState = rememberLazyListState()
+        // ONE list for both modes (see the comment where it is built).
+        val listState = rememberLazyListState()
+        var discoverTab by rememberSaveable { mutableIntStateOf(0) }
         // Title + search scroll with the content as the first list item (they are not pinned): scroll down and they
         // leave the screen, scroll back up to reach them. Only the bottom bar stays.
         val header: @Composable (Modifier) -> Unit = { m ->
@@ -150,24 +155,17 @@ fun SearchScreen(
                     SearchField(query = state.query, onQueryChange = viewModel::updateQuery, accent = accent)
                     Spacer(Modifier.height(14.dp))
 
-                    AnimatedVisibility(state.isLoading) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
-                            CircularProgressIndicator(Modifier.size(14.dp), color = accent, strokeWidth = 1.5.dp)
-                            Spacer(Modifier.width(10.dp))
-                            Text("Tuning the room...", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-                        }
-                    }
                     state.error?.let {
                         Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(vertical = 8.dp))
-                    }
-                    resolutionMessage?.let {
-                        Text(it, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, modifier = Modifier.padding(bottom = 8.dp))
                     }
                     Spacer(Modifier.height(6.dp))
             }
         }
         // Lists run to the bottom of the screen and scroll under the bar; the mini player strip frosts what passes behind it.
-        var barHeight by remember { mutableStateOf(0.dp) }
+        // Saved across navigation, so returning to this screen lays out the list correctly on the FIRST frame
+        // (starting from 0 made the list re-layout once the bar had been measured: a visible pop).
+        var barHeightDp by rememberSaveable { mutableStateOf(0f) }
+        val barHeight = barHeightDp.dp
         // The tab row is transparent, so nothing may scroll behind it: the list ends where the tabs begin. Only the
         // mini player strip (frosted) overlaps the list, so the list just needs room for the strip at its end.
         val tabsHeight = GamutBottomBarTabsHeight + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -176,42 +174,52 @@ fun SearchScreen(
         // Reuse the app-wide acrylic state when there is one (MainActivity marks the flowing background as a source
         // on it), so the mini player frosts the very same adaptive background instead of a copy of it.
         AcrylicHost(Modifier.fillMaxSize(), state = LocalAcrylicState.current ?: remember { HazeState() }) {
-            Box(Modifier.fillMaxSize().padding(start = 24.dp, end = 24.dp, bottom = tabsHeight).acrylicSource()) {
+            // ONE list for Discover and for results. The title + search field is its first item (key "header") in both modes,
+            // so it stays composed when the query goes from empty to "a": the field keeps its focus, keyboard and cursor.
+            // (Two different lists meant the field was rebuilt after the first letter and dropped focus.) Every item adds its
+            // own 24dp side padding, so Discover's card rows can still run edge to edge.
+            Box(Modifier.fillMaxSize().padding(bottom = tabsHeight).acrylicSource()) {
+                val resultsAlpha by animateFloatAsState(if (state.isLoading) 0.45f else 1f, tween(150), label = "results-alpha")
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = stripHeight + 24.dp),
+                ) {
+                    item(key = "header") { header(Modifier.padding(horizontal = 24.dp)) }
                     if (showingDiscover) {
-                        DiscoverContent(
-                            modifier = Modifier.fillMaxSize(),
+                        discoverItems(
                             state = discover,
+                            selectedTab = discoverTab,
+                            onSelectTab = { discoverTab = it },
                             onTrackClick = { track -> onTrackSelected(track, emptyList()) },
                             onArtistClick = onArtistSelected,
                             onAlbumClick = onAlbumSelected,
-                            listState = discoverListState,
-                            contentPadding = PaddingValues(bottom = stripHeight),
-                            header = { header(Modifier.padding(horizontal = 24.dp)) },
                         )
                     } else {
-                        LazyColumn(
-                            state = resultsListState,
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = stripHeight + 24.dp),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            item(key = "header") { header(Modifier) }
-                            artistHit?.let { hit ->
-                                item(key = "artist-hit") { ArtistHit(hit, accent, onArtistSelected) }
-                            }
-                            item {
-                                Text(
-                                    "Results",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = TextPrimary.copy(alpha = 0.9f),
-                                    modifier = Modifier.padding(vertical = 8.dp),
-                                )
-                            }
-                            items(state.tracks, key = { it.isrc }) { track ->
-                                TrackResultRow(track, resolvingIsrc == track.isrc, accent) { picked -> onTrackSelected(picked, state.tracks) }
+                        artistHit?.let { hit ->
+                            item(key = "artist-hit") { Box(Modifier.padding(horizontal = 24.dp)) { ArtistHit(hit, accent, onArtistSelected) } }
+                        }
+                        item(key = "results-title") {
+                            Text(
+                                "Results",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = TextPrimary.copy(alpha = 0.9f),
+                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                            )
+                        }
+                        if (state.isLoading && state.tracks.isEmpty()) {
+                            // Same shimmering placeholders as the album and artist screens.
+                            items(8, key = { "skeleton-$it" }) { TrackRowSkeleton(Modifier.padding(horizontal = 24.dp)) }
+                        } else {
+                            itemsIndexed(state.tracks, key = { i, t -> "${t.isrc}#$i" }) { _, track ->
+                                // While a refined search is loading, the old results dim instead of vanishing.
+                                Box(Modifier.padding(horizontal = 24.dp).graphicsLayer { alpha = resultsAlpha }) {
+                                    TrackResultRow(track, resolvingIsrc == track.isrc, accent) { picked -> onTrackSelected(picked, state.tracks) }
+                                }
                             }
                         }
                     }
+                }
             }
 
             // Bottom bar (flat) with the frosted mini player strip docked on top of it.
@@ -222,7 +230,7 @@ fun SearchScreen(
                 ),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .onSizeChanged { barHeight = with(density) { it.height.toDp() } },
+                    .onSizeChanged { barHeightDp = with(density) { it.height.toDp() }.value },
                 nowPlaying = nowPlaying,
             )
         }
@@ -280,13 +288,11 @@ private fun ArtistHit(item: DiscoverItem, accent: Color, onClick: (Long) -> Unit
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SubcomposeAsyncImage(
-            model = item.imageUrl,
-            contentDescription = item.title,
+        ArtImage(
+            url = item.imageUrl,
             modifier = Modifier.size(72.dp).clip(CircleShape),
-            contentScale = ContentScale.Crop,
-            loading = { ArtworkPlaceholder() },
-            error = { ArtworkPlaceholder() },
+            contentDescription = item.title,
+            fallback = { ArtworkFallbackIcon() },
         )
         Column(Modifier.weight(1f).padding(start = 16.dp)) {
             Text(item.title, style = MaterialTheme.typography.headlineMedium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -303,16 +309,13 @@ private fun TrackResultRow(track: Track, isResolving: Boolean, accent: Color, on
     ) {
         // YouTube thumbnails keep their own 16:9 shape (bar-free frame), everything else is square.
         val isYoutubeThumb = track.albumArtUrl?.let { "ytimg.com" in it || "img.youtube.com" in it } == true
-        SubcomposeAsyncImage(
-            model = squareArtUrl(track.albumArtUrl, 300),
-            contentDescription = null,
+        ArtImage(
+            url = remember(track.albumArtUrl) { squareArtUrl(track.albumArtUrl, 256) },
             modifier = Modifier
                 .size(width = if (isYoutubeThumb) 100.dp else 56.dp, height = 56.dp)
                 .shadow(3.dp, ArtShape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
                 .clip(ArtShape),
-            contentScale = ContentScale.Crop,
-            loading = { ArtworkPlaceholder() },
-            error = { ArtworkPlaceholder() },
+            fallback = { ArtworkFallbackIcon() },
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
             Text(
@@ -357,8 +360,6 @@ private fun TrackResultRow(track: Track, isResolving: Boolean, accent: Color, on
 }
 
 @Composable
-private fun ArtworkPlaceholder() {
-    Box(Modifier.fillMaxSize().background(ink(0.08f)), contentAlignment = Alignment.Center) {
-        Icon(PhosphorIcons.Light.MusicNote, null, tint = ink(0.45f), modifier = Modifier.size(22.dp))
-    }
+private fun ArtworkFallbackIcon() {
+    Icon(PhosphorIcons.Light.MusicNote, null, tint = ink(0.45f), modifier = Modifier.size(22.dp))
 }

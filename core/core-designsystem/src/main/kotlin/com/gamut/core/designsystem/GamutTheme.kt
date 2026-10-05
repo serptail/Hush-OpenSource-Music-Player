@@ -1,13 +1,16 @@
 package com.gamut.core.designsystem
 
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -171,14 +173,24 @@ fun BoxScope.AcrylicGloss(shape: Shape = ArtworkShape, alpha: Float = 0.16f) {
  */
 fun Modifier.pressScale(onClick: () -> Unit, scaleDown: Float = 0.94f): Modifier = composed {
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) scaleDown else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-        label = "press-scale",
-    )
+    val scale = remember { Animatable(1f) }
+    // The press animation runs in a coroutine and is only READ in graphicsLayer (draw phase), so pressing a row
+    // never recomposes it. Previously the animated value was read during composition, which recomposed the whole
+    // host composable on every animation frame of every tap.
+    LaunchedEffect(interaction, scaleDown) {
+        val spec = spring<Float>(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
+        interaction.interactions.collectLatest { event ->
+            when (event) {
+                is PressInteraction.Press -> scale.animateTo(scaleDown, spec)
+                is PressInteraction.Release, is PressInteraction.Cancel -> scale.animateTo(1f, spec)
+            }
+        }
+    }
     this
-        .scale(scale)
+        .graphicsLayer {
+            scaleX = scale.value
+            scaleY = scale.value
+        }
         .clickable(interactionSource = interaction, indication = null, onClick = onClick)
 }
 
