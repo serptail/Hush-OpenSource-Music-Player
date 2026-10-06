@@ -1,8 +1,13 @@
 package com.gamut.feature.playerui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,20 +21,21 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -154,39 +160,82 @@ private fun specFor(control: ModControl): Spec? = when (control) {
 @Composable
 private fun ControlRow(control: ModControl, settings: ModSettings, accent: Color) {
     if (control == ModControl.LINK) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Pitch follows speed", fontSize = 14.sp, color = Color.White)
-                Text("Tape style. Off keeps the original key.", fontSize = 11.sp, color = Color.White.copy(alpha = 0.55f))
+                Text("Pitch follows speed", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodyMedium)
+                Text("Tape style. Off keeps the original key.", fontSize = 11.sp, color = Color.White.copy(alpha = 0.5f))
             }
-            Switch(
-                checked = settings.pitchFollowsSpeed,
-                onCheckedChange = { on -> ModController.edit { it.copy(pitchFollowsSpeed = on) } },
-                colors = SwitchDefaults.colors(checkedTrackColor = accent, checkedThumbColor = Color.White),
-            )
+            TogglePill(on = settings.pitchFollowsSpeed, accent = accent) {
+                ModController.edit { it.copy(pitchFollowsSpeed = !it.pitchFollowsSpeed) }
+            }
         }
         return
     }
     val spec = specFor(control) ?: return
     val value = spec.get(settings).coerceIn(spec.min, spec.max)
-    val steps = ((spec.max - spec.min) / spec.step).roundToInt() - 1
-    Column(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-        Row(Modifier.fillMaxWidth()) {
-            Text(spec.label, fontSize = 14.sp, color = Color.White, modifier = Modifier.weight(1f))
-            Text(spec.format(value), fontSize = 13.sp, color = Color.White.copy(alpha = 0.65f))
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row {
+            Text(spec.label, color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.weight(1f))
+            Text(spec.format(value), color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodyMedium)
         }
-        Slider(
-            value = value,
-            onValueChange = { v -> ModController.edit { spec.set(it, v) } },
-            valueRange = spec.min..spec.max,
-            steps = steps.coerceAtLeast(0),
-            colors = SliderDefaults.colors(
-                thumbColor = accent,
-                activeTrackColor = accent,
-                inactiveTrackColor = Color.White.copy(alpha = 0.15f),
-                activeTickColor = Color.Transparent,
-                inactiveTickColor = Color.Transparent,
-            ),
+        LineSlider(
+            value = value, min = spec.min, max = spec.max, step = spec.step, accent = accent,
+            onChange = { v -> ModController.edit { spec.set(it, v) } },
         )
+    }
+}
+
+/** Same pill as the equalizer's Enable/Disable button: filled accent when on, outlined when off. */
+@Composable
+private fun TogglePill(on: Boolean, accent: Color, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(50)
+    Text(
+        if (on) "On" else "Off",
+        color = if (on) Color.Black.copy(alpha = 0.85f) else Color.White.copy(alpha = 0.75f),
+        style = MaterialTheme.typography.labelLarge,
+        modifier = Modifier
+            .clip(shape)
+            .then(
+                if (on) Modifier.background(accent)
+                else Modifier.border(1.dp, Color.White.copy(alpha = 0.18f), shape),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 7.dp),
+    )
+}
+
+/** The equalizer's hairline slider (thin track, accent fill, small white dot), for a float range with snapping. */
+@Composable
+private fun LineSlider(value: Float, min: Float, max: Float, step: Float, accent: Color, onChange: (Float) -> Unit) {
+    val onChangeNow by rememberUpdatedState(onChange)
+    Canvas(
+        Modifier
+            .fillMaxWidth()
+            .height(28.dp)
+            .pointerInput(min, max, step) {
+                awaitEachGesture {
+                    val pad = 6.dp.toPx()
+                    fun apply(x: Float) {
+                        val f = ((x - pad) / (size.width - 2 * pad)).coerceIn(0f, 1f)
+                        val snapped = min + ((f * (max - min)) / step).roundToInt() * step
+                        onChangeNow(snapped.coerceIn(min, max))
+                    }
+                    val down = awaitFirstDown()
+                    apply(down.position.x)
+                    drag(down.id) { change ->
+                        change.consume()
+                        apply(change.position.x)
+                    }
+                }
+            },
+    ) {
+        val pad = 6.dp.toPx()
+        val cy = size.height / 2f
+        val x = pad + (value - min) / (max - min) * (size.width - 2 * pad)
+        val stroke = 2.dp.toPx()
+        drawLine(Color.White.copy(alpha = 0.14f), Offset(pad, cy), Offset(size.width - pad, cy), stroke, StrokeCap.Round)
+        drawLine(accent, Offset(pad, cy), Offset(x, cy), stroke, StrokeCap.Round)
+        drawCircle(Color.White, 6.dp.toPx(), Offset(x, cy))
     }
 }

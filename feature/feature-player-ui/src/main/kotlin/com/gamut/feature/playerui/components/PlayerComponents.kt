@@ -86,7 +86,19 @@ import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
 import kotlin.math.pow
 import kotlin.time.Duration.Companion.milliseconds
+import android.media.MediaCodec
+import android.util.Log
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import java.nio.ByteOrder
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -395,53 +407,292 @@ internal fun waveformAt(wave: FloatArray, index: Int, count: Int): Float {
 }
 
 /**
- * Real amplitude envelope of [track] (0..1 per sample, evenly spaced over its duration).
- *
- * TODO: wire this to actual audio data. Until it returns non-null, [rememberWaveform] shows a
- * placeholder shape so the scrub UI can be built and tuned.
+ * Heights (0..1) for [count] bars. Each bar first takes the loudest sample of its slice, then every bar is ranked
+ * against all the others: the quietest bar becomes 0, the loudest 1, the median 0.5. A song's loudness values
+ * tend to bunch up in a narrow band, which makes bars look alike; ranking spreads them evenly over the whole range.
  */
-private suspend fun loadWaveform(track: Track): FloatArray? = null
+internal fun barHeights(wave: FloatArray, count: Int): FloatArray {
+    if (wave.isEmpty() || count <= 0) return FloatArray(maxOf(count, 0))
+    val raw = FloatArray(count) { waveformAt(wave, it, count) }
+    if (count == 1) return floatArrayOf(raw[0])
+    val sorted = raw.sortedArray()
+    return FloatArray(count) { i ->
+        var lo = 0
+        var hi = count   // first index whose value is >= raw[i]
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (sorted[mid] < raw[i]) lo = mid + 1 else hi = mid
+        }
+        lo.toFloat() / (count - 1)
+    }
+}
 
 /**
- * Makes differences visible: stretches the samples so the quietest one is 0 and the loudest is 1,
- * then squares-ish them (power > 1) so peaks (high notes / loud vocals) stand tall while
- * everything else stays low. Without this, most bars land in the same mid range and look alike.
+ * Where the player registers the audio URL of the song it is about to play, so the waveform can be built from the
+ * very same audio. Call [register] right before `player.play(track, audioUrl)`.
+ */
+object WaveformSource {
+    private val urls = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    internal fun keyOf(track: Track): String = track.isrc.orEmpty().ifBlank { "${track.title}|${track.artist}" }
+
+    @Volatile internal var appContext: android.content.Context? = null
+
+    /** Call once at startup (MainActivity.onCreate), before the first [register]. */
+    fun init(context: android.content.Context) {
+        appContext = context.applicationContext
+    }
+
+    fun register(track: Track, audioUrl: String) {
+        val key = keyOf(track)
+        urls[key] = audioUrl
+        // Songs we moved on from no longer need their waveform: stop spending CPU on them.
+        waveformEntries.keys.toList().forEach { k ->
+            if (k != key) waveformEntries.remove(k)?.job?.cancel()
+        }
+        // Start measuring right now, at song launch, so it is (nearly) ready by the time the player screen opens.
+        waveformEntry(track)
+    }
+
+    internal fun urlFor(track: Track): String? = urls[keyOf(track)]
+}
+
+/** Number of samples in a track's envelope. More than the ring has bars, so every bar gets real data. */
+private const val EnvelopeSamples = 480
+
+private const val WaveformTag = "Waveform"
+
+/** Audio servers often refuse default Android user agents, so ask like a browser would. */
+private const val WaveformUserAgent =
+    "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
+
+/** The audio is fetched in pieces this big: streaming it through MediaExtractor was throttled to a crawl. */
+private const val DownloadChunk = 1_048_576
+private const val MaxDownload = 48L * 1_048_576
+
+/** Decoded envelopes, so reopening the player (or coming back to a song) is instant. */
+private val waveformCache = object : LinkedHashMap<String, FloatArray>(16, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, FloatArray>?) = size > 24
+}
+
+/** One song's envelope while it is being measured: [data] fills in progressively and the UI just reads it. */
+private class WaveformEntry {
+    val data = mutableStateOf(FloatArray(0))
+    @Volatile var job: Job? = null
+}
+
+private val NoWaveform = FloatArray(0)
+private val waveformScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+private val waveformEntries = java.util.concurrent.ConcurrentHashMap<String, WaveformEntry>()
+
+/**
+ * The (possibly still filling) envelope of [track]. The measuring starts once per song, no matter how many times
+ * this is called or whether any screen is looking: [WaveformSource.register] calls it at song launch.
+ */
+private fun waveformEntry(track: Track): WaveformEntry {
+    val key = WaveformSource.keyOf(track)
+    synchronized(waveformCache) { waveformCache[key] }?.let { cached ->
+        return WaveformEntry().also { it.data.value = cached }
+    }
+    return waveformEntries.computeIfAbsent(key) { k ->
+        val entry = WaveformEntry()
+        entry.job = waveformScope.launch {
+            try {
+                val real = loadWaveform(track) { partial -> entry.data.value = partial }
+                if (real != null && real.isNotEmpty()) entry.data.value = real
+            } finally {
+                waveformEntries.remove(k)   // done, failed or cancelled: the cache (or a retry) takes over
+            }
+        }
+        entry
+    }
+}
+
+/**
+ * Real loudness envelope of [track] (0..1 per sample, evenly spaced over the whole audio). Downloads the audio, then
+ * measures the loudness at [EnvelopeSamples] points of it (see [sampleEnvelope]). Null when the audio URL is unknown
+ * or cannot be decoded (the ring then shows flat minimum ticks).
+ */
+private suspend fun loadWaveform(track: Track, onPartial: (FloatArray) -> Unit): FloatArray? {
+    val key = WaveformSource.keyOf(track)
+    synchronized(waveformCache) { waveformCache[key] }?.let { return it }
+    // The URL is registered right before playback starts; give it a moment in case this was asked for first.
+    var url = WaveformSource.urlFor(track)
+    var tries = 0
+    while (url == null && tries < 10) {
+        delay(300)
+        url = WaveformSource.urlFor(track)
+        tries++
+    }
+    val source = url ?: run {
+        Log.w(WaveformTag, "No audio URL registered for \"${track.title}\" (played without WaveformSource.register?)")
+        return null
+    }
+    val startedAt = System.currentTimeMillis()
+    val result = try {
+        val file = withContext(Dispatchers.IO) {
+            val job = currentCoroutineContext()[Job]
+            downloadAudio(source) { job?.isActive != false }
+        }
+        val downloadedAt = System.currentTimeMillis()
+        if (file == null) {
+            null
+        } else {
+            try {
+                withContext(Dispatchers.IO) { sampleEnvelope(file.path) }.also {
+                    Log.i(WaveformTag, "download ${downloadedAt - startedAt} ms, measuring ${System.currentTimeMillis() - downloadedAt} ms")
+                }
+            } finally {
+                file.delete()
+            }
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        Log.w(WaveformTag, "Decoding failed for \"${track.title}\"", e)
+        null
+    }
+    if (result == null) Log.w(WaveformTag, "No waveform for \"${track.title}\"")
+    else Log.i(
+        WaveformTag,
+        "Waveform ready for \"${track.title}\" in ${System.currentTimeMillis() - startedAt} ms " +
+            "(min ${result.min()}, max ${result.max()})",
+    )
+    if (result != null) synchronized(waveformCache) { waveformCache[key] = result }
+    return result
+}
+
+/**
+ * Downloads the audio into a temp file, a chunk at a time (YouTube's servers throttle one long request, but not
+ * ranged ones). Returns null on failure; the caller deletes the file.
+ */
+private fun downloadAudio(url: String, stillActive: () -> Boolean): java.io.File? {
+    val file = java.io.File.createTempFile("waveform", ".audio")
+    var ok = false
+    try {
+        val chunked = url.contains("googlevideo.com") && !url.contains("range=")
+        var start = 0L
+        file.outputStream().use { out ->
+            val buffer = ByteArray(64 * 1024)
+            while (start < MaxDownload) {
+                if (!stillActive()) return null
+                val end = start + DownloadChunk - 1
+                val connection = java.net.URL(if (chunked) "$url&range=$start-$end" else url).openConnection() as java.net.HttpURLConnection
+                connection.connectTimeout = 10_000
+                connection.readTimeout = 15_000
+                connection.setRequestProperty("User-Agent", WaveformUserAgent)
+                if (!chunked) connection.setRequestProperty("Range", "bytes=$start-$end")
+                try {
+                    val code = connection.responseCode
+                    if (code == 416) break   // asked past the end
+                    if (code !in 200..299) {
+                        Log.w(WaveformTag, "Download failed: HTTP $code")
+                        return null
+                    }
+                    var got = 0L
+                    connection.inputStream.use { input ->
+                        while (true) {
+                            val n = input.read(buffer)
+                            if (n < 0) break
+                            out.write(buffer, 0, n)
+                            got += n
+                        }
+                    }
+                    start += got
+                    // A server that ignores Range sends the whole file at once; a short chunk is the last one.
+                    if (got == 0L || got < DownloadChunk || (!chunked && code == 200)) break
+                } finally {
+                    connection.disconnect()
+                }
+            }
+        }
+        ok = file.length() > 0
+        if (!ok) Log.w(WaveformTag, "Download returned no data")
+        return if (ok) file else null
+    } finally {
+        if (!ok) file.delete()
+    }
+}
+
+/**
+ * Measures the loudness of the audio file at [path] with Amplituda (FFmpeg, native code: roughly a second for a
+ * 3-minute song) and boils its samples down to [EnvelopeSamples] points (0..1 each). Blocking: call off the main thread.
+ * Returns null when the audio cannot be read.
+ */
+private fun sampleEnvelope(path: String): FloatArray? {
+    val context = WaveformSource.appContext
+    if (context == null) {
+        Log.w(WaveformTag, "WaveformSource.init(context) was never called")
+        return null
+    }
+    val amps: List<Int> = com.linc.amplituda.Amplituda(context).processAudio(path).get()?.amplitudesAsList() ?: emptyList()
+    val peak = amps.maxOrNull() ?: 0
+    if (peak <= 0) { Log.w(WaveformTag, "Amplituda returned no audio (${amps.size} samples)"); return null }
+    val n = amps.size
+    val levels = FloatArray(EnvelopeSamples) { b ->
+        val from = (b.toLong() * n / EnvelopeSamples).toInt().coerceIn(0, n - 1)
+        val to = ((b + 1).toLong() * n / EnvelopeSamples).toInt().coerceIn(from + 1, n)
+        var sum = 0L
+        for (k in from until to) sum += amps[k]
+        sum.toFloat() / (to - from) / peak
+    }
+    return levelsToEnvelope(levels, EnvelopeSamples - 1)
+}
+
+/**
+ * Turns the raw per-tick RMS levels into 0..1 loudness values, in dB so quiet parts are not squashed next to loud ones.
+ * A tick that got no frame (rare) takes the value before it; ticks after [upTo] stay at 0 (not measured yet).
+ */
+private fun levelsToEnvelope(levels: FloatArray, upTo: Int): FloatArray {
+    var carry = 0f
+    return FloatArray(levels.size) { i ->
+        if (i > upTo) {
+            0f
+        } else {
+            if (levels[i] > 0f) carry = levels[i]
+            val db = 20f * kotlin.math.log10(carry.coerceAtLeast(1e-5f))
+            ((db + 55f) / 55f).coerceIn(0f, 1f)
+        }
+    }
+}
+
+/**
+ * Makes differences visible: stretches the samples so the quiet parts sit near 0 and the loud parts near 1
+ * (using the 5th and 98th percentile, so one outlier cannot flatten everything else), then raises them to a power
+ * so peaks (high notes / loud vocals) stand tall while everything else stays lower.
  */
 internal fun shapeWaveform(wave: FloatArray): FloatArray {
     if (wave.isEmpty()) return wave
-    var lo = Float.MAX_VALUE
-    var hi = 0f
-    for (v in wave) {
-        if (v < lo) lo = v
-        if (v > hi) hi = v
+    // While the song is still being decoded the tail is 0 (not measured yet). Only the measured part is used for
+    // scaling, otherwise those zeros would drag the scale around with every update and the bars would jump.
+    val measured = wave.indexOfLast { it > 0f } + 1
+    if (measured < 8) return FloatArray(wave.size)
+    // Loudness drifts slowly through a song, so on its own it gives bars of near-equal height. Mix in the local
+    // contrast (each sample minus the average of its neighbours) so beats and loud phrases stand out.
+    val r = 12   // neighbourhood: this many samples either side
+    val prefix = DoubleArray(measured + 1).also { for (i in 0 until measured) it[i + 1] = it[i] + wave[i] }
+    val mixed = FloatArray(measured) { i ->
+        val a = (i - r).coerceAtLeast(0)
+        val b = (i + r + 1).coerceAtMost(measured)
+        val local = ((prefix[b] - prefix[a]) / (b - a)).toFloat()
+        0.5f * wave[i] + 1.0f * (wave[i] - local)
     }
+    val sorted = mixed.sortedArray()
+    val lo = sorted[(sorted.size * 0.05f).toInt().coerceIn(0, sorted.lastIndex)]
+    val hi = sorted[(sorted.size * 0.97f).toInt().coerceIn(0, sorted.lastIndex)]
     val range = (hi - lo).coerceAtLeast(1e-3f)
-    return FloatArray(wave.size) { ((wave[it] - lo) / range).coerceIn(0f, 1f).pow(1.7f) }
+    return FloatArray(wave.size) { if (it < measured) ((mixed[it] - lo) / range).coerceIn(0f, 1f).pow(1.3f) else 0f }
 }
 
-/** Deterministic stand-in waveform (same track -> same shape). NOT real audio data. */
-private fun placeholderWaveform(seed: Int, count: Int = 240): FloatArray {
-    val rnd = java.util.Random(seed.toLong())
-    var prev = 0.5f
-    return FloatArray(count) { i ->
-        // Less smoothing than before, so neighbouring samples differ more.
-        prev = prev * 0.2f + rnd.nextFloat() * 0.8f
-        // Slow "sections" (quiet verse / loud chorus) plus the occasional spike.
-        val section = 0.35f + 0.65f * (0.5f + 0.5f * kotlin.math.sin(i * 0.07f + (seed % 7)))
-        val spike = if (rnd.nextFloat() < 0.08f) 1.6f else 1f
-        (prev * section * spike).coerceIn(0.03f, 1f)
-    }
-}
-
+/**
+ * The song's envelope. Empty until measuring has produced something (the ring then shows flat minimum ticks instead
+ * of made-up ones); it fills in from the start, and is usually complete before the player screen is even opened.
+ */
 @Composable
 internal fun rememberWaveform(track: Track?): FloatArray {
-    val seed = "${track?.title}|${track?.artist}".hashCode()
-    var data by remember(seed) { mutableStateOf(placeholderWaveform(seed)) }
-    LaunchedEffect(seed) {
-        val real = track?.let { loadWaveform(it) }
-        if (real != null && real.isNotEmpty()) data = real
-    }
-    return data
+    val key = track?.let(WaveformSource::keyOf)
+    val entry = remember(key) { track?.let { waveformEntry(it) } }
+    return entry?.data?.value ?: NoWaveform
 }
 
 // ==================== COVER ACCENT ====================

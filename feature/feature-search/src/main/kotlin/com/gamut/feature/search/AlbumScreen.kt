@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -178,7 +179,7 @@ private fun AlbumHero(album: AlbumDetails, artistImageUrl: String?, onBack: () -
             Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 10.dp),
+                .padding(horizontal = 24.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (artistImageUrl != null) {
@@ -209,10 +210,34 @@ private fun AlbumHero(album: AlbumDetails, artistImageUrl: String?, onBack: () -
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            AcrylicCircleButton(onClick = onPlay, size = 56.dp) {
-                Icon(PhosphorIcons.Fill.Play, "Play", tint = Color.White, modifier = Modifier.size(24.dp))
-            }
+            PlayFab(onClick = onPlay)
         }
+    }
+}
+
+/**
+ * Solid play button. Filled with the text color and the icon in its inverse, so it has strong contrast on any
+ * cover palette (the old acrylic disc blurred the fade behind it and hardcoded a white icon).
+ */
+@Composable
+private fun PlayFab(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val isLight = LocalCoverPalette.current.isLight
+    Box(
+        modifier
+            .size(60.dp)
+            .shadow(14.dp, CircleShape, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.35f))
+            .clip(CircleShape)
+            .background(ink())
+            .pressScale(onClick = onClick, scaleDown = 0.94f),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            PhosphorIcons.Fill.Play,
+            "Play",
+            tint = if (isLight) Color.White else Color.Black,
+            // A triangle's visual weight is left of its box; nudge it right so it looks centered.
+            modifier = Modifier.padding(start = 3.dp).size(26.dp),
+        )
     }
 }
 

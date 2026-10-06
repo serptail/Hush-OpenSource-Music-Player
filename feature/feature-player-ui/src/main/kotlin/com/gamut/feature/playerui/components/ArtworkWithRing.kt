@@ -75,11 +75,11 @@ private const val PausedCoverScale = 0.96f   // the cover settles a touch smalle
 
 // Scrubbing visuals (shown while the progress line is being dragged). Everything here has to fit in
 // the space between the ring and the edge of its box: RingInset - (RingGap + stroke/2) ~= 13.75dp.
-private val WaveBarWidth = 1.5.dp
-private val WaveBarPitch = 4.dp          // distance between bar centers along the line
+private val WaveBarWidth = 2.dp
+private val WaveBarPitch = 6.dp          // distance between bar centers along the line
 private val WaveStartOffset = 2.5.dp     // gap between the line's center and the base of a bar
-private val WaveMinLength = 2.dp         // quietest bar
-private val WaveMaxLength = 10.dp        // tallest bar; base + length + cap (~13.25dp) stays inside the box
+private val WaveMinLength = 1.dp         // quietest bar
+private val WaveMaxLength = 10.dp        // tallest bar; base + length + cap (~17dp) pokes a few dp past the box, which is fine: nothing clips it
 private val ScrubKnobRadius = 4.dp
 private val ScrubDashHalfLength = 3.dp
 private val ScrubDashWidth = 2.dp
@@ -105,6 +105,8 @@ internal fun ArtworkWithRing(
 ) {
     // Stretched + exaggerated once, so loud and quiet parts of the song look clearly different.
     val shapedWaveform = remember(waveform) { shapeWaveform(waveform) }
+    // Read at draw time (not baked into drawWithCache), so bars update when the waveform finishes decoding.
+    val shapedState = rememberUpdatedState(shapedWaveform)
     var tapTrigger by remember { mutableIntStateOf(0) }
     var iconVisible by remember { mutableStateOf(true) }
     var ringSize by remember { mutableStateOf(IntSize.Zero) } // measured size of the ring box
@@ -348,8 +350,8 @@ internal fun ArtworkWithRing(
                             color = android.graphics.Color.WHITE
                         }
 
-                        // Scrub visuals. Bar positions, directions and heights never change for a given
-                        // size / track, so they are worked out once here.
+                        // Scrub visuals. Bar positions and directions never change for a given size, so they
+                        // are worked out once here. Heights are read at draw time (the waveform arrives later).
                         val barW = WaveBarWidth.toPx()
                         val startOff = WaveStartOffset.toPx()
                         val minLen = WaveMinLength.toPx()
@@ -359,7 +361,6 @@ internal fun ArtworkWithRing(
                         val barY = FloatArray(barCount)
                         val barNx = FloatArray(barCount)
                         val barNy = FloatArray(barCount)
-                        val barAmp = FloatArray(barCount)
                         for (i in 0 until barCount) {
                             val dist = total * (i + 0.5f) / barCount
                             val pos = measure.getPosition(dist)
@@ -369,12 +370,14 @@ internal fun ArtworkWithRing(
                             // The path runs clockwise, so (ty, -tx) points away from the cover.
                             barNx[i] = tan.y
                             barNy[i] = -tan.x
-                            barAmp[i] = waveformAt(shapedWaveform, i, barCount)
                         }
                         val dashHalfLength = ScrubDashHalfLength.toPx()
                         val dashWidth = ScrubDashWidth.toPx()
                         val knobRadius = ScrubKnobRadius.toPx()
                         val startPoint = measure.getPosition(0f)
+                        // Bar heights, ranked across the whole ring; redone only when a new waveform arrives.
+                        var ampsFor: FloatArray? = null
+                        var amps = FloatArray(barCount)
 
                         onDrawBehind {
                             val fill = progress()
@@ -406,9 +409,15 @@ internal fun ArtworkWithRing(
                             // While dragging: the track's waveform along the outside of the line, a small
                             // dash where the track starts, and a knob at the current position.
                             if (reveal > 0.01f) {
+                                val wave = shapedState.value   // state read: redraws when the waveform arrives
+                                if (wave !== ampsFor) {
+                                    amps = barHeights(wave, barCount)
+                                    ampsFor = wave
+                                }
                                 for (i in 0 until barCount) {
                                     val f = (i + 0.5f) / barCount
-                                    val len = (minLen + (maxLen - minLen) * barAmp[i]) * reveal
+                                    val amp = amps[i]
+                                    val len = (minLen + (maxLen - minLen) * amp) * reveal
                                     drawLine(
                                         color = Color.White.copy(alpha = (if (f <= fill) 0.95f else 0.35f) * reveal),
                                         start = Offset(barX[i] + barNx[i] * startOff, barY[i] + barNy[i] * startOff),

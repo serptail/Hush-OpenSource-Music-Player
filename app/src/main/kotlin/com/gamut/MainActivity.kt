@@ -18,6 +18,8 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -88,6 +90,7 @@ import com.gamut.feature.library.FavoritesScreen
 import com.gamut.feature.library.LibraryScreen
 import com.gamut.feature.library.LibraryViewModel
 import com.gamut.feature.library.PlaylistScreen
+import com.gamut.feature.playerui.PlaylistPickerItem
 import com.gamut.feature.library.CreatePlaylistScreen
 import com.gamut.feature.playerui.PlayerScreen
 import com.gamut.feature.playerui.TrackActionsSheet
@@ -121,6 +124,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        com.gamut.feature.playerui.components.WaveformSource.init(applicationContext)
         // Configure the window ONCE, up front. Doing this lazily when the player opens re-lays out the window
         // and briefly shows the default (white) window background.
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -245,6 +249,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                             onSuccess = { audioUrl ->
                                                 val startIndex = queue.indexOfFirst { it.isrc == track.isrc }
                                                 if (startIndex >= 0) player.setQueue(queue, startIndex)
+                                                com.gamut.feature.playerui.components.WaveformSource.register(track, audioUrl)
                                                 player.play(track, audioUrl)
                                                 notifier.dismiss(noticeId)
                                                 nav.navigate("player") { launchSingleTop = true }
@@ -406,13 +411,13 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                             }
                             composable(
                                 "player",
-                                enterTransition = { slideInVertically(tween(320, easing = FastOutSlowInEasing)) { it } },
-                                popExitTransition = { slideOutVertically(tween(280, easing = FastOutSlowInEasing)) { it } },
+                                enterTransition = { slideInVertically(tween(200, easing = LinearOutSlowInEasing)) { it } },
+                                // Plain slide, opaque, no fade: what is revealed underneath is already drawn (see backgroundVisible).
+                                popExitTransition = { slideOutVertically(tween(160, easing = FastOutLinearInEasing)) { it } },
                             ) {
                                 val libraryVm = appLibraryVm
                                 val favoriteIsrcs by libraryVm.favoriteIsrcs.collectAsState()
                                 val playlists by libraryVm.playlists.collectAsState()
-                                var actionsTrack by remember { mutableStateOf<Track?>(null) }
                                 PlayerScreen(
                                     player,
                                     onBack = { nav.popBackStack() },
@@ -421,19 +426,11 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                         libraryVm.toggleFavorite(t)
                                         if (t.isrc in favoriteIsrcs) notifier.info("Removed from Favorites") else notifier.success("Added to Favorites")
                                     },
-                                    onMore = { actionsTrack = it },
+                                    playlists = playlists.map { PlaylistPickerItem(id = it.id.toString(), name = it.name, coverUrl = it.coverUri) },
+                                    onAddToPlaylist = { t, playlistId ->
+                                        playlists.firstOrNull { it.id.toString() == playlistId }?.let { libraryVm.addTrack(it.id, t) }
+                                    },
                                 )
-                                actionsTrack?.let { track ->
-                                    TrackActionsSheet(
-                                        track = track,
-                                        playlists = playlists,
-                                        onDismiss = { actionsTrack = null },
-                                        onPlayNext = { player.addToQueue(track, playNext = true); notifier.success("Playing next") },
-                                        onAddToQueue = { player.addToQueue(track); notifier.success("Added to queue") },
-                                        onAddToPlaylist = { playlist -> libraryVm.addTrack(playlist.id, track); notifier.success("Added to ${playlist.name}") },
-                                        onCreatePlaylist = { name -> libraryVm.createPlaylistAndAdd(name, track); notifier.success("Added to \u201c$name\u201d") },
-                                    )
-                                }
                             }
                         }
                         if (shazamState !is ShazamState.Idle) {

@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -43,6 +45,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.adamglin.phosphoricons.Light
+import com.adamglin.PhosphorIcons
+import com.adamglin.phosphoricons.light.SpeakerHigh
+import com.adamglin.phosphoricons.light.SpeakerLow
+import com.adamglin.phosphoricons.light.SpeakerX
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -58,13 +65,18 @@ internal class VolumeHud(private val audio: AudioManager, private val haptic: Ha
     var fraction by mutableFloatStateOf(0f)
         private set
 
+    /** Which edge the current drag started on. Kept after release so the pill fades out on the same side. */
+    var onRight by mutableStateOf(false)
+        private set
+
     /** Where the artwork row sits on screen; the pills are centered on it. Set by [volumeHudAnchor]. */
     var anchor by mutableStateOf(Rect.Zero)
         internal set
 
     private fun current(): Float = audio.getStreamVolume(AudioManager.STREAM_MUSIC) / maxSteps.toFloat()
 
-    fun begin() {
+    fun begin(right: Boolean) {
+        onRight = right
         fraction = current()
         lastStep = (fraction * maxSteps).roundToInt()
         holding = true
@@ -124,7 +136,7 @@ internal fun Modifier.edgeVolumeGesture(
                 if (abs(dy) > slop) {
                     if (abs(dy) > abs(dx) * 1.5f) {
                         claimed = true
-                        hud.begin()
+                        hud.begin(right = down.position.x > size.width / 2f)
                         startFraction = hud.fractionNow()
                         startY = c.position.y
                         c.consume()
@@ -140,7 +152,7 @@ internal fun Modifier.edgeVolumeGesture(
 }
 
 /**
- * Two thin pills, one on each side of the artwork. Draw on top of the screen (takes no touches);
+ * One thin pill on the edge being dragged (left or right), level with the artwork row. Draw on top of the screen (takes no touches);
  * they fade out shortly after release.
  */
 @Composable
@@ -150,7 +162,7 @@ internal fun VolumeHudOverlay(hud: VolumeHud, modifier: Modifier = Modifier) {
         if (hud.holding) visible = true else { delay(600); visible = false }
     }
     var origin by remember { mutableStateOf(Offset.Zero) }
-    val pillHeight = 160.dp
+    val pillHeight = 150.dp
     val pillHeightPx = with(LocalDensity.current) { pillHeight.toPx() }
     val top = (hud.anchor.center.y - origin.y - pillHeightPx / 2f).roundToInt()
 
@@ -161,8 +173,11 @@ internal fun VolumeHudOverlay(hud: VolumeHud, modifier: Modifier = Modifier) {
             exit = fadeOut(tween(240)),
         ) {
             Box(Modifier.fillMaxSize()) {
-                VolumePill(hud.fraction, pillHeight, Modifier.align(Alignment.TopStart).offset { IntOffset(0, top) }.padding(start = 10.dp))
-                VolumePill(hud.fraction, pillHeight, Modifier.align(Alignment.TopEnd).offset { IntOffset(0, top) }.padding(end = 10.dp))
+                if (hud.onRight) {
+                    VolumePill(hud.fraction, pillHeight, Modifier.align(Alignment.TopEnd).offset { IntOffset(0, top) }.padding(end = 8.dp))
+                } else {
+                    VolumePill(hud.fraction, pillHeight, Modifier.align(Alignment.TopStart).offset { IntOffset(0, top) }.padding(start = 8.dp))
+                }
             }
         }
     }
@@ -170,20 +185,33 @@ internal fun VolumeHudOverlay(hud: VolumeHud, modifier: Modifier = Modifier) {
 
 @Composable
 private fun VolumePill(fraction: Float, height: Dp, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(50)
+    val f = fraction.coerceIn(0f, 1f)
+    val icon = when {
+        f <= 0f -> PhosphorIcons.Light.SpeakerX
+        f < 0.5f -> PhosphorIcons.Light.SpeakerLow
+        else -> PhosphorIcons.Light.SpeakerHigh
+    }
+    // The icon sits at the bottom of the pill: dark while the white fill is behind it, white once the fill drops below it.
+    val iconTint = if (f > 0.16f) Color.Black.copy(alpha = 0.8f) else Color.White
     Box(
         modifier
-            .width(5.dp)
+            .width(22.dp)
             .height(height)
-            .clip(shape)
+            .clip(RoundedCornerShape(11.dp))
             .background(Color.White.copy(alpha = 0.16f)),
     ) {
         Box(
             Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .fillMaxHeight(fraction.coerceIn(0f, 1f))
+                .fillMaxHeight(f)
                 .background(Color.White.copy(alpha = 0.92f)),
+        )
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = iconTint,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp).size(14.dp),
         )
     }
 }

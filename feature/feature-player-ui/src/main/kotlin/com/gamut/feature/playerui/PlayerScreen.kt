@@ -30,14 +30,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -46,8 +50,8 @@ import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.light.CaretDown
 import com.adamglin.phosphoricons.light.DotsThreeVertical
-import com.adamglin.phosphoricons.light.Equalizer
 import com.adamglin.phosphoricons.light.Heart
+import com.adamglin.phosphoricons.light.ListPlus
 import com.adamglin.phosphoricons.light.Queue
 import com.adamglin.phosphoricons.light.Repeat
 import com.adamglin.phosphoricons.light.RepeatOnce
@@ -55,7 +59,6 @@ import com.adamglin.phosphoricons.light.Shuffle
 import com.adamglin.phosphoricons.light.Sparkle
 import com.adamglin.phosphoricons.light.SkipBack
 import com.adamglin.phosphoricons.light.SkipForward
-import com.adamglin.phosphoricons.light.Timer
 import com.gamut.core.designsystem.AcrylicHost
 import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.designsystem.LocalCoverPalette
@@ -75,6 +78,7 @@ import com.gamut.feature.playerui.components.TimeRow
 import com.gamut.feature.playerui.components.VolumeHud
 import com.gamut.feature.playerui.components.VolumeHudOverlay
 import com.gamut.feature.playerui.components.edgeVolumeGesture
+import com.gamut.feature.playerui.components.volumeHudAnchor
 import com.gamut.feature.playerui.components.backdropArtUrl
 import com.gamut.feature.playerui.components.bounceTap
 import com.gamut.feature.playerui.components.rememberCoverAccent
@@ -93,8 +97,10 @@ fun PlayerScreen(
     /** ISRCs of the favorited tracks; the heart is filled in when the current track is in this set. */
     favoriteIsrcs: Set<String> = emptySet(),
     onToggleFavorite: (Track) -> Unit = {},
-    /** The "more" (three dots) button: e.g. open the add-to-playlist sheet for this track. */
-    onMore: (Track) -> Unit = {},
+    /** The playlists shown in the list-plus sheet. */
+    playlists: List<PlaylistPickerItem> = emptyList(),
+    /** Called when the user taps a playlist in the list-plus sheet: add [Track] to the playlist with this id. */
+    onAddToPlaylist: (Track, String) -> Unit = { _, _ -> },
 ) {
     val state by player.playbackState.collectAsState()
     // `state` changes every position tick. It is only read inside derivedStateOf, so this screen recomposes when
@@ -124,6 +130,8 @@ fun PlayerScreen(
     val eqState by eq.state.collectAsState()
     var showEq by remember { mutableStateOf(false) }
     var showSleep by remember { mutableStateOf(false) }
+    var showMore by remember { mutableStateOf(false) }
+    var showAddToPlaylist by remember { mutableStateOf(false) }
     val modState by ModController.state.collectAsState()
     var showMod by remember { mutableStateOf(false) }
     val sleepEndsAt by SleepTimer.endsAt.collectAsState()
@@ -132,16 +140,26 @@ fun PlayerScreen(
 
     // Smooth progress clock (see PlayerClock). Everything below only reads it inside lambdas, so the per-frame
     // position invalidates the small pieces that draw it instead of recomposing the whole screen.
+    // Set the moment the user leaves. From then on the screen is a still picture: the per-frame clock, the lyrics
+    // glass and the blur stop invalidating, so the slide-out only moves one cached layer (no jank, no flash).
+    var leaving by remember { mutableStateOf(false) }
+    val leave = remember(onBack) { { if (!leaving) { leaving = true; onBack() } } }
+    BackHandler(enabled = !leaving) { leave() }
+    // False while the screen slides in (and once it is leaving): the backdrop must not fade or change then, it
+    // is just a still picture riding the slide.
+    var settled by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { delay(260); settled = true }
     val clock = remember { PlayerClock() }
     LaunchedEffect(modState.settings.speed) { clock.setSpeed(modState.settings.speed) }   // media time runs at `speed` x wall time
     LaunchedEffect(player) { clock.follow(player) }
-    LaunchedEffect(clock.live, duration) { if (clock.live) clock.tick(duration) }
+    LaunchedEffect(clock.live, duration, leaving) { if (clock.live && !leaving) clock.tick(duration) }
 
     // While the progress line is dragged, the line and time label follow the finger; the real seek happens on release.
     var scrubFraction by remember { mutableStateOf<Float?>(null) }
     val progressProvider = remember(duration) { { scrubFraction ?: (clock.positionMs / duration).coerceIn(0f, 1f) } }
     val positionProvider = remember(duration) { { (progressProvider() * duration).toLong() } }
     val lyricsPosition = remember(clock) { { clock.positionMs.toLong() + LyricsSyncOffsetMs } }
+    val frozenLyricsPosition = remember(leaving) { val p = clock.positionMs.toLong() + LyricsSyncOffsetMs; { p } }
 
     // Lyrics. Keyed on the track (ISRC if there is one, else title + artist: lyrics only need those), so a track
     // without an ISRC still gets lyrics, and the previous song's lines never show for a frame on a track change.
@@ -166,8 +184,13 @@ fun PlayerScreen(
     // frame (back press, transition, re-record), the glass shows just that backing color: the flash. The player has
     // its own dark backdrop, so its glass is pinned to the neutral palette: the same color as the screen, and still.
     CompositionLocalProvider(LocalCoverPalette provides CoverPalette.Neutral) {
-    AcrylicHost(Modifier.fillMaxSize().background(CoverPalette.Neutral.base).edgeVolumeGesture(volumeHud)) {
-        if (artUrl != null) PlayerBackdrop(artUrl)
+    AcrylicHost(
+        Modifier
+            .fillMaxSize()
+            .background(CoverPalette.Neutral.base)
+            .edgeVolumeGesture(volumeHud),
+    ) {
+        if (artUrl != null) PlayerBackdrop(artUrl, animateChanges = settled && !leaving)
 
         // Nothing playing (or still loading): just a black record turning in the middle of the flat background.
         if (track == null) {
@@ -176,16 +199,27 @@ fun PlayerScreen(
         }
 
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp)) {
-            PlayerTopBar(onBack, onMore = { onMore(track) }, modifier = Modifier.fillMaxWidth())
+            PlayerTopBar(leave, onMore = { showMore = true }, modifier = Modifier.fillMaxWidth())
 
             Spacer(Modifier.height(20.dp))
             TrackHeader(track, isFavorite = track.isrc in favoriteIsrcs, onToggleFavorite = { onToggleFavorite(track) })
 
             // Gap between the title row and the cover: bigger = cover + controls sit lower / more central.
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(48.dp))
 
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                DepthIcon(PhosphorIcons.Light.SkipBack, "Previous", Modifier.bounceTap(onClick = player::skipPrevious).padding(8.dp), size = 28.dp)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    // Let the cover row grow past the screen padding on both sides (the lyrics card, which takes
+                    // the leftover height, gets a bit shorter in return). Raise ArtworkExtraWidth for a bigger cover.
+                    .layout { measurable, constraints ->
+                        val extra = ArtworkExtraWidth.roundToPx()
+                        val w = constraints.maxWidth + extra * 2
+                        val placeable = measurable.measure(Constraints(minWidth = w, maxWidth = w))
+                        layout(constraints.maxWidth, placeable.height) { placeable.place(-extra, 0) }
+                    }
+                    .volumeHudAnchor(volumeHud), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                DepthIcon(PhosphorIcons.Light.SkipBack, "Previous", Modifier.bounceTap(onClick = player::skipPrevious).padding(4.dp), size = 28.dp)
                 ArtworkWithRing(
                     modifier = Modifier.weight(1f),
                     url = rawArt,
@@ -205,7 +239,7 @@ fun PlayerScreen(
                         player.seekTo(target)
                     },
                 )
-                DepthIcon(PhosphorIcons.Light.SkipForward, "Next", Modifier.bounceTap(onClick = player::skipNext).padding(8.dp), size = 28.dp)
+                DepthIcon(PhosphorIcons.Light.SkipForward, "Next", Modifier.bounceTap(onClick = player::skipNext).padding(4.dp), size = 28.dp)
             }
 
             Spacer(Modifier.height(14.dp))
@@ -226,12 +260,9 @@ fun PlayerScreen(
                         },
                     )
                 },
-                eqActive = eqState.enabled,
                 modActive = modState.preset != ModPreset.ORIGINAL,
-                sleepActive = sleepEndsAt != null,
                 onQueue = { showQueue = true },
-                onSleep = { showSleep = true },
-                onEqualizer = { showEq = true },
+                onAddToPlaylist = { showAddToPlaylist = true },
                 onMod = { showMod = true },
             )
 
@@ -240,7 +271,7 @@ fun PlayerScreen(
             // Lyrics: a collapsible card that takes whatever space is left below the controls.
             LyricsSection(
                 lyricsState = lyricsState,
-                positionMs = lyricsPosition,
+                positionMs = if (leaving) frozenLyricsPosition else lyricsPosition,
                 accent = accent,
                 expanded = lyricsExpanded,
                 onToggle = { lyricsExpanded = !lyricsExpanded },
@@ -251,6 +282,24 @@ fun PlayerScreen(
         // Volume pill: drawn above everything, takes no touches.
         VolumeHudOverlay(volumeHud)
 
+        if (showMore) {
+            PlayerOptionsSheet(
+                accent = accent,
+                eqActive = eqState.enabled,
+                sleepActive = sleepEndsAt != null,
+                onEqualizer = { showMore = false; showEq = true },
+                onSleepTimer = { showMore = false; showSleep = true },
+                onDismiss = { showMore = false },
+            )
+        }
+        if (showAddToPlaylist) {
+            AddToPlaylistSheet(
+                playlists = playlists,
+                accent = accent,
+                onPick = { onAddToPlaylist(track, it.id) },
+                onDismiss = { showAddToPlaylist = false },
+            )
+        }
         if (showEq) EqualizerSheet(eq, accent, onDismiss = { showEq = false })
         if (showMod) ModSheet(accent, onDismiss = { showMod = false })
         if (showSleep) {
@@ -314,14 +363,11 @@ private fun ModeRow(
     shuffleOn: Boolean,
     repeatMode: PlaybackRepeatMode,
     accent: Color,
-    eqActive: Boolean,
     modActive: Boolean,
-    sleepActive: Boolean,
     onShuffle: () -> Unit,
     onRepeat: () -> Unit,
     onQueue: () -> Unit,
-    onSleep: () -> Unit,
-    onEqualizer: () -> Unit,
+    onAddToPlaylist: () -> Unit,
     onMod: () -> Unit,
 ) {
     val idle = Color.White.copy(alpha = 0.85f)
@@ -345,20 +391,7 @@ private fun ModeRow(
             size = 22.dp,
         )
         DepthIcon(PhosphorIcons.Light.Queue, "Queue", Modifier.bounceTap(onClick = onQueue).padding(8.dp), tint = idle, size = 22.dp)
-        DepthIcon(
-            PhosphorIcons.Light.Timer,
-            if (sleepActive) "Sleep timer on" else "Sleep timer",
-            Modifier.bounceTap(onClick = onSleep).padding(8.dp),
-            tint = if (sleepActive) accent else idle,
-            size = 22.dp,
-        )
-        DepthIcon(
-            PhosphorIcons.Light.Equalizer,
-            "Equalizer",
-            Modifier.bounceTap(onClick = onEqualizer).padding(8.dp),
-            tint = if (eqActive) accent else idle,
-            size = 22.dp,
-        )
+        DepthIcon(PhosphorIcons.Light.ListPlus, "Add to playlist", Modifier.bounceTap(onClick = onAddToPlaylist).padding(8.dp), tint = idle, size = 22.dp)
         DepthIcon(
             PhosphorIcons.Light.Sparkle,
             if (modActive) "Mod on" else "Mod",
@@ -377,6 +410,9 @@ private fun ModeRow(
  * feels early or late on your device.
  */
 internal const val LyricsSyncOffsetMs = 250L
+
+/** How far (per side) the artwork row reaches past the screen's horizontal padding. Bigger = bigger cover. */
+private val ArtworkExtraWidth = 14.dp
 
 private const val RESYNC_THRESHOLD_MS = 400L   // ignore tick differences smaller than this
 
@@ -458,17 +494,21 @@ private val BackgroundBlur = 24.dp   // how hard the cover is blurred behind the
  * layer, so the lyrics card frosts exactly what is behind it instead of the raw, un-tinted art.
  */
 @Composable
-internal fun PlayerBackdrop(artUrl: String) {
+internal fun PlayerBackdrop(artUrl: String, animateChanges: Boolean = true) {
     Box(Modifier.fillMaxSize().acrylicSource()) {
-        AsyncImage(
-            model = rememberFadeRequest(artUrl),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { scaleX = 1.3f; scaleY = 1.3f }   // overscan, so the blur never shows an edge
-                .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(BackgroundBlur) else Modifier),
-        )
+        // The 1.3x overscan must be clipped to the screen: unclipped it spills past the top edge, and while the
+        // screen slides that spill shows as an untinted band of blurred cover above the player.
+        Box(Modifier.fillMaxSize().clipToBounds()) {
+            AsyncImage(
+                model = rememberFadeRequest(artUrl, durationMs = if (animateChanges) 600 else 0),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { scaleX = 1.3f; scaleY = 1.3f }   // overscan, so the blur never shows an edge
+                    .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(BackgroundBlur) else Modifier),
+            )
+        }
         // Frosted tint: the app's base color, translucent, denser toward the bottom where the controls are.
         Box(
             Modifier.fillMaxSize().background(
@@ -502,7 +542,9 @@ private fun rememberFadeRequest(url: String?, durationMs: Int = 600): ImageReque
     // The first image (already loaded elsewhere, e.g. in search) must appear instantly; only later
     // track changes fade. A fade from the dark base on entry shows up as a flicker.
     val firstUrl = remember { url }
-    return remember(url) {
-        ImageRequest.Builder(context).data(url).crossfade(if (url == firstUrl) 0 else durationMs).build()
+    return remember(url, durationMs == 0) {
+        ImageRequest.Builder(context).data(url)
+            .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
+            .crossfade(if (url == firstUrl || durationMs == 0) 0 else durationMs).build()
     }
 }
