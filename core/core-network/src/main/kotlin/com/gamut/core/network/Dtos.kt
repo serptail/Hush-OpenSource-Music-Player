@@ -195,3 +195,16 @@ data class AppleLookupItem(
     val releaseDate: String? = null,
     val kind: String? = null,
 )
+
+@Serializable
+data class BillboardHot100Dto(val date: String = "", val data: List<BillboardSongDto> = emptyList())
+
+@Serializable
+data class BillboardSongDto(
+    val song: String,
+    val artist: String,
+    @SerialName("this_week") val thisWeek: Int,
+    @SerialName("last_week") val lastWeek: Int? = null,
+    @SerialName("peak_position") val peak: Int = 0,
+    @SerialName("weeks_on_chart") val weeks: Int = 0,
+)

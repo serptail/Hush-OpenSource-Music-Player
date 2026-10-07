@@ -6,6 +6,7 @@ import com.gamut.core.model.TrackSource
 import com.gamut.core.network.ItunesApi
 import com.gamut.core.network.ItunesTrackDto
 import com.gamut.core.network.DeezerApi
+import com.gamut.core.network.DeezerArtistDto
 import com.gamut.core.network.DeezerTrackDto
 import com.gamut.core.network.YoutubeCandidate
 import com.gamut.core.network.YoutubeMusicSearchSource
@@ -24,7 +25,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 
-data class SearchResult(val tracks: List<Track>, val isFinal: Boolean)
+/** [artist] is the artist signal for this query (set from the second emission on); the UI uses it to gate the artist card. */
+data class SearchResult(val tracks: List<Track>, val isFinal: Boolean, val artist: ArtistSignal? = null)
 
 interface SearchRepository {
     fun search(query: String): Flow<SearchResult>
@@ -36,7 +38,7 @@ class SearchRepositoryImpl @Inject constructor(
     private val youtubeSource: YoutubeMusicSearchSource,
 ) : SearchRepository {
 
-    // Process-lifetime cache of raw query -> ranked tracks. iTunes has no per-key ETag/
+    // Process-lifetime cache of query -> final ranked tracks. iTunes has no per-key ETag/
     // cache-control worth respecting, and its own soft rate limit (~20 req/min/IP) means a
     // user backspacing to a query they already typed should never re-hit the network.
     private val resultCache = ConcurrentHashMap<String, CachedResult>()
@@ -44,6 +46,11 @@ class SearchRepositoryImpl @Inject constructor(
     private val itunesRateGate = Mutex()
     private val itunesRequestTimes = ArrayDeque<Long>()
 
+    /**
+     * Emission 1: iTunes + Deezer songs, ranked (fast, never waits for YouTube).
+     * Emission 2: same songs plus the [ArtistSignal] (so the UI can decide whether the artist card is deserved).
+     * Emission 3 (final): everything, with YouTube finds and, only for a confidently identified artist, their top songs.
+     */
     override fun search(query: String): Flow<SearchResult> = channelFlow {
         val trimmed = query.trim()
         if (trimmed.isEmpty()) {
@@ -54,12 +61,13 @@ class SearchRepositoryImpl @Inject constructor(
         val cacheKey = trimmed.lowercase()
         val cached = resultCache[cacheKey]?.takeIf { it.isFresh() }
         if (cached != null) {
-            send(SearchResult(mergeWithYoutube(cached.itunesTracks, cached.youtubeCandidates, trimmed), true))
+            send(SearchResult(cached.tracks, true, cached.artist))
             return@channelFlow
         }
 
         val itunesDeferred = async { searchItunes(trimmed) }
-        val artistDeferred = async { searchDeezerArtist(trimmed) }
+        val deezerDeferred = async { searchDeezerTracks(trimmed) }
+        val artistDeferred = async { lookupArtist(trimmed) }
         val youtubeDeferred = async {
             withTimeoutOrNull(YOUTUBE_BUDGET_MS) {
                 runCatching {
@@ -68,21 +76,27 @@ class SearchRepositoryImpl @Inject constructor(
                 }.getOrDefault(emptyList())
             }.orEmpty()
         }
-        val itunesTracks = itunesDeferred.await()
-        send(SearchResult(itunesTracks, isFinal = false))
-        val youtubeCandidates = youtubeDeferred.await()
-        if (itunesTracks.isNotEmpty() || youtubeCandidates.isNotEmpty()) {
-            resultCache[cacheKey] = CachedResult(itunesTracks, youtubeCandidates, System.currentTimeMillis())
-        }
-        send(SearchResult(mergeWithYoutube(itunesTracks, youtubeCandidates, trimmed), true))
 
-        // Artist discovery is deliberately a later refinement: Deezer must never delay
-        // the first usable result set when its public endpoint is slow or unavailable.
-        val artistTracks = artistDeferred.await()
-        if (artistTracks.isNotEmpty()) {
-            resultCache[cacheKey] = CachedResult(artistTracks, youtubeCandidates, System.currentTimeMillis())
-            send(SearchResult(mergeWithYoutube(artistTracks, youtubeCandidates, trimmed), true))
+        val itunes = itunesDeferred.await()
+        val deezer = deezerDeferred.await() // capped at DEEZER_TIMEOUT_MS
+        val first = assemble(trimmed, itunes, deezer, emptyList(), boostArtist = false, youtube = emptyList())
+        send(SearchResult(first, isFinal = false))
+
+        val artist = artistDeferred.await() // capped at DEEZER_TIMEOUT_MS
+        val signal = ArtistSignal(TextMatch.norm(trimmed), artist?.name, artist?.fanCount)
+        send(SearchResult(first, isFinal = false, artist = signal))
+
+        // Only a confidently identified artist gets their songs mixed in (never replaces the results any more).
+        val confidence = artist?.let { SearchRanking.artistConfidence(trimmed, it.name, it.fanCount, first) } ?: 0.0
+        val boost = artist != null && confidence >= SearchRanking.ARTIST_BOOST_THRESHOLD
+        val artistTracks = if (boost) topTracks(artist!!.id) else emptyList()
+
+        val youtube = youtubeDeferred.await()
+        val finalTracks = assemble(trimmed, itunes, deezer, artistTracks, boost, youtube)
+        if (finalTracks.isNotEmpty()) {
+            resultCache[cacheKey] = CachedResult(finalTracks, signal, System.currentTimeMillis())
         }
+        send(SearchResult(finalTracks, isFinal = true, artist = signal))
     }
 
     private suspend fun searchItunes(rawQuery: String): List<Track> {
@@ -98,27 +112,13 @@ class SearchRepositoryImpl @Inject constructor(
             return emptyList()
         }
 
-        val playable = response.body()?.results.orEmpty()
+        // iTunes' own order is kept (it is a useful relevance prior); SearchRanking does the real ranking.
+        return response.body()?.results.orEmpty()
             .asSequence()
             .filter { it.isPlayableSong() }
             .distinctBy { it.trackId }
-            .map { it to it.rankingScore(rawQuery) }
-            .sortedByDescending { (_, score) -> score }
+            .map { it.toDomain() }
             .toList()
-        val query = TextMatch.norm(rawQuery)
-        val hasExactSong = playable.any { TextMatch.norm(it.first.trackName.orEmpty()) == query }
-        return (if (hasExactSong) {
-            playable.filter { songMatchesQuery(it.first, query) }
-        } else {
-            playable
-        }).map { (dto, _) -> dto.toDomain() }
-    }
-
-    private fun songMatchesQuery(dto: ItunesTrackDto, normalizedQuery: String): Boolean {
-        val title = TextMatch.toks(dto.trackName.orEmpty())
-        val query = TextMatch.toks(normalizedQuery)
-        val coverage = query.count { it in title }.toDouble() / query.size.coerceAtLeast(1)
-        return coverage >= 0.8
     }
 
     private suspend fun <T> withItunesRateLimit(block: suspend () -> T): T {
@@ -138,16 +138,27 @@ class SearchRepositoryImpl @Inject constructor(
         return block()
     }
 
-    private suspend fun searchDeezerArtist(query: String): List<Track> = withTimeoutOrNull(DEEZER_TIMEOUT_MS) {
+    private suspend fun searchDeezerTracks(query: String): List<DeezerTrackDto> = withTimeoutOrNull(DEEZER_TIMEOUT_MS) {
+        runCatching { deezerApi.searchTracks(query, limit = SEARCH_LIMIT).data }.getOrDefault(emptyList())
+    }.orEmpty()
+
+    /** Best Deezer artist for the query by name match, ties broken by fan count. No popularity decision here. */
+    private suspend fun lookupArtist(query: String): DeezerArtistDto? = withTimeoutOrNull(DEEZER_TIMEOUT_MS) {
         runCatching {
-            val normalizedQuery = TextMatch.norm(query)
-            val artist = deezerApi.searchArtists(query).data.firstOrNull {
-                TextMatch.norm(it.name) == normalizedQuery
-            } ?: return@runCatching emptyList()
-            deezerApi.topTracks(artist.id, limit = ARTIST_TRACK_LIMIT).data
+            deezerApi.searchArtists(query, limit = 5).data
+                .map { it to SearchRanking.nameMatch(query, it.name) }
+                .filter { (_, match) -> match > 0.0 }
+                .maxWithOrNull(compareBy({ it.second }, { it.first.fanCount ?: 0L }))
+                ?.first
+        }.getOrNull()
+    }
+
+    private suspend fun topTracks(artistId: Long): List<DeezerTrackDto> = withTimeoutOrNull(DEEZER_TIMEOUT_MS) {
+        runCatching {
+            deezerApi.topTracks(artistId, limit = ARTIST_TRACK_LIMIT).data
                 .distinctBy { it.id }
                 .sortedByDescending { it.rank }
-                .map { it.toDomain() }
+                .take(ARTIST_BOOST_TRACKS)
         }.getOrDefault(emptyList())
     }.orEmpty()
 
@@ -161,41 +172,63 @@ class SearchRepositoryImpl @Inject constructor(
         return true
     }
 
-    /**
-     * iTunes' own relevance ranking is decent but has no concept of "this is the well-known
-     * artist you obviously meant" -- same client-side boost strategy as the old MusicBrainz
-     * scorer, just without MB's separate text-match score to blend in.
-     */
-    private fun ItunesTrackDto.rankingScore(rawQuery: String): Double {
-        val queryTokens = TextMatch.toks(rawQuery)
-        val artistTokens = TextMatch.toks(artistName.orEmpty())
-        val titleTokens = TextMatch.toks(trackName.orEmpty())
-        val albumTokens = TextMatch.toks(collectionName.orEmpty())
-        val artistMatch = queryTokens.count { it in artistTokens }.toDouble() / queryTokens.size.coerceAtLeast(1)
-        val titleMatch = queryTokens.count { it in titleTokens }.toDouble() / queryTokens.size.coerceAtLeast(1)
-        val junk = ((artistTokens + titleTokens + albumTokens) intersect TextMatch.DERIVATIVE).size
-        val exactArtist = TextMatch.primaryArtist(artistName.orEmpty()) == TextMatch.norm(rawQuery)
-        return (if (exactArtist) 100.0 else 0.0) + artistMatch * 40.0 + titleMatch * 30.0 - junk * 60.0
-    }
+    private fun Track.key() = TextMatch.norm(title) + "|" + TextMatch.primaryArtist(artist)
 
     /**
-     * Unifies iTunes tracks and YouTube candidates:
-     *  - a YouTube candidate closely matching an existing iTunes track is dropped (iTunes
-     *    stays canonical -- it carries proper album metadata and free high-res artwork)
-     *  - a YouTube candidate with no close match becomes its own Track, using the YouTube
-     *    thumbnail as artwork and a fallback resolution key
+     * Pools iTunes, Deezer, the (optional) boosted artist's songs and YouTube finds into [Candidate]s and ranks them:
+     *  - iTunes stays canonical (album metadata, free high-res art); Deezer only adds popularity to a song iTunes
+     *    already has, or contributes songs iTunes did not return
+     *  - a YouTube find close to an existing catalog song is dropped, otherwise it competes with a small penalty
      */
-    private fun mergeWithYoutube(
-        itunesTracks: List<Track>,
-        youtubeCandidates: List<YoutubeCandidate>,
+    private fun assemble(
         query: String,
+        itunes: List<Track>,
+        deezer: List<DeezerTrackDto>,
+        artistTracks: List<DeezerTrackDto>,
+        boostArtist: Boolean,
+        youtube: List<YoutubeCandidate>,
     ): List<Track> {
-        val youtubeOnly = youtubeCandidates
-            .filter { candidate -> isCleanYoutubeResult(candidate, query) }
-            .filter { candidate -> itunesTracks.none { track -> duplicates(candidate, track) } }
-            .map { it.toYoutubeOnlyTrack() }
+        val popularityByKey = HashMap<String, Double>()
+        (deezer + artistTracks).forEach { dto ->
+            popularityByKey.merge(dto.toDomain().key(), SearchRanking.trackPopularity(dto.rank), ::maxOf)
+        }
+        val artistKeys = if (boostArtist) artistTracks.map { it.toDomain().key() }.toSet() else emptySet()
+        fun boostFor(key: String) = if (key in artistKeys) ARTIST_BOOST else 0.0
 
-        return itunesTracks + youtubeOnly
+        val candidates = ArrayList<Candidate>()
+        val known = HashSet<String>()
+        itunes.forEachIndexed { i, track ->
+            val key = track.key()
+            known += key
+            candidates += Candidate(track, popularityByKey[key] ?: 0.0, i, boost = boostFor(key))
+        }
+        deezer.forEachIndexed { i, dto ->
+            val track = dto.toDomain()
+            val key = track.key()
+            if (known.add(key)) {
+                candidates += Candidate(track, SearchRanking.trackPopularity(dto.rank), i, penalty = 2.0, boost = boostFor(key))
+            }
+        }
+        artistTracks.forEachIndexed { i, dto ->
+            val track = dto.toDomain()
+            if (known.add(track.key())) {
+                candidates += Candidate(track, SearchRanking.trackPopularity(dto.rank), i, boost = boostFor(track.key()))
+            }
+        }
+
+        val catalog = candidates.map { it.track }
+        youtube
+            .filter { isCleanYoutubeResult(it, query) }
+            .filter { candidate -> catalog.none { duplicates(candidate, it) } }
+            .forEachIndexed { i, candidate ->
+                candidates += Candidate(
+                    candidate.toYoutubeOnlyTrack(),
+                    SearchRanking.viewsPopularity(candidate.viewCount),
+                    i,
+                    penalty = YOUTUBE_PENALTY,
+                )
+            }
+        return SearchRanking.rank(query, candidates)
     }
 
     private fun YoutubeCandidate.toYoutubeOnlyTrack(): Track = Track(
@@ -231,8 +264,8 @@ class SearchRepositoryImpl @Inject constructor(
     }
 
     private data class CachedResult(
-        val itunesTracks: List<Track>,
-        val youtubeCandidates: List<YoutubeCandidate>,
+        val tracks: List<Track>,
+        val artist: ArtistSignal,
         val cachedAtMs: Long,
     ) {
         fun isFresh(): Boolean = System.currentTimeMillis() - cachedAtMs < CACHE_TTL_MS
@@ -246,7 +279,10 @@ class SearchRepositoryImpl @Inject constructor(
         const val SEARCH_LIMIT = 25
         const val YOUTUBE_BUDGET_MS = 5_000L
         const val DEEZER_TIMEOUT_MS = 3_000L
-        const val ARTIST_TRACK_LIMIT = 100
+        const val ARTIST_TRACK_LIMIT = 30
+        const val ARTIST_BOOST_TRACKS = 15
+        const val ARTIST_BOOST = 15.0
+        const val YOUTUBE_PENALTY = 10.0
         const val ITUNES_MAX_REQUESTS = 15
         const val ITUNES_WINDOW_MS = 60_000L
         const val CACHE_TTL_MS = 10 * 60 * 1_000L // 10 min: iTunes catalog changes rarely

@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -32,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
@@ -81,8 +85,6 @@ fun LibraryScreen(
     barHeight: androidx.compose.ui.unit.Dp,
 ) {
     val userPlaylists by viewModel.playlists.collectAsStateWithLifecycle()
-    // Count only: collecting the full favorites list here mapped every liked track just to show a number.
-    val favoriteCount by viewModel.favoriteCount.collectAsStateWithLifecycle()
     val playlistInfo by viewModel.playlistInfo.collectAsStateWithLifecycle()
     val notifier = LocalNotifier.current
 
@@ -114,7 +116,6 @@ fun LibraryScreen(
                         item(key = "liked") {
                             LibraryRow(
                                 title = "Liked songs",
-                                subtitle = songCountLabel(favoriteCount),
                                 onClick = { onOpenPlaylist("liked") },
                                 cover = { RowCover(null, PhosphorIcons.Fill.Heart) },
                             )
@@ -124,7 +125,8 @@ fun LibraryScreen(
                         items(userPlaylists, key = { "v-${it.id}" }, contentType = { "playlist" }) { playlist ->
                             LibraryRow(
                                 title = playlist.name,
-                                subtitle = songCountLabel(playlistInfo[playlist.id]?.songCount ?: 0),
+                                // Tags replace the song count: the count only shows once you are inside the playlist.
+                                meta = if (playlist.tags.isEmpty()) null else ({ TagRow(playlist.tags) }),
                                 onClick = { onOpenPlaylist(playlist.id.toString()) },
                                 // A cover the user picked always wins over the art of the last song.
                                 cover = { RowCover(playlist.coverUri ?: playlistInfo[playlist.id]?.coverUrl, PhosphorIcons.Light.VinylRecord) },
@@ -204,19 +206,50 @@ private fun RowCover(coverUrl: String?, icon: ImageVector) {
     }
 }
 
-private fun songCountLabel(n: Int) = when (n) {
-    0 -> "Empty"
-    1 -> "1 song"
-    else -> "$n songs"
+/**
+ * A playlist's tags as small pills under its name: up to [MAX_TAGS_SHOWN], then a "+N". Blank and duplicate tags are
+ * skipped. Long tags shrink with an ellipsis rather than pushing the row wider.
+ */
+@Composable
+private fun TagRow(tags: List<String>) {
+    val clean = remember(tags) { tags.map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() } }
+    if (clean.isEmpty()) return
+    val shown = clean.take(MAX_TAGS_SHOWN)
+    val extra = clean.size - shown.size
+    Row(
+        Modifier.fillMaxWidth().clipToBounds(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        shown.forEach { tag -> TagPill(tag, Modifier.weight(1f, fill = false)) }
+        if (extra > 0) TagPill("+$extra")
+    }
 }
 
-/** Flat list row: cover, title, quiet subtitle, trailing chevron (or a custom trailing action). */
+@Composable
+private fun TagPill(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = ink(0.75f),
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier
+            .background(ink(0.10f), CircleShape)
+            .padding(horizontal = 10.dp, vertical = 3.dp),
+    )
+}
+
+private const val MAX_TAGS_SHOWN = 3
+
+/** Flat list row: cover, title, optional [meta] line (the tags), trailing chevron (or a custom trailing action). */
 @Composable
 private fun LibraryRow(
     title: String,
-    subtitle: String,
     onClick: () -> Unit,
     cover: @Composable () -> Unit,
+    meta: (@Composable () -> Unit)? = null,
     trailing: @Composable () -> Unit = { ChevronIcon() },
 ) {
     Row(
@@ -226,7 +259,10 @@ private fun LibraryRow(
         cover()
         Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 1)
+            if (meta != null) {
+                Spacer(Modifier.height(5.dp))
+                meta()
+            }
         }
         trailing()
     }

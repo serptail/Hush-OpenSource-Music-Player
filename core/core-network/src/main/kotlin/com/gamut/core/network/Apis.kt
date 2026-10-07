@@ -113,3 +113,8 @@ interface ResolverSyncApi {
     @GET("youtube/search") suspend fun searchYoutube(@Query("query") query: String): YoutubeSearchResponse
     @GET("youtube/stream/{videoId}") suspend fun youtubeStream(@Path("videoId") videoId: String): Response<AudioStreamDto>
 }
+
+interface BillboardApi {
+    @GET("mhollingshead/billboard-hot-100/main/recent.json")
+    suspend fun recent(): BillboardHot100Dto
+}

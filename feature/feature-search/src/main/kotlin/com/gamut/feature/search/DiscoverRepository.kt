@@ -51,13 +51,17 @@ data class AlbumDetails(
     val tracks: List<Track>,
 )
 
-/** Everything here is keyless Apple: RSS charts (marketingtools) + iTunes lookup/search. No server needed. */
+/**
+ * Apple RSS charts + iTunes lookup, blended with the Billboard Hot 100 (resolved through Deezer).
+ * No API keys, no server.
+ */
 @Singleton
 class DiscoverRepository @Inject constructor(
     private val apple: AppleChartsApi,
     private val itunes: ItunesApi,
     private val catalog: AppleCatalogRepository,
     private val diskCache: DiscoverDiskCache,
+    private val billboard: BillboardRepository,
 ) {
     @Volatile private var cachedDiscover: DiscoverState? = null
     // Written from several coroutines (album screens opening while Discover loads): must be thread-safe.
@@ -69,14 +73,15 @@ class DiscoverRepository @Inject constructor(
 
     /**
      * Emits Discover in stages: the charts as soon as they arrive (that is all the loading screen waits for), then
-     * the artist portraits one by one in chart order. A finished load is cached for the rest of the process.
+     * artist portraits and Billboard resolutions (artwork + playable tracks) as they land. A finished load is cached
+     * for the rest of the process and on disk.
      */
     fun discoverFlow(): Flow<DiscoverState> = channelFlow {
         cachedDiscover?.let { send(it.copy(isLoading = false)); return@channelFlow }
         // Last session's Discover first: the loading screen can end at once, fresh data replaces it when it lands.
         val stale = diskCache.read()
         if (stale != null) send(stale)
-        val (songs, albums) = coroutineScope {
+        val (songs, rawAlbums, bb) = coroutineScope {
             val songsJob = async {
                 withTimeoutOrNull(CHART_TIMEOUT_MS) {
                     safe { apple.topSongs(100).feed.results }.getOrDefault(emptyList())
@@ -84,31 +89,38 @@ class DiscoverRepository @Inject constructor(
             }
             val albumsJob = async {
                 withTimeoutOrNull(CHART_TIMEOUT_MS) {
-                    safe { apple.topAlbums(10).feed.results.take(10) }.getOrDefault(emptyList())
+                    safe { apple.topAlbums(20).feed.results.take(20) }.getOrDefault(emptyList())
                 }.orEmpty()
             }
-            songsJob.await() to albumsJob.await()
+            // chart() never throws; a Billboard outage just means Discover stays Apple-only.
+            val billboardJob = async { withTimeoutOrNull(CHART_TIMEOUT_MS) { billboard.chart() }.orEmpty() }
+            Triple(songsJob.await(), albumsJob.await(), billboardJob.await())
         }
-        if (songs.isEmpty() && albums.isEmpty()) {
+        if (songs.isEmpty() && rawAlbums.isEmpty()) {
             // Offline or charts down: keep showing last session's Discover rather than replacing it with an error.
             if (stale == null) send(DiscoverState(isLoading = false, error = "Discover is unavailable"))
             return@channelFlow
         }
+        val albums = boostAlbums(rawAlbums, bb)
         val latest = latestFrom(songs)
-        val tabs = buildList {
-            add(DiscoverTab("Top 10", "Apple Music top songs", songs.take(10).map { it.toDiscoverItem() }))
+        val resolved = HashMap<String, Track>() // Billboard key -> playable track; guarded by [lock]
+
+        fun buildTabs(): List<DiscoverTab> = buildList {
+            add(DiscoverTab("Trending", "Trending now", blendTrending(songs, bb, resolved)))
+            if (bb.isNotEmpty()) {
+                add(DiscoverTab("Billboard", "Billboard Hot 100", bb.take(BILLBOARD_TAB_LIMIT).map { it.toDiscoverItem(resolved[it.key]) }))
+            }
             if (latest.isNotEmpty()) add(DiscoverTab("Latest", "New on the charts", latest.map { it.toDiscoverItem() }))
             add(DiscoverTab("Albums", "Apple Music top albums", albums.map { it.toDiscoverAlbum() }))
         }
+
         // With a stale copy on screen its portraits stay until the fresh ones are all in (one swap, no shrinking row).
         val progressive = stale == null || stale.artists.isEmpty()
-        val base = DiscoverState(
-            albums = albums.map { it.toDiscoverAlbum() },
-            artists = if (progressive) emptyList() else stale!!.artists,
-            tabs = tabs,
-            isLoading = false,
-        )
-        send(base)
+        val albumRow = albums.take(10).map { it.toDiscoverAlbum() } // the row stays at 10; the Albums tab has all 20
+        var artistsNow: List<DiscoverItem> = if (progressive) emptyList() else stale!!.artists
+        var tabsNow = buildTabs()
+        fun state() = DiscoverState(albums = albumRow, artists = artistsNow, tabs = tabsNow, isLoading = false)
+        send(state())
 
         // Chart items carry Apple's artistId, so there is no name matching and no namesake problem.
         val ids = songs.mapNotNull { item -> item.artistId?.toLongOrNull()?.let { it to item.artistName } }
@@ -116,26 +128,80 @@ class DiscoverRepository @Inject constructor(
         val slots = arrayOfNulls<DiscoverItem>(ids.size)
         val lock = Mutex()
         val gate = Semaphore(4)
-        withTimeoutOrNull(ARTIST_IMAGES_TIMEOUT_MS) {
-            coroutineScope {
-                ids.forEachIndexed { index, (id, name) ->
-                    launch {
-                        val card = gate.withPermit { catalog.artistCard(id, name) } ?: return@launch
-                        lock.withLock {
-                            slots[index] = card
-                            if (progressive) send(base.copy(artists = slots.filterNotNull())) // chart order is kept
+        coroutineScope {
+            launch {
+                withTimeoutOrNull(ARTIST_IMAGES_TIMEOUT_MS) {
+                    coroutineScope {
+                        ids.forEachIndexed { index, (id, name) ->
+                            launch {
+                                val card = gate.withPermit { catalog.artistCard(id, name) } ?: return@launch
+                                lock.withLock {
+                                    slots[index] = card
+                                    if (progressive) { artistsNow = slots.filterNotNull(); send(state()) } // chart order is kept
+                                }
+                            }
                         }
                     }
                 }
             }
+            if (bb.isNotEmpty()) launch {
+                var lastPushMs = 0L
+                withTimeoutOrNull(BILLBOARD_RESOLVE_TIMEOUT_MS) {
+                    billboard.resolve(bb.take(BILLBOARD_TAB_LIMIT)) { entry, track ->
+                        lock.withLock {
+                            resolved[entry.key] = track
+                            val now = System.currentTimeMillis()
+                            if (now - lastPushMs >= PUSH_THROTTLE_MS) { // throttled: 100 tracks != 100 emissions
+                                lastPushMs = now
+                                tabsNow = buildTabs()
+                                send(state())
+                            }
+                        }
+                    }
+                }
+                lock.withLock { tabsNow = buildTabs(); send(state()) } // whatever resolved before the timeout
+            }
         }
-        val artists = slots.filterNotNull()
-        val finalState = if (artists.isNotEmpty()) base.copy(artists = artists) else base
-        if (!progressive && artists.isNotEmpty()) send(finalState)
-        if (artists.isNotEmpty()) {
+        lock.withLock {
+            val fresh = slots.filterNotNull()
+            if (fresh.isNotEmpty()) artistsNow = fresh
+            send(state())
+        }
+        if (artistsNow.isNotEmpty()) {
+            val finalState = state()
             cachedDiscover = finalState
             diskCache.write(finalState)
         }
+    }
+
+    /**
+     * Trending = Apple and Billboard blended 50/50 by chart position (101 - rank). A song on both charts scores up to
+     * 100, a song on one chart up to 50. Billboard-only songs join once they are resolved (they need artwork).
+     */
+    private fun blendTrending(apple: List<AppleChartItem>, bb: List<BillboardEntry>, resolved: Map<String, Track>): List<DiscoverItem> {
+        val bbByKey = bb.associateBy { it.key }
+        val seen = HashSet<String>()
+        val scored = ArrayList<Pair<Double, DiscoverItem>>()
+        apple.take(100).forEachIndexed { i, item ->
+            val key = chartKey(item.name, item.artistName)
+            seen += key
+            val billboardPoints = bbByKey[key]?.let { BLEND_WEIGHT * (101 - it.rank) } ?: 0.0
+            scored += (BLEND_WEIGHT * (100 - i) + billboardPoints) to item.toDiscoverItem()
+        }
+        bb.forEach { entry ->
+            if (entry.key !in seen) resolved[entry.key]?.let { scored += BLEND_WEIGHT * (101 - entry.rank) to entry.toDiscoverItem(it) }
+        }
+        return scored.sortedByDescending { it.first }.take(50).map { it.second }
+    }
+
+    /** Apple albums by chart position, plus a bonus when the artist has songs on the Hot 100 (capped). */
+    private fun boostAlbums(albums: List<AppleChartItem>, bb: List<BillboardEntry>): List<AppleChartItem> {
+        if (bb.isEmpty()) return albums
+        val heat = HashMap<String, Double>()
+        bb.forEach { heat.merge(it.artistKey, (101 - it.rank) / 4.0, Double::plus) }
+        return albums.withIndex()
+            .sortedByDescending { (i, a) -> (albums.size - i) + (heat[artistKey(a.artistName)] ?: 0.0).coerceAtMost(ALBUM_BOOST_CAP) }
+            .map { it.value }
     }
 
     /** Newest releases from the chart, strictly by release date -- never a copy of Top 10. */
@@ -199,5 +265,10 @@ class DiscoverRepository @Inject constructor(
         const val CHART_TIMEOUT_MS = 6_000L
         const val ARTIST_IMAGES_TIMEOUT_MS = 6_000L
         const val ALBUM_TIMEOUT_MS = 10_000L
+        const val BILLBOARD_RESOLVE_TIMEOUT_MS = 25_000L // Deezer is rate-limited to ~8 req/s in NetworkModule
+        const val BILLBOARD_TAB_LIMIT = 50 // tab rows are composed eagerly inside one LazyColumn item (no per-row laziness)
+        const val PUSH_THROTTLE_MS = 500L
+        const val BLEND_WEIGHT = 0.5
+        const val ALBUM_BOOST_CAP = 30.0
     }
 }

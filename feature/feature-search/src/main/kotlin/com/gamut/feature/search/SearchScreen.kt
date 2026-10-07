@@ -8,6 +8,26 @@ import com.gamut.core.designsystem.LocalAcrylicState
 import dev.chrisbanes.haze.HazeState
 import com.gamut.core.designsystem.acrylicSource
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.text.font.FontWeight
+import com.adamglin.phosphoricons.light.ArrowRight
+import com.adamglin.phosphoricons.light.Play
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -108,6 +128,8 @@ fun SearchScreen(
     onAlbumSelected: (DiscoverItem) -> Unit,
     /** The round "what's this song?" button next to the profile icon. */
     onShazam: () -> Unit,
+    /** Three dots on a Discover song row. Defaults to a no-op until the actions sheet is wired in MainActivity. */
+    onTrackMore: (Track) -> Unit = {},
     /** Height of the shared bottom bar + mini player strip (owned by HomeTabs in MainActivity). */
     barHeight: androidx.compose.ui.unit.Dp,
 ) {
@@ -189,18 +211,28 @@ fun SearchScreen(
                             state = discover,
                             selectedTab = discoverTab,
                             onSelectTab = { discoverTab = it },
-                            onTrackClick = { track -> onTrackSelected(track, emptyList()) },
+                            onTrackClick = onTrackSelected,
+                            onMoreClick = onTrackMore,
                             onArtistClick = onArtistSelected,
                             onAlbumClick = onAlbumSelected,
                         )
                     } else {
                         artistHit?.let { hit ->
-                            item(key = "artist-hit") { Box(Modifier.padding(horizontal = 24.dp)) { ArtistHit(hit, accent, onArtistSelected) } }
+                            item(key = "artist-hit") {
+                                // Eases in: the card arrives after the songs (it waits for its verification), so it must not jolt the list.
+                                val visible = remember { MutableTransitionState(false).apply { targetState = true } }
+                                AnimatedVisibility(
+                                    visibleState = visible,
+                                    enter = fadeIn(tween(240)) + expandVertically(tween(240)),
+                                ) {
+                                    Box(Modifier.padding(horizontal = 16.dp)) { ArtistHit(hit, onArtistSelected) }
+                                }
+                            }
                         }
                         item(key = "results-title") {
                             Text(
                                 "Results",
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                                 color = TextPrimary.copy(alpha = 0.9f),
                                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
                             )
@@ -211,7 +243,7 @@ fun SearchScreen(
                         } else {
                             itemsIndexed(state.tracks, key = { i, t -> "${t.isrc}#$i" }) { _, track ->
                                 // While a refined search is loading, the old results dim instead of vanishing.
-                                Box(Modifier.padding(horizontal = 24.dp).graphicsLayer { alpha = resultsAlpha }) {
+                                Box(Modifier.padding(horizontal = 16.dp).graphicsLayer { alpha = resultsAlpha }) {
                                     TrackResultRow(track, resolvingIsrc == track.isrc, accent) { picked -> onTrackSelected(picked, state.tracks) }
                                 }
                             }
@@ -262,51 +294,137 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit, accent: 
     }
 }
 
-/** Highlighted card for a searched artist: round portrait, name in the display face, tap opens their page. */
+private val CardShapeLarge = RoundedCornerShape(22.dp)
+
+/**
+ * YouTube mark (32x32 viewBox). Drawn black and always shown through `Icon(tint = ink())`, so it is dark on light
+ * covers and white on dark ones: one glyph instead of a black and a white copy.
+ */
+private val YouTubeGlyph: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "YouTube",
+        defaultWidth = 32.dp,
+        defaultHeight = 32.dp,
+        viewportWidth = 32f,
+        viewportHeight = 32f,
+    ).addPath(
+        pathData = PathParser().parsePathString(
+            "M24.325 8.309s-2.655-.334-8.357-.334c-5.517 0-8.294.334-8.294.334A2.675 2.675 0 0 0 5 10.984v10.034" +
+                "a2.675 2.675 0 0 0 2.674 2.676s2.582.332 8.294.332c5.709 0 8.357-.332 8.357-.332A2.673 2.673 0 0 0 27 21.018" +
+                "V10.982a2.673 2.673 0 0 0-2.675-2.673zM13.061 19.975V12.03L20.195 16l-7.134 3.975z",
+        ).toNodes(),
+        fill = SolidColor(Color.Black),
+    ).build()
+}
+private val RowShape = RoundedCornerShape(16.dp)
+private val ThumbShape = RoundedCornerShape(10.dp)
+
+/**
+ * Shared touch behaviour for result rows and the artist card: a soft ink tint fades in on hover (mouse, stylus,
+ * ChromeOS) or press, and a press squeezes the surface then springs it back with a small overshoot (the bounce).
+ * [content] receives `active` (hovered or pressed) so children can react too (play glyph, arrow slide).
+ */
 @Composable
-private fun ArtistHit(item: DiscoverItem, accent: Color, onClick: (Long) -> Unit) {
+private fun InteractiveSurface(
+    shape: Shape,
+    pressedScale: Float,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
+    content: @Composable RowScope.(active: Boolean) -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) pressedScale else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "surface-scale",
+    )
+    val tint by animateColorAsState(
+        targetValue = ink(if (pressed) 0.10f else if (hovered) 0.06f else 0f),
+        animationSpec = tween(140),
+        label = "surface-tint",
+    )
     Row(
+        // Scale is outermost so anything [modifier] draws (the glass card) squeezes with the content.
         Modifier
-            .fillMaxWidth()
-            .padding(bottom = 12.dp)
-            .pressScale(onClick = { item.artistId?.let(onClick) }, scaleDown = 0.98f)
-            .glass(PanelShape, fill = 0.07f, borderColor = accent.copy(alpha = 0.55f))
-            .padding(14.dp),
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .then(modifier)
+            .clip(shape)
+            .background(tint)
+            .hoverable(interaction)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(contentPadding),
         verticalAlignment = Alignment.CenterVertically,
-    ) {
+    ) { content(this, hovered || pressed) }
+}
+
+/**
+ * The searched artist: round portrait, name in the display face, tap opens their page. No container (no glass, no
+ * border): it sits on the background like the rows below it, only larger. The hover/press tint is the one moment a
+ * shape appears, as touch feedback. The 16dp list gutter plus 8dp inner padding keeps the portrait aligned with the rows.
+ */
+@Composable
+private fun ArtistHit(item: DiscoverItem, onClick: (Long) -> Unit) {
+    InteractiveSurface(
+        shape = CardShapeLarge,
+        pressedScale = 0.97f,
+        onClick = { item.artistId?.let(onClick) },
+        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
+    ) { active ->
         ArtImage(
             url = item.imageUrl,
-            modifier = Modifier.size(72.dp).clip(CircleShape),
+            modifier = Modifier
+                .size(76.dp)
+                .shadow(10.dp, CircleShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.35f))
+                .clip(CircleShape),
             contentDescription = item.title,
             fallback = { ArtworkFallbackIcon() },
         )
-        Column(Modifier.weight(1f).padding(start = 16.dp)) {
+        Column(Modifier.weight(1f).padding(start = 18.dp, end = 8.dp)) {
             Text(item.title, style = MaterialTheme.typography.headlineMedium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("Artist", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
         }
+        // The arrow nudges forward on hover/press: a quiet "this opens".
+        val slide by animateDpAsState(
+            targetValue = if (active) 4.dp else 0.dp,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+            label = "artist-arrow",
+        )
+        Icon(
+            PhosphorIcons.Light.ArrowRight,
+            "Open artist",
+            tint = ink(if (active) 0.9f else 0.5f),
+            modifier = Modifier.offset(x = slide).size(22.dp),
+        )
     }
 }
 
 @Composable
 private fun TrackResultRow(track: Track, isResolving: Boolean, accent: Color, onTrackSelected: (Track) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().pressScale(onClick = { onTrackSelected(track) }, scaleDown = 0.98f).padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    InteractiveSurface(
+        shape = RowShape,
+        pressedScale = 0.97f,
+        onClick = { onTrackSelected(track) },
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+    ) { active ->
         // YouTube thumbnails keep their own 16:9 shape (bar-free frame), everything else is square.
         val isYoutubeThumb = track.albumArtUrl?.let { "ytimg.com" in it || "img.youtube.com" in it } == true
         ArtImage(
             url = remember(track.albumArtUrl) { squareArtUrl(track.albumArtUrl, 256) },
             modifier = Modifier
                 .size(width = if (isYoutubeThumb) 100.dp else 56.dp, height = 56.dp)
-                .shadow(3.dp, ArtShape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
-                .clip(ArtShape),
+                .shadow(6.dp, ThumbShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.20f), spotColor = Color.Black.copy(alpha = 0.30f))
+                .clip(ThumbShape),
             fallback = { ArtworkFallbackIcon() },
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
             Text(
                 track.title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
                 color = TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -320,27 +438,31 @@ private fun TrackResultRow(track: Track, isResolving: Boolean, accent: Color, on
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
-                // Distinguishes fan edits / bootlegs / off-catalog finds (source = YOUTUBE,
-                // no MusicBrainz match) from the canonical catalog tracks above them.
-                if (track.source == TrackSource.YOUTUBE) {
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "YouTube",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ink(0.75f),
-                        modifier = Modifier
-                            .clip(TagShape)
-                            .background(ink(0.10f), TagShape)
-                            .padding(horizontal = 6.dp, vertical = 1.dp),
-                    )
-                }
             }
             if (isResolving) {
                 Text("Checking a verified source", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
             }
         }
         if (isResolving) {
-            CircularProgressIndicator(Modifier.size(16.dp), color = accent, strokeWidth = 1.5.dp)
+            CircularProgressIndicator(Modifier.size(16.dp).padding(end = 0.dp), color = accent, strokeWidth = 1.5.dp)
+        } else {
+            // A play glyph fades in on hover/press, so a row reads as tappable before it is tapped.
+            val playAlpha by animateFloatAsState(if (active) 0.9f else 0f, tween(140), label = "row-play")
+            Icon(
+                PhosphorIcons.Light.Play,
+                null,
+                tint = ink(),
+                modifier = Modifier.padding(end = 4.dp).size(18.dp).graphicsLayer { alpha = playAlpha },
+            )
+        }
+        // Off-catalog finds (fan edits, bootlegs) carry the YouTube mark at the far right instead of a text tag.
+        if (track.source == TrackSource.YOUTUBE) {
+            Icon(
+                YouTubeGlyph,
+                "From YouTube",
+                tint = ink(0.7f),
+                modifier = Modifier.padding(start = 6.dp, end = 2.dp).size(26.dp),
+            )
         }
     }
 }

@@ -92,5 +92,6 @@ class DiscoverDiskCache @Inject constructor(@ApplicationContext context: Context
 
     private fun JSONArray.objects(): List<JSONObject> = List(length()) { getJSONObject(it) }
 
-    private companion object { const val VERSION = 1 }
+    // 3: drops copies saved while Billboard art was unresolved (Deezer quota errors) so they are not shown as "stale".
+    private companion object { const val VERSION = 3 }
 }

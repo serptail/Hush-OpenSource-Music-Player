@@ -1,0 +1,148 @@
+package com.gamut.feature.search
+
+import com.gamut.core.model.Track
+import com.gamut.core.model.TrackSource
+import com.gamut.core.network.BillboardApi
+import com.gamut.core.network.DeezerApi
+import com.gamut.core.network.DeezerTrackDto
+import java.util.concurrent.ConcurrentHashMap
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+
+data class BillboardEntry(
+    val rank: Int,
+    val title: String,
+    val artist: String,
+    val lastWeek: Int?,
+    val peak: Int,
+    val weeks: Int,
+) {
+    val titleKey: String = titleKey(title)
+    val artistKey: String = artistKey(artist)
+    val key: String = "$titleKey|$artistKey"
+}
+
+// ---- Normalisation shared by Billboard, Apple chart items and Deezer results ----
+
+private val NON_ALNUM = Regex("[^\\p{L}\\p{N}]+")
+private val BRACKETED = Regex("\\s*[(\\[].*?[)\\]]")
+private val FEAT_TAIL = Regex("(?i)\\s+(feat\\.?|ft\\.?|featuring)\\s+.*")
+private val ARTIST_SPLIT = Regex("(?i)\\s+(featuring|feat\\.?|ft\\.?|with|x|&|and)\\s+|,|/")
+private val BAD_VERSION = Regex("remix|karaoke|instrumental|live|cover")
+
+private val DIACRITICS = Regex("\\p{M}+")
+
+/** Lowercase, accents folded ("ADÉLA" == "ADELA"), punctuation collapsed. */
+private fun norm(s: String) =
+    java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD).replace(DIACRITICS, "")
+        .lowercase().replace(NON_ALNUM, " ").trim()
+
+/** "Song (feat. X) - Radio Edit" and "Song" give the same key. */
+internal fun titleKey(title: String): String =
+    norm(title.replace(BRACKETED, "").replace(FEAT_TAIL, "").substringBefore(" - "))
+
+/** Lead artist only: "A Featuring B", "A & B", "A, B" all become "a". */
+internal fun artistKey(artist: String): String = norm(artist.split(ARTIST_SPLIT).first())
+
+internal fun chartKey(title: String, artist: String) = "${titleKey(title)}|${artistKey(artist)}"
+
+/** A track the resolver can still play: it falls back to a YouTube search on "artist title". */
+internal fun BillboardEntry.placeholderTrack() = Track(
+    isrc = "billboard:$key", musicBrainzId = null, title = title, artist = artist, album = null,
+    durationMs = 0L, albumArtUrl = null, source = TrackSource.ITUNES, youtubeVideoId = null,
+)
+
+internal fun BillboardEntry.toDiscoverItem(resolved: Track?): DiscoverItem {
+    val track = resolved ?: placeholderTrack()
+    return DiscoverItem(
+        id = "billboard:$key", title = title, subtitle = artist,
+        imageUrl = track.albumArtUrl.orEmpty(), track = track,
+    )
+}
+
+/**
+ * Billboard Hot 100 (keyless JSON on raw.githubusercontent). Entries carry no ids or artwork, so they are
+ * resolved against Deezer search (generous rate limit, art included) -- NOT iTunes, whose ~20 req/min
+ * limit could not cover 100 lookups. Resolutions are kept for the process lifetime.
+ */
+@Singleton
+class BillboardRepository @Inject constructor(
+    private val api: BillboardApi,
+    private val deezer: DeezerApi,
+) {
+    private data class Snapshot(val entries: List<BillboardEntry>, val atMs: Long)
+
+    @Volatile private var snapshot: Snapshot? = null
+    private val resolvedCache = ConcurrentHashMap<String, Track>()
+
+    /** Never throws (except cancellation): on failure returns the last good chart, or empty. */
+    suspend fun chart(): List<BillboardEntry> {
+        snapshot?.takeIf { System.currentTimeMillis() - it.atMs < CHART_TTL_MS }?.let { return it.entries }
+        return try {
+            val entries = api.recent().data.map {
+                BillboardEntry(it.thisWeek, it.song, it.artist, it.lastWeek, it.peak, it.weeks)
+            }.sortedBy { it.rank }
+            if (entries.isNotEmpty()) snapshot = Snapshot(entries, System.currentTimeMillis())
+            entries.ifEmpty { snapshot?.entries.orEmpty() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            snapshot?.entries.orEmpty()
+        }
+    }
+
+    /** Resolves entries 4 at a time, calling [onResolved] as each one lands. Unresolvable entries are skipped. */
+    suspend fun resolve(entries: List<BillboardEntry>, onResolved: suspend (BillboardEntry, Track) -> Unit) =
+        coroutineScope {
+            val gate = Semaphore(4)
+            entries.forEach { entry ->
+                launch {
+                    var track = resolvedCache[entry.key]
+                    if (track == null) {
+                        track = gate.withPermit { lookup(entry) }
+                        if (track != null) resolvedCache[entry.key] = track
+                    }
+                    if (track != null) onResolved(entry, track)
+                }
+            }
+        }
+
+    private suspend fun lookup(e: BillboardEntry): Track? = try {
+        // One plain query first (it resolved nearly everything and Deezer allows only ~50 requests / 5 s); the strict
+        // field query is only the fallback. Brackets are dropped from the query: "(FIFA World Cup ...)" matches nothing.
+        val lead = e.artist.split(ARTIST_SPLIT).first().replace("\"", "")
+        val title = e.title.replace(BRACKETED, "").replace("\"", "").trim()
+        pick(deezer.searchTracks("$lead $title", limit = 10).data, e)
+            ?: pick(deezer.searchTracks("artist:\"$lead\" track:\"$title\"", limit = 5).data, e)
+    } catch (ex: CancellationException) {
+        throw ex
+    } catch (ex: Exception) {
+        null
+    }
+
+    private fun pick(results: List<DeezerTrackDto>, e: BillboardEntry): Track? {
+        val wantsVersion = BAD_VERSION.containsMatchIn(e.title.lowercase())
+        return results
+            .filter { titleKey(it.titleShort ?: it.title) == e.titleKey && artistKey(it.artist.name) == e.artistKey }
+            .filter { wantsVersion || !BAD_VERSION.containsMatchIn(it.title.lowercase()) }
+            .maxByOrNull { it.rank }
+            ?.toTrack()
+    }
+
+    private fun DeezerTrackDto.toTrack() = Track(
+        isrc = "deezer:$id",
+        title = listOfNotNull(titleShort ?: title, titleVersion?.takeIf { it.isNotBlank() }).joinToString(" "),
+        artist = artist.name,
+        album = album.title,
+        durationMs = duration * 1_000L,
+        albumArtUrl = album.coverXl ?: album.coverBig,
+        source = TrackSource.ITUNES,
+    )
+
+    private companion object { const val CHART_TTL_MS = 60 * 60 * 1_000L }
+}

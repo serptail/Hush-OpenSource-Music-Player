@@ -40,16 +40,22 @@ class AppleCatalogRepository @Inject constructor(
         (hits.firstOrNull { TextMatch.norm(it.artistName.orEmpty()) == wanted } ?: hits.firstOrNull())?.artistId
     }
 
-    /** Top artist match for a search query: the name must equal or start with what was typed (no random namesakes). */
+    /**
+     * Top artist match for a search query. Uses the shared [SearchRanking.nameMatch] rule (exact name, or the last word
+     * still being typed on a 3+ character query) instead of a bare startsWith, which let "qm" match anything starting
+     * with "qm". Exact matches beat prefix matches; Apple's own order breaks ties. Whether the match is well known
+     * enough to deserve the card is decided afterwards by [SearchRanking.showArtistCard] (it needs the Deezer fan count
+     * and the song results, which this repository does not have).
+     */
     suspend fun searchArtistCard(query: String): DiscoverItem? = withTimeoutOrNull(4_000) {
-        val q = TextMatch.norm(query)
-        if (q.length < 2) return@withTimeoutOrNull null
+        if (TextMatch.norm(query).length < 2) return@withTimeoutOrNull null
         val hit = runCatching { itunes.searchArtists(query, limit = 5).results }
             .getOrDefault(emptyList())
-            .firstOrNull {
-                it.artistId != null &&
-                    TextMatch.norm(it.artistName.orEmpty()).let { n -> n == q || n.startsWith(q) }
-            } ?: return@withTimeoutOrNull null
+            .filter { it.artistId != null }
+            .map { it to SearchRanking.nameMatch(query, it.artistName.orEmpty()) }
+            .filter { (_, match) -> match > 0.0 }
+            .maxByOrNull { (_, match) -> match }
+            ?.first ?: return@withTimeoutOrNull null
         artistCard(hit.artistId!!, hit.artistName.orEmpty())
     }
 

@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -48,8 +49,11 @@ class SearchViewModel @Inject constructor(
     private val _discover = MutableStateFlow(DiscoverState())
     val discover: StateFlow<DiscoverState> = _discover.asStateFlow()
 
-    /** The artist whose name matches what is typed (null when none). Shown as a highlighted card above the songs. */
-    val artistHit: StateFlow<DiscoverItem?> = query
+    /** What Deezer says about the artist matching the CURRENT query; the gate for [artistHit]. */
+    private val artistSignal = MutableStateFlow<ArtistSignal?>(null)
+
+    /** Raw lookup: the artist whose name matches what is typed. Not shown directly, see [artistHit]. */
+    private val rawArtistHit = query
         .debounce(300)
         .distinctUntilChanged()
         .mapLatest { value ->
@@ -62,7 +66,15 @@ class SearchViewModel @Inject constructor(
                 null // a failed lookup must not kill the flow
             }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /**
+     * The highlighted artist card above the songs. A name match is not enough any more: [SearchRanking.showArtistCard]
+     * also needs the artist to be well known (fan count) and/or backed by the song results, so an obscure account that
+     * merely shares a name with the query ("qm") never gets the card.
+     */
+    val artistHit: StateFlow<DiscoverItem?> = combine(rawArtistHit, artistSignal, _state) { hit, signal, ui ->
+        hit?.takeIf { SearchRanking.showArtistCard(ui.query, it.title, signal, ui.tracks) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     init {
         viewModelScope.launch {
@@ -84,6 +96,7 @@ class SearchViewModel @Inject constructor(
                 // A result for an older query can land after the box was cleared; never show it.
                 val stillSearching = query.value.trim().length >= MIN_QUERY_LENGTH
                 val tracks = if (stillSearching) result.tracks else emptyList()
+                artistSignal.value = if (stillSearching) result.artist else null
                 _state.update {
                     it.copy(
                         tracks = tracks,
@@ -100,6 +113,7 @@ class SearchViewModel @Inject constructor(
 
     fun updateQuery(value: String) {
         query.value = value
+        if (value.isBlank()) artistSignal.value = null
         // Atomic update: the result collector writes to the same state from another coroutine.
         _state.update { if (value.isBlank()) SearchUiState() else it.copy(query = value, error = null) }
     }

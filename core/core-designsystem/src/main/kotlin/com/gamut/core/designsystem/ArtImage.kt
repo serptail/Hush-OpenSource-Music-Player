@@ -10,6 +10,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
@@ -33,7 +36,10 @@ fun ArtImage(
         ImageRequest.Builder(context).data(url?.takeIf { it.isNotBlank() }).crossfade(false).build()
     }
     var failed by remember(url) { mutableStateOf(false) }
-    Box(modifier.background(ink(0.08f)), contentAlignment = Alignment.Center) {
+    // The tint must be OPAQUE. Callers put Modifier.shadow() before this box; a translucent fill let that shadow show
+    // through as a darker/lighter square around the fallback icon (worst on the big album cards). Same look, no bleed.
+    val tile = ink(0.08f).compositeOver(if (ink().luminance() > 0.5f) Color(0xFF0E0E10) else Color(0xFFF4F4F6))
+    Box(modifier.background(tile), contentAlignment = Alignment.Center) {
         AsyncImage(
             model = request,
             contentDescription = contentDescription,

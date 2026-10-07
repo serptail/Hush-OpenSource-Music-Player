@@ -66,12 +66,22 @@ object NetworkModule {
     @Provides
     @Singleton
     @Named("deezer")
-    fun deezerClient(@Named("catalog-cache") cache: Cache): OkHttpClient = baseClient().newBuilder().cached(cache).build()
+    fun deezerClient(@Named("catalog-cache") cache: Cache): OkHttpClient = baseClient().newBuilder()
+        // Deezer answers HTTP 200 with {"error":{"code":4,...}} once ~50 requests / 5 s are exceeded; those used to
+        // be read as "no results" (and cached). Stay under the limit, and never cache an error body (see cached()).
+        .addNetworkInterceptor(DeezerRateLimitInterceptor)
+        .cached(cache)
+        .build()
 
     @Provides
     @Singleton
     @Named("apple")
     fun appleClient(@Named("catalog-cache") cache: Cache): OkHttpClient = baseClient().newBuilder().cached(cache).build()
+
+    @Provides
+    @Singleton
+    @Named("billboard")
+    fun billboardClient(@Named("catalog-cache") cache: Cache): OkHttpClient = baseClient().newBuilder().cached(cache).build()
 
     @Provides
     @Singleton
@@ -107,6 +117,11 @@ object NetworkModule {
     @Singleton
     fun appleChartsApi(@Named("apple") client: OkHttpClient): AppleChartsApi =
         retrofit("https://rss.marketingtools.apple.com/api/v2/us/", client).create(AppleChartsApi::class.java)
+
+    @Provides
+    @Singleton
+    fun billboardApi(@Named("billboard") client: OkHttpClient): BillboardApi =
+        retrofit("https://raw.githubusercontent.com/", client).create(BillboardApi::class.java)
 
     @Provides
     @Singleton
@@ -146,7 +161,9 @@ private const val CATALOG_TTL_SECONDS = 3_600
 private fun OkHttpClient.Builder.cached(cache: Cache): OkHttpClient.Builder = cache(cache)
     .addNetworkInterceptor { chain ->
         val response = chain.proceed(chain.request())
-        if (chain.request().method == "GET" && response.isSuccessful) {
+        // Deezer reports quota errors as 200 + {"error":...}: caching that would serve "no results" for an hour.
+        val apiError = response.isSuccessful && response.peekBody(256).string().trimStart().startsWith("{\"error\"")
+        if (chain.request().method == "GET" && response.isSuccessful && !apiError) {
             response.newBuilder()
                 .removeHeader("Pragma")
                 .removeHeader("Vary")
@@ -161,6 +178,26 @@ private object UserAgentInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response = chain.proceed(
         chain.request().newBuilder().header("User-Agent", "Gamut/1.0 (https://github.com/yourname/gamut)").build(),
     )
+}
+
+/** At most 40 network requests per 5 s window (Deezer's documented limit is 50). Cache hits never get here. */
+private object DeezerRateLimitInterceptor : Interceptor {
+    private const val WINDOW_MS = 5_000L
+    private const val MAX_REQUESTS = 40
+    private val lock = Any()
+    private val times = ArrayDeque<Long>()
+
+    override fun intercept(chain: Interceptor.Chain): Response {
+        synchronized(lock) {
+            while (true) {
+                val now = System.currentTimeMillis()
+                while (times.isNotEmpty() && now - times.first() >= WINDOW_MS) times.removeFirst()
+                if (times.size < MAX_REQUESTS) { times.addLast(now); break }
+                Thread.sleep(WINDOW_MS - (now - times.first()))
+            }
+        }
+        return chain.proceed(chain.request())
+    }
 }
 
 private object MusicBrainzRateLimitInterceptor : Interceptor {
