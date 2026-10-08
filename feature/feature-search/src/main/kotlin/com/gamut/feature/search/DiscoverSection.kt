@@ -74,6 +74,7 @@ import com.adamglin.phosphoricons.light.MusicNote
 import com.adamglin.phosphoricons.light.Play
 import com.gamut.core.designsystem.GamutDisplayFont
 import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.pressScale
 
 // ---------------------------------------------------------------------------------------------
@@ -100,8 +101,10 @@ internal fun LazyListScope.discoverItems(
     onSelectTab: (Int) -> Unit,
     /** The tapped track plus the list it came from (that list becomes the queue). */
     onTrackClick: (Track, List<Track>) -> Unit,
-    /** No longer used: the three dots now open their own menu. Safe to remove here and at the call site. */
+    /** Three dots on a song row: opens the track actions sheet (hosted by SearchScreen). */
     onMoreClick: (Track) -> Unit = {},
+    /** ISRC of the track that is playing right now; its row gets the now-playing highlight. */
+    nowPlayingIsrc: String? = null,
     onArtistClick: (Long) -> Unit,
     onAlbumClick: (DiscoverItem) -> Unit,
 ) {
@@ -166,7 +169,6 @@ internal fun LazyListScope.discoverItems(
             ) { index ->
                 val tab = tabs[index.coerceIn(0, tabs.lastIndex)]
                 val queue = remember(tab) { tab.items.mapNotNull { it.track } }
-                val context = LocalContext.current
                 Column(Modifier.fillMaxWidth()) {
                     Row(
                         Modifier.fillMaxWidth().padding(end = 20.dp),
@@ -183,27 +185,11 @@ internal fun LazyListScope.discoverItems(
                     Spacer(Modifier.height(12.dp))
                     tab.items.forEachIndexed { index, item ->
                         val track = item.track
-                        // Album/playlist rows have no track to act on, so they get no menu (and no dots).
-                        val actions = if (track == null) emptyList() else buildList {
-                            add(RowAction("Play") { onTrackClick(track, listOf(track)) })
-                            // Plays this song, then carries on down the list.
-                            add(RowAction("Play from here") {
-                                val from = queue.indexOf(track).coerceAtLeast(0)
-                                onTrackClick(track, queue.drop(from))
-                            })
-                            item.artistId?.let { id -> add(RowAction("Go to artist") { onArtistClick(id) }) }
-                            add(RowAction("Share") {
-                                val send = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, "${item.title} \u2013 ${item.subtitle}")
-                                }
-                                context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                            })
-                        }
                         SongRow(
                             item = item,
                             onClick = { track?.let { onTrackClick(it, queue) } ?: onAlbumClick(item) },
-                            actions = actions,
+                            onMore = track?.let { t -> { onMoreClick(t) } },
+                            isPlaying = track != null && track.isrc == nowPlayingIsrc,
                             // Charts are ranked; playlists are not.
                             index = if (queue.isNotEmpty()) index + 1 else null,
                         )
@@ -327,16 +313,14 @@ private fun CircleControl(
     }
 }
 
-/** An action in a song row's three-dots menu. */
-private class RowAction(val label: String, val onClick: () -> Unit)
-
 /**
  * One chart row. Hover fades in a soft tint; press squeezes the row and springs it back (the bounce). The three dots
  * are their own tap target and open a menu right here, so they work without the caller having to host anything.
  * Rows with no [actions] show no dots.
  */
 @Composable
-private fun SongRow(item: DiscoverItem, onClick: () -> Unit, actions: List<RowAction>, index: Int? = null) {
+private fun SongRow(item: DiscoverItem, onClick: () -> Unit, onMore: (() -> Unit)?, isPlaying: Boolean, index: Int? = null) {
+    val accent = MaterialTheme.colorScheme.primary
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val pressed by interaction.collectIsPressedAsState()
@@ -381,81 +365,35 @@ private fun SongRow(item: DiscoverItem, onClick: () -> Unit, actions: List<RowAc
             fallback = { CoverFallbackIcon() },
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-            Text(
-                item.title,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
-                color = ink(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isPlaying) {
+                    NowPlayingBars(color = accent, modifier = Modifier.padding(end = 8.dp))
+                }
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium),
+                    color = if (isPlaying) accent else ink(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
             Text(item.subtitle, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (actions.isNotEmpty()) {
-            // The menu is a child of this Box so it anchors to the dots.
-            Box {
-                Box(
-                    Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = ripple(color = ink()),
-                            onClickLabel = "More options",
-                        ) { menuOpen = true },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(PhosphorIcons.Light.DotsThreeVertical, "More options", tint = ink(0.6f), modifier = Modifier.size(22.dp))
-                }
-                RowMenu(expanded = menuOpen, actions = actions, onDismiss = { menuOpen = false })
-            }
-        }
-    }
-}
-
-private val MenuShape = RoundedCornerShape(18.dp)
-
-/**
- * The three-dots menu. A themed popup instead of the stock DropdownMenu, which paints its own white Material surface:
- * this one follows the cover palette (dark surface on dark covers, light on light) and uses the same ink for text.
- */
-@Composable
-private fun RowMenu(expanded: Boolean, actions: List<RowAction>, onDismiss: () -> Unit) {
-    if (!expanded) return
-    val isLight = LocalCoverPalette.current.isLight
-    val container = if (isLight) Color.White else Color(0xFF26262B)
-    // Opens just below the dots, right-aligned to them.
-    val below = with(LocalDensity.current) { 46.dp.roundToPx() }
-    Popup(
-        alignment = Alignment.TopEnd,
-        offset = IntOffset(0, below),
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true),
-    ) {
-        Column(
-            Modifier
-                .width(208.dp)
-                .shadow(24.dp, MenuShape, ambientColor = Color.Black.copy(alpha = 0.30f), spotColor = Color.Black.copy(alpha = 0.45f))
-                .clip(MenuShape)
-                .background(container)
-                .border(1.dp, ink(0.08f), MenuShape)
-                .padding(vertical = 6.dp),
-        ) {
-            actions.forEach { action ->
-                Text(
-                    action.label,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = ink(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = ripple(color = ink()),
-                        ) {
-                            onDismiss()
-                            action.onClick()
-                        }
-                        .padding(horizontal = 18.dp, vertical = 13.dp),
-                )
+        if (onMore != null) {
+            Box(
+                Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = ripple(color = ink()),
+                        onClickLabel = "More options",
+                        onClick = onMore,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(PhosphorIcons.Light.DotsThreeVertical, "More options", tint = ink(0.6f), modifier = Modifier.size(22.dp))
             }
         }
     }
@@ -513,6 +451,8 @@ data class DiscoverItem(
     val imageUrl: String,
     val track: com.gamut.core.model.Track? = null,
     val artistId: Long? = null,
+    /** Followers (Deezer fans) of an artist card; decides the verified badge. Null when unknown. */
+    val followers: Long? = null,
 )
 
 /** One tab of the list beside the vertical tabs: a heading and its rows. */

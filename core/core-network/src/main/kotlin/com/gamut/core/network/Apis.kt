@@ -79,6 +79,10 @@ interface DeezerApi {
         @Query("index") index: Int = 0,
     ): DeezerAlbumResponse
 
+    /** Artists Deezer considers related to this one (same listeners and scene: collaborators, rivals, peers). */
+    @GET("artist/{artistId}/related")
+    suspend fun relatedArtists(@Path("artistId") artistId: Long, @Query("limit") limit: Int = 20): DeezerArtistSearchResponse
+
     @GET("artist/{artistId}")
     suspend fun artist(@Path("artistId") artistId: Long): DeezerArtistDto
 

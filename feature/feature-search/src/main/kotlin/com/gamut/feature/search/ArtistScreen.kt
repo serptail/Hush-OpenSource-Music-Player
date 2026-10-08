@@ -3,6 +3,7 @@ package com.gamut.feature.search
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -30,15 +31,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -53,12 +58,14 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.light.ArrowLeft
+import com.adamglin.phosphoricons.light.DotsThreeVertical
 import com.adamglin.phosphoricons.light.MusicNote
 import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.TrackRowSkeleton
 import com.gamut.core.designsystem.shimmer
 import androidx.compose.foundation.layout.Spacer
 import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.fadeEdges
 import com.gamut.core.designsystem.ink
@@ -68,6 +75,7 @@ import com.gamut.core.designsystem.glass
 import com.gamut.core.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -92,11 +100,29 @@ class ArtistViewModel @Inject constructor(
             val base = id?.let { repository.artistOverview(it) }
             _state.value = base          // the page is usable here: top songs + albums
             _failed.value = base == null
-            if (base == null || base.songsLoaded) return@launch
-            // Portrait and full discography load in the background and fill the page in.
-            launch { repository.artistPhoto(base)?.let { photo -> _state.update { it?.copy(imageUrl = photo) } } }
+            if (base == null) return@launch
+            // Similar artists load on their own, so a slow answer never holds up the page.
+            launch {
+                val similar = repository.similarArtists(base)
+                _state.update { it?.copy(similar = similar) }
+            }
+            // The portrait loads on its own, whether or not the songs are already there.
+            launch { loadPortrait(base) }
+            if (base.songsLoaded) return@launch
             val full = repository.artistSongs(base)
             _state.update { it?.copy(songs = full.songs, latestSongs = full.latestSongs, songsLoaded = true) }
+        }
+    }
+
+    /** Deezer can be slow or rate-limited, so a single empty answer is not final: retry with growing pauses. */
+    private suspend fun loadPortrait(base: ArtistDetails) {
+        repeat(4) { attempt ->
+            val photo = repository.artistPhoto(base)
+            if (photo != null) {
+                _state.update { it?.copy(imageUrl = photo) }
+                return
+            }
+            if (attempt < 3) delay(1_500L * (attempt + 1))
         }
     }
 }
@@ -108,6 +134,18 @@ fun ArtistScreen(
     /** The picked track plus the list it was picked from (the queue). */
     onTrackSelected: (Track, List<Track>) -> Unit,
     onAlbumSelected: (DiscoverItem) -> Unit = {},
+    /** Opens another artist's page by name (Similar artists; the app resolves the name when it is tapped). */
+    onSimilarArtist: (String) -> Unit = {},
+    /** Opens the artist page of a track (by name), from the actions sheet. */
+    onTrackArtist: (Track) -> Unit = {},
+    /** ISRCs of the user's favorites, for the actions sheet. */
+    favoriteIsrcs: Set<String> = emptySet(),
+    onToggleFavorite: (Track) -> Unit = {},
+    /** The user's playlists, for "Add to playlist". */
+    playlists: List<TrackPlaylistOption> = emptyList(),
+    onAddToPlaylist: (Track, String) -> Unit = { _, _ -> },
+    /** ISRC of the track loaded in the player: its row gets the accent title + animated bars (like Search / Discover). */
+    nowPlayingIsrc: String? = null,
     nowPlaying: @Composable () -> Unit = {},
 ) {
     val artist by viewModel.state.collectAsStateWithLifecycle()
@@ -137,6 +175,11 @@ fun ArtistScreen(
         }
         val value = artist ?: return@CoverTheme
         val tabs = listOf("Overview", "Songs", "Albums", "Latest")
+        // Same three-dots flow as the Search screen and Discover: actions sheet -> share / playlist picker.
+        var actionsTrack by remember { mutableStateOf<Track?>(null) }
+        var shareTrack by remember { mutableStateOf<Track?>(null) }
+        var pickerTrack by remember { mutableStateOf<Track?>(null) }
+        val accent = MaterialTheme.colorScheme.primary
         var selectedTab by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Row(
@@ -165,15 +208,47 @@ fun ArtistScreen(
                 )
                 Crossfade(selectedTab, label = "artist-tab", modifier = Modifier.weight(1f)) { tab ->
                     when (tab) {
-                        0 -> ArtistOverview(value, { picked -> onTrackSelected(picked, value.popular) }, onAlbumSelected, onViewAll = { selectedTab = 1 })
-                        1 -> TrackList(value.songs, loading = !value.songsLoaded) { picked -> onTrackSelected(picked, value.songs) }
+                        0 -> ArtistOverview(
+                            artist = value,
+                            onTrack = { picked -> onTrackSelected(picked, value.popular) },
+                            nowPlayingIsrc = nowPlayingIsrc,
+                            accent = accent,
+                            onMore = { actionsTrack = it },
+                            onAlbum = onAlbumSelected,
+                            onArtist = onSimilarArtist,
+                            onViewAll = { selectedTab = 1 },
+                        )
+                        1 -> TrackList(value.songs, loading = !value.songsLoaded, nowPlayingIsrc = nowPlayingIsrc, accent = accent, onMore = { actionsTrack = it }) { picked -> onTrackSelected(picked, value.songs) }
                         2 -> AlbumGrid(value.albums, onAlbumSelected)
-                        else -> TrackList(value.latestSongs, loading = !value.songsLoaded) { picked -> onTrackSelected(picked, value.latestSongs) }
+                        else -> TrackList(value.latestSongs, loading = !value.songsLoaded, nowPlayingIsrc = nowPlayingIsrc, accent = accent, onMore = { actionsTrack = it }) { picked -> onTrackSelected(picked, value.latestSongs) }
                     }
                 }
             }
             nowPlaying()
         }
+
+        actionsTrack?.let { t ->
+            TrackActionsSheet(
+                track = t,
+                isFavorite = t.isrc in favoriteIsrcs,
+                onDismiss = { actionsTrack = null },
+                onShare = { actionsTrack = null; shareTrack = t },
+                onToggleFavorite = { onToggleFavorite(t) },
+                onAddToPlaylist = { actionsTrack = null; pickerTrack = t },
+                onGoToArtist = { actionsTrack = null; onTrackArtist(t) },
+            )
+        }
+        pickerTrack?.let { t ->
+            SavedInSheet(
+                track = t,
+                playlists = playlists,
+                accent = accent,
+                showFavorites = false,
+                onAddToPlaylist = { id -> onAddToPlaylist(t, id) },
+                onDismiss = { pickerTrack = null },
+            )
+        }
+        shareTrack?.let { t -> ShareSheet(track = t, onDismiss = { shareTrack = null }) }
     }
 }
 
@@ -181,7 +256,16 @@ fun ArtistScreen(
 private const val OVERVIEW_ALBUM_FRACTION = 0.8f
 
 @Composable
-private fun ArtistOverview(artist: ArtistDetails, onTrack: (Track) -> Unit, onAlbum: (DiscoverItem) -> Unit, onViewAll: () -> Unit) {
+private fun ArtistOverview(
+    artist: ArtistDetails,
+    onTrack: (Track) -> Unit,
+    nowPlayingIsrc: String?,
+    accent: Color,
+    onMore: (Track) -> Unit,
+    onAlbum: (DiscoverItem) -> Unit,
+    onArtist: (String) -> Unit,
+    onViewAll: () -> Unit,
+) {
     LazyColumn(Modifier.fillMaxSize().fadeEdges(), contentPadding = PaddingValues(start = 12.dp, end = 24.dp, bottom = 24.dp)) {
         item {
             Column(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -200,7 +284,7 @@ private fun ArtistOverview(artist: ArtistDetails, onTrack: (Track) -> Unit, onAl
                 Text("View all", color = ink(0.6f), modifier = Modifier.pressScale(onClick = onViewAll).padding(vertical = 6.dp))
             }
         }
-        itemsIndexed(artist.popular.take(4), key = { i, t -> "${t.isrc}-$i" }) { _, t -> TrackLine(t, onTrack) }
+        itemsIndexed(artist.popular.take(4), key = { i, t -> "${t.isrc}-$i" }) { _, t -> TrackLine(t, isPlaying = t.isrc == nowPlayingIsrc, accent = accent, onClick = onTrack, onMore = onMore) }
         item {
             Text("Albums", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(top = 24.dp, bottom = 12.dp))
             BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -211,17 +295,31 @@ private fun ArtistOverview(artist: ArtistDetails, onTrack: (Track) -> Unit, onAl
                 }
             }
         }
+        // Last on the page: artists related to this one (collaborators, rivals, same scene).
+        if (artist.similar.isNotEmpty()) item(key = "similar") {
+            Text("Similar artists", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(top = 24.dp, bottom = 12.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                items(artist.similar, key = { it.id }) { SimilarArtistCard(it, onArtist) }
+            }
+        }
     }
 }
 
 @Composable
-private fun TrackList(tracks: List<Track>, loading: Boolean = false, onTrack: (Track) -> Unit) {
+private fun TrackList(
+    tracks: List<Track>,
+    loading: Boolean = false,
+    nowPlayingIsrc: String?,
+    accent: Color,
+    onMore: (Track) -> Unit,
+    onTrack: (Track) -> Unit,
+) {
     if (tracks.isEmpty() && !loading) {
         Text("Nothing here yet.", color = ink(0.6f), modifier = Modifier.padding(16.dp))
         return
     }
     LazyColumn(Modifier.fillMaxSize().fadeEdges(), contentPadding = PaddingValues(start = 12.dp, end = 24.dp, bottom = 24.dp)) {
-        itemsIndexed(tracks, key = { i, t -> "${t.isrc}-$i" }) { _, t -> TrackLine(t, onTrack) }
+        itemsIndexed(tracks, key = { i, t -> "${t.isrc}-$i" }) { _, t -> TrackLine(t, isPlaying = t.isrc == nowPlayingIsrc, accent = accent, onClick = onTrack, onMore = onMore) }
         // The rest of the discography is still arriving: show it instead of a list that looks finished.
         if (loading) item(key = "loading") {
             Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
@@ -259,7 +357,7 @@ private fun AlbumCard(album: DiscoverItem, onClick: (DiscoverItem) -> Unit, modi
 }
 
 @Composable
-private fun TrackLine(track: Track, onClick: (Track) -> Unit) {
+private fun TrackLine(track: Track, isPlaying: Boolean, accent: Color, onClick: (Track) -> Unit, onMore: (Track) -> Unit) {
     Row(
         Modifier.fillMaxWidth().pressScale(onClick = { onClick(track) }, scaleDown = 0.98f).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -271,8 +369,59 @@ private fun TrackLine(track: Track, onClick: (Track) -> Unit) {
             contentScale = ContentScale.Crop,
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-            Text(track.title, color = ink(), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // The playing track: accent title + animated bars, exactly like the Search results.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isPlaying) NowPlayingBars(color = accent, modifier = Modifier.padding(end = 8.dp))
+                Text(
+                    track.title,
+                    color = if (isPlaying) accent else ink(),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
             Text(track.album ?: track.artist, color = ink(0.6f), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        TrackMoreButton { onMore(track) }
+    }
+}
+
+@Composable
+private fun TrackMoreButton(onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClickLabel = "More options", onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Icon(PhosphorIcons.Light.DotsThreeVertical, "More options", tint = ink(0.6f), modifier = Modifier.size(24.dp)) }
+}
+
+@Composable
+private fun SimilarArtistCard(artist: DiscoverItem, onClick: (String) -> Unit) {
+    Column(
+        Modifier.width(96.dp).pressScale(onClick = { onClick(artist.title) }, scaleDown = 0.96f),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        SubcomposeAsyncImage(
+            model = artist.imageUrl,
+            contentDescription = artist.title,
+            modifier = Modifier.size(96.dp).clip(CircleShape),
+            contentScale = ContentScale.Crop,
+            loading = { ArtistPlaceholder() },
+            error = { ArtistPlaceholder() },
+        )
+        Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                artist.title,
+                color = ink(),
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            if (isVerifiedArtist(artist.followers)) VerifiedBadge(Modifier.padding(start = 4.dp), size = 14.dp)
         }
     }
 }

@@ -37,11 +37,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,12 +60,14 @@ import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.fill.Play
 import com.adamglin.phosphoricons.light.ArrowLeft
+import com.adamglin.phosphoricons.light.DotsThreeVertical
 import com.adamglin.phosphoricons.light.VinylRecord
 import com.gamut.core.designsystem.AcrylicCircleButton
 import com.gamut.core.designsystem.AcrylicHost
 import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.HeroListSkeleton
 import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.glass
 import com.gamut.core.designsystem.ink
@@ -114,6 +119,16 @@ fun AlbumScreen(
     onBack: () -> Unit,
     /** The picked track plus the list it was picked from (the queue). */
     onTrackSelected: (Track, List<Track>) -> Unit,
+    /** Opens the artist page of a track (by name), from the actions sheet. */
+    onTrackArtist: (Track) -> Unit = {},
+    /** ISRCs of the user's favorites, for the actions sheet. */
+    favoriteIsrcs: Set<String> = emptySet(),
+    onToggleFavorite: (Track) -> Unit = {},
+    /** The user's playlists, for "Add to playlist". */
+    playlists: List<TrackPlaylistOption> = emptyList(),
+    onAddToPlaylist: (Track, String) -> Unit = { _, _ -> },
+    /** ISRC of the track loaded in the player: its row gets the accent title + animated bars instead of the number. */
+    nowPlayingIsrc: String? = null,
     nowPlaying: @Composable () -> Unit = {},
 ) {
     val album by viewModel.state.collectAsStateWithLifecycle()
@@ -123,6 +138,11 @@ fun AlbumScreen(
     // The cover no longer sits under the status bar, so icons simply follow the palette.
     TransparentStatusBar(darkIcons = palette.isLight)
     CoverTheme(palette) {
+        // Same three-dots flow as Artist / Search / Discover: actions sheet -> share / playlist picker.
+        var actionsTrack by remember { mutableStateOf<Track?>(null) }
+        var shareTrack by remember { mutableStateOf<Track?>(null) }
+        var pickerTrack by remember { mutableStateOf<Track?>(null) }
+        val accent = MaterialTheme.colorScheme.primary
         AcrylicHost(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize()) {
                 Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -146,6 +166,9 @@ fun AlbumScreen(
                                         number = index + 1,
                                         track = track,
                                         showArtist = !track.artist.equals(value.artist, ignoreCase = true),
+                                        isPlaying = track.isrc == nowPlayingIsrc,
+                                        accent = accent,
+                                        onMore = { actionsTrack = it },
                                     ) { picked -> onTrackSelected(picked, value.tracks) }
                                 }
                                 item(key = "nav-space") { Box(Modifier.navigationBarsPadding()) }
@@ -171,6 +194,29 @@ fun AlbumScreen(
                 nowPlaying()
             }
         }
+
+        actionsTrack?.let { t ->
+            TrackActionsSheet(
+                track = t,
+                isFavorite = t.isrc in favoriteIsrcs,
+                onDismiss = { actionsTrack = null },
+                onShare = { actionsTrack = null; shareTrack = t },
+                onToggleFavorite = { onToggleFavorite(t) },
+                onAddToPlaylist = { actionsTrack = null; pickerTrack = t },
+                onGoToArtist = { actionsTrack = null; onTrackArtist(t) },
+            )
+        }
+        pickerTrack?.let { t ->
+            SavedInSheet(
+                track = t,
+                playlists = playlists,
+                accent = accent,
+                showFavorites = false,
+                onAddToPlaylist = { id -> onAddToPlaylist(t, id) },
+                onDismiss = { pickerTrack = null },
+            )
+        }
+        shareTrack?.let { t -> ShareSheet(track = t, onDismiss = { shareTrack = null }) }
     }
 }
 
@@ -304,9 +350,20 @@ private fun PlayFab(onClick: () -> Unit, modifier: Modifier = Modifier) {
  *
  * Interaction: on hover (mouse, stylus, ChromeOS) a soft tint fades in and the number turns into a play glyph. On press
  * the row squeezes down and springs back with a small overshoot, the bounce.
+ *
+ * The playing track swaps its number for the animated bars and gets the accent title; a quiet three-dots button on
+ * the right opens the actions sheet.
  */
 @Composable
-private fun AlbumTrackRow(number: Int, track: Track, showArtist: Boolean, onClick: (Track) -> Unit) {
+private fun AlbumTrackRow(
+    number: Int,
+    track: Track,
+    showArtist: Boolean,
+    isPlaying: Boolean,
+    accent: Color,
+    onMore: (Track) -> Unit,
+    onClick: (Track) -> Unit,
+) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val pressed by interaction.collectIsPressedAsState()
@@ -332,13 +389,15 @@ private fun AlbumTrackRow(number: Int, track: Track, showArtist: Boolean, onClic
             .background(tint)
             .hoverable(interaction)
             .clickable(interactionSource = interaction, indication = null) { onClick(track) }
-            .padding(horizontal = 12.dp, vertical = 12.dp),
+            .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(32.dp), contentAlignment = Alignment.CenterStart) {
             Crossfade(targetState = active, animationSpec = tween(120), label = "rowLead") { on ->
                 if (on) {
                     Icon(PhosphorIcons.Fill.Play, null, tint = ink(), modifier = Modifier.size(14.dp))
+                } else if (isPlaying) {
+                    NowPlayingBars(color = accent)
                 } else {
                     Text(
                         number.toString(),
@@ -351,8 +410,8 @@ private fun AlbumTrackRow(number: Int, track: Track, showArtist: Boolean, onClic
         Column(Modifier.weight(1f)) {
             Text(
                 track.title,
-                color = ink(),
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                color = if (isPlaying) accent else ink(),
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -366,7 +425,19 @@ private fun AlbumTrackRow(number: Int, track: Track, showArtist: Boolean, onClic
                 )
             }
         }
+        AlbumMoreButton { onMore(track) }
     }
+}
+
+@Composable
+private fun AlbumMoreButton(onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClickLabel = "More options", onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Icon(PhosphorIcons.Light.DotsThreeVertical, "More options", tint = ink(0.5f), modifier = Modifier.size(22.dp)) }
 }
 
 @Composable

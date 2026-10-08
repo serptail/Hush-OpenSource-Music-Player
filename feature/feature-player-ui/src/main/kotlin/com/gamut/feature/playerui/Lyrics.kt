@@ -164,24 +164,60 @@ object LyricsRepository {
         }
     }
 
+    /** First artist of "A, B", "A & B", "A x B", "A feat. B" ...: lyrics databases usually list just that one. */
+    private val artistSplit = Regex("""\s*(?:,|;|/|&|\band\b|\bx\b|\bwith\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*""", RegexOption.IGNORE_CASE)
+    private fun primaryArtist(artist: String) = artist.split(artistSplit).firstOrNull { it.isNotBlank() }?.trim() ?: artist
+
+    private fun norm(s: String) = s.lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
+
+    /** True if a search hit is plausibly this song (used for the loose queries, which can return unrelated songs). */
+    private fun looksLike(o: JSONObject, title: String, artist: String): Boolean {
+        val t = norm(o.optString("trackName", o.optString("name", "")))
+        val a = norm(o.optString("artistName", ""))
+        val wantT = norm(title)
+        val wantA = norm(artist)
+        val titleOk = t.isNotEmpty() && wantT.isNotEmpty() && (t == wantT || t.startsWith(wantT) || wantT.startsWith(t))
+        val artistOk = a.isNotEmpty() && wantA.isNotEmpty() && (a.contains(wantA) || wantA.contains(a))
+        return titleOk && artistOk
+    }
+
     private fun lookup(track: Track): FetchedLyrics? {
         val title = cleanTitle(track.title)
+        val coreTitle = title.substringBefore(" (").substringBefore(" - ").trim().ifBlank { title }
         val artist = track.artist.replace(featuringNoise, "").trim().ifBlank { track.artist }
+        val lead = primaryArtist(track.artist)
         val seconds = track.durationMs / 1000.0
+        // A network failure on one request must not end the lookup: later requests may still work. Only when nothing
+        // was found AND something failed is the answer "error, try again" rather than "no lyrics exist".
+        var failed = false
+        fun get(url: String): String? = try { httpGetRetrying(url) } catch (e: IOException) { failed = true; null }
 
         // 1. Exact match by title + artist + length. One small request, and the right version of the song.
         if (seconds > 0) {
-            val exact = httpGet("$BASE_URL/get?track_name=${enc(title)}&artist_name=${enc(artist)}&duration=${seconds.roundToInt()}")
-            if (exact != null) toLyrics(JSONObject(exact))?.let { return it }
+            for (a in listOf(artist, lead).distinct()) {
+                val exact = get("$BASE_URL/get?track_name=${enc(title)}&artist_name=${enc(a)}&duration=${seconds.roundToInt()}")
+                if (exact != null) runCatching { toLyrics(JSONObject(exact)) }.getOrNull()?.let { return it }
+            }
         }
 
-        // 2. Search, then pick the result whose length is closest to the track's.
-        for (query in listOf("track_name=${enc(title)}&artist_name=${enc(artist)}", "q=${enc("$title $artist")}")) {
-            val body = httpGet("$BASE_URL/search?$query") ?: continue
-            val results = JSONArray(body)
-            val items = List(results.length()) { results.getJSONObject(it) }
+        // 2. Search, then pick the result whose length is closest to the track's. The first queries are targeted;
+        //    the loose ones are filtered so an unrelated song can never be shown.
+        data class Q(val query: String, val strict: Boolean)
+        val queries = listOf(
+            Q("track_name=${enc(title)}&artist_name=${enc(artist)}", false),
+            Q("track_name=${enc(title)}&artist_name=${enc(lead)}", false),
+            Q("q=${enc("$title $artist")}", true),
+            Q("q=${enc("$coreTitle $lead")}", true),
+            Q("q=${enc(coreTitle)}", true),
+        ).distinctBy { it.query }
+        for ((query, strict) in queries) {
+            val body = get("$BASE_URL/search?$query") ?: continue
+            val results = runCatching { JSONArray(body) }.getOrNull() ?: continue
+            var items = List(results.length()) { results.getJSONObject(it) }
+            if (strict) items = items.filter { looksLike(it, coreTitle, lead) }
             pickBest(items, seconds)?.let { return it }
         }
+        if (failed) throw IOException("lyrics lookup failed")
         return null
     }
 
@@ -210,6 +246,20 @@ object LyricsRepository {
     private fun cleanTitle(title: String) = title.replace(bracketNoise, "").replace(dashNoise, "").trim().ifBlank { title }
 
     private fun enc(v: String) = URLEncoder.encode(v, "UTF-8")
+
+    /** [httpGet] with one quick retry for timeouts, 429 and 5xx (the public service is sometimes slow or busy). */
+    private fun httpGetRetrying(url: String): String? {
+        var last: IOException? = null
+        repeat(2) { attempt ->
+            try {
+                return httpGet(url)
+            } catch (e: IOException) {
+                last = e
+                if (attempt == 0) Thread.sleep(600)
+            }
+        }
+        throw last ?: IOException("request failed")
+    }
 
     /** GET [url]; the body on 200, null on 404 (no such lyrics), an [IOException] on anything else. */
     private fun httpGet(url: String): String? {

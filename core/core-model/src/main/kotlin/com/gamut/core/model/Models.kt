@@ -71,3 +71,8 @@ data class QueueState(
     val tracks: List<Track> = emptyList(),
     val currentIndex: Int = -1,
 )
+/** "Is this track on disk?", answered synchronously. Implemented by the database module's DownloadIndex. */
+interface LocalAudioIndex {
+    /** Absolute path of the downloaded file for [isrc], or null if it has not been downloaded. */
+    fun pathFor(isrc: String): String?
+}

@@ -52,6 +52,30 @@ class NewPipeYoutubeSource @Inject constructor(
         }
     }
 
+    /**
+     * Highest-bitrate direct audio stream of ANY codec (Opus/WebM ~160 kbps beats AAC ~128 kbps). Used by downloads,
+     * which save the stream untouched; playback keeps preferring m4a in [audioUrl].
+     */
+    suspend fun bestAudioUrl(videoId: String): Result<String> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            ensureInitialized()
+            Result.success(
+                StreamInfo.getInfo("https://www.youtube.com/watch?v=$videoId")
+                    .audioStreams
+                    .asSequence()
+                    .filter { it.isUrl }
+                    .sortedByDescending { it.averageBitrate }
+                    .map { it.content }
+                    .firstOrNull { it.isNotBlank() }
+                    ?: error("NewPipe returned no direct audio stream"),
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     override suspend fun searchSongs(query: String): List<YoutubeCandidate> =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {

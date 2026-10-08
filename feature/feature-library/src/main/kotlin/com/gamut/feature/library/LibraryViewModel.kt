@@ -3,6 +3,7 @@ package com.gamut.feature.library
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.gamut.core.database.DownloadIndex
 import com.gamut.core.model.Playlist
 import com.gamut.core.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,13 +22,16 @@ import kotlinx.coroutines.launch
 private const val STOP_TIMEOUT_MS = 5_000L
 
 /** What a Library row shows for a playlist: the cover of the song added last, and how many songs it holds. */
-data class PlaylistInfo(val coverUrl: String?, val songCount: Int)
+data class PlaylistInfo(val coverUrl: String?, val songCount: Int, /** Every song is downloaded: shows the "available offline" mark. */ val offline: Boolean = false)
 
 // One instance for the whole app (MainActivity shares it with every screen), and its flows start immediately:
 // the small library tables are already loaded when the Library / Favorites screens first draw, so they never
 // paint empty and then pop their content in.
 @HiltViewModel
-class LibraryViewModel @Inject constructor(private val repository: LibraryRepository) : ViewModel() {
+class LibraryViewModel @Inject constructor(
+    private val repository: LibraryRepository,
+    private val downloadIndex: DownloadIndex,
+) : ViewModel() {
     val playlists: StateFlow<List<Playlist>> =
         repository.observePlaylists().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -36,15 +40,19 @@ class LibraryViewModel @Inject constructor(private val repository: LibraryReposi
     val playlistInfo: StateFlow<Map<Long, PlaylistInfo>> =
         playlists.flatMapLatest { list ->
             if (list.isEmpty()) {
-                flowOf<Map<Long, PlaylistInfo>>(emptyMap())
+                flowOf<Map<Long, List<Track>>>(emptyMap())
             } else {
                 combine(
-                    list.map { p ->
-                        repository.observeTracks(p.id).map { tracks ->
-                            p.id to PlaylistInfo(tracks.lastOrNull()?.albumArtUrl?.takeIf { it.isNotBlank() }, tracks.size)
-                        }
-                    },
+                    list.map { p -> repository.observeTracks(p.id).map { tracks -> p.id to tracks } },
                 ) { pairs -> pairs.toMap() }
+            }
+        }.combine(downloadIndex.downloads) { byPlaylist, saved ->
+            byPlaylist.mapValues { (_, tracks) ->
+                PlaylistInfo(
+                    coverUrl = tracks.lastOrNull()?.albumArtUrl?.takeIf { it.isNotBlank() },
+                    songCount = tracks.size,
+                    offline = tracks.isNotEmpty() && tracks.all { it.isrc in saved },
+                )
             }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
@@ -85,6 +93,17 @@ class LibraryViewModel @Inject constructor(private val repository: LibraryReposi
     val favorites: StateFlow<List<Track>> =
         repository.observeFavorites().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    /** Every liked song is downloaded (the "Liked songs" row shows the offline mark). */
+    val likedOffline: StateFlow<Boolean> =
+        combine(favorites, downloadIndex.downloads) { liked, saved -> liked.isNotEmpty() && liked.all { it.isrc in saved } }
+            .distinctUntilChanged()
+            .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /** Saves a new favorites order (drag to reorder) or restores a removed favorite (undo). */
+    fun setFavoriteOrder(tracks: List<Track>) {
+        viewModelScope.launch { repository.setFavoriteOrder(tracks) }
+    }
+
     fun toggleFavorite(track: Track) {
         viewModelScope.launch { repository.toggleFavorite(track) }
     }
@@ -117,12 +136,33 @@ class PlaylistViewModel @Inject constructor(
         viewModelScope.launch { repository.replaceTracks(id, list) }
     }
 
+    /** Saves a new order (manage sheet: drag to reorder, or Undo after a removal). */
+    fun setTracks(newTracks: List<Track>) {
+        val id = playlistId ?: return
+        viewModelScope.launch { repository.replaceTracks(id, newTracks) }
+    }
+
+    /** Takes one song out of the playlist (manage sheet). */
+    fun removeTrack(isrc: String) {
+        val id = playlistId ?: return
+        viewModelScope.launch { repository.removeTrack(id, isrc) }
+    }
+
     fun removeAt(index: Int) {
         val id = playlistId ?: return
         val list = tracks.value.toMutableList()
         if (index !in list.indices) return
         list.removeAt(index)
         viewModelScope.launch { repository.replaceTracks(id, list) }
+    }
+
+    /** Deletes this playlist; [onDone] runs once it is gone (navigate back there, not before). */
+    fun delete(onDone: () -> Unit) {
+        val id = playlistId ?: return
+        viewModelScope.launch {
+            repository.deletePlaylist(id)
+            onDone()
+        }
     }
 
     /** Edit mode "Done": name, tags and cover always; [newTracks] only when the list changed. */

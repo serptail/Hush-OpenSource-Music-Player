@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -30,6 +31,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.adamglin.PhosphorIcons
+import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.light.X
 import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.model.QueueState
 
@@ -109,7 +113,7 @@ internal fun QueueSheet(
                             Modifier.size(40.dp).clickable { onRemove(index) },
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text("\u00D7", style = MaterialTheme.typography.titleLarge, color = Color.White.copy(alpha = 0.6f))
+                            Icon(PhosphorIcons.Light.X, "Remove from queue", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
                         }
                     }
                 }

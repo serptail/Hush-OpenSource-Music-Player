@@ -3,7 +3,6 @@ package com.gamut.core.designsystem
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,23 +25,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.adamglin.PhosphorIcons
+import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.light.Devices
+import com.adamglin.phosphoricons.light.Pause
+import com.adamglin.phosphoricons.light.Play
+import com.adamglin.phosphoricons.light.SkipForward
 
 /**
  * The now-playing strip that docks onto [GamutBottomBar] (pass it as the bar's `nowPlaying` slot). It is part of
  * the bar, not a separate floating card: no shadow, flat, but frosted glass over the list scrolling behind it (the only acrylic in the bar). A thin progress line runs
- * along its top edge in the cover's accent. Tap the strip to open the player. Icons are drawn here, so this
- * file needs nothing but Coil. Must be inside [CoverTheme] (uses [ink] and the accent).
+ * along its top edge in the cover's accent. Tap the strip to open the player. Icons come from Phosphor. Must be inside [CoverTheme] (uses [ink] and the accent).
  */
 @Composable
 fun MiniPlayerStrip(
@@ -57,6 +55,10 @@ fun MiniPlayerStrip(
     onTogglePlay: () -> Unit,
     onNext: () -> Unit,
     onArtistClick: () -> Unit = {},
+    /** Opens the Connect sheet (Bluetooth + output devices). */
+    onDevicesClick: () -> Unit = {},
+    /** True when audio is routed to an external device (Bluetooth etc.): the devices icon takes the accent. */
+    devicesActive: Boolean = false,
     modifier: Modifier = Modifier,
     /** True when the strip sits at the very bottom of a screen without [GamutBottomBar]: it then also fills the system navigation area. */
     dockedToEdge: Boolean = false,
@@ -104,48 +106,21 @@ fun MiniPlayerStrip(
                     modifier = Modifier.pressScale(onClick = onArtistClick, scaleDown = 0.98f),
                 )
             }
+            Box(Modifier.size(44.dp).pressScale(onClick = onDevicesClick, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
+                Icon(PhosphorIcons.Light.Devices, "Connect to a device", tint = if (devicesActive) accent else ink(0.75f), modifier = Modifier.size(24.dp))
+            }
             Box(Modifier.size(48.dp).pressScale(onClick = onTogglePlay, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
                 Crossfade(if (isLoading) 2 else if (isPlaying) 1 else 0, animationSpec = tween(160), label = "mini-play") { s ->
                     when (s) {
                         2 -> CircularProgressIndicator(color = ink(), strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                        1 -> GlyphPause(ink(), Modifier.size(24.dp))
-                        else -> GlyphPlay(ink(), Modifier.size(24.dp))
+                        1 -> Icon(PhosphorIcons.Light.Pause, "Pause", tint = ink(), modifier = Modifier.size(24.dp))
+                        else -> Icon(PhosphorIcons.Light.Play, "Play", tint = ink(), modifier = Modifier.size(24.dp))
                     }
                 }
             }
             Box(Modifier.size(48.dp).pressScale(onClick = onNext, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
-                GlyphNext(ink(0.9f), Modifier.size(24.dp))
+                Icon(PhosphorIcons.Light.SkipForward, "Next", tint = ink(0.9f), modifier = Modifier.size(24.dp))
             }
         }
     }
-}
-
-@Composable
-private fun GlyphPlay(color: Color, modifier: Modifier) = Canvas(modifier) {
-    val w = size.width; val h = size.height
-    val p = Path().apply {
-        moveTo(w * 0.28f, h * 0.16f); lineTo(w * 0.84f, h * 0.5f); lineTo(w * 0.28f, h * 0.84f); close()
-    }
-    drawPath(p, color)
-    drawPath(p, color, style = Stroke(w * 0.10f, join = StrokeJoin.Round)) // softens the corners
-}
-
-@Composable
-private fun GlyphPause(color: Color, modifier: Modifier) = Canvas(modifier) {
-    val w = size.width; val h = size.height
-    val bar = Size(w * 0.17f, h * 0.64f)
-    val r = CornerRadius(w * 0.06f)
-    drawRoundRect(color, Offset(w * 0.26f, h * 0.18f), bar, r)
-    drawRoundRect(color, Offset(w * 0.57f, h * 0.18f), bar, r)
-}
-
-@Composable
-private fun GlyphNext(color: Color, modifier: Modifier) = Canvas(modifier) {
-    val w = size.width; val h = size.height
-    val p = Path().apply {
-        moveTo(w * 0.20f, h * 0.20f); lineTo(w * 0.70f, h * 0.5f); lineTo(w * 0.20f, h * 0.80f); close()
-    }
-    drawPath(p, color)
-    drawPath(p, color, style = Stroke(w * 0.08f, join = StrokeJoin.Round))
-    drawRoundRect(color, Offset(w * 0.74f, h * 0.20f), Size(w * 0.10f, h * 0.60f), CornerRadius(w * 0.04f))
 }

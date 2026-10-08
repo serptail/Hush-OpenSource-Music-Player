@@ -41,6 +41,8 @@ data class ArtistDetails(
     val listeners: String = "",
     /** False while only the fast overview is loaded; the Songs / Latest tabs show a spinner until it flips. */
     val songsLoaded: Boolean = true,
+    /** Related artists for the "Similar artists" row; filled in the background after the page opens. */
+    val similar: List<DiscoverItem> = emptyList(),
 )
 
 data class AlbumDetails(
@@ -220,6 +222,9 @@ class DiscoverRepository @Inject constructor(
 
     suspend fun artistPhoto(base: ArtistDetails): String? =
         catalog.artistPhoto(base.id, base.name, base.albums.map { it.title }.take(40))
+
+    /** Artists related to this one (Deezer), already verified against the right Deezer artist. Empty when unknown. */
+    suspend fun similarArtists(base: ArtistDetails): List<DiscoverItem> = catalog.similarArtists(base)
 
     /** Verified artist photo for an album's artist, or null (never a namesake's). */
     suspend fun artistPhotoFor(name: String, albumTitle: String): String? = catalog.artistPhotoFor(name, albumTitle)

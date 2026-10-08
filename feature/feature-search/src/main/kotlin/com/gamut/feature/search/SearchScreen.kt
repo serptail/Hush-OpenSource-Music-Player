@@ -67,7 +67,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
@@ -81,6 +86,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.light.MagnifyingGlass
+import com.adamglin.phosphoricons.light.PlusCircle
+import com.adamglin.phosphoricons.Fill
+import com.adamglin.phosphoricons.fill.CheckCircle
+import com.adamglin.phosphoricons.light.DotsThreeVertical
 import com.adamglin.phosphoricons.light.MusicNote
 import com.adamglin.phosphoricons.light.User
 import com.adamglin.phosphoricons.light.VinylRecord
@@ -97,6 +106,7 @@ import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.glass
 import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
@@ -130,8 +140,22 @@ fun SearchScreen(
     onShazam: () -> Unit,
     /** Three dots on a Discover song row. Defaults to a no-op until the actions sheet is wired in MainActivity. */
     onTrackMore: (Track) -> Unit = {},
+    /** ISRC of the playing track: its row gets the accent title + animated bars. */
+    nowPlayingIsrc: String? = null,
+    /** Opens the artist page of a track (by name). */
+    onTrackArtist: (Track) -> Unit = {},
+    /** ISRCs of the user's favorites (the + turns into a check). */
+    favoriteIsrcs: Set<String> = emptySet(),
+    /** Adds the track to favorites, or removes it when it is already there. */
+    onToggleFavorite: (Track) -> Unit = {},
+    /** The user's playlists, for the "Saved in" sheet and "Add to playlist". */
+    playlists: List<TrackPlaylistOption> = emptyList(),
+    /** Adds [Track] to the playlist with this id. */
+    onAddToPlaylist: (Track, String) -> Unit = { _, _ -> },
     /** Height of the shared bottom bar + mini player strip (owned by HomeTabs in MainActivity). */
     barHeight: androidx.compose.ui.unit.Dp,
+    /** Bumped when something asks for search mode (empty-state "Find ..." buttons): scroll to the field, focus it, show the keyboard. */
+    focusSearchTick: Int = 0,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val discover by viewModel.discover.collectAsStateWithLifecycle()
@@ -148,6 +172,22 @@ fun SearchScreen(
         // ONE list for both modes (see the comment where it is built).
         val listState = rememberLazyListState()
         var discoverTab by rememberSaveable { mutableIntStateOf(0) }
+        val searchFocus = remember { FocusRequester() }
+        var actionsTrack by remember { mutableStateOf<Track?>(null) }
+        var savedTrack by remember { mutableStateOf<Track?>(null) }
+        var shareTrack by remember { mutableStateOf<Track?>(null) }
+        var pickerTrack by remember { mutableStateOf<Track?>(null) }
+        val keyboard = LocalSoftwareKeyboardController.current
+        LaunchedEffect(focusSearchTick) {
+            if (focusSearchTick > 0) {
+                // The tab slide (HomeTabs, ~240 ms) is still running: focusing a field that is not on screen yet can fail.
+                delay(280)
+                // The field is the first list item; if the list was scrolled away it is not composed.
+                listState.scrollToItem(0)
+                runCatching { searchFocus.requestFocus() }
+                keyboard?.show()
+            }
+        }
         // Title + search scroll with the content as the first list item (they are not pinned): scroll down and they
         // leave the screen, scroll back up to reach them. Only the bottom bar stays.
         val header: @Composable (Modifier) -> Unit = { m ->
@@ -159,7 +199,7 @@ fun SearchScreen(
                             color = TextPrimary,
                             modifier = Modifier.weight(1f),
                         )
-                        Box(Modifier.size(44.dp).pressScale(onClick = onShazam).glass(CircleShape), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(44.dp).pressScale(onClick = onShazam), contentAlignment = Alignment.Center) {
                             Icon(
     painterResource(com.gamut.core.designsystem.R.drawable.ic_shazam),
     "Identify a song",
@@ -174,7 +214,7 @@ fun SearchScreen(
                     }
 
                     Spacer(Modifier.height(22.dp))
-                    SearchField(query = state.query, onQueryChange = viewModel::updateQuery, accent = accent)
+                    SearchField(query = state.query, onQueryChange = viewModel::updateQuery, accent = accent, focusRequester = searchFocus)
                     Spacer(Modifier.height(14.dp))
 
                     state.error?.let {
@@ -212,7 +252,8 @@ fun SearchScreen(
                             selectedTab = discoverTab,
                             onSelectTab = { discoverTab = it },
                             onTrackClick = onTrackSelected,
-                            onMoreClick = onTrackMore,
+                            onMoreClick = { actionsTrack = it },
+                            nowPlayingIsrc = nowPlayingIsrc,
                             onArtistClick = onArtistSelected,
                             onAlbumClick = onAlbumSelected,
                         )
@@ -244,7 +285,22 @@ fun SearchScreen(
                             itemsIndexed(state.tracks, key = { i, t -> "${t.isrc}#$i" }) { _, track ->
                                 // While a refined search is loading, the old results dim instead of vanishing.
                                 Box(Modifier.padding(horizontal = 16.dp).graphicsLayer { alpha = resultsAlpha }) {
-                                    TrackResultRow(track, resolvingIsrc == track.isrc, accent) { picked -> onTrackSelected(picked, state.tracks) }
+                                    val isFav = track.isrc in favoriteIsrcs
+                                    TrackResultRow(
+                                        track = track,
+                                        isResolving = resolvingIsrc == track.isrc,
+                                        isPlaying = track.isrc == nowPlayingIsrc,
+                                        isFavorite = isFav,
+                                        accent = accent,
+                                        onMore = { actionsTrack = track },
+                                        onAdd = {
+                                            // The + saves straight to favorites, then offers the playlists too.
+                                            // Tapping it again (check showing) undoes the save.
+                                            onToggleFavorite(track)
+                                            if (!isFav) savedTrack = track
+                                        },
+                                        onTrackSelected = { picked -> onTrackSelected(picked, state.tracks) },
+                                    )
                                 }
                             }
                         }
@@ -252,12 +308,45 @@ fun SearchScreen(
                 }
             }
         }
+
+        actionsTrack?.let { t ->
+            TrackActionsSheet(
+                track = t,
+                isFavorite = t.isrc in favoriteIsrcs,
+                onDismiss = { actionsTrack = null },
+                onShare = { actionsTrack = null; shareTrack = t },
+                onToggleFavorite = { onToggleFavorite(t) },
+                onAddToPlaylist = { actionsTrack = null; pickerTrack = t },
+                onGoToArtist = { actionsTrack = null; onTrackArtist(t) },
+            )
+        }
+        savedTrack?.let { t ->
+            SavedInSheet(
+                track = t,
+                playlists = playlists,
+                accent = accent,
+                showFavorites = true,
+                onAddToPlaylist = { id -> onAddToPlaylist(t, id) },
+                onDismiss = { savedTrack = null },
+            )
+        }
+        pickerTrack?.let { t ->
+            SavedInSheet(
+                track = t,
+                playlists = playlists,
+                accent = accent,
+                showFavorites = false,
+                onAddToPlaylist = { id -> onAddToPlaylist(t, id) },
+                onDismiss = { pickerTrack = null },
+            )
+        }
+        shareTrack?.let { t -> ShareSheet(track = t, onDismiss = { shareTrack = null }) }
     }
 }
 
 /** Flat translucent field, no edge at rest. While focused it gets a hairline ring in the cover's accent. */
 @Composable
-private fun SearchField(query: String, onQueryChange: (String) -> Unit, accent: Color) {
+private fun SearchField(query: String, onQueryChange: (String) -> Unit, accent: Color, focusRequester: FocusRequester) {
     var focused by remember { mutableStateOf(false) }
     val focus by animateFloatAsState(if (focused) 1f else 0f, tween(200), label = "search-focus")
     Row(
@@ -273,7 +362,7 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit, accent: 
         BasicTextField(
             value = query,
             onValueChange = onQueryChange,
-            modifier = Modifier.weight(1f).onFocusChanged { focused = it.isFocused },
+            modifier = Modifier.weight(1f).focusRequester(focusRequester).onFocusChanged { focused = it.isFocused },
             singleLine = true,
             textStyle = MaterialTheme.typography.bodyLarge.copy(color = TextPrimary),
             cursorBrush = SolidColor(accent),
@@ -384,7 +473,18 @@ private fun ArtistHit(item: DiscoverItem, onClick: (Long) -> Unit) {
             fallback = { ArtworkFallbackIcon() },
         )
         Column(Modifier.weight(1f).padding(start = 18.dp, end = 8.dp)) {
-            Text(item.title, style = MaterialTheme.typography.headlineMedium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                // Big enough artists get the seal-check badge (follower count decides, see VerifiedBadge.kt).
+                if (isVerifiedArtist(item.followers)) VerifiedBadge(Modifier.padding(start = 8.dp), size = 22.dp)
+            }
             Text("Artist", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
         }
         // The arrow nudges forward on hover/press: a quiet "this opens".
@@ -403,7 +503,16 @@ private fun ArtistHit(item: DiscoverItem, onClick: (Long) -> Unit) {
 }
 
 @Composable
-private fun TrackResultRow(track: Track, isResolving: Boolean, accent: Color, onTrackSelected: (Track) -> Unit) {
+private fun TrackResultRow(
+    track: Track,
+    isResolving: Boolean,
+    isPlaying: Boolean,
+    isFavorite: Boolean,
+    accent: Color,
+    onMore: () -> Unit,
+    onAdd: () -> Unit,
+    onTrackSelected: (Track) -> Unit,
+) {
     InteractiveSurface(
         shape = RowShape,
         pressedScale = 0.97f,
@@ -422,13 +531,17 @@ private fun TrackResultRow(track: Track, isResolving: Boolean, accent: Color, on
             fallback = { ArtworkFallbackIcon() },
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-            Text(
-                track.title,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
-                color = TextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isPlaying) NowPlayingBars(color = accent, modifier = Modifier.padding(end = 8.dp))
+                Text(
+                    track.title,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium),
+                    color = if (isPlaying) accent else TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     track.artist,
@@ -464,7 +577,26 @@ private fun TrackResultRow(track: Track, isResolving: Boolean, accent: Color, on
                 modifier = Modifier.padding(start = 6.dp, end = 2.dp).size(26.dp),
             )
         }
+        // + saves to favorites (and opens "Saved in"); the dots open the actions sheet.
+        RowIconButton(
+            icon = if (isFavorite) PhosphorIcons.Fill.CheckCircle else PhosphorIcons.Light.PlusCircle,
+            description = if (isFavorite) "Saved" else "Add to favorites",
+            tint = if (isFavorite) accent else ink(0.7f),
+            onClick = onAdd,
+        )
+        RowIconButton(PhosphorIcons.Light.DotsThreeVertical, "More options", ink(0.6f), onMore)
     }
+}
+
+@Composable
+private fun RowIconButton(icon: ImageVector, description: String, tint: Color, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = description, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Icon(icon, description, tint = tint, modifier = Modifier.size(24.dp)) }
 }
 
 @Composable

@@ -1,5 +1,6 @@
 package com.gamut.core.player
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -20,6 +21,7 @@ import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.CacheWriter
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
@@ -102,7 +104,10 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
     // loading screen is gone, or by the first playback call if that comes first.
     private val player: ExoPlayer by lazy {
         ExoPlayer.Builder(context, renderersFactory)
-        .setMediaSourceFactory(DefaultMediaSourceFactory(DataSource.Factory { cacheFactory.createDataSource() }))
+        .setMediaSourceFactory(DefaultMediaSourceFactory(DataSource.Factory {
+            // Downloaded songs (file:) play straight from disk; copying them into the stream cache would only waste space.
+            SchemeRoutingDataSource(local = DefaultDataSource.Factory(context).createDataSource(), remote = cacheFactory.createDataSource())
+        }))
         // Start quickly, but download in long bursts rather than a constant trickle: fewer radio wake-ups.
         .setLoadControl(
             DefaultLoadControl.Builder()
@@ -111,6 +116,9 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
         )
         .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
         .setHandleAudioBecomingNoisy(true)   // pause when the headphones are unplugged
+        // Without this the CPU and Wi-Fi are allowed to sleep with the screen off, which stalls the stream and the
+        // player then pauses / stops by itself on the lock screen. NETWORK also holds the Wi-Fi lock for streams.
+        .setWakeMode(C.WAKE_MODE_NETWORK)
         .build()
         .apply {
             // This is a music player -- some yt-dlp-resolved sources are muxed video+audio
@@ -312,7 +320,21 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
 
     // ---- Transport ----
 
+    // Nothing else binds to GamutMediaSessionService, so without this the service (and its foreground notification)
+    // never starts and Android is free to freeze / kill the app once the screen is off: playback then stops by itself.
+    // A controller connection binds the service and keeps it foreground while audio plays.
+    private var controllerFuture: com.google.common.util.concurrent.ListenableFuture<androidx.media3.session.MediaController>? = null
+
+    private fun ensureSessionService() {
+        if (controllerFuture != null) return
+        runCatching {
+            val token = androidx.media3.session.SessionToken(context, ComponentName(context, GamutMediaSessionService::class.java))
+            controllerFuture = androidx.media3.session.MediaController.Builder(context, token).buildAsync()
+        }
+    }
+
     override fun play(track: Track, sourceUrl: String) {
+        ensureSessionService()
         loadJob?.cancel()
         positionJob?.cancel()   // else it keeps publishing the OLD item's position for the new track until ExoPlayer reports not-playing
         syncQueuePositionTo(track)
@@ -639,6 +661,7 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
 
     /** Downloads the first [WARM_BYTES] of the stream into the disk cache (nothing if it is already there). */
     private suspend fun warmCache(url: String) = withContext(Dispatchers.IO) {
+        if (url.startsWith("file:")) return@withContext   // already on disk
         try {
             val spec = DataSpec.Builder()
                 .setUri(url)
@@ -803,4 +826,25 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
         /** How often one track may be re-resolved after its stream URL failed, before showing an error. */
         const val MAX_RECOVERIES = 3
     }
+}
+
+/** Sends `file:` URIs to a plain file source and everything else (network streams) through the disk cache. */
+@UnstableApi
+private class SchemeRoutingDataSource(private val local: DataSource, private val remote: DataSource) : DataSource {
+    private var active: DataSource = remote
+
+    override fun addTransferListener(transferListener: TransferListener) {
+        local.addTransferListener(transferListener)
+        remote.addTransferListener(transferListener)
+    }
+
+    override fun open(dataSpec: DataSpec): Long {
+        active = if (dataSpec.uri.scheme == "file") local else remote
+        return active.open(dataSpec)
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int = active.read(buffer, offset, length)
+    override fun getUri(): Uri? = active.uri
+    override fun getResponseHeaders(): Map<String, List<String>> = active.responseHeaders
+    override fun close() = active.close()
 }

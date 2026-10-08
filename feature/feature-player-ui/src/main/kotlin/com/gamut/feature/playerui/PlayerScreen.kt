@@ -156,7 +156,11 @@ fun PlayerScreen(
 
     // While the progress line is dragged, the line and time label follow the finger; the real seek happens on release.
     var scrubFraction by remember { mutableStateOf<Float?>(null) }
-    val progressProvider = remember(duration) { { scrubFraction ?: (clock.positionMs / duration).coerceIn(0f, 1f) } }
+    // A track whose length is not known yet (duration 1 here) must show an empty bar, not a full one.
+    val durationKnown = (track?.durationMs ?: 0L) > 0L
+    val progressProvider = remember(duration, durationKnown) {
+        { scrubFraction ?: if (durationKnown) (clock.positionMs / duration).coerceIn(0f, 1f) else 0f }
+    }
     val positionProvider = remember(duration) { { (progressProvider() * duration).toLong() } }
     val lyricsPosition = remember(clock) { { clock.positionMs.toLong() + LyricsSyncOffsetMs } }
     val frozenLyricsPosition = remember(leaving) { val p = clock.positionMs.toLong() + LyricsSyncOffsetMs; { p } }
@@ -169,7 +173,15 @@ fun PlayerScreen(
     }
     LaunchedEffect(lyricsKey) {
         val t = track ?: return@LaunchedEffect
-        if (lyricsState is LyricsState.Loading) lyricsState = LyricsRepository.fetchLyrics(t)
+        if (lyricsState !is LyricsState.Loading) return@LaunchedEffect
+        // A failed lookup is usually a slow / busy lyrics service, not "no lyrics": retry with growing pauses.
+        var attempt = 0
+        while (true) {
+            val result = LyricsRepository.fetchLyrics(t)
+            lyricsState = result
+            if (result !is LyricsState.Error || ++attempt >= 4) break
+            delay(2_000L * attempt)
+        }
     }
     var lyricsExpanded by remember { mutableStateOf(true) }
 
@@ -461,7 +473,15 @@ internal class PlayerClock {
             when (s) {
                 is PlaybackState.Playing -> { reported = s.positionMs; track = s.track }
                 is PlaybackState.Paused -> { reported = s.positionMs; track = s.track }
-                else -> return@collect
+                else -> {
+                    // Loading / idle / error: the next track is not playing yet. Without this the clock kept the
+                    // PREVIOUS track's end position, so the bar showed full while the new song loaded.
+                    live = false
+                    wasLive = false
+                    lastTrackKey = null
+                    anchor(0L)
+                    return@collect
+                }
             }
             val key = track.isrc.orEmpty() + "|" + track.title
             val nowLive = s is PlaybackState.Playing && !awaiting

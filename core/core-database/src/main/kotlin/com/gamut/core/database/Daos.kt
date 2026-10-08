@@ -56,6 +56,7 @@ abstract class PlaylistTrackDao {
 interface DownloadDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(download: DownloadEntity)
     @Query("SELECT * FROM downloads WHERE isrc = :isrc") fun observe(isrc: String): Flow<DownloadEntity?>
+    @Query("SELECT * FROM downloads") fun observeAll(): Flow<List<DownloadEntity>>
     @Query("DELETE FROM downloads WHERE isrc = :isrc") suspend fun delete(isrc: String)
 }
 
@@ -67,10 +68,21 @@ interface ArtworkCacheDao {
 }
 
 @Dao
-interface FavoriteDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun add(favorite: FavoriteEntity)
-    @Query("DELETE FROM favorites WHERE isrc = :isrc") suspend fun remove(isrc: String)
-    @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE isrc = :isrc)") suspend fun isFavorite(isrc: String): Boolean
-    @Query("SELECT isrc FROM favorites") fun observeIsrcs(): Flow<List<String>>
-    @Query("SELECT t.* FROM tracks t INNER JOIN favorites f ON t.isrc = f.isrc ORDER BY f.addedAtEpochMs DESC") fun observeTracks(): Flow<List<TrackEntity>>
+abstract class FavoriteDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE) abstract suspend fun add(favorite: FavoriteEntity)
+    @Query("DELETE FROM favorites WHERE isrc = :isrc") abstract suspend fun remove(isrc: String)
+    @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE isrc = :isrc)") abstract suspend fun isFavorite(isrc: String): Boolean
+    @Query("SELECT isrc FROM favorites") abstract fun observeIsrcs(): Flow<List<String>>
+    @Query("SELECT t.* FROM tracks t INNER JOIN favorites f ON t.isrc = f.isrc ORDER BY f.addedAtEpochMs DESC") abstract fun observeTracks(): Flow<List<TrackEntity>>
+
+    /**
+     * Puts the favorites in exactly this order (first = shown first). The order IS addedAtEpochMs (newest first), so
+     * this hands out descending timestamps: no new column, no migration. Also (re)adds any isrc that is missing,
+     * which is how "Undo" brings a removed favorite back to its old place. One transaction = one change for observers.
+     */
+    @Transaction
+    open suspend fun setOrder(isrcs: List<String>) {
+        val base = System.currentTimeMillis()
+        isrcs.distinct().forEachIndexed { index, isrc -> add(FavoriteEntity(isrc, base - index)) }
+    }
 }
