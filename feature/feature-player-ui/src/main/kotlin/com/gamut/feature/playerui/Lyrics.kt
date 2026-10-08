@@ -68,6 +68,7 @@ import com.gamut.feature.playerui.components.tapTarget
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.UnknownHostException
 import java.net.URLEncoder
 import java.util.Collections
 import kotlin.coroutines.cancellation.CancellationException
@@ -171,14 +172,16 @@ object LyricsRepository {
     private fun norm(s: String) = s.lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
 
     /** True if a search hit is plausibly this song (used for the loose queries, which can return unrelated songs). */
-    private fun looksLike(o: JSONObject, title: String, artist: String): Boolean {
+    private fun looksLike(o: JSONObject, title: String, artist: String, seconds: Double): Boolean {
         val t = norm(o.optString("trackName", o.optString("name", "")))
         val a = norm(o.optString("artistName", ""))
         val wantT = norm(title)
         val wantA = norm(artist)
         val titleOk = t.isNotEmpty() && wantT.isNotEmpty() && (t == wantT || t.startsWith(wantT) || wantT.startsWith(t))
         val artistOk = a.isNotEmpty() && wantA.isNotEmpty() && (a.contains(wantA) || wantA.contains(a))
-        return titleOk && artistOk
+        // Same title and (nearly) the same length is the same song even when the artist is spelled / transliterated differently.
+        val durationOk = seconds > 0 && o.has("duration") && !o.isNull("duration") && abs(o.optDouble("duration") - seconds) <= 3.0
+        return titleOk && (artistOk || durationOk)
     }
 
     private fun lookup(track: Track): FetchedLyrics? {
@@ -190,7 +193,17 @@ object LyricsRepository {
         // A network failure on one request must not end the lookup: later requests may still work. Only when nothing
         // was found AND something failed is the answer "error, try again" rather than "no lyrics exist".
         var failed = false
-        fun get(url: String): String? = try { httpGetRetrying(url) } catch (e: IOException) { failed = true; null }
+        var offline = false   // no network at all: don't wait through ten more doomed requests
+        fun get(url: String): String? {
+            if (offline) return null
+            return try {
+                httpGetRetrying(url)
+            } catch (e: UnknownHostException) {
+                failed = true; offline = true; null
+            } catch (e: IOException) {
+                failed = true; null
+            }
+        }
 
         // 1. Exact match by title + artist + length. One small request, and the right version of the song.
         if (seconds > 0) {
@@ -206,6 +219,7 @@ object LyricsRepository {
         val queries = listOf(
             Q("track_name=${enc(title)}&artist_name=${enc(artist)}", false),
             Q("track_name=${enc(title)}&artist_name=${enc(lead)}", false),
+            Q("track_name=${enc(coreTitle)}&artist_name=${enc(lead)}", false),
             Q("q=${enc("$title $artist")}", true),
             Q("q=${enc("$coreTitle $lead")}", true),
             Q("q=${enc(coreTitle)}", true),
@@ -214,7 +228,7 @@ object LyricsRepository {
             val body = get("$BASE_URL/search?$query") ?: continue
             val results = runCatching { JSONArray(body) }.getOrNull() ?: continue
             var items = List(results.length()) { results.getJSONObject(it) }
-            if (strict) items = items.filter { looksLike(it, coreTitle, lead) }
+            if (strict) items = items.filter { looksLike(it, coreTitle, lead, seconds) }
             pickBest(items, seconds)?.let { return it }
         }
         if (failed) throw IOException("lyrics lookup failed")
@@ -243,19 +257,21 @@ object LyricsRepository {
         return plain?.let { FetchedLyrics(parsePlainLyrics(it), isSynced = false) }
     }
 
-    private fun cleanTitle(title: String) = title.replace(bracketNoise, "").replace(dashNoise, "").trim().ifBlank { title }
+    private fun cleanTitle(title: String) = title.replace('\u2019', '\'').replace(bracketNoise, "").replace(dashNoise, "").trim().ifBlank { title }
 
     private fun enc(v: String) = URLEncoder.encode(v, "UTF-8")
 
-    /** [httpGet] with one quick retry for timeouts, 429 and 5xx (the public service is sometimes slow or busy). */
+    /** [httpGet] with up to three tries for timeouts, 429 and 5xx (the public service is sometimes slow or busy). */
     private fun httpGetRetrying(url: String): String? {
         var last: IOException? = null
-        repeat(2) { attempt ->
+        repeat(3) { attempt ->
             try {
                 return httpGet(url)
+            } catch (e: UnknownHostException) {
+                throw e   // no network: retrying only delays the answer
             } catch (e: IOException) {
                 last = e
-                if (attempt == 0) Thread.sleep(600)
+                if (attempt < 2) Thread.sleep(500L * (attempt + 1))
             }
         }
         throw last ?: IOException("request failed")
@@ -398,6 +414,8 @@ fun LyricsSection(
     expanded: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Tap on the "no lyrics" / error message: look the lyrics up again. */
+    onRetry: () -> Unit = {},
 ) {
     BoxWithConstraints(modifier) {
         val fullHeight = maxHeight
@@ -469,8 +487,8 @@ fun LyricsSection(
                                         )
                                     }
                                 }
-                                is LyricsState.NotAvailable -> LyricsEmptyState(lyricsState.reason)
-                                is LyricsState.Error -> LyricsEmptyState("Error: ${lyricsState.message}")
+                                is LyricsState.NotAvailable -> LyricsEmptyState("${lyricsState.reason}\nTap to retry", onRetry)
+                                is LyricsState.Error -> LyricsEmptyState("${lyricsState.message}\nRetrying\u2026 tap to retry now", onRetry)
                             }
                         }
                     }
@@ -559,9 +577,9 @@ private fun LyricsPreviewMessage(message: String) {
 
 /** Empty state for lyrics. */
 @Composable
-private fun LyricsEmptyState(message: String) {
+private fun LyricsEmptyState(message: String, onClick: (() -> Unit)? = null) {
     Box(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().let { if (onClick != null) it.tapTarget(onClick) else it },
         contentAlignment = Alignment.Center,
     ) {
         Column(

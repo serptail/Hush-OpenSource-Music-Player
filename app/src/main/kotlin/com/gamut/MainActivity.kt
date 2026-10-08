@@ -562,6 +562,7 @@ private fun NowPlayingStrip(player: MusicPlayer, docked: Boolean, onOpen: () -> 
     val isPlaying by remember { derivedStateOf { state is PlaybackState.Playing } }
     val isLoading by remember { derivedStateOf { state is PlaybackState.Loading } }
     val loadProgress by player.loadProgress.collectAsState()
+    val streamDuration by player.streamDurationMs.collectAsState()
     val position = (state as? PlaybackState.Playing)?.positionMs ?: (state as? PlaybackState.Paused)?.positionMs ?: 0L
     // Keep the last track around so the strip keeps its content while it slides away.
     var last by remember { mutableStateOf(track) }
@@ -569,7 +570,7 @@ private fun NowPlayingStrip(player: MusicPlayer, docked: Boolean, onOpen: () -> 
     val shown = track ?: last
     // Position ticks about once a second; a linear tween of the same length makes the line glide.
     val progress by animateFloatAsState(
-        targetValue = if (shown == null) 0f else (position.toFloat() / shown.durationMs.coerceAtLeast(1L)).coerceIn(0f, 1f),
+        targetValue = if (shown == null) 0f else (position.toFloat() / (if (streamDuration > 0L) streamDuration else shown.durationMs).coerceAtLeast(1L)).coerceIn(0f, 1f),
         animationSpec = tween(500, easing = LinearEasing),
         label = "strip-progress",
     )

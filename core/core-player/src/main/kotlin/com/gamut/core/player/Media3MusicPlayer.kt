@@ -207,7 +207,26 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
     // True while moving to a track that ExoPlayer does not hold yet (skip without a preloaded next item, queue tap,
     // recovery): the UI already shows the new track as playing while its audio loads, instead of the loading screen.
     private var transitioning = false
-        set(value) { field = value; updateAwaiting() }
+        set(value) { field = value; updateTransitionLock(value); updateAwaiting() }
+
+    // Resolving the next URL (yt-dlp) can take seconds. ExoPlayer's own wake lock is only held while it plays, so with
+    // the screen off the CPU slept in that gap and the track never started. Held only while moving between tracks.
+    private val transitionLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Gamut:transition").apply { setReferenceCounted(false) }
+    private fun updateTransitionLock(on: Boolean) {
+        runCatching { if (on) transitionLock.acquire(TRANSITION_LOCK_MS) else if (transitionLock.isHeld) transitionLock.release() }
+    }
+
+    /** True while moving between tracks: the media service must stay foreground even though ExoPlayer is paused. */
+    internal val keepForeground: Boolean get() = transitioning || loadJob?.isActive == true
+
+    private val streamDuration = MutableStateFlow(0L)
+    override val streamDurationMs: StateFlow<Long> = streamDuration
+
+    private fun publishStreamDuration() {
+        val d = player.duration
+        val ok = d != C.TIME_UNSET && d > 0 && player.currentMediaItem?.mediaId == currentTrack?.isrc
+        streamDuration.value = if (ok) d else 0L
+    }
 
     private val awaiting = MutableStateFlow(false)
     override val awaitingAudio: StateFlow<Boolean> = awaiting
@@ -259,6 +278,7 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
                     // Paused while it was still buffering: leave the Loading state.
                     Player.STATE_READY -> {
                         learnDuration()
+                        publishStreamDuration()
                         val track = currentTrack
                         if (!player.playWhenReady && track != null) {
                             val loadedThis = loadedIsrc == track.isrc && player.currentMediaItem?.mediaId == track.isrc
@@ -273,6 +293,7 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
 
             /** ExoPlayer moved on by itself (the track ended) into the preloaded next item. */
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                publishStreamDuration()
                 if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && reason != Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) return
                 val id = mediaItem?.mediaId ?: return
                 if (id != currentTrack?.isrc) {
@@ -329,7 +350,13 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
         if (controllerFuture != null) return
         runCatching {
             val token = androidx.media3.session.SessionToken(context, ComponentName(context, GamutMediaSessionService::class.java))
-            controllerFuture = androidx.media3.session.MediaController.Builder(context, token).buildAsync()
+            val future = androidx.media3.session.MediaController.Builder(context, token).buildAsync()
+            controllerFuture = future
+            // A failed connection must not block every later attempt: the service would then never start.
+            future.addListener(
+                { if (runCatching { future.get() }.isFailure && controllerFuture === future) controllerFuture = null },
+                androidx.core.content.ContextCompat.getMainExecutor(context),
+            )
         }
     }
 
@@ -374,10 +401,12 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
             pos = target
             currentTrack = track
             loadedIsrc = track.isrc
+            streamDuration.value = 0L
             publishQueue()
             state.value = PlaybackState.Playing(0L, track)
             player.seekToNextMediaItem()
             player.play()
+            publishStreamDuration()
         } else {
             loadAtPos(target)
         }
@@ -518,6 +547,7 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
         pos = p
         currentTrack = track
         publishQueue()
+        streamDuration.value = 0L
         // Show the new track right away as playing; its audio follows as soon as it is ready.
         transitioning = true
         state.value = PlaybackState.Playing(startPositionMs, track)
@@ -546,19 +576,27 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
     /** Resolves off the main thread; null if it could not be resolved. */
     private suspend fun resolveUrl(track: Track, forceRefresh: Boolean, onProgress: (Float) -> Unit = {}): String? {
         val active = resolver ?: return null
-        return try {
-            withContext(Dispatchers.Default) { active.resolve(track, forceRefresh, onProgress) }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            null
+        // One failed resolve (slow yt-dlp, flaky network) used to leave the player paused on the track: in the
+        // background that is "playback stopped by itself". Try again, later attempts ignoring any cached URL.
+        repeat(RESOLVE_ATTEMPTS) { attempt ->
+            val url = try {
+                withContext(Dispatchers.Default) { active.resolve(track, forceRefresh || attempt > 0, onProgress) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+            if (url != null) return url
+            if (attempt < RESOLVE_ATTEMPTS - 1) delay(800L * (attempt + 1))
         }
+        return null
     }
 
     /** [soft] = a queue transition: the UI keeps showing the track as playing instead of the loading screen. */
     private fun startMedia(track: Track, url: String, soft: Boolean = false, startPositionMs: Long = 0L) {
         currentTrack = track
         loadedIsrc = track.isrc
+        streamDuration.value = 0L
         if (!soft) {
             transitioning = false
             state.value = PlaybackState.Loading
@@ -601,12 +639,15 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
     private fun trackBuffering() {
         progressJob?.cancel()
         progressJob = scope.launch {
-            while (isActive && state.value is PlaybackState.Loading) {
+            // Runs for every kind of wait (the loading screen AND the "playing but still silent" queue transitions)
+            // and only reports full once audio is really coming out. Before, soft transitions skipped the loop and
+            // the bar jumped to 100% at once.
+            while (isActive && (state.value is PlaybackState.Loading || transitioning)) {
                 val ahead = (player.bufferedPosition - player.currentPosition).coerceAtLeast(0L)
                 raiseProgress(bufferBase + (1f - bufferBase) * (ahead.toFloat() / BUFFER_FOR_PLAYBACK_MS).coerceIn(0f, 1f))
                 delay(100)
             }
-            raiseProgress(1f)
+            if (isActive) raiseProgress(1f)
         }
     }
 
@@ -825,6 +866,9 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
 
         /** How often one track may be re-resolved after its stream URL failed, before showing an error. */
         const val MAX_RECOVERIES = 3
+
+        const val RESOLVE_ATTEMPTS = 3
+        const val TRANSITION_LOCK_MS = 90_000L
     }
 }
 

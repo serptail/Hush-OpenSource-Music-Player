@@ -24,6 +24,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -118,7 +119,11 @@ fun PlayerScreen(
     }
     val isLoadingState by remember { derivedStateOf { state is PlaybackState.Loading } }
     val loadProgress by player.loadProgress.collectAsState()
-    val duration = (track?.durationMs ?: 0L).coerceAtLeast(1L)
+    // The stream's real length wins over the catalog's: when they differ (another version of the song) the bar used
+    // to hit 100% at the catalog length and stay full for the rest of the track.
+    val streamDuration by player.streamDurationMs.collectAsState()
+    val effectiveDurationMs = if (streamDuration > 0L) streamDuration else (track?.durationMs ?: 0L)
+    val duration = effectiveDurationMs.coerceAtLeast(1L)
     val shuffleOn by player.shuffleEnabled.collectAsState()
     val repeatMode by player.repeatMode.collectAsState()
     val queueState by player.queue.collectAsState()
@@ -157,9 +162,12 @@ fun PlayerScreen(
     // While the progress line is dragged, the line and time label follow the finger; the real seek happens on release.
     var scrubFraction by remember { mutableStateOf<Float?>(null) }
     // A track whose length is not known yet (duration 1 here) must show an empty bar, not a full one.
-    val durationKnown = (track?.durationMs ?: 0L) > 0L
-    val progressProvider = remember(duration, durationKnown) {
-        { scrubFraction ?: if (durationKnown) (clock.positionMs / duration).coerceIn(0f, 1f) else 0f }
+    val durationKnown = effectiveDurationMs > 0L
+    // The clock is re-anchored asynchronously after a track change; until it has been anchored to THIS track its
+    // position still belongs to the previous one (often near its end), which drew a full bar for a few frames.
+    val currentKey = track?.let { it.isrc.orEmpty() + "|" + it.title }
+    val progressProvider = remember(duration, durationKnown, currentKey) {
+        { scrubFraction ?: if (durationKnown && clock.anchoredKey == currentKey) (clock.positionMs / duration).coerceIn(0f, 1f) else 0f }
     }
     val positionProvider = remember(duration) { { (progressProvider() * duration).toLong() } }
     val lyricsPosition = remember(clock) { { clock.positionMs.toLong() + LyricsSyncOffsetMs } }
@@ -171,16 +179,19 @@ fun PlayerScreen(
     var lyricsState by remember(lyricsKey) {
         mutableStateOf<LyricsState>(track?.let { LyricsRepository.cached(it) } ?: LyricsState.Loading)
     }
-    LaunchedEffect(lyricsKey) {
+    var lyricsRetry by remember(lyricsKey) { mutableIntStateOf(0) }   // bumped by tapping the lyrics card after a failure
+    LaunchedEffect(lyricsKey, lyricsRetry) {
         val t = track ?: return@LaunchedEffect
-        if (lyricsState !is LyricsState.Loading) return@LaunchedEffect
-        // A failed lookup is usually a slow / busy lyrics service, not "no lyrics": retry with growing pauses.
+        if (lyricsState is LyricsState.Loaded) return@LaunchedEffect
+        lyricsState = LyricsState.Loading
+        // A failed lookup is usually a slow / busy lyrics service or no network, not "no lyrics": keep retrying with
+        // growing pauses (capped), so lyrics appear on their own as soon as the connection is back.
         var attempt = 0
         while (true) {
             val result = LyricsRepository.fetchLyrics(t)
             lyricsState = result
-            if (result !is LyricsState.Error || ++attempt >= 4) break
-            delay(2_000L * attempt)
+            if (result !is LyricsState.Error || ++attempt >= 20) break
+            delay((2_000L * attempt).coerceAtMost(15_000L))
         }
     }
     var lyricsExpanded by remember { mutableStateOf(true) }
@@ -255,7 +266,7 @@ fun PlayerScreen(
             }
 
             Spacer(Modifier.height(14.dp))
-            TimeRow(positionProvider, track.durationMs)
+            TimeRow(positionProvider, effectiveDurationMs)
 
             Spacer(Modifier.height(10.dp))
             ModeRow(
@@ -287,6 +298,7 @@ fun PlayerScreen(
                 accent = accent,
                 expanded = lyricsExpanded,
                 onToggle = { lyricsExpanded = !lyricsExpanded },
+                onRetry = { lyricsRetry++ },
                 modifier = Modifier.fillMaxWidth().weight(1f).padding(bottom = 16.dp),
             )
         }
@@ -441,6 +453,10 @@ internal class PlayerClock {
     private var baseTimestamp = SystemClock.elapsedRealtime()
     private var speed = 1f   // playback speed: the position advances this many ms per wall-clock ms
 
+    /** Key of the track the position currently belongs to (null = none yet). */
+    var anchoredKey: String? = null
+        private set
+
     /** True while audio is actually playing. */
     var live by mutableStateOf(false)
         private set
@@ -479,17 +495,21 @@ internal class PlayerClock {
                     live = false
                     wasLive = false
                     lastTrackKey = null
+                    anchoredKey = null
                     anchor(0L)
                     return@collect
                 }
             }
             val key = track.isrc.orEmpty() + "|" + track.title
             val nowLive = s is PlaybackState.Playing && !awaiting
+            if (key != lastTrackKey) anchoredKey = null   // until re-anchored below: the old position is not this track's
             val now = SystemClock.elapsedRealtime()
             val estimate = if (wasLive) basePosition + ((now - baseTimestamp) * speed).toLong() else basePosition
             if (!nowLive || key != lastTrackKey || nowLive != wasLive || abs(reported - estimate) > RESYNC_THRESHOLD_MS) {
+                anchoredKey = key
                 anchor(reported)
             }
+            anchoredKey = key
             lastTrackKey = key
             wasLive = nowLive
             live = nowLive

@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 private val NeverAwaiting = MutableStateFlow(false)
+private val NoStreamDuration = MutableStateFlow(0L)
 
 /**
  * Turns a [Track] into a playable stream URL. The player owns the queue, so when the user skips
@@ -41,6 +42,13 @@ interface MusicPlayer {
      * true, otherwise the timer runs ahead of the sound and then jumps back when the audio really starts.
      */
     val awaitingAudio: StateFlow<Boolean> get() = NeverAwaiting
+
+    /**
+     * Real length (ms) of the audio ExoPlayer holds for the current track, or 0 while unknown. The catalog length can
+     * differ from the stream's (another version / video intro); the progress bar must use this one, or it sits at
+     * "full" for the rest of the song.
+     */
+    val streamDurationMs: StateFlow<Long> get() = NoStreamDuration
 
     /** Plays [track] from [sourceUrl]. If the track is part of the queue the queue position follows it. */
     fun play(track: Track, sourceUrl: String)
