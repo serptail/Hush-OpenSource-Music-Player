@@ -14,8 +14,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DownloadEntity::class,
         ArtworkCacheEntity::class,
         FavoriteEntity::class,
+        PendingSyncEntity::class,
+        SyncStateEntity::class,
+        RecentEntity::class,
     ],
-    version = 5,
+    version = 7,
     exportSchema = true,
 )
 abstract class GamutDatabase : RoomDatabase() {
@@ -26,6 +29,9 @@ abstract class GamutDatabase : RoomDatabase() {
     abstract fun downloadDao(): DownloadDao
     abstract fun artworkCacheDao(): ArtworkCacheDao
     abstract fun favoriteDao(): FavoriteDao
+    abstract fun pendingSyncDao(): PendingSyncDao
+    abstract fun syncStateDao(): SyncStateDao
+    abstract fun recentDao(): RecentDao
 }
 
 val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -59,5 +65,25 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
     override fun migrate(database: SupportSQLiteDatabase) {
         database.execSQL("ALTER TABLE playlists ADD COLUMN coverUri TEXT")
         database.execSQL("ALTER TABLE playlists ADD COLUMN tags TEXT NOT NULL DEFAULT ''")
+    }
+}
+
+/** Sync: playlists.remoteId, the pending queue and the sync cursors. Register it next to the others. */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("ALTER TABLE playlists ADD COLUMN remoteId TEXT")
+        database.execSQL(
+            "CREATE TABLE IF NOT EXISTS pending_sync (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "type TEXT NOT NULL, itemKey TEXT NOT NULL, payload TEXT, createdAtEpochMs INTEGER NOT NULL)",
+        )
+        database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_pending_sync_type_itemKey ON pending_sync (type, itemKey)")
+        database.execSQL("CREATE TABLE IF NOT EXISTS sync_state (name TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(name))")
+    }
+}
+
+/** Recently played history. Register it next to the others. */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("CREATE TABLE IF NOT EXISTS recently_played (isrc TEXT NOT NULL, playedAtEpochMs INTEGER NOT NULL, PRIMARY KEY(isrc))")
     }
 }

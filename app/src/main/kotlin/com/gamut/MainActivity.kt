@@ -27,6 +27,16 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import com.gamut.core.designsystem.MiniPlayerStrip
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Column
+import com.gamut.account.AccountViewModel
+import com.gamut.account.ProfileScreen
+import com.gamut.settings.RecentlyPlayedScreen
+import com.gamut.settings.RecentlyPlayedViewModel
+import com.gamut.settings.SettingsScreen
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.slideInHorizontally
@@ -65,6 +75,7 @@ import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.light.MagnifyingGlass
 import com.adamglin.phosphoricons.light.VinylRecord
+import com.adamglin.phosphoricons.light.User
 import com.gamut.core.designsystem.BottomBarItem
 import com.gamut.core.designsystem.GamutBottomBar
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -79,6 +90,7 @@ import com.gamut.core.designsystem.rememberNotifier
 import com.gamut.core.designsystem.acrylicSource
 import com.gamut.core.designsystem.GamutBackdrop
 import com.gamut.core.designsystem.FlowingBackground
+import com.gamut.core.designsystem.ProfileAvatar
 import com.gamut.core.designsystem.GamutTheme
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.rememberCoverPalette
@@ -141,7 +153,11 @@ class MainActivity : ComponentActivity() {
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
         window.setBackgroundDrawable(ColorDrawable(CoverPalette.Neutral.base.toArgb()))
-        setContent { GamutApp(player, resolveTrackSource, audioSources, newPipe, downloadIndex, downloadManager) }
+        setContent {
+            com.gamut.onboarding.OnboardingGate {
+                GamutApp(player, resolveTrackSource, audioSources, newPipe, downloadIndex, downloadManager)
+            }
+        }
     }
 }
 
@@ -171,8 +187,11 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
     }
     // Bumped by the empty-state "Find ..." buttons: HomeTabs reacts by sliding to the Discover (search) tab.
     var openSearchTick by remember { mutableIntStateOf(0) }
-    var showLoading by remember { mutableStateOf(true) }
-    var forceReady by remember { mutableStateOf(false) }
+    // Bumped by Settings > Your Playlists: HomeTabs slides to the Library tab.
+    var openLibraryTick by remember { mutableIntStateOf(0) }
+    // Saveable: if the system recreates the activity (file picker, background, rotation) we must NOT replay the splash.
+    var showLoading by rememberSaveable { mutableStateOf(true) }
+    var forceReady by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) { delay(10_000); forceReady = true } // never trap the user if Discover fails
     val dataReady = forceReady || discover.tabs.isNotEmpty() || (!discover.isLoading && discover.error != null)
     // Warm-ups run only after the first screen is up, so they never compete with the startup requests or the
@@ -208,6 +227,9 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
     val shazamVm = hiltViewModel<ShazamViewModel>()
     val shazamState by shazamVm.state.collectAsState()
     val appLibraryVm = hiltViewModel<LibraryViewModel>()
+    // Recently played: whatever the player loads (tap, skip, auto-advance) is recorded once it starts.
+    val recentVm = hiltViewModel<RecentlyPlayedViewModel>()
+    LaunchedEffect(loadedTrack?.isrc) { loadedTrack?.let(recentVm::record) }
     val context = LocalContext.current
     var resumeAfterShazam by remember { mutableStateOf(false) }
     val startShazam = {
@@ -339,6 +361,8 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                             onOpenPlaylist = { id -> nav.navigate(if (id == "liked") "favorites" else "playlist/$id") },
                             onCreatePlaylist = { nav.navigate("create-playlist") { launchSingleTop = true } },
                             openSearchTick = openSearchTick,
+                            openLibraryTick = openLibraryTick,
+                            onProfile = { nav.navigate("settings") { launchSingleTop = true } },
                             onShazam = onShazam,
                             nowPlaying = nowPlaying,
                         )
@@ -364,6 +388,32 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                         ) {
                             // "home" is drawn by HomeTabs above and never leaves composition, so this destination is empty.
                             composable("home") {}
+                            composable("settings") {
+                                AfterEnter {
+                                    SettingsScreen(
+                                        onBack = { nav.popBackStack() },
+                                        onLikedSongs = { nav.navigate("favorites") },
+                                        onPlaylists = { openLibraryTick++; nav.popBackStack("home", false) },
+                                        onRecentlyPlayed = { nav.navigate("recently-played") },
+                                        onProfile = { nav.navigate("profile") },
+                                        nowPlaying = nowPlayingDocked,
+                                    )
+                                }
+                            }
+                            composable("profile") {
+                                AfterEnter { ProfileScreen(onBack = { nav.popBackStack() }, nowPlaying = nowPlayingDocked) }
+                            }
+                            composable("recently-played") {
+                                val recent by recentVm.tracks.collectAsState()
+                                AfterEnter {
+                                    RecentlyPlayedScreen(
+                                        tracks = recent,
+                                        onBack = { nav.popBackStack() },
+                                        onTrackSelected = playTrackWithQueue,
+                                        nowPlaying = nowPlayingDocked,
+                                    )
+                                }
+                            }
                             composable("favorites") {
                                 val favorites by appLibraryVm.favorites.collectAsState()
                                 val downloadsVm = hiltViewModel<PlaylistDownloadsViewModel>()
@@ -632,6 +682,7 @@ private fun AfterEnter(content: @Composable () -> Unit) {
  * player strip live here ONCE. While a detail screen covers this layer it is faded out, blocks touches and is hidden
  * from accessibility.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeTabs(
     active: Boolean,
@@ -649,10 +700,17 @@ private fun HomeTabs(
     onOpenPlaylist: (String) -> Unit,
     onCreatePlaylist: () -> Unit,
     openSearchTick: Int,
+    openLibraryTick: Int,
+    onProfile: () -> Unit,
     onShazam: () -> Unit,
     nowPlaying: @Composable () -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    // Feeds the generated profile circle in the Discover header.
+    val accountVm = hiltViewModel<AccountViewModel>()
+    val profileName by accountVm.displayName.collectAsState()
+    val profileId by accountVm.userId.collectAsState()
+    val avatar by accountVm.avatar.collectAsState()
     val favoriteIsrcs by libraryVm.favoriteIsrcs.collectAsState()
     val libraryPlaylists by libraryVm.playlists.collectAsState()
     val playlistOptions = remember(libraryPlaylists) {
@@ -678,6 +736,7 @@ private fun HomeTabs(
 
     // Empty-state buttons ("Find artists", "Find songs") ask for the search tab.
     LaunchedEffect(openSearchTick) { if (openSearchTick > 0) { goTo(0); focusSearchTick++ } }
+    LaunchedEffect(openLibraryTick) { if (openLibraryTick > 0) goTo(1) }
     BackHandler(enabled = active && tab == 1) { goTo(0) }
     // Only the visible layer may set the status bar icons; a hidden Library recomposing must not override an album's.
     if (active) TransparentStatusBar(darkIcons = palette.isLight)
@@ -724,6 +783,10 @@ private fun HomeTabs(
                     onArtistSelected = onArtistSelected,
                     onAlbumSelected = onAlbumSelected,
                     onShazam = onShazam,
+                    onProfile = onProfile,
+                    profileName = profileName,
+                    profileSeed = profileId,
+                    profileImage = avatar,
                     nowPlayingIsrc = nowPlayingIsrc,
                     favoriteIsrcs = favoriteIsrcs,
                     onToggleFavorite = libraryVm::toggleFavorite,

@@ -1,7 +1,6 @@
 package com.gamut.core.database
 
 import androidx.room.Dao
-import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -12,6 +11,8 @@ import kotlinx.coroutines.flow.Flow
 interface TrackDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(track: TrackEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertAll(tracks: List<TrackEntity>)
+    /** Used when pulling from the server: never overwrite a richer local row. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertIgnore(tracks: List<TrackEntity>)
     @Query("SELECT * FROM tracks WHERE isrc = :isrc") suspend fun get(isrc: String): TrackEntity?
     @Query("SELECT * FROM tracks ORDER BY title") fun observeAll(): Flow<List<TrackEntity>>
     @Query("DELETE FROM tracks WHERE isrc = :isrc") suspend fun delete(isrc: String)
@@ -28,10 +29,16 @@ interface ResolvedSourceDao {
 interface PlaylistDao {
     @Insert suspend fun insert(playlist: PlaylistEntity): Long
     @Query("SELECT * FROM playlists ORDER BY createdAtEpochMs DESC") fun observeAll(): Flow<List<PlaylistEntity>>
+    @Query("SELECT * FROM playlists") suspend fun getAll(): List<PlaylistEntity>
     @Query("SELECT * FROM playlists WHERE id = :id") suspend fun get(id: Long): PlaylistEntity?
+    @Query("SELECT * FROM playlists WHERE remoteId = :remoteId LIMIT 1") suspend fun getByRemoteId(remoteId: String): PlaylistEntity?
     @Query("DELETE FROM playlists WHERE id = :id") suspend fun delete(id: Long)
     @Query("UPDATE playlists SET name = :name, tags = :tags, coverUri = :coverUri WHERE id = :id")
     suspend fun update(id: Long, name: String, tags: String, coverUri: String?)
+    @Query("UPDATE playlists SET name = :name, tags = :tags WHERE id = :id")
+    suspend fun updateMeta(id: Long, name: String, tags: String)
+    @Query("UPDATE playlists SET remoteId = :remoteId WHERE id = :id")
+    suspend fun setRemoteId(id: Long, remoteId: String)
 }
 
 // An abstract class (not an interface) so it can hold the @Transaction method below.
@@ -40,6 +47,7 @@ abstract class PlaylistTrackDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) abstract suspend fun upsert(ref: PlaylistTrackCrossRef)
     @Query("DELETE FROM playlisttrackcrossref WHERE playlistId = :playlistId AND isrc = :isrc") abstract suspend fun remove(playlistId: Long, isrc: String)
     @Query("SELECT t.* FROM tracks t INNER JOIN playlisttrackcrossref r ON t.isrc = r.isrc WHERE r.playlistId = :playlistId ORDER BY r.position") abstract fun observeTracks(playlistId: Long): Flow<List<TrackEntity>>
+    @Query("SELECT isrc FROM playlisttrackcrossref WHERE playlistId = :playlistId ORDER BY position") abstract suspend fun isrcsFor(playlistId: Long): List<String>
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM playlisttrackcrossref WHERE playlistId = :playlistId") abstract suspend fun nextPosition(playlistId: Long): Int
     @Query("SELECT EXISTS(SELECT 1 FROM playlisttrackcrossref WHERE playlistId = :playlistId AND isrc = :isrc)") abstract suspend fun contains(playlistId: Long, isrc: String): Boolean
     @Query("DELETE FROM playlisttrackcrossref WHERE playlistId = :playlistId") abstract suspend fun clear(playlistId: Long)
@@ -71,18 +79,43 @@ interface ArtworkCacheDao {
 abstract class FavoriteDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) abstract suspend fun add(favorite: FavoriteEntity)
     @Query("DELETE FROM favorites WHERE isrc = :isrc") abstract suspend fun remove(isrc: String)
+    @Query("SELECT * FROM favorites WHERE isrc = :isrc") abstract suspend fun get(isrc: String): FavoriteEntity?
+    @Query("SELECT * FROM favorites") abstract suspend fun all(): List<FavoriteEntity>
     @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE isrc = :isrc)") abstract suspend fun isFavorite(isrc: String): Boolean
     @Query("SELECT isrc FROM favorites") abstract fun observeIsrcs(): Flow<List<String>>
     @Query("SELECT t.* FROM tracks t INNER JOIN favorites f ON t.isrc = f.isrc ORDER BY f.addedAtEpochMs DESC") abstract fun observeTracks(): Flow<List<TrackEntity>>
 
-    /**
-     * Puts the favorites in exactly this order (first = shown first). The order IS addedAtEpochMs (newest first), so
-     * this hands out descending timestamps: no new column, no migration. Also (re)adds any isrc that is missing,
-     * which is how "Undo" brings a removed favorite back to its old place. One transaction = one change for observers.
-     */
+    /** Puts the favorites in exactly this order (first = shown first) using descending timestamps. */
     @Transaction
     open suspend fun setOrder(isrcs: List<String>) {
         val base = System.currentTimeMillis()
         isrcs.distinct().forEachIndexed { index, isrc -> add(FavoriteEntity(isrc, base - index)) }
     }
+}
+
+@Dao
+interface RecentDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(entry: RecentEntity)
+    @Query("SELECT t.* FROM tracks t INNER JOIN recently_played r ON t.isrc = r.isrc ORDER BY r.playedAtEpochMs DESC LIMIT :limit")
+    fun observeTracks(limit: Int): Flow<List<TrackEntity>>
+    @Query("DELETE FROM recently_played WHERE isrc NOT IN (SELECT isrc FROM recently_played ORDER BY playedAtEpochMs DESC LIMIT :keep)")
+    suspend fun trim(keep: Int)
+    @Query("DELETE FROM recently_played") suspend fun clear()
+}
+
+@Dao
+interface PendingSyncDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(entry: PendingSyncEntity)
+    @Query("SELECT * FROM pending_sync ORDER BY id") suspend fun all(): List<PendingSyncEntity>
+    @Query("DELETE FROM pending_sync WHERE id IN (:ids)") suspend fun deleteIds(ids: List<Long>)
+    @Query("SELECT COUNT(*) FROM pending_sync") fun observeCount(): Flow<Int>
+    @Query("SELECT EXISTS(SELECT 1 FROM pending_sync WHERE type = :type AND itemKey = :key)") suspend fun has(type: String, key: String): Boolean
+    @Query("DELETE FROM pending_sync WHERE type = :type AND itemKey = :key") suspend fun delete(type: String, key: String)
+    @Query("DELETE FROM pending_sync WHERE type = :type AND itemKey LIKE :prefix") suspend fun deleteByPrefix(type: String, prefix: String)
+}
+
+@Dao
+interface SyncStateDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(entry: SyncStateEntity)
+    @Query("SELECT value FROM sync_state WHERE name = :name") suspend fun get(name: String): String?
 }

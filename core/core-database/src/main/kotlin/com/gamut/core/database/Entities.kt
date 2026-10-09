@@ -14,8 +14,6 @@ data class TrackEntity(
     val album: String?,
     val durationMs: Long,
     val albumArtUrl: String?,
-    // Additive columns for the unified MusicBrainz+YouTube search. Nullable with defaults
-    // so this is a safe migration on top of existing rows (see DatabaseMigrations.kt notes).
     val source: String = "MUSICBRAINZ",
     val youtubeVideoId: String? = null,
 )
@@ -38,6 +36,8 @@ data class PlaylistEntity(
     val coverUri: String? = null,
     /** Tags joined with "\n" (see LibraryRepository). */
     @ColumnInfo(defaultValue = "''") val tags: String = "",
+    /** Supabase playlists.id (uuid). Null until the playlist has been pushed once. */
+    val remoteId: String? = null,
 )
 
 @Entity(primaryKeys = ["playlistId", "isrc"], indices = [Index("isrc")])
@@ -51,11 +51,6 @@ data class DownloadEntity(
     val fileSizeBytes: Long,
 )
 
-/**
- * Persistent cover-art URL cache, keyed by MusicBrainz release ID. Closes the "gone on
- * restart, re-fetch every session" gap: SearchRepositoryImpl now checks this table before
- * hitting Cover Art Archive, and writes to it after every successful lookup.
- */
 @Entity(tableName = "artwork_cache")
 data class ArtworkCacheEntity(
     @PrimaryKey val releaseId: String,
@@ -69,3 +64,31 @@ data class FavoriteEntity(
     @PrimaryKey val isrc: String,
     val addedAtEpochMs: Long,
 )
+
+/**
+ * Pending-sync queue. State-based "dirty markers": one row per (type, itemKey), newer replaces older, and the payload
+ * is only what cannot be re-read from the local tables (a playlist song's position, or null = removed).
+ */
+@Entity(tableName = "pending_sync", indices = [Index(value = ["type", "itemKey"], unique = true)])
+data class PendingSyncEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val type: String,
+    val itemKey: String,
+    val payload: String? = null,
+    val createdAtEpochMs: Long,
+)
+
+/** A song the user opened (one row per song, replaying moves it to the top). Local only, not synced. */
+@Entity(tableName = "recently_played")
+data class RecentEntity(@PrimaryKey val isrc: String, val playedAtEpochMs: Long)
+
+/** Small key/value store for sync cursors (server timestamps), owner id, last sync time. */
+@Entity(tableName = "sync_state")
+data class SyncStateEntity(@PrimaryKey val name: String, val value: String)
+
+object SyncTypes {
+    const val FAV = "fav"        // itemKey = isrc
+    const val PL = "pl"          // itemKey = local playlist id (name/tags changed or playlist created)
+    const val PLS = "pls"        // itemKey = "<local playlist id>|<isrc>", payload = position, null = removed
+    const val PL_DEL = "pl_del"  // itemKey = remote playlist uuid
+}

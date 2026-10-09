@@ -2,8 +2,10 @@ package com.gamut
 
 import android.app.Application
 import android.net.Uri
+import androidx.work.Configuration
 import com.gamut.core.database.DownloadIndex
 import com.gamut.core.player.MusicPlayer
+import com.gamut.core.sync.SyncManager
 import com.gamut.feature.resolver.AndroidYtDlpEngine
 import com.gamut.feature.resolver.AudioSourceRepository
 import com.gamut.feature.resolver.ResolveTrackSourceUseCase
@@ -16,12 +18,16 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 @HiltAndroidApp
-class GamutApplication : Application() {
+class GamutApplication : Application(), Configuration.Provider {
+	// WorkManager's auto-initializer is disabled in this project, so it is configured here (used by the daily auto-backup).
+	override val workManagerConfiguration: Configuration get() = Configuration.Builder().build()
+
 	@Inject lateinit var ytDlp: AndroidYtDlpEngine
 	@Inject lateinit var player: MusicPlayer
 	@Inject lateinit var resolveTrackSource: ResolveTrackSourceUseCase
 	@Inject lateinit var audioSources: AudioSourceRepository
 	@Inject lateinit var downloadIndex: DownloadIndex
+	@Inject lateinit var syncManager: SyncManager
 
 	override fun onCreate() {
 		super.onCreate()
@@ -40,5 +46,7 @@ class GamutApplication : Application() {
 			audioSources.audioUrl(source.youtubeVideoId, forceRefresh).getOrNull()
 		}
 		CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { ytDlp.warmUp() }
+		// Local-first sync: does nothing until a Supabase project is configured and the user signs in.
+		syncManager.start(CoroutineScope(SupervisorJob() + Dispatchers.Default))
 	}
 }

@@ -2,6 +2,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:extractNativeLibs="true">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -10,7 +11,8 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <application android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:name=".GamutApplication" android:label="Gamut" android:theme="@style/Theme.Gamut" android:usesCleartextTraffic="true" android:enableOnBackInvokedCallback="true">
-        <activity android:name=".MainActivity" android:exported="true" android:theme="@style/Theme.Gamut.Splash">
+        <activity android:name=".MainActivity" android:exported="true" android:theme="@style/Theme.Gamut.Splash"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|uiMode|density|fontScale|locale|layoutDirection">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
         <service android:name="com.gamut.core.player.GamutMediaSessionService" android:foregroundServiceType="mediaPlayback" android:exported="true">

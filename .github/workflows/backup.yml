@@ -1,0 +1,17 @@
+name: db-backup
+on:
+  schedule: [{ cron: "0 4 * * 0" }]   # weekly
+  workflow_dispatch:
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: pg_dump (encrypted)
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}          # use the session-pooler URI
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          docker run --rm -e DB_URL postgres:17 sh -c 'pg_dump "$DB_URL" -Fc --no-owner' > backup.dump
+          gpg --batch --yes --passphrase "$PASS" -c -o backup.dump.gpg backup.dump
+      - uses: actions/upload-artifact@v4
+        with: { name: gamut-backup, path: backup.dump.gpg, retention-days: 30 }

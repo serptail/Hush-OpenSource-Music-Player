@@ -95,6 +95,7 @@ import com.adamglin.phosphoricons.light.User
 import com.adamglin.phosphoricons.light.VinylRecord
 import com.adamglin.phosphoricons.light.Waveform
 import com.adamglin.phosphoricons.light.X
+import com.gamut.core.designsystem.ProfileAvatar
 import com.gamut.core.designsystem.BottomBarItem
 import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.GamutBottomBar
@@ -138,6 +139,13 @@ fun SearchScreen(
     onAlbumSelected: (DiscoverItem) -> Unit,
     /** The round "what's this song?" button next to the profile icon. */
     onShazam: () -> Unit,
+    /** Profile icon: opens the account / sync / backup screen. */
+    onProfile: () -> Unit = {},
+    /** Feeds the generated profile circle: name = its letter, seed = auth user id (null = signed out). */
+    profileName: String? = null,
+    profileSeed: String? = null,
+    /** Current avatar image URL from the account ViewModel. */
+    profileImage: Any? = null,
     /** Three dots on a Discover song row. Defaults to a no-op until the actions sheet is wired in MainActivity. */
     onTrackMore: (Track) -> Unit = {},
     /** ISRC of the playing track: its row gets the accent title + animated bars. */
@@ -201,18 +209,28 @@ fun SearchScreen(
                         )
                         Box(Modifier.size(44.dp).pressScale(onClick = onShazam), contentAlignment = Alignment.Center) {
                             Icon(
-    painterResource(com.gamut.core.designsystem.R.drawable.ic_shazam),
-    "Identify a song",
-    tint = ink(0.9f),
-    modifier = Modifier.size(22.dp),
-)
+                                painterResource(com.gamut.core.designsystem.R.drawable.ic_shazam),
+                                "Identify a song",
+                                tint = ink(0.9f),
+                                modifier = Modifier.size(22.dp),
+                            )
                         }
                         Spacer(Modifier.width(8.dp))
-                        Box(Modifier.size(44.dp).pressScale(onClick = {}), contentAlignment = Alignment.Center) {
-                            Icon(PhosphorIcons.Light.User, "Profile", tint = ink(0.85f), modifier = Modifier.size(24.dp))
+                        Box(
+                            Modifier
+                                .size(44.dp)
+                                .pressScale(onClick = onProfile),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            ProfileAvatar(
+                                name = profileName,
+                                seed = profileSeed,
+                                size = 34.dp,
+                                guestIcon = PhosphorIcons.Light.User,
+                                image = profileImage
+                            )
                         }
-                    }
-
+                    }                
                     Spacer(Modifier.height(22.dp))
                     SearchField(query = state.query, onQueryChange = viewModel::updateQuery, accent = accent, focusRequester = searchFocus)
                     Spacer(Modifier.height(14.dp))

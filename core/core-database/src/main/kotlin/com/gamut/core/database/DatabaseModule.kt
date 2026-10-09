@@ -16,7 +16,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): GamutDatabase =
         Room.databaseBuilder(context, GamutDatabase::class.java, "gamut.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
             .build()
 
     @Provides fun trackDao(db: GamutDatabase): TrackDao = db.trackDao()
@@ -26,4 +26,5 @@ object DatabaseModule {
     @Provides fun downloadDao(db: GamutDatabase): DownloadDao = db.downloadDao()
     @Provides fun artworkCacheDao(db: GamutDatabase): ArtworkCacheDao = db.artworkCacheDao()
     @Provides fun favoriteDao(db: GamutDatabase): FavoriteDao = db.favoriteDao()
+    @Provides fun recentDao(db: GamutDatabase): RecentDao = db.recentDao()
 }
