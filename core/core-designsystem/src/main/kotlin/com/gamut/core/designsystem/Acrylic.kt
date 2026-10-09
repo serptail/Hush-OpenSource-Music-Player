@@ -121,6 +121,13 @@ object AcrylicMaterials {
     val Ultra = AcrylicMaterial(56.dp, 0.55f, 0.04f, 0.16f, 0.60f, 0.92f)
 }
 
+/** The material as the user's Glass settings change it. Off = no blur at all, a dense flat tint instead. */
+private fun AcrylicMaterial.adapted(s: AppearanceSettings): AcrylicMaterial = copy(
+    blurRadius = blurRadius * s.glassDensity.blurScale,
+    tintAlpha = (tintAlpha * s.glassDensity.tintScale).coerceAtMost(0.95f),
+    fallbackAlpha = if (s.glass) (fallbackAlpha * s.glassDensity.tintScale).coerceAtMost(0.97f) else maxOf(fallbackAlpha, 0.88f),
+)
+
 private val DarkBase = Color(0xFF0B0D12)
 private val LightBase = Color(0xFFF4F6FA)
 
@@ -152,7 +159,11 @@ fun AcrylicSurface(
     hazeState: HazeState? = LocalAcrylicState.current,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    if (hazeState == null) {
+    // Appearance > Glass: density scales blur and tint; "off" skips the blur and draws only the dense flat tint.
+    val appearance = LocalAppearance.current
+    val material = material.adapted(appearance)
+    val hazeState = if (appearance.glass) hazeState else null
+    if (hazeState == null && appearance.glass) {
         // Without a HazeState there is nothing to blur: only the dense fallback tint is drawn.
         SideEffect {
             if (!noHazeWarned) {
@@ -291,9 +302,11 @@ fun Modifier.acrylicFill(
     state: HazeState? = LocalAcrylicState.current,
     intensity: () -> Float = { 1f },
 ): Modifier {
+    val appearance = LocalAppearance.current
+    val material = material.adapted(appearance)
     val base = rememberGlassBase()
     val style = remember(material, base) { material.hazeStyle(base) }
-    return if (state != null) {
+    return if (state != null && appearance.glass) {
         this.hazeEffect(state = state, style = style) { alpha = intensity() }
     } else {
         this.background(base.copy(alpha = material.fallbackAlpha))
@@ -315,6 +328,9 @@ fun AcrylicScrim(
     tone: AcrylicTone = AcrylicTone.Dark,
     state: HazeState? = LocalAcrylicState.current,
 ) {
+    val appearance = LocalAppearance.current
+    val material = material.adapted(appearance)
+    val state = if (appearance.glass) state else null
     val base = rememberGlassBase()
     val style = remember(material, base) { material.hazeStyle(base) }
     val top = edge == AcrylicEdge.Top

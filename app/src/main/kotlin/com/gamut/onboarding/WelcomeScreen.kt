@@ -38,10 +38,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.gamut.R
-import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.designsystem.FlowingBackground
 import com.gamut.core.designsystem.GamutBackdrop
 import com.gamut.core.designsystem.GamutTheme
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.ink
 
 /** Wrap the app with this: shows the welcome screen until the user signs in or chooses to continue locally. */
 @Composable
@@ -56,8 +57,8 @@ fun OnboardingGate(vm: WelcomeViewModel = hiltViewModel(), app: @Composable () -
     when (gate) {
         Gate.Ready -> app()
         Gate.Welcome -> GamutTheme { WelcomeScreen(vm) }
-        // Same colour as the window background, so there is no visible flash.
-        Gate.Loading -> Box(Modifier.fillMaxSize().background(CoverPalette.Neutral.base))
+        // Same colour as the window background (the saved light/dark look), so there is no visible flash.
+        Gate.Loading -> GamutTheme { Box(Modifier.fillMaxSize().background(LocalCoverPalette.current.base)) }
     }
 }
 
@@ -71,11 +72,12 @@ fun WelcomeScreen(
 ) {
     val ui by vm.ui.collectAsState()
     val context = LocalContext.current
+    val palette = LocalCoverPalette.current
 
     GamutBackdrop {
         Box(Modifier.fillMaxSize()) {
             FlowingBackground(
-                palette = CoverPalette.Neutral,
+                palette = palette,
                 isPlaying = true,
                 visible = true,
                 modifier = Modifier.fillMaxSize(),
@@ -90,7 +92,7 @@ fun WelcomeScreen(
                 Text(
                     "Your library, on your terms.",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = ink(0.7f),
                     textAlign = TextAlign.Center,
                 )
                 Spacer(Modifier.weight(1.2f))
@@ -100,6 +102,8 @@ fun WelcomeScreen(
                     enabled = !ui.busy,
                     modifier = Modifier.fillMaxWidth().height(54.dp),
                     shape = CircleShape,
+                    // Google's button stays white in both modes; the hairline keeps it visible on a light background.
+                    border = BorderStroke(1.dp, ink(0.12f)),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.White,
                         contentColor = Color(0xFF1F1F1F),
@@ -121,7 +125,7 @@ fun WelcomeScreen(
                 Text(
                     "Syncs your favorites and playlists across devices automatically.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.55f),
+                    color = ink(0.55f),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 8.dp, start = 8.dp, end = 8.dp),
                 )
@@ -133,13 +137,13 @@ fun WelcomeScreen(
                     enabled = !ui.busy,
                     modifier = Modifier.fillMaxWidth().height(54.dp),
                     shape = CircleShape,
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    border = BorderStroke(1.dp, ink(0.35f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ink()),
                 ) { Text("Continue locally", fontWeight = FontWeight.Medium) }
                 Text(
                     "Everything stays on this device. Gamut saves a backup copy automatically every day.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.55f),
+                    color = ink(0.55f),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 8.dp, start = 8.dp, end = 8.dp),
                 )
@@ -166,6 +170,6 @@ private fun Wordmark() {
         "Gamut",
         style = MaterialTheme.typography.displayMedium,
         fontWeight = FontWeight.Bold,
-        color = Color.White,
+        color = ink(),
     )
 }

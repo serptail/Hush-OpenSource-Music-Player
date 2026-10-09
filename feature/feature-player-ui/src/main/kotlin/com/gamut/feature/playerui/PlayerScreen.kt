@@ -306,44 +306,47 @@ fun PlayerScreen(
         // Volume pill: drawn above everything, takes no touches.
         VolumeHudOverlay(volumeHud)
 
-        if (showMore) {
-            PlayerOptionsSheet(
-                accent = accent,
-                eqActive = eqState.enabled,
-                sleepActive = sleepEndsAt != null,
-                onEqualizer = { showMore = false; showEq = true },
-                onSleepTimer = { showMore = false; showSleep = true },
-                onDismiss = { showMore = false },
-            )
-        }
-        if (showAddToPlaylist) {
-            AddToPlaylistSheet(
-                playlists = playlists,
-                accent = accent,
-                onPick = { onAddToPlaylist(track, it.id) },
-                onDismiss = { showAddToPlaylist = false },
-            )
-        }
-        if (showEq) EqualizerSheet(eq, accent, onDismiss = { showEq = false })
-        if (showMod) ModSheet(accent, onDismiss = { showMod = false })
-        if (showSleep) {
-            SleepTimerSheet(
-                onPick = { minutes -> SleepTimer.start(minutes) { player.pause() }; showSleep = false },
-                onTurnOff = { SleepTimer.cancel(); showSleep = false },
-                onDismiss = { showSleep = false },
-            )
-        }
-
-        if (showQueue) {
-            QueueSheet(
-                queue = queueState,
-                accent = accent,
-                onDismiss = { showQueue = false },
-                onPlay = player::skipTo,
-                onRemove = player::removeFromQueue,
-            )
-        }
     }
+    }
+
+    // Sheets sit OUTSIDE the Neutral pin above: the pin keeps the player's glass still over its dark backdrop, but a
+    // sheet is its own window, so inside the pin it would always be dark. Out here it follows the app's light/dark look.
+    if (showMore) {
+        PlayerOptionsSheet(
+            accent = accent,
+            eqActive = eqState.enabled,
+            sleepActive = sleepEndsAt != null,
+            onEqualizer = { showMore = false; showEq = true },
+            onSleepTimer = { showMore = false; showSleep = true },
+            onDismiss = { showMore = false },
+        )
+    }
+    if (showAddToPlaylist) {
+        AddToPlaylistSheet(
+            playlists = playlists,
+            accent = accent,
+            onPick = { picked -> track?.let { onAddToPlaylist(it, picked.id) } },
+            onDismiss = { showAddToPlaylist = false },
+        )
+    }
+    if (showEq) EqualizerSheet(eq, accent, onDismiss = { showEq = false })
+    if (showMod) ModSheet(accent, onDismiss = { showMod = false })
+    if (showSleep) {
+        SleepTimerSheet(
+            onPick = { minutes -> SleepTimer.start(minutes) { player.pause() }; showSleep = false },
+            onTurnOff = { SleepTimer.cancel(); showSleep = false },
+            onDismiss = { showSleep = false },
+        )
+    }
+
+    if (showQueue) {
+        QueueSheet(
+            queue = queueState,
+            accent = accent,
+            onDismiss = { showQueue = false },
+            onPlay = player::skipTo,
+            onRemove = player::removeFromQueue,
+        )
     }
 }
 

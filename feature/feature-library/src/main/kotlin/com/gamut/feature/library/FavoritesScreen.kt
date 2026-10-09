@@ -37,7 +37,7 @@ import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import com.gamut.core.designsystem.GamutSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -107,10 +107,7 @@ private val WheelPillShape = RoundedCornerShape(30.dp)
 private val PlayButtonSize = 52.dp
 private val ShufflePill = RoundedCornerShape(20.dp)
 
-// Quick-actions sheet: always dark, whatever the cover palette is, with light text on top.
-private val SheetBackground: Color get() = LibrarySheetBackground
-private val SheetText = Color.White
-private val SheetTextSecondary = Color.White.copy(alpha = 0.6f)
+// Quick-actions sheet: background and text follow the app palette (GamutSheet + ink()).
 private val SheetDestructive = Color(0xFFFF6B6B)
 
 private val SideInset = 20.dp   // screen edge to pill
@@ -445,12 +442,10 @@ private fun TrackActionsSheet(
         }
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
+    GamutSheet(
+        onDismiss = onDismiss,
         sheetState = sheetState,
-        containerColor = SheetBackground,
-        contentColor = SheetText,
-        dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.3f)) },
+        dragHandle = { BottomSheetDefaults.DragHandle(color = ink(0.3f)) },
     ) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp)) {
             Row(
@@ -462,14 +457,14 @@ private fun TrackActionsSheet(
                     Text(
                         track.title,
                         style = MaterialTheme.typography.titleMedium,
-                        color = SheetText,
+                        color = ink(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         track.artist,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = SheetTextSecondary,
+                        color = ink(0.6f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -499,7 +494,7 @@ private fun TrackActionsSheet(
 private fun SheetAction(
     label: String,
     icon: ImageVector,
-    tint: Color = SheetText,
+    tint: Color = ink(),
     onClick: () -> Unit,
 ) {
     Row(

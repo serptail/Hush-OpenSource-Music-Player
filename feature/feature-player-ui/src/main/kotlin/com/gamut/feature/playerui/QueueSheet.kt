@@ -34,7 +34,9 @@ import coil.compose.AsyncImage
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.light.X
-import com.gamut.core.designsystem.CoverPalette
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.ink
 import com.gamut.core.model.QueueState
 
 /**
@@ -52,26 +54,21 @@ internal fun QueueSheet(
     onRemove: (Int) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = CoverPalette.Neutral.base,
-        contentColor = Color.White,
-    ) {
+    GamutSheet(onDismiss = onDismiss, sheetState = sheetState) {
         Text(
             text = "Up next",
             style = MaterialTheme.typography.titleLarge,
-            color = Color.White,
+            color = ink(),
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
         )
         if (queue.tracks.isEmpty()) {
             Text(
                 text = "The queue is empty",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.6f),
+                color = ink(0.6f),
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp),
             )
-            return@ModalBottomSheet
+            return@GamutSheet
         }
         val listState = rememberLazyListState(initialFirstVisibleItemIndex = queue.currentIndex.coerceAtLeast(0))
         LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 32.dp)) {
@@ -96,14 +93,14 @@ internal fun QueueSheet(
                             text = track.title,
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (isCurrent) accent else Color.White,
+                            color = if (isCurrent) accent else ink(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
                             text = track.artist,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.6f),
+                            color = ink(0.6f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -113,7 +110,7 @@ internal fun QueueSheet(
                             Modifier.size(40.dp).clickable { onRemove(index) },
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(PhosphorIcons.Light.X, "Remove from queue", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
+                            Icon(PhosphorIcons.Light.X, "Remove from queue", tint = ink(0.6f), modifier = Modifier.size(20.dp))
                         }
                     }
                 }

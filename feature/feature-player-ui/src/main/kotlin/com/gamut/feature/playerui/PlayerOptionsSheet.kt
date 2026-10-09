@@ -1,5 +1,8 @@
 package com.gamut.feature.playerui
 
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.ink
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -41,17 +44,12 @@ internal fun PlayerOptionsSheet(
     onSleepTimer: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = CoverPalette.Neutral.base,
-        contentColor = Color.White,
-    ) {
+    GamutSheet(onDismiss = onDismiss) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp)) {
             Text(
                 "Options",
                 style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
+                color = ink(),
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
             )
             OptionRow(PhosphorIcons.Light.Equalizer, "Equalizer", if (eqActive) "On" else "Off", eqActive, accent, onEqualizer)
@@ -66,9 +64,9 @@ private fun OptionRow(icon: ImageVector, label: String, status: String, active: 
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, tint = if (active) accent else Color.White.copy(alpha = 0.85f), modifier = Modifier.size(24.dp))
+        Icon(icon, contentDescription = null, tint = if (active) accent else ink(0.85f), modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(16.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = Color.White, modifier = Modifier.weight(1f))
-        Text(status, style = MaterialTheme.typography.bodyMedium, color = if (active) accent else Color.White.copy(alpha = 0.5f))
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = ink(), modifier = Modifier.weight(1f))
+        Text(status, style = MaterialTheme.typography.bodyMedium, color = if (active) accent else ink(0.5f))
     }
 }

@@ -68,6 +68,7 @@ import com.adamglin.phosphoricons.light.VinylRecord
 import com.adamglin.phosphoricons.light.X
 import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.designsystem.CoverTheme
+import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.ink
@@ -126,11 +127,12 @@ fun CreatePlaylistScreen(
         }
     }
 
-    CoverTheme(CoverPalette.Neutral) {
+    val palette = LocalCoverPalette.current
+    CoverTheme(palette) {
         Column(
             Modifier
                 .fillMaxSize()
-                .background(CoverPalette.Neutral.base)
+                .background(palette.base)
                 .statusBarsPadding()
                 .navigationBarsPadding()
                 .imePadding(),
@@ -215,7 +217,7 @@ fun CreatePlaylistScreen(
                     Text(
                         "Create playlist",
                         style = MaterialTheme.typography.titleMedium,
-                        color = if (canCreate) CoverPalette.Neutral.base else ink(0.3f),
+                        color = if (canCreate) palette.base else ink(0.3f),
                     )
                 }
             }
@@ -325,7 +327,8 @@ private fun OptionRow(icon: ImageVector, title: String, subtitle: String, checke
 private fun FlatSwitch(checked: Boolean) {
     val thumbX by animateDpAsState(if (checked) 20.dp else 2.dp, tween(160), label = "switch-x")
     val track by animateColorAsState(if (checked) ink() else ink(0.18f), tween(160), label = "switch-track")
-    val thumb by animateColorAsState(if (checked) CoverPalette.Neutral.base else ink(0.8f), tween(160), label = "switch-thumb")
+    val base = LocalCoverPalette.current.base
+    val thumb by animateColorAsState(if (checked) base else ink(0.8f), tween(160), label = "switch-thumb")
     Box(Modifier.size(width = 46.dp, height = 28.dp).background(track, PillShape)) {
         Box(Modifier.align(Alignment.CenterStart).offset(x = thumbX).size(24.dp).background(thumb, CircleShape))
     }

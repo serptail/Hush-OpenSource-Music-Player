@@ -1,5 +1,8 @@
 package com.gamut.feature.playerui
 
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.ink
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -65,26 +68,21 @@ fun TrackActionsSheet(
         }
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = CoverPalette.Neutral.base,
-        contentColor = Color.White,
-    ) {
+    GamutSheet(onDismiss = onDismiss, sheetState = sheetState) {
         LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
             item {
                 Column(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
                     Text(
                         track.title,
                         style = MaterialTheme.typography.titleLarge,
-                        color = Color.White,
+                        color = ink(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         track.artist,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = ink(0.6f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -96,7 +94,7 @@ fun TrackActionsSheet(
                 Text(
                     "Add to playlist",
                     style = MaterialTheme.typography.labelLarge,
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = ink(0.6f),
                     modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 4.dp),
                 )
             }
@@ -109,18 +107,18 @@ fun TrackActionsSheet(
                         Box(
                             Modifier
                                 .weight(1f)
-                                .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                                .background(ink(0.1f), RoundedCornerShape(12.dp))
                                 .padding(horizontal = 14.dp, vertical = 12.dp),
                         ) {
                             if (name.isEmpty()) {
-                                Text("Playlist name", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.bodyLarge)
+                                Text("Playlist name", color = ink(0.4f), style = MaterialTheme.typography.bodyLarge)
                             }
                             BasicTextField(
                                 value = name,
                                 onValueChange = { name = it },
                                 singleLine = true,
-                                textStyle = MaterialTheme.typography.bodyLarge.merge(TextStyle(color = Color.White)),
-                                cursorBrush = SolidColor(Color.White),
+                                textStyle = MaterialTheme.typography.bodyLarge.merge(TextStyle(color = ink())),
+                                cursorBrush = SolidColor(ink()),
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                                 keyboardActions = KeyboardActions(onDone = { submitNew() }),
                                 modifier = Modifier.fillMaxWidth(),
@@ -145,7 +143,7 @@ private fun ActionRow(label: String, onClick: () -> Unit) {
     Text(
         text = label,
         style = MaterialTheme.typography.bodyLarge,
-        color = Color.White,
+        color = ink(),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier

@@ -44,6 +44,7 @@ fun SettingsScreen(
     onPlaylists: () -> Unit,
     onRecentlyPlayed: () -> Unit,
     onProfile: () -> Unit,
+    onAppearance: () -> Unit,
     nowPlaying: @Composable () -> Unit,
     vm: AccountViewModel = hiltViewModel(),
 ) {
@@ -75,7 +76,7 @@ fun SettingsScreen(
         Cell("Recently Played", icon = PhosphorIcons.Light.ClockCounterClockwise, onClick = onRecentlyPlayed)
 
         GroupLabel("Preferences")
-        Cell("Appearance", icon = PhosphorIcons.Light.Palette, subtitle = "Theme and colors", onClick = soon)
+        Cell("Appearance", icon = PhosphorIcons.Light.Palette, subtitle = "Theme, colors and glass", onClick = onAppearance)
         Cell("Playback & Audio", icon = PhosphorIcons.Light.Waveform, subtitle = "Crossfade, quality", onClick = soon)
         Cell("Storage & Downloads", icon = PhosphorIcons.Light.HardDrives, subtitle = "Cache and offline songs", onClick = soon)
 

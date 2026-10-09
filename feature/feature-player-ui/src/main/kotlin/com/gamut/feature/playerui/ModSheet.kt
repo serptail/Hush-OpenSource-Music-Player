@@ -1,5 +1,8 @@
 package com.gamut.feature.playerui
 
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.ink
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -54,18 +57,13 @@ internal fun ModSheet(accent: Color, onDismiss: () -> Unit) {
     val state by ModController.state.collectAsState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = CoverPalette.Neutral.base,
-        contentColor = Color.White,
-    ) {
+    GamutSheet(onDismiss = onDismiss, sheetState = sheetState) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding()
                 .padding(horizontal = 20.dp).padding(bottom = 16.dp),
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Mod", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Color.White, modifier = Modifier.weight(1f))
+                Text("Mod", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = ink(), modifier = Modifier.weight(1f))
                 if (state.preset != ModPreset.ORIGINAL && state.settings != state.preset.defaults()) {
                     Text(
                         "Reset", fontSize = 14.sp, color = accent,
@@ -94,7 +92,7 @@ internal fun ModSheet(accent: Color, onDismiss: () -> Unit) {
             Spacer(Modifier.height(20.dp))
             val controls = ModControl.entries.filter { it in state.preset.controls }
             if (controls.isEmpty()) {
-                Text("Pick a mod to reshape the sound.", fontSize = 14.sp, color = Color.White.copy(alpha = 0.55f))
+                Text("Pick a mod to reshape the sound.", fontSize = 14.sp, color = ink(0.55f))
             } else {
                 controls.forEach { ControlRow(it, state.settings, accent) }
             }
@@ -109,16 +107,16 @@ private fun PresetCell(preset: ModPreset, selected: Boolean, accent: Color, modi
         modifier
             .height(68.dp)
             .clip(shape)
-            .background(if (selected) accent.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.07f))
-            .border(BorderStroke(1.dp, if (selected) accent else Color.White.copy(alpha = 0.08f)), shape)
+            .background(if (selected) accent.copy(alpha = 0.22f) else ink(0.07f))
+            .border(BorderStroke(1.dp, if (selected) accent else ink(0.08f)), shape)
             .bounceTap(onClick = onClick)
             .padding(horizontal = 8.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(preset.label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color.White, maxLines = 1)
+        Text(preset.label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = ink(), maxLines = 1)
         Spacer(Modifier.height(2.dp))
-        Text(presetHint(preset), fontSize = 11.sp, color = Color.White.copy(alpha = 0.55f), maxLines = 1)
+        Text(presetHint(preset), fontSize = 11.sp, color = ink(0.55f), maxLines = 1)
     }
 }
 
@@ -162,8 +160,8 @@ private fun ControlRow(control: ModControl, settings: ModSettings, accent: Color
     if (control == ModControl.LINK) {
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Pitch follows speed", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodyMedium)
-                Text("Tape style. Off keeps the original key.", fontSize = 11.sp, color = Color.White.copy(alpha = 0.5f))
+                Text("Pitch follows speed", color = ink(0.8f), style = MaterialTheme.typography.bodyMedium)
+                Text("Tape style. Off keeps the original key.", fontSize = 11.sp, color = ink(0.5f))
             }
             TogglePill(on = settings.pitchFollowsSpeed, accent = accent) {
                 ModController.edit { it.copy(pitchFollowsSpeed = !it.pitchFollowsSpeed) }
@@ -175,9 +173,9 @@ private fun ControlRow(control: ModControl, settings: ModSettings, accent: Color
     val value = spec.get(settings).coerceIn(spec.min, spec.max)
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Row {
-            Text(spec.label, color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodyMedium)
+            Text(spec.label, color = ink(0.8f), style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.weight(1f))
-            Text(spec.format(value), color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodyMedium)
+            Text(spec.format(value), color = ink(0.5f), style = MaterialTheme.typography.bodyMedium)
         }
         LineSlider(
             value = value, min = spec.min, max = spec.max, step = spec.step, accent = accent,
@@ -192,13 +190,13 @@ private fun TogglePill(on: Boolean, accent: Color, onClick: () -> Unit) {
     val shape = RoundedCornerShape(50)
     Text(
         if (on) "On" else "Off",
-        color = if (on) Color.Black.copy(alpha = 0.85f) else Color.White.copy(alpha = 0.75f),
+        color = if (on) LocalCoverPalette.current.base else ink(0.75f),
         style = MaterialTheme.typography.labelLarge,
         modifier = Modifier
             .clip(shape)
             .then(
                 if (on) Modifier.background(accent)
-                else Modifier.border(1.dp, Color.White.copy(alpha = 0.18f), shape),
+                else Modifier.border(1.dp, ink(0.18f), shape),
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 7.dp),
@@ -209,6 +207,7 @@ private fun TogglePill(on: Boolean, accent: Color, onClick: () -> Unit) {
 @Composable
 private fun LineSlider(value: Float, min: Float, max: Float, step: Float, accent: Color, onChange: (Float) -> Unit) {
     val onChangeNow by rememberUpdatedState(onChange)
+    val trackC = ink(0.14f); val tickC = ink(0.3f); val dotC = ink()
     Canvas(
         Modifier
             .fillMaxWidth()
@@ -234,8 +233,8 @@ private fun LineSlider(value: Float, min: Float, max: Float, step: Float, accent
         val cy = size.height / 2f
         val x = pad + (value - min) / (max - min) * (size.width - 2 * pad)
         val stroke = 2.dp.toPx()
-        drawLine(Color.White.copy(alpha = 0.14f), Offset(pad, cy), Offset(size.width - pad, cy), stroke, StrokeCap.Round)
+        drawLine(trackC, Offset(pad, cy), Offset(size.width - pad, cy), stroke, StrokeCap.Round)
         drawLine(accent, Offset(pad, cy), Offset(x, cy), stroke, StrokeCap.Round)
-        drawCircle(Color.White, 6.dp.toPx(), Offset(x, cy))
+        drawCircle(dotC, 6.dp.toPx(), Offset(x, cy))
     }
 }

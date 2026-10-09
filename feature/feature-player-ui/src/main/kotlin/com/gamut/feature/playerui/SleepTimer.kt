@@ -10,16 +10,15 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.gamut.core.designsystem.CoverPalette
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.ink
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -62,24 +61,22 @@ object SleepTimer {
 @Composable
 internal fun SleepTimerSheet(onPick: (minutes: Int) -> Unit, onTurnOff: () -> Unit, onDismiss: () -> Unit) {
     val endsAt by SleepTimer.endsAt.collectAsState()
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
+    GamutSheet(
+        onDismiss = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = CoverPalette.Neutral.base,
-        contentColor = Color.White,
     ) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp).padding(bottom = 16.dp)) {
-            Text("Sleep timer", style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Text("Sleep timer", style = MaterialTheme.typography.titleLarge, color = ink())
             endsAt?.let { end ->
                 val left = ((end - SystemClock.elapsedRealtime()) / 60_000L + 1).coerceAtLeast(1)
                 Spacer(Modifier.height(4.dp))
-                Text("Playback pauses in about $left min", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodyMedium)
+                Text("Playback pauses in about $left min", color = ink(0.6f), style = MaterialTheme.typography.bodyMedium)
             }
             Spacer(Modifier.height(8.dp))
             listOf(5, 10, 15, 30, 45, 60).forEach { m ->
                 Text(
                     "$m minutes",
-                    color = Color.White,
+                    color = ink(),
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.fillMaxWidth().clickable { onPick(m) }.padding(vertical = 14.dp),
                 )
@@ -87,7 +84,7 @@ internal fun SleepTimerSheet(onPick: (minutes: Int) -> Unit, onTurnOff: () -> Un
             if (endsAt != null) {
                 Text(
                     "Turn off timer",
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = ink(0.7f),
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.fillMaxWidth().clickable(onClick = onTurnOff).padding(vertical = 14.dp),
                 )

@@ -93,7 +93,12 @@ import com.gamut.core.designsystem.FlowingBackground
 import com.gamut.core.designsystem.ProfileAvatar
 import com.gamut.core.designsystem.GamutTheme
 import com.gamut.core.designsystem.LocalCoverPalette
-import com.gamut.core.designsystem.rememberCoverPalette
+import com.gamut.core.designsystem.AppearanceSettings
+import com.gamut.core.designsystem.LocalAppearance
+import com.gamut.core.designsystem.appNeutralPalette
+import com.gamut.core.designsystem.rememberAppPalette
+import com.gamut.settings.AppearanceScreen
+import com.gamut.settings.AppearanceStore
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.PlaybackState
 import com.gamut.core.model.Track
@@ -143,6 +148,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var newPipe: NewPipeYoutubeSource
     @Inject lateinit var downloadIndex: DownloadIndex
     @Inject lateinit var downloadManager: TrackDownloadManager
+    @Inject lateinit var appearanceStore: AppearanceStore
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -151,18 +157,25 @@ class MainActivity : ComponentActivity() {
         // and briefly shows the default (white) window background.
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = android.graphics.Color.TRANSPARENT
-        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
-        window.setBackgroundDrawable(ColorDrawable(CoverPalette.Neutral.base.toArgb()))
+        // The store is read synchronously, so the very first frame already has the saved look (no theme flash).
+        val systemDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val startPalette = appearanceStore.settings.value.neutralPalette(systemDark)
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = startPalette.isLight
+        window.setBackgroundDrawable(ColorDrawable(startPalette.base.toArgb()))
         setContent {
-            com.gamut.onboarding.OnboardingGate {
-                GamutApp(player, resolveTrackSource, audioSources, newPipe, downloadIndex, downloadManager)
+            val appearance by appearanceStore.settings.collectAsState()
+            CompositionLocalProvider(LocalAppearance provides appearance) {
+                com.gamut.onboarding.OnboardingGate {
+                    GamutApp(player, resolveTrackSource, audioSources, newPipe, downloadIndex, downloadManager, appearance)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSourceUseCase, audioSources: AudioSourceRepository, newPipe: NewPipeYoutubeSource, downloadIndex: DownloadIndex, downloadManager: TrackDownloadManager) {
+private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSourceUseCase, audioSources: AudioSourceRepository, newPipe: NewPipeYoutubeSource, downloadIndex: DownloadIndex, downloadManager: TrackDownloadManager, appearance: AppearanceSettings) {
     val nav = rememberNavController()
     // App-wide toast pill (top). Screens reach it with LocalNotifier.current.
     val notifier = rememberNotifier()
@@ -255,14 +268,21 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
     // One palette and ONE flowing background for the whole app: it lives behind the NavHost, so Search and
     // Library are drawn on the same canvas (same colors, same animation state) and navigating never restarts it.
     val artUrl = remember(loadedTrack?.albumArtUrl) { squareArtUrl(loadedTrack?.albumArtUrl, 200) }
-    val palette = rememberCoverPalette(artUrl)
+    // Adaptive: the cover's palette, forced into the chosen Light/Dark (Auto = cover decides). Otherwise a fixed preset.
+    val palette = rememberAppPalette(artUrl, appearance)
+    val neutralPalette = appNeutralPalette(appearance)
+    // Light/dark of the whole app, for Material surfaces outside CoverTheme (sheets, dialogs, menus).
+    val appDark = !palette.isLight
     // Keep the flowing background alive until the player has finished sliding in over it.
     var backgroundVisible by remember { mutableStateOf(true) }
     LaunchedEffect(currentRoute) {
         // The player and the New playlist screen draw their own opaque background.
         if (currentRoute == "player" || currentRoute == "create-playlist") { delay(360); backgroundVisible = false } else backgroundVisible = true
     }
-    GamutTheme {
+    // Keep the window behind everything in step with the setting, so overscroll / transitions never show the old look.
+    val activity = LocalContext.current as? ComponentActivity
+    SideEffect { activity?.window?.setBackgroundDrawable(ColorDrawable(neutralPalette.base.toArgb())) }
+    GamutTheme(dark = appDark) {
         Box(Modifier.fillMaxSize()) {
             GamutBackdrop {
                 // One shared acrylic state for the whole app. The flowing background is registered as a source on it
@@ -396,9 +416,13 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                         onPlaylists = { openLibraryTick++; nav.popBackStack("home", false) },
                                         onRecentlyPlayed = { nav.navigate("recently-played") },
                                         onProfile = { nav.navigate("profile") },
+                                        onAppearance = { nav.navigate("appearance") },
                                         nowPlaying = nowPlayingDocked,
                                     )
                                 }
+                            }
+                            composable("appearance") {
+                                AfterEnter { AppearanceScreen(onBack = { nav.popBackStack() }, nowPlaying = nowPlayingDocked) }
                             }
                             composable("profile") {
                                 AfterEnter { ProfileScreen(onBack = { nav.popBackStack() }, nowPlaying = nowPlayingDocked) }
@@ -565,27 +589,30 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                             val shazamLevel by shazamVm.level.collectAsState()
                             val favoriteIsrcs by appLibraryVm.favoriteIsrcs.collectAsState()
                             val playlists by appLibraryVm.playlists.collectAsState()
-                            ShazamSheet(
-                                state = shazamState,
-                                level = shazamLevel,
-                                favoriteIsrcs = favoriteIsrcs,
-                                playlists = playlists,
-                                onDismiss = shazamVm::dismiss,
-                                onRetry = onShazam,
-                                onOpenSettings = {
-                                    context.startActivity(
-                                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
-                                    )
-                                },
-                                onPlay = { track -> shazamVm.dismiss(); playTrackWithQueue(track, emptyList()) },
-                                onToggleFavorite = appLibraryVm::toggleFavorite,
-                                onAddToQueue = { track -> player.addToQueue(track) },
-                                onAddToPlaylist = { playlist, track -> appLibraryVm.addTrack(playlist.id, track) },
-                                onCreatePlaylist = { name, track -> appLibraryVm.createPlaylistAndAdd(name, track) },
-                            )
+                            // Sheets sit outside the screens' CoverTheme, so they get their own: light/dark applies here too.
+                            CoverTheme(palette) {
+                                ShazamSheet(
+                                    state = shazamState,
+                                    level = shazamLevel,
+                                    favoriteIsrcs = favoriteIsrcs,
+                                    playlists = playlists,
+                                    onDismiss = shazamVm::dismiss,
+                                    onRetry = onShazam,
+                                    onOpenSettings = {
+                                        context.startActivity(
+                                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
+                                        )
+                                    },
+                                    onPlay = { track -> shazamVm.dismiss(); playTrackWithQueue(track, emptyList()) },
+                                    onToggleFavorite = appLibraryVm::toggleFavorite,
+                                    onAddToQueue = { track -> player.addToQueue(track) },
+                                    onAddToPlaylist = { playlist, track -> appLibraryVm.addTrack(playlist.id, track) },
+                                    onCreatePlaylist = { name, track -> appLibraryVm.createPlaylistAndAdd(name, track) },
+                                )
+                            }
                         }
                         // Last child = drawn above every screen. Needs its own CoverTheme (it is outside the screens').
-                        CoverTheme(if (currentRoute == "player" || currentRoute == "create-playlist") CoverPalette.Neutral else palette) { NoticeHost() }
+                        CoverTheme(if (currentRoute == "player" || currentRoute == "create-playlist") neutralPalette else palette) { NoticeHost() }
                         // Connect sheet (Bluetooth + output devices), opened from the mini player's devices icon.
                         if (showConnect) {
                             CoverTheme(palette) {

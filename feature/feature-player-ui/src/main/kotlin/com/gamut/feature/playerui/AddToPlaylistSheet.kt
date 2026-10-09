@@ -1,5 +1,8 @@
 package com.gamut.feature.playerui
 
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.ink
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -70,12 +73,7 @@ internal fun AddToPlaylistSheet(
         }
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = CoverPalette.Neutral.base,
-        contentColor = Color.White,
-    ) {
+    GamutSheet(onDismiss = onDismiss) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -85,7 +83,7 @@ internal fun AddToPlaylistSheet(
                 Spacer(Modifier.width(10.dp))
                 Text("Added to playlist", style = MaterialTheme.typography.titleLarge, color = accent)
             } else {
-                Text("Add to playlist", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                Text("Add to playlist", style = MaterialTheme.typography.titleLarge, color = ink())
             }
         }
 
@@ -93,10 +91,10 @@ internal fun AddToPlaylistSheet(
             Text(
                 "You don't have any playlists yet.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.6f),
+                color = ink(0.6f),
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp),
             )
-            return@ModalBottomSheet
+            return@GamutSheet
         }
 
         LazyColumn(contentPadding = PaddingValues(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
@@ -113,7 +111,7 @@ internal fun AddToPlaylistSheet(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(
-                        Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.07f)),
+                        Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(ink(0.07f)),
                         contentAlignment = Alignment.Center,
                     ) {
                         if (playlist.coverUrl != null) {
@@ -124,7 +122,7 @@ internal fun AddToPlaylistSheet(
                                 modifier = Modifier.size(48.dp),
                             )
                         } else {
-                            Icon(PhosphorIcons.Light.MusicNote, contentDescription = null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(22.dp))
+                            Icon(PhosphorIcons.Light.MusicNote, contentDescription = null, tint = ink(0.5f), modifier = Modifier.size(22.dp))
                         }
                     }
                     Spacer(Modifier.width(14.dp))
@@ -132,7 +130,7 @@ internal fun AddToPlaylistSheet(
                         Text(
                             playlist.name,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = if (picked) accent else Color.White,
+                            color = if (picked) accent else ink(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -140,7 +138,7 @@ internal fun AddToPlaylistSheet(
                             Text(
                                 if (n == 1) "1 song" else "$n songs",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.6f),
+                                color = ink(0.6f),
                             )
                         }
                     }

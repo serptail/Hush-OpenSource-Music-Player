@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -101,9 +102,21 @@ private val GamutTypography = Typography().run {
     )
 }
 
+private val GamutDarkColors = darkColorScheme(
+    primary = GamutAccentA,
+    onPrimary = Color.White,
+    secondary = GamutAccentB,
+    background = Color(0xFF0B0B0D),
+    surface = Color(0xFF16161A),
+    onBackground = Color(0xFFF2F2F5),
+    onSurface = Color(0xFFF2F2F5),
+    error = Color(0xFFFF7A8E),
+)
+
+/** [dark] = the resolved light/dark of the whole app (Appearance settings, or the cover in Auto mode). */
 @Composable
-fun GamutTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = GamutColors, typography = GamutTypography, content = content)
+fun GamutTheme(dark: Boolean = false, content: @Composable () -> Unit) {
+    MaterialTheme(colorScheme = if (dark) GamutDarkColors else GamutColors, typography = GamutTypography, content = content)
 }
 
 @Composable

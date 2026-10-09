@@ -1,5 +1,8 @@
 package com.gamut.feature.search
 
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.ink
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
@@ -90,12 +93,7 @@ fun ShazamSheet(
     onAddToPlaylist: (Playlist, Track) -> Unit,
     onCreatePlaylist: (String, Track) -> Unit,
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = CoverPalette.Neutral.base,
-        contentColor = Color.White,
-    ) {
+    GamutSheet(onDismiss = onDismiss) {
         when (state) {
             is ShazamState.Listening -> ListeningContent(level, state.searching, onDismiss)
             is ShazamState.Found -> FoundContent(
@@ -160,7 +158,7 @@ private fun ListeningContent(level: Float, searching: Boolean, onCancel: () -> U
                             scaleY = 0.5f + 0.5f * p
                             alpha = (1f - p) * 0.35f
                         }
-                        .border(2.dp, Color.White, CircleShape),
+                        .border(2.dp, ink(), CircleShape),
                 )
             }
             Box(
@@ -171,25 +169,25 @@ private fun ListeningContent(level: Float, searching: Boolean, onCancel: () -> U
                         scaleX = s
                         scaleY = s
                     }
-                    .background(Color.White.copy(alpha = 0.14f), CircleShape),
+                    .background(ink(0.14f), CircleShape),
             )
-            Box(Modifier.size(76.dp).background(Color.White, CircleShape), contentAlignment = Alignment.Center) {
-                Icon(PhosphorIcons.Light.Waveform, null, tint = CoverPalette.Neutral.base, modifier = Modifier.size(34.dp))
+            Box(Modifier.size(76.dp).background(ink(), CircleShape), contentAlignment = Alignment.Center) {
+                Icon(PhosphorIcons.Light.Waveform, null, tint = LocalCoverPalette.current.base, modifier = Modifier.size(34.dp))
             }
         }
         Spacer(Modifier.height(8.dp))
         Text(
             if (searching) "Identifying\u2026" else "Listening\u2026",
             style = MaterialTheme.typography.titleLarge,
-            color = Color.White,
+            color = ink(),
         )
         Text(
             "Hold your phone near the music",
             style = MaterialTheme.typography.bodyMedium,
-            color = Color.White.copy(alpha = 0.6f),
+            color = ink(0.6f),
             modifier = Modifier.padding(top = 4.dp),
         )
-        TextButton(onClick = onCancel, modifier = Modifier.padding(top = 12.dp)) { Text("Cancel", color = Color.White.copy(alpha = 0.8f)) }
+        TextButton(onClick = onCancel, modifier = Modifier.padding(top = 12.dp)) { Text("Cancel", color = ink(0.8f)) }
     }
 }
 
@@ -199,13 +197,13 @@ private fun MessageContent(icon: ImageVector, title: String, message: String, ac
         Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 8.dp, bottom = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(icon, null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(34.dp))
+        Icon(icon, null, tint = ink(0.9f), modifier = Modifier.size(34.dp))
         Spacer(Modifier.height(12.dp))
-        Text(title, style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.Center)
+        Text(title, style = MaterialTheme.typography.titleLarge, color = ink(), textAlign = TextAlign.Center)
         Text(
             message,
             style = MaterialTheme.typography.bodyMedium,
-            color = Color.White.copy(alpha = 0.6f),
+            color = ink(0.6f),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 8.dp, bottom = 20.dp),
         )
@@ -214,10 +212,10 @@ private fun MessageContent(icon: ImageVector, title: String, message: String, ac
                 .pressScale(onClick = onAction)
                 .height(48.dp)
                 .clip(RoundedCornerShape(24.dp))
-                .background(Color.White)
+                .background(ink())
                 .padding(horizontal = 28.dp),
             contentAlignment = Alignment.Center,
-        ) { Text(action, style = MaterialTheme.typography.labelLarge, color = CoverPalette.Neutral.base) }
+        ) { Text(action, style = MaterialTheme.typography.labelLarge, color = LocalCoverPalette.current.base) }
     }
 }
 
@@ -252,13 +250,13 @@ private fun FoundContent(
                     model = track.albumArtUrl,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(104.dp).clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = 0.08f)),
+                    modifier = Modifier.size(104.dp).clip(RoundedCornerShape(14.dp)).background(ink(0.08f)),
                 )
                 Column(Modifier.weight(1f).padding(start = 16.dp)) {
-                    Text(track.title, style = MaterialTheme.typography.titleLarge, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(track.artist, style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(track.title, style = MaterialTheme.typography.titleLarge, color = ink(), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(track.artist, style = MaterialTheme.typography.bodyLarge, color = ink(0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     track.album?.let {
-                        Text(it, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.5f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(it, style = MaterialTheme.typography.bodyMedium, color = ink(0.5f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
@@ -271,9 +269,9 @@ private fun FoundContent(
                         .pressScale(onClick = { onPlay(track) })
                         .height(48.dp)
                         .clip(RoundedCornerShape(24.dp))
-                        .background(Color.White),
+                        .background(ink()),
                     contentAlignment = Alignment.Center,
-                ) { Text("Play", style = MaterialTheme.typography.labelLarge, color = CoverPalette.Neutral.base) }
+                ) { Text("Play", style = MaterialTheme.typography.labelLarge, color = LocalCoverPalette.current.base) }
                 Spacer(Modifier.width(12.dp))
                 Box(
                     Modifier
@@ -286,13 +284,13 @@ private fun FoundContent(
                             scaleDown = 0.88f,
                         )
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.12f)),
+                        .background(ink(0.12f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         if (isFavorite) PhosphorIcons.Fill.Heart else PhosphorIcons.Light.Heart,
                         if (isFavorite) "Remove from favorites" else "Add to favorites",
-                        tint = if (isFavorite) FavoriteRed else Color.White,
+                        tint = if (isFavorite) FavoriteRed else ink(),
                         modifier = Modifier.size(24.dp),
                     )
                 }
@@ -303,7 +301,7 @@ private fun FoundContent(
                 Text(
                     message,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = ink(0.6f),
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
                 )
             }
@@ -313,7 +311,7 @@ private fun FoundContent(
             Text(
                 "Add to playlist",
                 style = MaterialTheme.typography.labelLarge,
-                color = Color.White.copy(alpha = 0.6f),
+                color = ink(0.6f),
                 modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 4.dp),
             )
         }
@@ -323,18 +321,18 @@ private fun FoundContent(
                     Box(
                         Modifier
                             .weight(1f)
-                            .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                            .background(ink(0.1f), RoundedCornerShape(12.dp))
                             .padding(horizontal = 14.dp, vertical = 12.dp),
                     ) {
                         if (name.isEmpty()) {
-                            Text("Playlist name", color = Color.White.copy(alpha = 0.4f), style = MaterialTheme.typography.bodyLarge)
+                            Text("Playlist name", color = ink(0.4f), style = MaterialTheme.typography.bodyLarge)
                         }
                         BasicTextField(
                             value = name,
                             onValueChange = { name = it },
                             singleLine = true,
-                            textStyle = MaterialTheme.typography.bodyLarge.merge(TextStyle(color = Color.White)),
-                            cursorBrush = SolidColor(Color.White),
+                            textStyle = MaterialTheme.typography.bodyLarge.merge(TextStyle(color = ink())),
+                            cursorBrush = SolidColor(ink()),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                             keyboardActions = KeyboardActions(onDone = { submitNew() }),
                             modifier = Modifier.fillMaxWidth(),
@@ -361,7 +359,7 @@ private fun ActionRow(label: String, onClick: () -> Unit) {
     Text(
         text = label,
         style = MaterialTheme.typography.bodyLarge,
-        color = Color.White,
+        color = ink(),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier

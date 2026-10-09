@@ -83,6 +83,18 @@ data class CoverPalette(
             base = Color(0xFF0B0B0D),
             flows = false,
         )
+
+        /** Light twin of [Neutral]: used when the app is forced to light mode and nothing is playing. */
+        val NeutralLight = CoverPalette(
+            primary = Color(0xFFE4E4EA),
+            secondary = Color(0xFFE4E4EA),
+            tertiary = Color(0xFFE4E4EA),
+            accent = Color(0xFF141414),
+            base = Color(0xFFF4F4F6),
+            onBase = Color(0xFF141414),
+            isLight = true,
+            flows = false,
+        )
     }
 }
 
@@ -103,13 +115,26 @@ fun CoverTheme(palette: CoverPalette, content: @Composable () -> Unit) {
     val onBase by animateColorAsState(palette.onBase, tween(ThemeTransitionMs), label = "cover-onbase")
     val accent by animateColorAsState(palette.accent, tween(ThemeTransitionMs), label = "cover-accent")
     val parent = MaterialTheme.colorScheme
-    val scheme = remember(parent, onBase, accent) {
+    // Sheets, dialogs and menus take their container from the surface roles, so those follow the palette too:
+    // a dark app never gets a white bottom sheet (and vice versa).
+    val surfaceBase by animateColorAsState(palette.base, tween(ThemeTransitionMs), label = "cover-surface")
+    val scheme = remember(parent, onBase, accent, surfaceBase) {
+        val lift = if (palette.isLight) Color.Black else Color.White
+        fun tone(a: Float) = androidx.compose.ui.graphics.lerp(surfaceBase, lift, a)
         parent.copy(
             background = Color.Transparent,
             onBackground = onBase,
+            surface = surfaceBase,
             onSurface = onBase,
+            surfaceVariant = tone(0.06f),
+            surfaceContainerLowest = surfaceBase,
+            surfaceContainerLow = tone(0.02f),
+            surfaceContainer = tone(0.04f),
+            surfaceContainerHigh = tone(0.06f),
+            surfaceContainerHighest = tone(0.08f),
             onSurfaceVariant = onBase.copy(alpha = 0.65f),
             outline = onBase.copy(alpha = 0.30f),
+            outlineVariant = onBase.copy(alpha = 0.15f),
             primary = accent,
         )
     }
@@ -126,28 +151,33 @@ private val paletteCache = object : LinkedHashMap<String, CoverPalette>(24, 0.75
     override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CoverPalette>?): Boolean = size > 24
 }
 
-/** Palette for the cover at [url]. Extracted once per URL, off the main thread, and cached. */
+/**
+ * Palette for the cover at [url]. Extracted once per URL, off the main thread, and cached.
+ * [forceLight]: true = the palette is forced to a light base, false = to a dark base, null = the cover decides.
+ */
 @Composable
-fun rememberCoverPalette(url: String?): CoverPalette {
+fun rememberCoverPalette(url: String?, forceLight: Boolean? = null): CoverPalette {
     val context = LocalContext.current
-    var palette by remember { mutableStateOf(url?.let { paletteCache[it] } ?: CoverPalette.Neutral) }
-    LaunchedEffect(url) {
+    val neutral = if (forceLight == true) CoverPalette.NeutralLight else CoverPalette.Neutral
+    var palette by remember { mutableStateOf(url?.let { paletteCache["$it|$forceLight"] } ?: neutral) }
+    LaunchedEffect(url, forceLight) {
         if (url.isNullOrBlank()) {
-            palette = CoverPalette.Neutral
+            palette = neutral
             return@LaunchedEffect
         }
-        palette = paletteCache[url]
-            ?: withContext(Dispatchers.IO) { loadPalette(context, url) }?.also { paletteCache[url] = it }
-                    ?: CoverPalette.Neutral
+        val key = "$url|$forceLight"
+        palette = paletteCache[key]
+            ?: withContext(Dispatchers.IO) { loadPalette(context, url, forceLight) }?.also { paletteCache[key] = it }
+                    ?: neutral
     }
     return palette
 }
 
-private suspend fun loadPalette(context: Context, url: String): CoverPalette? = runCatching {
+private suspend fun loadPalette(context: Context, url: String, forceLight: Boolean?): CoverPalette? = runCatching {
     val request = ImageRequest.Builder(context).data(url).size(96).allowHardware(false).build()
     val result = context.imageLoader.execute(request) as? SuccessResult ?: return@runCatching null
     val bitmap = (result.drawable as? BitmapDrawable)?.bitmap ?: return@runCatching null
-    paletteFromBitmap(bitmap)
+    paletteFromBitmap(bitmap, forceLight)
 }.getOrNull()
 
 /**
@@ -165,11 +195,11 @@ private suspend fun loadPalette(context: Context, url: String): CoverPalette? = 
  *     boosted slightly. Brown stays brown and cream stays cream. Missing accents are lighter/darker shades of
  *     the first one, never a shifted hue.
  */
-private fun paletteFromBitmap(bitmap: Bitmap): CoverPalette {
+private fun paletteFromBitmap(bitmap: Bitmap, forceLight: Boolean? = null): CoverPalette {
     val size = 48
     val sample = bitmap.scale(size, size, true)
     val pixels = IntArray(size * size) { i -> sample[i % size, i / size] }
-    return paletteFromPixels(pixels)
+    return paletteFromPixels(pixels, forceLight)
 }
 
 private const val ClusterCount = 8
@@ -190,16 +220,17 @@ private class Lch(val l: Double, val c: Double, val h: Double) {
     fun shaded(dL: Double, chromaMul: Double, lo: Double, hi: Double) = Lch((l + dL).coerceIn(lo, hi), c * chromaMul, h)
 }
 
-internal fun paletteFromPixels(pixels: IntArray): CoverPalette {
+internal fun paletteFromPixels(pixels: IntArray, forceLight: Boolean? = null): CoverPalette {
     val n = pixels.size
     val lab = Array(n) { argbToOklab(pixels[it]) }
     val clusters = quantize(lab, ClusterCount)
     val baseCluster = clusters[0] // largest
-    val isLight = baseCluster.l > LightBaseThreshold
+    // The user's Light / Dark choice wins over the cover; Auto (null) lets the cover decide.
+    val isLight = forceLight ?: (baseCluster.l > LightBaseThreshold)
     val onBase = if (isLight) Color(0xFF141414) else Color.White
 
     // Accents: strict about size first (ignore specks), relaxed only if that leaves nothing.
-    val accents = pickAccents(clusters, n, minFraction = 0.025).ifEmpty { pickAccents(clusters, n, minFraction = 0.0) }
+    val accents = pickAccents(clusters, n, minFraction = 0.015).ifEmpty { pickAccents(clusters, n, minFraction = 0.0) }
 
     val base = if (isLight) {
         oklch(0.965, minOf(baseCluster.chroma * 0.5, 0.03), baseCluster.hue)
@@ -242,8 +273,8 @@ private fun labDist(x: Cluster, y: Cluster): Double {
 }
 
 /**
- * Up to [MaxAccents] colorful clusters, best first. Score = size^0.6 x (chroma + 0.04), damped when close to
- * one already chosen so the picks differ. Anything much duller than the best pick is dropped.
+ * Up to [MaxAccents] colorful clusters, best first. Score = size^0.5 x (chroma + 0.04), damped when close to
+ * one already chosen (more so when it has the same hue) so the picks differ. Anything much duller than the best pick is dropped.
  */
 private fun pickAccents(clusters: List<Cluster>, total: Int, minFraction: Double): List<Cluster> {
     var candidates = clusters.filter { it.chroma >= NeutralChroma && it.count.toDouble() / total >= minFraction }
@@ -257,10 +288,18 @@ private fun pickAccents(clusters: List<Cluster>, total: Int, minFraction: Double
         var best: Cluster? = null
         var bestScore = -1.0
         for (c in candidates) {
-            var score = Math.pow(c.count.toDouble() / total, 0.6) * (c.chroma + 0.04)
+            var score = Math.pow(c.count.toDouble() / total, 0.5) * (c.chroma + 0.04)
             for (other in chosen) {
                 val f = minOf(1.0, labDist(c, other) / 0.12)
                 score *= f * f
+                // A second shade of the same hue adds nothing to the gradient; a different hue (gold next to a
+                // hot pink cover, say) does. Same-hue candidates are pushed down hard, distinct hues are not.
+                if (c.chroma >= NeutralChroma && other.chroma >= NeutralChroma) {
+                    var dh = Math.abs(c.hue - other.hue)
+                    if (dh > Math.PI) dh = 2 * Math.PI - dh
+                    val t = minOf(1.0, dh / 1.0)
+                    score *= 0.1 + 0.9 * t * t
+                }
             }
             if (score > bestScore) { bestScore = score; best = c }
         }
@@ -474,22 +513,44 @@ fun FlowingBackground(
      * paused. Everything else is kept, so the flow resumes exactly where it left off, not from zero.
      */
     visible: Boolean = true,
+    settings: AppearanceSettings = LocalAppearance.current,
 ) {
     val base by animateColorAsState(palette.base, tween(1400), label = "flow-base")
     val primary by animateColorAsState(palette.primary, tween(1400), label = "flow-primary")
     val secondary by animateColorAsState(palette.secondary, tween(1400), label = "flow-secondary")
     val tertiary by animateColorAsState(palette.tertiary, tween(1400), label = "flow-tertiary")
-    val strength by animateFloatAsState(if (palette.isLight) LightStrength else 1f, tween(1400), label = "flow-strength")
+    val strength by animateFloatAsState(
+        (if (palette.isLight) LightStrength else 1f) * settings.flowIntensity.flowStrength,
+        tween(1400), label = "flow-strength",
+    )
+    // Mercury and Metaballs have defined shapes, so on a light base they keep the full cover color instead of the
+    // faint tint the soft Flow gradient needs.
+    val fullStrength by animateFloatAsState(settings.flowIntensity.flowStrength, tween(1400), label = "flow-strength-full")
     // 0 = solid fill, 1 = full flow. Fades, so going from "nothing playing" to a track isn't a cut.
     val flow by animateFloatAsState(if (palette.flows) 1f else 0f, tween(1400), label = "flow-amount")
-    val clock = rememberFlowClock(isPlaying, running = visible && (palette.flows || flow > 0f))
+    val clock = rememberFlowClock(
+        isPlaying = isPlaying,
+        running = visible && (palette.flows || flow > 0f),
+        animated = settings.flowAnimated,
+        speedScale = settings.flowSpeed.flowSpeed,
+        freezeWhenPaused = settings.freezeWhenPaused,
+    )
 
     if (!visible) {
         // Covered by an opaque screen: draw nothing.
     } else if (flow <= 0f) {
         Box(modifier.fillMaxSize().background(base))
     } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        MeshBackground(base, primary, secondary, tertiary, strength * flow, clock, modifier)
+        when (settings.flowStyle) {
+            FlowStyle.Mercury ->
+                MercuryBackground(base, primary, secondary, tertiary, fullStrength * flow, palette.isLight, clock, modifier)
+            FlowStyle.Metaballs ->
+                MetaballsBackground(base, primary, secondary, tertiary, fullStrength * flow, palette.isLight, clock, modifier)
+            FlowStyle.Dithering ->
+                DitheringBackground(base, primary, secondary, tertiary, strength * flow, palette.isLight, clock, modifier)
+            FlowStyle.Flow ->
+                MeshBackground(base, primary, secondary, tertiary, strength * flow, clock, modifier)
+        }
     } else {
         BlobBackground(base, primary, secondary, tertiary, strength * flow, clock, modifier)
     }
@@ -500,9 +561,16 @@ fun FlowingBackground(
  * ticking at all while [running] is false (solid background), so a flat screen costs nothing per frame.
  */
 @Composable
-private fun rememberFlowClock(isPlaying: Boolean, running: Boolean): FloatState {
+private fun rememberFlowClock(
+    isPlaying: Boolean,
+    running: Boolean,
+    animated: Boolean,
+    speedScale: Float,
+    freezeWhenPaused: Boolean,
+): FloatState {
     val context = LocalContext.current
-    val speed by animateFloatAsState(if (isPlaying) 1f else PausedSpeed, tween(1200), label = "flow-speed")
+    val pausedSpeed = if (freezeWhenPaused) 0f else PausedSpeed
+    val speed by animateFloatAsState((if (isPlaying) 1f else pausedSpeed) * speedScale, tween(1200), label = "flow-speed")
     val clock = remember { mutableFloatStateOf(0f) }
     val animationsOn = remember {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
@@ -511,9 +579,10 @@ private fun rememberFlowClock(isPlaying: Boolean, running: Boolean): FloatState 
             true
         }
     }
-    LaunchedEffect(animationsOn, running) {
+    LaunchedEffect(animationsOn, running, animated) {
         if (!running) return@LaunchedEffect
-        if (!animationsOn) {
+        // "Animate" off (or system animations off): one still frame, no per-frame work at all.
+        if (!animationsOn || !animated) {
             clock.floatValue = 3f
             return@LaunchedEffect
         }

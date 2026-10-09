@@ -48,7 +48,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.gamut.core.designsystem.CoverPalette
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.ink
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.light.Bluetooth
@@ -81,16 +83,11 @@ fun ConnectSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val connectedBt = devices.firstOrNull { it.isBluetooth }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = CoverPalette.Neutral.base,
-        contentColor = Color.White,
-    ) {
+    GamutSheet(onDismiss = onDismiss, sheetState = sheetState) {
         Text(
             "Connect",
             style = MaterialTheme.typography.titleLarge,
-            color = Color.White,
+            color = ink(),
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
         )
 
@@ -100,11 +97,11 @@ fun ConnectSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp, vertical = 8.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color.White.copy(alpha = 0.06f))
+                .background(ink(0.06f))
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val tint = if (connectedBt != null) accent else Color.White.copy(alpha = if (btOn) 0.9f else 0.5f)
+            val tint = if (connectedBt != null) accent else ink(if (btOn) 0.9f else 0.5f)
             Icon(
                 when {
                     !btOn -> PhosphorIcons.Light.BluetoothSlash
@@ -123,7 +120,7 @@ fun ConnectSheet(
                     },
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
+                    color = ink(),
                 )
                 Text(
                     when {
@@ -132,7 +129,7 @@ fun ConnectSheet(
                         else -> "No Bluetooth device connected"
                     },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = ink(0.6f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -146,7 +143,7 @@ fun ConnectSheet(
                     Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    val tint = if (d.isActive) accent else Color.White.copy(alpha = 0.75f)
+                    val tint = if (d.isActive) accent else ink(0.75f)
                     Icon(
                         if (d.isBluetooth) PhosphorIcons.Light.BluetoothConnected else PhosphorIcons.Light.Devices,
                         null, tint = tint, modifier = Modifier.size(24.dp),
@@ -157,12 +154,12 @@ fun ConnectSheet(
                             d.name,
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = if (d.isActive) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (d.isActive) accent else Color.White,
+                            color = if (d.isActive) accent else ink(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                         if (d.isActive) {
-                            Text("Playing here", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.6f))
+                            Text("Playing here", style = MaterialTheme.typography.bodySmall, color = ink(0.6f))
                         }
                     }
                     if (d.isActive) Box(Modifier.size(8.dp).clip(CircleShape).background(accent))
@@ -186,12 +183,12 @@ fun ConnectSheet(
             contentAlignment = Alignment.Center,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(PhosphorIcons.Light.Bluetooth, null, tint = Color.Black, modifier = Modifier.size(20.dp))
+                Icon(PhosphorIcons.Light.Bluetooth, null, tint = LocalCoverPalette.current.base, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(10.dp))
                 Text(
                     "Find Bluetooth devices",
                     style = MaterialTheme.typography.titleSmall,
-                    color = Color.Black,
+                    color = LocalCoverPalette.current.base,
                     textAlign = TextAlign.Center,
                 )
             }

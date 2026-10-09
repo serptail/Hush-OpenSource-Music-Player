@@ -1,5 +1,8 @@
 package com.gamut.feature.search
 
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.ink
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
@@ -83,7 +86,6 @@ import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
 
-private val SheetColor: Color get() = CoverPalette.Neutral.base
 private val SheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
 
 /** A playlist as the "Saved in" sheet needs it. [contains] = the track is already in it. */
@@ -109,7 +111,7 @@ private fun Modifier.bounceClick(onClick: () -> Unit): Modifier = composed {
         label = "bounce",
     )
     val tint by animateColorAsState(
-        targetValue = Color.White.copy(alpha = if (pressed) 0.10f else if (hovered) 0.06f else 0f),
+        targetValue = ink().copy(alpha = if (pressed) 0.10f else if (hovered) 0.06f else 0f),
         animationSpec = tween(140),
         label = "tint",
     )
@@ -135,22 +137,16 @@ internal fun TrackActionsSheet(
     onAddToPlaylist: () -> Unit,
     onGoToArtist: (() -> Unit)?,
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = SheetColor,
-        contentColor = Color.White,
-        shape = SheetShape,
-    ) {
+    GamutSheet(onDismiss = onDismiss, shape = SheetShape) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
             TrackHeader(track)
-            HorizontalDivider(Modifier.padding(top = 14.dp, bottom = 6.dp), color = Color.White.copy(alpha = 0.1f))
+            HorizontalDivider(Modifier.padding(top = 14.dp, bottom = 6.dp), color = ink(0.1f))
             ActionRow(PhosphorIcons.Light.ShareNetwork, "Share") { onShare() }
             // Stays open: the icon fills and the label changes in place.
             ActionRow(
                 if (isFavorite) PhosphorIcons.Fill.HeartFill else PhosphorIcons.Light.Heart,
                 if (isFavorite) "Added to favorites" else "Add to favorites",
-                tint = if (isFavorite) MaterialTheme.colorScheme.primary else Color.White,
+                tint = if (isFavorite) MaterialTheme.colorScheme.primary else ink(),
             ) { onToggleFavorite() }
             ActionRow(PhosphorIcons.Light.ListPlus, "Add to playlist") { onAddToPlaylist() }
             if (onGoToArtist != null) ActionRow(PhosphorIcons.Light.UserCircle, "Go to artist") { onGoToArtist() }
@@ -164,17 +160,17 @@ private fun TrackHeader(track: Track) {
         ArtImage(
             url = remember(track.albumArtUrl) { squareArtUrl(track.albumArtUrl, 256) },
             modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)),
-            fallback = { Icon(PhosphorIcons.Light.MusicNote, null, tint = Color.White.copy(alpha = 0.5f)) },
+            fallback = { Icon(PhosphorIcons.Light.MusicNote, null, tint = ink(0.5f)) },
         )
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
-            Text(track.title, style = MaterialTheme.typography.titleMedium, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(track.title, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
 
 @Composable
-private fun ActionRow(icon: ImageVector, label: String, tint: Color = Color.White, onClick: () -> Unit) {
+private fun ActionRow(icon: ImageVector, label: String, tint: Color = ink(), onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().bounceClick(onClick).padding(horizontal = 24.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -203,19 +199,13 @@ internal fun SavedInSheet(
 ) {
     // Local ticks so the check responds instantly; the real state is the caller's.
     val ticked = remember { mutableStateListOf<String>().apply { addAll(playlists.filter { it.contains }.map { it.id }) } }
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = SheetColor,
-        contentColor = Color.White,
-        shape = SheetShape,
-    ) {
+    GamutSheet(onDismiss = onDismiss, shape = SheetShape) {
         Row(Modifier.padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (showFavorites) {
                 Icon(PhosphorIcons.Fill.CheckCircle, null, tint = accent, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.width(10.dp))
             }
-            Text(if (showFavorites) "Saved in" else "Add to playlist", style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Text(if (showFavorites) "Saved in" else "Add to playlist", style = MaterialTheme.typography.titleLarge, color = ink())
         }
         LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
             if (showFavorites) {
@@ -228,7 +218,7 @@ internal fun SavedInSheet(
                     Text(
                         "You don't have any playlists yet.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = ink(0.6f),
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp),
                     )
                 }
@@ -257,7 +247,7 @@ private fun PlaylistRow(
     checked: Boolean,
     accent: Color,
     icon: ImageVector = PhosphorIcons.Light.MusicNote,
-    iconTint: Color = Color.White.copy(alpha = 0.5f),
+    iconTint: Color = ink(0.5f),
     onClick: () -> Unit,
 ) {
     Row(
@@ -265,20 +255,20 @@ private fun PlaylistRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.07f)),
+            Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(ink(0.07f)),
             contentAlignment = Alignment.Center,
         ) {
             if (coverUrl != null) ArtImage(url = coverUrl, modifier = Modifier.size(48.dp), fallback = {})
             else Icon(icon, null, tint = iconTint, modifier = Modifier.size(22.dp))
         }
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-            Text(name, style = MaterialTheme.typography.bodyLarge, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (sub != null) Text(sub, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.6f))
+            Text(name, style = MaterialTheme.typography.bodyLarge, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (sub != null) Text(sub, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f))
         }
         // Plus circle that turns into a filled check circle once added.
         Crossfade(targetState = checked, label = "added") { on ->
             if (on) Icon(PhosphorIcons.Fill.CheckCircle, "Added", tint = accent, modifier = Modifier.size(28.dp))
-            else Icon(PhosphorIcons.Light.PlusCircle, "Add", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(28.dp))
+            else Icon(PhosphorIcons.Light.PlusCircle, "Add", tint = ink(0.6f), modifier = Modifier.size(28.dp))
         }
     }
 }
@@ -310,13 +300,7 @@ internal fun ShareSheet(track: Track, onDismiss: () -> Unit) {
         onDismiss()
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = SheetColor,
-        contentColor = Color.White,
-        shape = SheetShape,
-    ) {
+    GamutSheet(onDismiss = onDismiss, shape = SheetShape) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 16.dp)) {
             HorizontalPager(
                 state = pager,
@@ -330,11 +314,11 @@ internal fun ShareSheet(track: Track, onDismiss: () -> Unit) {
                     Box(
                         Modifier.padding(horizontal = 8.dp).size(36.dp).clip(CircleShape)
                             .background(Brush.verticalGradient(listOf(st.top, st.bottom)))
-                            .border(if (selected) 2.dp else 1.dp, if (selected) Color.White else Color.White.copy(alpha = 0.25f), CircleShape),
+                            .border(if (selected) 2.dp else 1.dp, if (selected) ink() else ink(0.25f), CircleShape),
                     )
                 }
             }
-            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+            HorizontalDivider(color = ink(0.1f))
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 18.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -382,15 +366,15 @@ private fun ShareCard(track: Track, style: ShareCardStyle) {
 }
 
 @Composable
-private fun ShareTarget(icon: ImageVector, label: String, tint: Color = Color.White, onClick: () -> Unit) {
+private fun ShareTarget(icon: ImageVector, label: String, tint: Color = ink(), onClick: () -> Unit) {
     Column(
         Modifier.width(76.dp).bounceClick(onClick).padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(Modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(56.dp).clip(CircleShape).background(ink(0.1f)), contentAlignment = Alignment.Center) {
             Icon(icon, label, tint = tint, modifier = Modifier.size(28.dp))
         }
         Spacer(Modifier.height(8.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, color = Color.White, maxLines = 1, textAlign = TextAlign.Center)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = ink(), maxLines = 1, textAlign = TextAlign.Center)
     }
 }

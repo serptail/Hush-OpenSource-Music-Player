@@ -1,5 +1,8 @@
 package com.gamut.feature.library
 
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.ink
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -66,9 +69,9 @@ import com.gamut.core.designsystem.pressScale
 import com.gamut.core.model.Track
 import com.gamut.feature.resolver.DownloadState
 
-/** Background of every bottom sheet (same as the queue sheet: CoverPalette.Neutral.base). */
-internal val LibrarySheetBackground: Color get() = CoverPalette.Neutral.base
-private val ManageTextSecondary = Color.White.copy(alpha = 0.6f)
+/** Background of every bottom sheet (same as the queue sheet: LocalCoverPalette.current.base). */
+internal val LibrarySheetBackground: Color @Composable get() = LocalCoverPalette.current.base
+private val ManageTextSecondary: Color @Composable get() = ink(0.6f)
 private val ManageDestructive = Color(0xFFFF6B6B)
 
 /** Fastest auto-scroll while dragging at an edge, in pixels per frame. */
@@ -201,18 +204,16 @@ internal fun ManageTracksSheet(
         }
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
+    GamutSheet(
+        onDismiss = onDismiss,
         sheetState = sheetState,
-        containerColor = LibrarySheetBackground,
-        contentColor = Color.White,
-        dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.3f)) },
+        dragHandle = { BottomSheetDefaults.DragHandle(color = ink(0.3f)) },
     ) {
         Column(Modifier.fillMaxWidth().height(screenHeight * 0.86f).navigationBarsPadding()) {
             Text(
                 title,
                 style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
+                color = ink(),
                 modifier = Modifier.padding(horizontal = 24.dp),
             )
             Text(
@@ -228,7 +229,7 @@ internal fun ManageTracksSheet(
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Color.White.copy(alpha = 0.07f))
+                    .background(ink(0.07f))
                     .pressScale(onClick = onDownloadClick, scaleDown = 0.98f)
                     .padding(start = 18.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -241,7 +242,7 @@ internal fun ManageTracksSheet(
                             PlaylistDownloadStatus.Done -> "Available offline"
                         },
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
+                        color = ink(),
                     )
                     Text(
                         when (downloadUi.status) {
@@ -259,8 +260,8 @@ internal fun ManageTracksSheet(
                     onClick = onDownloadClick,
                     size = 40.dp,
                     glyphSize = 22.dp,
-                    tint = Color.White.copy(alpha = 0.85f),
-                    accent = Color.White,
+                    tint = ink(0.85f),
+                    accent = ink(),
                     idleIcon = PhosphorIcons.Light.BoxArrowDown,   // all of them: box-arrow-down -> (ring) -> archive
                     doneIcon = PhosphorIcons.Fill.Archive,
                 )
@@ -278,7 +279,7 @@ internal fun ManageTracksSheet(
                 }
             }
 
-            Box(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp).height(1.dp).background(Color.White.copy(alpha = 0.10f)))
+            Box(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp).height(1.dp).background(ink(0.10f)))
 
             LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(vertical = 4.dp)) {
                 items(draft, key = { it.isrc }) { track ->
@@ -329,14 +330,14 @@ internal fun ManageTracksSheet(
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color.White.copy(alpha = 0.10f))
+                        .background(ink(0.10f))
                         .padding(start = 18.dp, end = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         "Removed \u201C${removed.title}\u201D",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White,
+                        color = ink(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
@@ -344,7 +345,7 @@ internal fun ManageTracksSheet(
                     Text(
                         "Undo",
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
+                        color = ink(),
                         modifier = Modifier
                             .pressScale(onClick = {
                                 draft.add(at.coerceIn(0, draft.size), removed)
@@ -395,7 +396,7 @@ private fun ManageRow(
             .padding(horizontal = 12.dp, vertical = 2.dp)
             .graphicsLayer { val s = if (dragging) 1.03f else 1f; scaleX = s; scaleY = s }
             .shadow(if (dragging) 10.dp else 0.dp, shape)
-            .background(if (dragging) Color(0xFF2A2A2A) else Color.Transparent, shape)
+            .background(if (dragging) androidx.compose.ui.graphics.lerp(LocalCoverPalette.current.base, ink(), 0.12f) else Color.Transparent, shape)
             .pointerInput(track.isrc) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
@@ -429,7 +430,7 @@ private fun ManageRow(
     ) {
         CoverImage(track.albumArtUrl.orEmpty(), Modifier.size(46.dp).softCover(RoundedCornerShape(10.dp)))
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-            Text(track.title, style = MaterialTheme.typography.titleMedium, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(track.title, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = ManageTextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (offline) {
@@ -439,7 +440,7 @@ private fun ManageRow(
             Icon(PhosphorIcons.Light.TrashSimple, removeDescription, tint = ManageDestructive, modifier = Modifier.size(18.dp))
         }
         Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
-            Icon(PhosphorIcons.Light.DotsSixVertical, "Drag to reorder", tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
+            Icon(PhosphorIcons.Light.DotsSixVertical, "Drag to reorder", tint = ink(0.5f), modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -448,7 +449,7 @@ private fun ManageRow(
 private fun ConfirmRemoveDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(LibrarySheetBackground).padding(24.dp)) {
-            Text("Remove downloads?", style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Text("Remove downloads?", style = MaterialTheme.typography.titleLarge, color = ink())
             Text(
                 "Your favorites stay, but won't play offline until you download them again.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -459,7 +460,7 @@ private fun ConfirmRemoveDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
                 Text(
                     "Cancel",
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
+                    color = ink(),
                     modifier = Modifier.pressScale(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 10.dp),
                 )
                 Text(

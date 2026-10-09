@@ -1,5 +1,8 @@
 package com.gamut.feature.playerui
 
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.ink
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -52,11 +55,8 @@ private const val StepMb = 50   // band sliders snap to 0.5 dB
 @Composable
 internal fun EqualizerSheet(controller: EqualizerController, accent: Color, onDismiss: () -> Unit) {
     val s by controller.state.collectAsState()
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = CoverPalette.Neutral.base,
-        contentColor = Color.White,
+    GamutSheet(
+        onDismiss = onDismiss,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         dragHandle = {
             Box(
@@ -65,7 +65,7 @@ internal fun EqualizerSheet(controller: EqualizerController, accent: Color, onDi
                     .width(32.dp)
                     .height(3.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(Color.White.copy(alpha = 0.2f)),
+                    .background(ink(0.2f)),
             )
         },
     ) {
@@ -78,7 +78,7 @@ internal fun EqualizerSheet(controller: EqualizerController, accent: Color, onDi
                 .padding(bottom = 24.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Equalizer", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                Text("Equalizer", style = MaterialTheme.typography.titleLarge, color = ink())
                 Spacer(Modifier.weight(1f))
                 if (s.available) {
                     EnableButton(enabled = s.enabled, accent = accent) { controller.setEnabled(!s.enabled) }
@@ -89,7 +89,7 @@ internal fun EqualizerSheet(controller: EqualizerController, accent: Color, onDi
                 Spacer(Modifier.height(24.dp))
                 Text(
                     "The equalizer connects to the audio output once a song is playing. Start a track and open this again.",
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = ink(0.6f),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Spacer(Modifier.height(24.dp))
@@ -135,12 +135,12 @@ private fun EnableButton(enabled: Boolean, accent: Color, onClick: () -> Unit) {
     val shape = RoundedCornerShape(50)
     Text(
         if (enabled) "Disable" else "Enable",
-        color = if (enabled) Color.White.copy(alpha = 0.75f) else Color.Black.copy(alpha = 0.85f),
+        color = if (enabled) ink(0.75f) else LocalCoverPalette.current.base,
         style = MaterialTheme.typography.labelLarge,
         modifier = Modifier
             .clip(shape)
             .then(
-                if (enabled) Modifier.border(1.dp, Color.White.copy(alpha = 0.18f), shape)
+                if (enabled) Modifier.border(1.dp, ink(0.18f), shape)
                 else Modifier.background(accent),
             )
             .clickable(onClick = onClick)
@@ -152,7 +152,7 @@ private fun EnableButton(enabled: Boolean, accent: Color, onClick: () -> Unit) {
 private fun PresetChip(text: String, selected: Boolean, accent: Color, onClick: () -> Unit) {
     Text(
         text,
-        color = if (selected) accent else Color.White.copy(alpha = 0.5f),
+        color = if (selected) accent else ink(0.5f),
         style = MaterialTheme.typography.labelLarge,
         modifier = Modifier
             .clip(RoundedCornerShape(50))
@@ -174,8 +174,9 @@ private fun BandSlider(
     onChange: (Int) -> Unit,
 ) {
     val onChangeNow by rememberUpdatedState(onChange)
+    val trackC = ink(0.14f); val tickC = ink(0.3f); val dotC = ink()
     Column(Modifier.width(48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(dbLabel(levelMb), color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp)
+        Text(dbLabel(levelMb), color = ink(0.6f), fontSize = 11.sp)
         Spacer(Modifier.height(8.dp))
         Canvas(
             Modifier
@@ -207,13 +208,13 @@ private fun BandSlider(
             val stroke = 2.dp.toPx()
             val zeroY = yFor(0)
             val y = yFor(levelMb)
-            drawLine(Color.White.copy(alpha = 0.14f), Offset(x, top), Offset(x, bottom), stroke, StrokeCap.Round)
+            drawLine(trackC, Offset(x, top), Offset(x, bottom), stroke, StrokeCap.Round)
             drawLine(accent, Offset(x, zeroY), Offset(x, y), stroke, StrokeCap.Round)
-            drawLine(Color.White.copy(alpha = 0.3f), Offset(x - 5.dp.toPx(), zeroY), Offset(x + 5.dp.toPx(), zeroY), 1.dp.toPx())
-            drawCircle(Color.White, 6.dp.toPx(), Offset(x, y))
+            drawLine(tickC, Offset(x - 5.dp.toPx(), zeroY), Offset(x + 5.dp.toPx(), zeroY), 1.dp.toPx())
+            drawCircle(dotC, 6.dp.toPx(), Offset(x, y))
         }
         Spacer(Modifier.height(8.dp))
-        Text(label, color = Color.White.copy(alpha = 0.45f), fontSize = 11.sp)
+        Text(label, color = ink(0.45f), fontSize = 11.sp)
     }
 }
 
@@ -221,9 +222,9 @@ private fun BandSlider(
 private fun EffectSlider(title: String, value: Int, accent: Color, enabled: Boolean, onChange: (Int) -> Unit) {
     Column {
         Row {
-            Text(title, color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodyMedium)
+            Text(title, color = ink(0.8f), style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.weight(1f))
-            Text("${value / 10}%", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodyMedium)
+            Text("${value / 10}%", color = ink(0.5f), style = MaterialTheme.typography.bodyMedium)
         }
         LineSlider(value, 1000, accent, enabled, onChange)
     }
@@ -233,6 +234,7 @@ private fun EffectSlider(title: String, value: Int, accent: Color, enabled: Bool
 @Composable
 private fun LineSlider(value: Int, max: Int, accent: Color, enabled: Boolean, onChange: (Int) -> Unit) {
     val onChangeNow by rememberUpdatedState(onChange)
+    val trackC = ink(0.14f); val tickC = ink(0.3f); val dotC = ink()
     Canvas(
         Modifier
             .fillMaxWidth()
@@ -258,9 +260,9 @@ private fun LineSlider(value: Int, max: Int, accent: Color, enabled: Boolean, on
         val cy = size.height / 2f
         val x = pad + value.toFloat() / max * (size.width - 2 * pad)
         val stroke = 2.dp.toPx()
-        drawLine(Color.White.copy(alpha = 0.14f), Offset(pad, cy), Offset(size.width - pad, cy), stroke, StrokeCap.Round)
+        drawLine(trackC, Offset(pad, cy), Offset(size.width - pad, cy), stroke, StrokeCap.Round)
         drawLine(accent, Offset(pad, cy), Offset(x, cy), stroke, StrokeCap.Round)
-        drawCircle(Color.White, 6.dp.toPx(), Offset(x, cy))
+        drawCircle(dotC, 6.dp.toPx(), Offset(x, cy))
     }
 }
 

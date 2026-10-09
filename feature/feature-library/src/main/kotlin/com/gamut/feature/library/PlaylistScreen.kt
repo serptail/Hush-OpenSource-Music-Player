@@ -94,6 +94,7 @@ import com.adamglin.phosphoricons.light.User
 import com.adamglin.phosphoricons.light.VinylRecord
 import com.adamglin.phosphoricons.light.X
 import com.gamut.core.designsystem.CoverTheme
+import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.TransparentStatusBar
@@ -109,8 +110,9 @@ private val PanelShape = RoundedCornerShape(16.dp)
 private val DangerColor = Color(0xFFFF6B6B)
 private const val MAX_NAME_LENGTH = 60
 
-/** The sheets have a fixed dark background (LibrarySheetBackground), so their content is white, not cover-tinted. */
-private fun sheetInk(alpha: Float = 1f): Color = Color.White.copy(alpha = alpha)
+/** Sheet content color: follows the cover palette (dark text on a light sheet, white on a dark one), like ManageTracksSheet. */
+@Composable
+private fun sheetInk(alpha: Float = 1f): Color = ink(alpha)
 
 private enum class PlaylistSheet { None, Options, Edit }
 
@@ -326,8 +328,11 @@ fun PlaylistScreen(
         // ---- playlist options sheet ----
         if (sheet == PlaylistSheet.Options) {
             val state = rememberModalBottomSheetState()
-            ModalBottomSheet(onDismissRequest = { sheet = PlaylistSheet.None }, sheetState = state, containerColor = LibrarySheetBackground, contentColor = Color.White,
-                dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.3f)) }) {
+            GamutSheet(
+                onDismiss = { sheet = PlaylistSheet.None },
+                sheetState = state,
+                dragHandle = { BottomSheetDefaults.DragHandle(color = ink(0.3f)) },
+            ) {
                 Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp)) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (coverUrl.isNullOrBlank()) {
@@ -355,8 +360,11 @@ fun PlaylistScreen(
         // ---- edit sheet: name, tags, cover ----
         if (sheet == PlaylistSheet.Edit) {
             val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-            ModalBottomSheet(onDismissRequest = { sheet = PlaylistSheet.None }, sheetState = state, containerColor = LibrarySheetBackground, contentColor = Color.White,
-                dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.3f)) }) {
+            GamutSheet(
+                onDismiss = { sheet = PlaylistSheet.None },
+                sheetState = state,
+                dragHandle = { BottomSheetDefaults.DragHandle(color = ink(0.3f)) },
+            ) {
                 Column(
                     Modifier
                         .fillMaxWidth()
@@ -753,7 +761,8 @@ private fun SheetAction(icon: ImageVector, label: String, danger: Boolean = fals
 
 @Composable
 private fun SheetButton(label: String, filled: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    val content = if (filled) Color.Black else Color.White
+    // Filled pill = ink on the sheet, so its label takes the sheet color; the quiet pill keeps ink.
+    val content = if (filled) LocalCoverPalette.current.base else ink()
     Box(
         Modifier
             .then(if (enabled) Modifier.pressScale(onClick = onClick) else Modifier)
