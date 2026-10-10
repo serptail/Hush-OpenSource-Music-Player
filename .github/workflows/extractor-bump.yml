@@ -4,8 +4,10 @@ name: extractor-bump
 #   3. resolves a few songs with the OLD and the NEW version (tools/extractor-smoke);
 #   4. only if the new one is no worse AND the app still builds: commits the bump and starts the release workflow,
 #      which the app then forces onto every user.
-# Note: YouTube often blocks GitHub's servers. If both runs score 0 the test says nothing about the new version, and the
-# bump goes ahead on the strength of the build alone (the new version is a published, upstream-tested release).
+# Note: YouTube often blocks GitHub's servers ("Sign in to confirm you're not a bot"). Those failures say nothing about
+# the library, so they are NOT counted against the new version. Only real failures (parsing errors, crashes, etc.) are
+# compared. If blocking hides the result, the bump goes ahead on the strength of the build alone (the new version is a
+# published, upstream-tested release).
 on:
   schedule:
     - cron: "23 */6 * * *"
@@ -30,6 +32,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.BUMP_TOKEN || github.token }}
+
+      - name: Ignore file-mode changes
+        # chmod +x gradlew would otherwise show up as an unstaged change and break "git pull --rebase".
+        run: git config core.fileMode false
 
       - name: Look for newer versions
         id: plan
@@ -63,15 +69,27 @@ jobs:
         run: |
           # No "|| true": if this does not even compile, the library changed its API and a person has to look.
           ./gradlew :tools:extractor-smoke:run --console=plain -q 2>&1 | tee smoke-after.txt
-          score() { grep -o 'SMOKE_RESULT passed=[0-9]*' "$1" | tail -n 1 | grep -o '[0-9]*$' || echo 0; }
-          before=$(score smoke-before.txt); after=$(score smoke-after.txt)
-          echo "resolved before: $before, after: $after"
-          if [ "$after" -lt "$before" ]; then
-            echo "::error::The new version resolves fewer songs ($after) than the current one ($before). Not releasing."
+
+          BLOCK='not a bot|SignInConfirmNotBot|LOGIN_REQUIRED'
+          # Failures caused by YouTube blocking the runner (inconclusive).
+          blocked() { grep '^fail ' "$1" | grep -Eic "$BLOCK" || true; }
+          # Failures NOT caused by blocking (real problems with the library).
+          real() { grep '^fail ' "$1" | grep -Eivc "$BLOCK" || true; }
+          passed() { grep -o 'SMOKE_RESULT passed=[0-9]*' "$1" | tail -n 1 | grep -o '[0-9]*$' || echo 0; }
+
+          bb=$(blocked smoke-before.txt); ba=$(blocked smoke-after.txt)
+          rb=$(real smoke-before.txt);    ra=$(real smoke-after.txt)
+          pb=$(passed smoke-before.txt);  pa=$(passed smoke-after.txt)
+          echo "passed:  before=$pb after=$pa"
+          echo "blocked: before=$bb after=$ba (inconclusive, ignored)"
+          echo "real failures: before=$rb after=$ra"
+
+          if [ "$ra" -gt "$rb" ]; then
+            echo "::error::The new version has more real failures ($ra) than the current one ($rb). Not releasing."
             exit 1
           fi
-          if [ "$before" -eq 0 ] && [ "$after" -eq 0 ]; then
-            echo "::warning::YouTube is probably blocking this runner (nothing resolved before or after): going on the build alone."
+          if [ "$ba" -gt 0 ] || [ "$bb" -gt 0 ]; then
+            echo "::warning::YouTube blocked this runner for some songs (before=$bb, after=$ba). Those are ignored; going on the build and the non-blocked checks."
           fi
 
       - name: The app still builds
@@ -85,9 +103,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git status --short
           git add gradle/libs.versions.toml
           git commit -m "chore(deps): $SUMMARY"
-          git pull --rebase origin "${{ github.ref_name }}"
+          git pull --rebase --autostash origin "${{ github.ref_name }}"
           git push origin "HEAD:${{ github.ref_name }}"
           gh workflow run release.yml --ref "${{ github.ref_name }}" -f force_min=true -f "notes=Updated: $SUMMARY"
 
