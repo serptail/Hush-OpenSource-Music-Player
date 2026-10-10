@@ -1,12 +1,16 @@
 package com.gamut.settings
 
 import android.content.Context
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -16,11 +20,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.pressScale
 import com.gamut.core.player.BandType
 import com.gamut.core.player.Crossfeed
 import com.gamut.core.player.EqBand
@@ -45,7 +52,7 @@ class PlaybackSettingsViewModel @Inject constructor(
     val sound: SoundSettings = SoundSettings.get(context)
 }
 
-private enum class PlaybackDialog { QUALITY, FADE, PRESET, BANDS, CROSSFEED, RESET }
+private enum class PlaybackDialog { QUALITY, PRESET, BANDS, RESET }
 
 private val FadeChoices = listOf(
     Choice(0, "Off"),
@@ -54,23 +61,14 @@ private val FadeChoices = listOf(
     Choice(1_000, "Long", "1 second"),
 )
 
-private fun fadeLabel(ms: Int) = FadeChoices.firstOrNull { it.value == ms }?.let { c ->
-    if (c.hint == null) c.label else "${c.label} (${c.hint})"
-} ?: "${ms} ms"
-
 private fun hzLabel(hz: Int) =
     if (hz >= 1_000) String.format(Locale.US, "%.1f kHz", hz / 1_000f).replace(".0 ", " ") else "$hz Hz"
 
-private fun dbLabel(mb: Int) = String.format(Locale.US, "%+.1f dB", mb / 100f)
+/** Compact label under each vertical band. */
+private fun hzShort(hz: Int) =
+    if (hz >= 1_000) String.format(Locale.US, "%.1fk", hz / 1_000f).replace(".0k", "k") else "$hz"
 
-private fun bandTitle(b: EqBand): String {
-    val f = hzLabel(b.freqHz.roundToInt())
-    return when (b.type) {
-        BandType.LOW_SHELF -> "$f  ·  low shelf"
-        BandType.HIGH_SHELF -> "$f  ·  high shelf"
-        BandType.PEAK -> f
-    }
-}
+private fun dbLabel(mb: Int) = String.format(Locale.US, "%+.1f dB", mb / 100f)
 
 private val LnMinHz = ln(20f)
 private val LnMaxHz = ln(20_000f)
@@ -88,24 +86,23 @@ private fun BandEditorDialog(bands: List<EqBand>, sound: SoundSettings, onDismis
     ) {
         Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
             bands.forEachIndexed { i, b ->
-                Text(
-                    "Band ${i + 1}", style = MaterialTheme.typography.titleMedium, color = ink(),
-                    modifier = Modifier.padding(top = 14.dp),
-                )
-                SliderCell(
-                    title = "Frequency",
-                    valueLabel = hzLabel(b.freqHz.roundToInt()),
-                    value = ln(b.freqHz),
-                    range = LnMinHz..LnMaxHz,
-                    onChange = { sound.setBandFreq(i, exp(it).roundToInt().toFloat()) },
-                )
-                SliderCell(
-                    title = if (b.type == BandType.PEAK) "Q" else "Steepness",
-                    valueLabel = String.format(Locale.US, "%.2f", b.q),
-                    value = b.q,
-                    range = 0.3f..8f,
-                    onChange = { sound.setBandQ(i, (it * 20).roundToInt() / 20f) },
-                )
+                Text("Band ${i + 1}", style = MaterialTheme.typography.titleMedium, color = ink(), modifier = Modifier.padding(top = 14.dp))
+                Column(Modifier.padding(top = 4.dp)) {
+                    SliderCell(
+                        title = "Frequency",
+                        valueLabel = hzLabel(b.freqHz.roundToInt()),
+                        value = ln(b.freqHz),
+                        range = LnMinHz..LnMaxHz,
+                        onChange = { sound.setBandFreq(i, exp(it).roundToInt().toFloat()) },
+                    )
+                    SliderCell(
+                        title = if (b.type == BandType.PEAK) "Q" else "Steepness",
+                        valueLabel = String.format(Locale.US, "%.2f", b.q),
+                        value = b.q,
+                        range = 0.3f..8f,
+                        onChange = { sound.setBandQ(i, (it * 20).roundToInt() / 20f) },
+                    )
+                }
             }
         }
     }
@@ -130,130 +127,184 @@ fun PlaybackSettingsScreen(
     val s by vm.settings.state.collectAsState()
     val snd by vm.sound.state.collectAsState()
     var dialog by remember { mutableStateOf<PlaybackDialog?>(null) }
+    var activeBand by remember { mutableStateOf<Int?>(null) }
     val settings = vm.settings
     val sound = vm.sound
 
     GamutPage(title = "Playback & Audio", onBack = onBack, nowPlaying = nowPlaying) {
 
-        GroupLabel("Streaming")
-        Cell(
-            "Streaming quality",
-            subtitle = if (s.streamQuality == StreamQuality.AUTO) "Auto: ${s.streamQuality.hint}" else "${s.streamQuality.label}: ${s.streamQuality.hint}",
-            onClick = { dialog = PlaybackDialog.QUALITY },
-        )
-        SwitchCell(
-            "Preload next track",
-            checked = s.preload,
-            onChange = { v -> settings.update { it.copy(preload = v) } },
-            subtitle = "Gapless transitions and instant skips. Uses a little extra data.",
-        )
-        SwitchCell(
-            "Preload on Wi-Fi only",
-            checked = s.preloadUnmeteredOnly,
-            enabled = s.preload,
-            onChange = { v -> settings.update { it.copy(preloadUnmeteredOnly = v) } },
-            subtitle = "On mobile data the next track loads when you get to it.",
-        )
-
-        GroupLabel("Playback")
-        SliderCell(
-            title = "Crossfade",
-            valueLabel = if (s.crossfadeMs == 0) "Off" else "${s.crossfadeMs / 1000} s",
-            value = s.crossfadeMs / 1000f,
-            range = 0f..12f,
-            steps = 11,
-            onChange = { v -> settings.update { it.copy(crossfadeMs = v.roundToInt() * 1000) } },
-            subtitle = "Songs overlap as one ends and the next begins. Off keeps them gapless.",
-        )
-        Cell(
-            "Fade on pause and resume",
-            subtitle = fadeLabel(s.fadeMs),
-            onClick = { dialog = PlaybackDialog.FADE },
-        )
-        SwitchCell(
-            "Skip silence",
-            checked = s.skipSilence,
-            onChange = { v -> settings.update { it.copy(skipSilence = v) } },
-            subtitle = "Cut long silent gaps inside tracks, like in live recordings.",
-        )
-        SwitchCell(
-            "Pause when headphones disconnect",
-            checked = s.pauseOnUnplug,
-            onChange = { v -> settings.update { it.copy(pauseOnUnplug = v) } },
-        )
-
-        GroupLabel("Equalizer")
-        SwitchCell(
-            "10-band parametric EQ",
-            checked = snd.eqEnabled,
-            onChange = sound::setEqEnabled,
-            subtitle = "${snd.preset}. 64-bit filters, tuned band by band.",
-        )
-        Cell("Preset", subtitle = snd.preset, onClick = { dialog = PlaybackDialog.PRESET })
-        snd.bands.forEachIndexed { i, band ->
-            SliderCell(
-                title = bandTitle(band),
-                valueLabel = dbLabel((band.gainDb * 100).roundToInt()),
-                value = band.gainDb,
-                range = -SoundSettings.MAX_GAIN_DB..SoundSettings.MAX_GAIN_DB,
-                onChange = { sound.setBandGain(i, (it * 10).roundToInt() / 10f) },
-                enabled = snd.eqEnabled,
+        SoftHeader("Streaming")
+        SoftCard {
+            SoftValueRow(
+                "Streaming quality",
+                value = s.streamQuality.label,
+                subtitle = s.streamQuality.hint,
+                onClick = { dialog = PlaybackDialog.QUALITY },
+            )
+            SoftDivider()
+            SoftSwitchRow(
+                "Preload next track",
+                checked = s.preload,
+                onChange = { v -> settings.update { it.copy(preload = v) } },
+                subtitle = "Gapless transitions and instant skips. Uses a little extra data.",
+            )
+            SoftDivider()
+            SoftSwitchRow(
+                "Preload on Wi-Fi only",
+                checked = s.preloadUnmeteredOnly,
+                enabled = s.preload,
+                onChange = { v -> settings.update { it.copy(preloadUnmeteredOnly = v) } },
+                subtitle = "On mobile data the next track loads when you get to it.",
             )
         }
-        Cell("Frequency and Q", subtitle = "Move and reshape each band", onClick = { dialog = PlaybackDialog.BANDS })
 
-        GroupLabel("Sound quality")
-        SwitchCell(
-            "Automatic headroom",
-            checked = snd.autoHeadroom,
-            onChange = sound::setAutoHeadroom,
-            subtitle = "Lowers the level by exactly the EQ's biggest boost, so boosted bands cannot clip.",
-        )
-        SwitchCell(
-            "Soft limiter",
-            checked = snd.limiter,
-            onChange = sound::setLimiter,
-            subtitle = "Catches peaks just below full scale before they distort.",
-        )
-        SwitchCell(
-            "Dither",
-            checked = snd.dither,
-            onChange = sound::setDither,
-            subtitle = "Adds a whisper of triangular noise when the sound is processed, so quiet detail is not rounded away.",
-        )
-        Cell(
-            "Headphone crossfeed",
-            subtitle = if (snd.crossfeed == Crossfeed.OFF) "Off" else "${snd.crossfeed.label}: ${snd.crossfeed.hint}",
-            onClick = { dialog = PlaybackDialog.CROSSFEED },
-        )
-        SliderCell(
-            title = "Stereo width",
-            valueLabel = "${snd.widthPercent}%",
-            value = snd.widthPercent.toFloat(),
-            range = 0f..200f,
-            // Snap to the middle so "as recorded" is easy to hit.
-            onChange = { v -> sound.setWidth(if (abs(v - 100f) < 4f) 100 else v.roundToInt()) },
-            subtitle = "0% is mono, 100% is the recording as it is.",
-        )
+        SoftHeader("Playback")
+        SoftCard {
+            SoftSliderRow(
+                title = "Crossfade",
+                valueLabel = if (s.crossfadeMs == 0) "Off" else "${s.crossfadeMs / 1000} s",
+                value = s.crossfadeMs / 1000f,
+                range = 0f..12f,
+                steps = 11,
+                onChange = { v -> settings.update { it.copy(crossfadeMs = v.roundToInt() * 1000) } },
+                subtitle = "Songs overlap as one ends and the next begins. Off keeps them gapless.",
+            )
+            SoftDivider()
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text("Fade on pause and resume", style = MaterialTheme.typography.titleMedium, color = ink())
+                Spacer(Modifier.height(12.dp))
+                SegmentedControl(
+                    options = FadeChoices,
+                    selected = s.fadeMs,
+                    onSelect = { ms -> settings.update { it.copy(fadeMs = ms) } },
+                )
+                FadeChoices.firstOrNull { it.value == s.fadeMs }?.hint?.let {
+                    Text(it, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 8.dp, start = 4.dp))
+                }
+            }
+            SoftDivider()
+            SoftSwitchRow(
+                "Skip silence",
+                checked = s.skipSilence,
+                onChange = { v -> settings.update { it.copy(skipSilence = v) } },
+                subtitle = "Cut long silent gaps inside tracks, like in live recordings.",
+            )
+            SoftDivider()
+            SoftSwitchRow(
+                "Pause when headphones disconnect",
+                checked = s.pauseOnUnplug,
+                onChange = { v -> settings.update { it.copy(pauseOnUnplug = v) } },
+            )
+        }
 
-        GroupLabel("Output")
-        SwitchCell(
-            "Mono audio",
-            checked = s.mono,
-            onChange = { v -> settings.update { it.copy(mono = v) } },
-            subtitle = "Play both channels as one. Helps with a single earbud or hearing differences.",
-        )
-        SliderCell(
-            title = "Balance",
-            valueLabel = balanceLabel(s.balance),
-            value = s.balance,
-            range = -1f..1f,
-            // Snap to the middle so "centred" is easy to hit.
-            onChange = { v -> settings.update { it.copy(balance = if (abs(v) < 0.04f) 0f else v) } },
-        )
+        SoftHeader("Equalizer")
+        SoftCard {
+            SoftSwitchRow(
+                "10-band parametric EQ",
+                checked = snd.eqEnabled,
+                onChange = sound::setEqEnabled,
+                subtitle = "64-bit filters, tuned band by band.",
+            )
+            Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp)) {
+                val band = activeBand?.let { snd.bands.getOrNull(it) }
+                Text(
+                    if (band != null) "${hzLabel(band.freqHz.roundToInt())}  ·  ${dbLabel((band.gainDb * 100).roundToInt())}" else snd.preset,
+                    style = MaterialTheme.typography.bodyMedium, color = ink(0.6f),
+                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+                )
+                EqCurve(snd.bands, SoundSettings.MAX_GAIN_DB, snd.eqEnabled, LnMinHz, LnMaxHz)
+                Spacer(Modifier.height(12.dp))
+                EqBandSliders(
+                    bands = snd.bands,
+                    maxDb = SoundSettings.MAX_GAIN_DB,
+                    enabled = snd.eqEnabled,
+                    labelFor = { hzShort(it.freqHz.roundToInt()) },
+                    onGain = { i, g -> sound.setBandGain(i, g) },
+                    onActive = { activeBand = it },
+                )
+            }
+            SoftDivider()
+            SoftValueRow("Preset", value = snd.preset, onClick = { dialog = PlaybackDialog.PRESET })
+            SoftDivider()
+            SoftValueRow("Frequency and Q", subtitle = "Move and reshape each band", onClick = { dialog = PlaybackDialog.BANDS })
+        }
+
+        SoftHeader("Sound quality")
+        SoftCard {
+            SoftSwitchRow(
+                "Automatic headroom",
+                checked = snd.autoHeadroom,
+                onChange = sound::setAutoHeadroom,
+                subtitle = "Lowers the level by exactly the EQ's biggest boost, so boosted bands cannot clip.",
+            )
+            SoftDivider()
+            SoftSwitchRow(
+                "Soft limiter",
+                checked = snd.limiter,
+                onChange = sound::setLimiter,
+                subtitle = "Catches peaks just below full scale before they distort.",
+            )
+            SoftDivider()
+            SoftSwitchRow(
+                "Dither",
+                checked = snd.dither,
+                onChange = sound::setDither,
+                subtitle = "Adds a whisper of triangular noise when the sound is processed, so quiet detail is not rounded away.",
+            )
+            SoftDivider()
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text("Headphone crossfeed", style = MaterialTheme.typography.titleMedium, color = ink())
+                Text(
+                    "Lets a little of the lows cross over between ears, like speakers do.",
+                    style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 2.dp),
+                )
+                Spacer(Modifier.height(12.dp))
+                SegmentedControl(Crossfeed.entries.map { Choice(it, it.label, it.hint) }, snd.crossfeed, sound::setCrossfeed)
+                if (snd.crossfeed != Crossfeed.OFF) {
+                    Text(snd.crossfeed.hint, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 8.dp, start = 4.dp))
+                }
+            }
+            SoftDivider()
+            SoftSliderRow(
+                title = "Stereo width",
+                valueLabel = "${snd.widthPercent}%",
+                value = snd.widthPercent.toFloat(),
+                range = 0f..200f,
+                // Snap to the middle so "as recorded" is easy to hit.
+                onChange = { v -> sound.setWidth(if (abs(v - 100f) < 4f) 100 else v.roundToInt()) },
+                subtitle = "0% is mono, 100% is the recording as it is.",
+                centered = true,
+            )
+        }
+
+        SoftHeader("Output")
+        SoftCard {
+            SoftSwitchRow(
+                "Mono audio",
+                checked = s.mono,
+                onChange = { v -> settings.update { it.copy(mono = v) } },
+                subtitle = "Play both channels as one. Helps with a single earbud or hearing differences.",
+            )
+            SoftDivider()
+            SoftSliderRow(
+                title = "Balance",
+                valueLabel = balanceLabel(s.balance),
+                value = s.balance,
+                range = -1f..1f,
+                // Snap to the middle so "centred" is easy to hit.
+                onChange = { v -> settings.update { it.copy(balance = if (abs(v) < 0.04f) 0f else v) } },
+                centered = true,
+            )
+        }
 
         Spacer(Modifier.height(24.dp))
-        Cell("Reset audio settings", destructive = true, chevron = false, onClick = { dialog = PlaybackDialog.RESET })
+        Box(
+            Modifier.fillMaxWidth().pressScale(onClick = { dialog = PlaybackDialog.RESET })
+                .clip(RoundedCornerShape(20.dp)).background(GamutDestructive.copy(alpha = 0.12f)).padding(vertical = 16.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("Reset audio settings", style = MaterialTheme.typography.titleMedium, color = GamutDestructive)
+        }
     }
 
     when (dialog) {
@@ -264,13 +315,6 @@ fun PlaybackSettingsScreen(
             onSelect = { q -> settings.update { it.copy(streamQuality = q) } },
             onDismiss = { dialog = null },
             note = "Applies from the next track you play. Downloads always use the best quality.",
-        )
-        PlaybackDialog.FADE -> GamutChoiceDialog(
-            title = "Fade on pause and resume",
-            choices = FadeChoices,
-            selected = s.fadeMs,
-            onSelect = { ms -> settings.update { it.copy(fadeMs = ms) } },
-            onDismiss = { dialog = null },
         )
         PlaybackDialog.PRESET -> GamutChoiceDialog(
             title = "Equalizer preset",
@@ -283,14 +327,6 @@ fun PlaybackSettingsScreen(
             onDismiss = { dialog = null },
         )
         PlaybackDialog.BANDS -> BandEditorDialog(snd.bands, sound) { dialog = null }
-        PlaybackDialog.CROSSFEED -> GamutChoiceDialog(
-            title = "Headphone crossfeed",
-            choices = Crossfeed.entries.map { Choice(it, it.label, it.hint) },
-            selected = snd.crossfeed,
-            onSelect = sound::setCrossfeed,
-            onDismiss = { dialog = null },
-            note = "On headphones each ear hears only one channel, which is not how music is mixed. Crossfeed lets a little of the lows cross over, like speakers do.",
-        )
         PlaybackDialog.RESET -> GamutDialog(
             title = "Reset audio settings?",
             body = "Streaming, playback, output and sound-quality options go back to their defaults, and the equalizer returns to Flat.",

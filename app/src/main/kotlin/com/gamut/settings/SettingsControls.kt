@@ -12,14 +12,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
@@ -54,6 +51,7 @@ fun SwitchCell(
     )
 }
 
+/** Slim hairline slider. Delegates to [PillSlider] so every slider in the app looks the same. */
 @Composable
 fun GamutSlider(
     value: Float,
@@ -64,24 +62,14 @@ fun GamutSlider(
     steps: Int = 0,
     onFinished: (() -> Unit)? = null,
 ) {
-    Slider(
-        value = value.coerceIn(range.start, range.endInclusive),
-        onValueChange = onChange,
+    PillSlider(
+        value = value,
+        onChange = onChange,
+        range = range,
         modifier = modifier,
         enabled = enabled,
-        valueRange = range,
         steps = steps,
-        onValueChangeFinished = onFinished,
-        colors = SliderDefaults.colors(
-            thumbColor = ink(0.95f),
-            activeTrackColor = ink(0.95f),
-            inactiveTrackColor = ink(0.18f),
-            disabledThumbColor = ink(0.5f),
-            disabledActiveTrackColor = ink(0.4f),
-            disabledInactiveTrackColor = ink(0.12f),
-            activeTickColor = Color.Transparent,
-            inactiveTickColor = Color.Transparent,
-        ),
+        onFinished = onFinished,
     )
 }
 

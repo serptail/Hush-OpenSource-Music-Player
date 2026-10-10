@@ -1,5 +1,7 @@
 package com.gamut.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -61,97 +63,135 @@ fun AppearanceScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm:
         Preview()
 
         // ---- theme ----
-        GroupLabel("Theme")
-        val modes = buildList {
-            if (s.adaptive) add(AppThemeMode.Auto to "Auto")
-            add(AppThemeMode.System to "System")
-            add(AppThemeMode.Light to "Light")
-            add(AppThemeMode.Dark to "Dark")
+        SoftHeader("Theme")
+        SoftCard {
+            val modes = buildList {
+                if (s.adaptive) add(Choice(AppThemeMode.Auto, "Auto"))
+                add(Choice(AppThemeMode.System, "System"))
+                add(Choice(AppThemeMode.Light, "Light"))
+                add(Choice(AppThemeMode.Dark, "Dark"))
+            }
+            OptionBlock(
+                caption = when (s.effectiveMode) {
+                    AppThemeMode.Auto -> "Each album decides: light covers give a light app, dark covers a dark one."
+                    AppThemeMode.System -> "Follows your phone's light / dark setting."
+                    AppThemeMode.Light -> "Light everywhere, including sheets and pop-ups."
+                    AppThemeMode.Dark -> "Dark everywhere, including sheets and pop-ups."
+                },
+            ) {
+                SegmentedControl(options = modes, selected = s.effectiveMode, onSelect = { m -> vm.update { it.copy(mode = m) } })
+            }
         }
-        GamutSegmented(modes, s.effectiveMode) { m -> vm.update { it.copy(mode = m) } }
-        Caption(
-            when (s.effectiveMode) {
-                AppThemeMode.Auto -> "Each album decides: light covers give a light app, dark covers a dark one."
-                AppThemeMode.System -> "Follows your phone's light / dark setting."
-                AppThemeMode.Light -> "Light everywhere, including sheets and pop-ups."
-                AppThemeMode.Dark -> "Dark everywhere, including sheets and pop-ups."
-            },
-        )
 
         // ---- background ----
-        GroupLabel("Background")
-        Cell(
-            title = "Adaptive background", subtitle = "Colors flow from the album you're playing",
-            chevron = false, onClick = { vm.update { it.copy(adaptive = !it.adaptive) } },
-            trailing = { GamutSwitch(s.adaptive) { v -> vm.update { it.copy(adaptive = v) } } },
-        )
-        if (s.adaptive) {
-            OptionRow("Style") {
-                GamutSegmented(
-                    listOf(
-                        FlowStyle.Flow to "Flow",
-                        FlowStyle.Mercury to "Mercury",
-                        FlowStyle.Metaballs to "Blobs",
-                        FlowStyle.Dithering to "Dither",
-                    ),
-                    s.flowStyle,
-                ) { v -> vm.update { it.copy(flowStyle = v) } }
-            }
-            Cell(
-                title = "Animate", subtitle = "Slowly drifting color", chevron = false,
-                onClick = { vm.update { it.copy(flowAnimated = !it.flowAnimated) } },
-                trailing = { GamutSwitch(s.flowAnimated) { v -> vm.update { it.copy(flowAnimated = v) } } },
+        SoftHeader("Background")
+        SoftCard(Modifier.animateContentSize()) {
+            SoftSwitchRow(
+                "Adaptive background",
+                checked = s.adaptive,
+                onChange = { v -> vm.update { it.copy(adaptive = v) } },
+                subtitle = "Colors flow from the album you're playing",
             )
-            if (s.flowAnimated) {
-                OptionRow("Speed") {
-                    GamutSegmented(levels("Slow", "Normal", "Fast"), s.flowSpeed) { v -> vm.update { it.copy(flowSpeed = v) } }
+            AnimatedVisibility(s.adaptive) {
+                Column {
+                    SoftDivider()
+                    OptionBlock(title = "Style") {
+                        SegmentedControl(
+                            options = listOf(
+                                Choice(FlowStyle.Flow, "Flow"),
+                                Choice(FlowStyle.Mercury, "Mercury"),
+                                Choice(FlowStyle.Metaballs, "Blobs"),
+                                Choice(FlowStyle.Dithering, "Dither"),
+                            ),
+                            selected = s.flowStyle,
+                            onSelect = { v -> vm.update { it.copy(flowStyle = v) } },
+                        )
+                    }
+                    SoftDivider()
+                    SoftSwitchRow(
+                        "Animate",
+                        checked = s.flowAnimated,
+                        onChange = { v -> vm.update { it.copy(flowAnimated = v) } },
+                        subtitle = "Slowly drifting color",
+                    )
+                    AnimatedVisibility(s.flowAnimated) {
+                        Column {
+                            SoftDivider()
+                            OptionBlock(title = "Speed") {
+                                SegmentedControl(levels("Slow", "Normal", "Fast"), s.flowSpeed, onSelect = { v -> vm.update { it.copy(flowSpeed = v) } })
+                            }
+                            SoftDivider()
+                            SoftSwitchRow(
+                                "Freeze when paused",
+                                checked = s.freezeWhenPaused,
+                                onChange = { v -> vm.update { it.copy(freezeWhenPaused = v) } },
+                                subtitle = "Stops the motion while nothing is playing",
+                            )
+                        }
+                    }
+                    SoftDivider()
+                    OptionBlock(title = "Intensity") {
+                        SegmentedControl(levels("Calm", "Balanced", "Vivid"), s.flowIntensity, onSelect = { v -> vm.update { it.copy(flowIntensity = v) } })
+                    }
                 }
-                Cell(
-                    title = "Freeze when paused", subtitle = "Stops the motion while nothing is playing", chevron = false,
-                    onClick = { vm.update { it.copy(freezeWhenPaused = !it.freezeWhenPaused) } },
-                    trailing = { GamutSwitch(s.freezeWhenPaused) { v -> vm.update { it.copy(freezeWhenPaused = v) } } },
-                )
             }
-            OptionRow("Intensity") {
-                GamutSegmented(levels("Calm", "Balanced", "Vivid"), s.flowIntensity) { v -> vm.update { it.copy(flowIntensity = v) } }
+            AnimatedVisibility(!s.adaptive) {
+                Column {
+                    SoftDivider()
+                    OptionBlock(title = "Color", caption = "Fixed colors in light and dark. They don't change with the music.") {
+                        PresetGrid(selectedId = s.preset, dark = showDark) { id -> vm.update { it.copy(preset = id) } }
+                    }
+                }
             }
-        } else {
-            OptionRow("Color") {
-                PresetGrid(selectedId = s.preset, dark = showDark) { id -> vm.update { it.copy(preset = id) } }
-            }
-            Caption("Fixed colors in light and dark. They don't change with the music.")
         }
 
         // ---- glass ----
-        GroupLabel("Glass")
-        Cell(
-            title = "Frosted glass", subtitle = "Blur behind the mini player, bars and buttons. Off is lighter on battery.",
-            chevron = false, onClick = { vm.update { it.copy(glass = !it.glass) } },
-            trailing = { GamutSwitch(s.glass) { v -> vm.update { it.copy(glass = v) } } },
-        )
-        if (s.glass) {
-            OptionRow("Density") {
-                GamutSegmented(levels("Light", "Balanced", "Dense"), s.glassDensity) { v -> vm.update { it.copy(glassDensity = v) } }
+        SoftHeader("Glass")
+        SoftCard(Modifier.animateContentSize()) {
+            SoftSwitchRow(
+                "Frosted glass",
+                checked = s.glass,
+                onChange = { v -> vm.update { it.copy(glass = v) } },
+                subtitle = "Blur behind the mini player, bars and buttons. Off is lighter on battery.",
+            )
+            AnimatedVisibility(s.glass) {
+                Column {
+                    SoftDivider()
+                    OptionBlock(title = "Density") {
+                        SegmentedControl(levels("Light", "Balanced", "Dense"), s.glassDensity, onSelect = { v -> vm.update { it.copy(glassDensity = v) } })
+                    }
+                }
             }
         }
 
-        GamutButton("Reset to defaults", onClick = vm::reset, filled = false, modifier = Modifier.fillMaxWidth().padding(top = 32.dp))
+        Spacer(Modifier.height(24.dp))
+        Box(
+            Modifier.fillMaxWidth().pressScale(onClick = vm::reset)
+                .clip(RoundedCornerShape(20.dp)).background(GamutDestructive.copy(alpha = 0.12f)).padding(vertical = 16.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("Reset to defaults", style = MaterialTheme.typography.titleMedium, color = GamutDestructive)
+        }
     }
 }
 
-private fun levels(low: String, mid: String, high: String) =
-    listOf(AppearanceLevel.Low to low, AppearanceLevel.Medium to mid, AppearanceLevel.High to high)
+private fun levels(low: String, mid: String, high: String) = listOf(
+    Choice(AppearanceLevel.Low, low),
+    Choice(AppearanceLevel.Medium, mid),
+    Choice(AppearanceLevel.High, high),
+)
 
+/** A padded block inside a card: optional title, the control, optional caption underneath. */
 @Composable
-private fun Caption(text: String) {
-    Text(text, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 8.dp))
-}
-
-@Composable
-private fun OptionRow(title: String, content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-        Text(title, style = MaterialTheme.typography.titleMedium, color = ink(), modifier = Modifier.padding(bottom = 8.dp))
+private fun OptionBlock(title: String? = null, caption: String? = null, content: @Composable () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+        if (title != null) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = ink(), modifier = Modifier.padding(bottom = 12.dp))
+        }
         content()
+        if (caption != null) {
+            Text(caption, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 10.dp, start = 4.dp))
+        }
     }
 }
 
@@ -179,10 +219,10 @@ private fun PresetGrid(selectedId: String, dark: Boolean, onPick: (String) -> Un
                     val selected = p.id == selectedId
                     Column(Modifier.weight(1f).pressScale(onClick = { onPick(p.id) }, scaleDown = 0.95f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Box(
-                            Modifier.size(56.dp).clip(CircleShape).background(pal.base)
+                            Modifier.size(52.dp).clip(CircleShape).background(pal.base)
                                 .border(if (selected) 2.dp else 1.dp, if (selected) ink(0.95f) else ink(0.2f), CircleShape),
                             contentAlignment = Alignment.Center,
-                        ) { Box(Modifier.size(24.dp).background(pal.accent, CircleShape)) }
+                        ) { Box(Modifier.size(22.dp).background(pal.accent, CircleShape)) }
                         Text(p.name, style = MaterialTheme.typography.labelMedium, color = ink(if (selected) 0.95f else 0.6f), modifier = Modifier.padding(top = 6.dp))
                     }
                 }

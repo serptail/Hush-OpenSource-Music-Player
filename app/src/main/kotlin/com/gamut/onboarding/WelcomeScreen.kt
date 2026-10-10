@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,11 +39,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.gamut.R
+import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.FlowingBackground
 import com.gamut.core.designsystem.GamutBackdrop
 import com.gamut.core.designsystem.GamutTheme
+import com.gamut.core.designsystem.LocalAppearance
 import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.TransparentStatusBar
+import com.gamut.core.designsystem.appNeutralPalette
 import com.gamut.core.designsystem.ink
+import com.gamut.settings.AppearanceViewModel
 
 /** Wrap the app with this: shows the welcome screen until the user signs in or chooses to continue locally. */
 @Composable
@@ -56,9 +62,23 @@ fun OnboardingGate(vm: WelcomeViewModel = hiltViewModel(), app: @Composable () -
     val gate = if (rawGate == Gate.Loading && appShown) Gate.Ready else rawGate
     when (gate) {
         Gate.Ready -> app()
-        Gate.Welcome -> GamutTheme { WelcomeScreen(vm) }
+        Gate.Welcome -> AppearanceRoot { WelcomeScreen(vm) }
         // Same colour as the window background (the saved light/dark look), so there is no visible flash.
-        Gate.Loading -> GamutTheme { Box(Modifier.fillMaxSize().background(LocalCoverPalette.current.base)) }
+        Gate.Loading -> AppearanceRoot { Box(Modifier.fillMaxSize().background(LocalCoverPalette.current.base)) }
+    }
+}
+
+/**
+ * Gives the pre-app screens the user's saved look: theme mode (light / dark / system), or the fixed colour preset.
+ * Nothing is playing yet, so the palette is the solid "neutral" one from the Appearance settings.
+ */
+@Composable
+private fun AppearanceRoot(content: @Composable () -> Unit) {
+    val appearance by hiltViewModel<AppearanceViewModel>().settings.collectAsState()
+    val palette = appNeutralPalette(appearance)
+    TransparentStatusBar(darkIcons = palette.isLight)
+    CompositionLocalProvider(LocalAppearance provides appearance) {
+        GamutTheme { CoverTheme(palette) { content() } }
     }
 }
 
