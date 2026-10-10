@@ -27,7 +27,7 @@ interface ResolvedSourceRepository {
 }
 
 class ResolvedSourceRepositoryImpl @Inject constructor(private val dao: ResolvedSourceDao, private val api: ResolverSyncApi) : ResolvedSourceRepository {
-    private val remoteEnabled = !BuildConfig.SYNC_BASE_URL.startsWith("http://10.0.2.2")
+    private val remoteEnabled = false
     override suspend fun getLocal(isrc: String) = dao.get(isrc)?.toDomain()
     override suspend fun getRemote(isrc: String) = if (remoteEnabled) runCatching { api.get(isrc).body()?.toDomain() }.getOrNull() else null
     override suspend fun saveLocal(source: ResolvedSource) = dao.upsert(source.toEntity())

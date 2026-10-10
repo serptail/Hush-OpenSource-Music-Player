@@ -21,18 +21,22 @@ android {
         applicationId = "com.gamut"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // CI passes these on every release (see .github/workflows/release.yml); a local build stays 1 / "1.0".
+        versionCode = (project.findProperty("gamut.versionCode") as String?)?.toIntOrNull() ?: 1
+        versionName = (project.findProperty("gamut.versionName") as String?) ?: "1.0"
+
+        // Where the app looks for updates: the latest GitHub release's latest.json. Blank (local builds) = no update check.
+        val updateRepo = (project.findProperty("gamut.repo") as String?).orEmpty()
+        val updateUrl = if (updateRepo.isBlank()) "" else "https://github.com/$updateRepo/releases/latest/download/latest.json"
+        buildConfigField("String", "UPDATE_MANIFEST_URL", "\"$updateUrl\"")
 
         multiDexEnabled = true
 
+        // Local builds keep all four (emulators). CI passes -Pgamut.abis=... to ship a much smaller APK, because every
+        // required update is a full download and yt-dlp's python + ffmpeg are copied per ABI.
         ndk {
-            abiFilters += listOf(
-                "x86",
-                "x86_64",
-                "armeabi-v7a",
-                "arm64-v8a"
-            )
+            val abis = ((project.findProperty("gamut.abis") as String?) ?: "x86,x86_64,armeabi-v7a,arm64-v8a").split(",")
+            abiFilters += abis.map { it.trim() }.filter { it.isNotEmpty() }
         }
     }
 
@@ -47,9 +51,23 @@ android {
         }
     }
 
+    // An installed app can only be updated by an APK signed with the SAME key. CI signs every release with the keystore
+    // from its secrets; without them (a local build) the debug key is used, as before.
+    val ciKeystore = System.getenv("GAMUT_KEYSTORE_FILE").orEmpty()
+    signingConfigs {
+        create("release") {
+            if (ciKeystore.isNotBlank()) {
+                storeFile = file(ciKeystore)
+                storePassword = System.getenv("GAMUT_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("GAMUT_KEY_ALIAS")
+                keyPassword = System.getenv("GAMUT_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         getByName("release") {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (ciKeystore.isNotBlank()) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
     }
 }
@@ -86,6 +104,10 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.hilt.navigation.compose)
     ksp(libs.hilt.compiler)
+
+    // App updates (checks GitHub, downloads the APK)
+    implementation(libs.okhttp)
+    implementation(libs.kotlinx.serialization.json)
 
     // WorkManager and sign-in
     implementation(libs.androidx.work.runtime)

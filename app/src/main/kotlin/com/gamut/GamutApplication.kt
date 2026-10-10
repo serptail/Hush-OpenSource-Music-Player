@@ -9,6 +9,7 @@ import com.gamut.core.sync.SyncManager
 import com.gamut.feature.resolver.AndroidYtDlpEngine
 import com.gamut.feature.resolver.AudioSourceRepository
 import com.gamut.feature.resolver.ResolveTrackSourceUseCase
+import com.gamut.feature.resolver.YtDlpUpdateWorker
 import dagger.hilt.android.HiltAndroidApp
 import java.io.File
 import javax.inject.Inject
@@ -45,7 +46,11 @@ class GamutApplication : Application(), Configuration.Provider {
 			onProgress(0.5f)   // the track is identified; what is left is fetching its audio URL
 			audioSources.audioUrl(source.youtubeVideoId, forceRefresh).getOrNull()
 		}
-		CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { ytDlp.warmUp() }
+		CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+			// Brings yt-dlp up to date if it has been a while, then keeps it fresh in the background (every ~12 h).
+			ytDlp.warmUp()
+			YtDlpUpdateWorker.schedule(applicationContext)
+		}
 		// Local-first sync: does nothing until a Supabase project is configured and the user signs in.
 		syncManager.start(CoroutineScope(SupervisorJob() + Dispatchers.Default))
 	}

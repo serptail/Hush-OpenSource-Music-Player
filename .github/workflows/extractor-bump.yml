@@ -1,0 +1,100 @@
+name: extractor-bump
+# Keeps NewPipe Extractor (and the yt-dlp wrapper) current without anyone watching:
+#   1. finds a newer release upstream;  2. waits until it can be downloaded;
+#   3. resolves a few songs with the OLD and the NEW version (tools/extractor-smoke);
+#   4. only if the new one is no worse AND the app still builds: commits the bump and starts the release workflow,
+#      which the app then forces onto every user.
+# Note: YouTube often blocks GitHub's servers. If both runs score 0 the test says nothing about the new version, and the
+# bump goes ahead on the strength of the build alone (the new version is a published, upstream-tested release).
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: extractor-bump
+  cancel-in-progress: false
+
+env:
+  GH_TOKEN: ${{ secrets.BUMP_TOKEN || github.token }}
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.BUMP_TOKEN || github.token }}
+
+      - name: Look for newer versions
+        id: plan
+        run: python3 scripts/bump_extractors.py plan
+
+      - uses: actions/setup-java@v4
+        if: steps.plan.outputs.changed == 'true'
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.plan.outputs.changed == 'true'
+
+      - name: Wait until the new versions can be downloaded
+        if: steps.plan.outputs.changed == 'true'
+        run: python3 scripts/bump_extractors.py wait
+
+      - name: Smoke test, current versions
+        if: steps.plan.outputs.changed == 'true'
+        run: |
+          chmod +x gradlew
+          ./gradlew :tools:extractor-smoke:run --console=plain -q 2>&1 | tee smoke-before.txt || true
+
+      - name: Apply the bump
+        if: steps.plan.outputs.changed == 'true'
+        run: python3 scripts/bump_extractors.py apply
+
+      - name: Smoke test, new versions
+        if: steps.plan.outputs.changed == 'true'
+        run: |
+          # No "|| true": if this does not even compile, the library changed its API and a person has to look.
+          ./gradlew :tools:extractor-smoke:run --console=plain -q 2>&1 | tee smoke-after.txt
+          score() { grep -o 'SMOKE_RESULT passed=[0-9]*' "$1" | tail -n 1 | grep -o '[0-9]*$' || echo 0; }
+          before=$(score smoke-before.txt); after=$(score smoke-after.txt)
+          echo "resolved before: $before, after: $after"
+          if [ "$after" -lt "$before" ]; then
+            echo "::error::The new version resolves fewer songs ($after) than the current one ($before). Not releasing."
+            exit 1
+          fi
+          if [ "$before" -eq 0 ] && [ "$after" -eq 0 ]; then
+            echo "::warning::YouTube is probably blocking this runner (nothing resolved before or after): going on the build alone."
+          fi
+
+      - name: The app still builds
+        if: steps.plan.outputs.changed == 'true'
+        run: ./gradlew :app:assembleDebug --no-daemon
+
+      - name: Commit and release
+        if: steps.plan.outputs.changed == 'true'
+        env:
+          SUMMARY: ${{ steps.plan.outputs.summary }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gradle/libs.versions.toml
+          git commit -m "chore(deps): $SUMMARY"
+          git pull --rebase origin "${{ github.ref_name }}"
+          git push origin "HEAD:${{ github.ref_name }}"
+          gh workflow run release.yml --ref "${{ github.ref_name }}" -f force_min=true -f "notes=Updated: $SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.plan.outputs.changed == 'true'
+        with:
+          name: smoke-logs
+          path: smoke-*.txt
+          if-no-files-found: ignore
+          retention-days: 14

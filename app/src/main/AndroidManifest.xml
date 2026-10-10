@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <!-- Lets the in-app updater install the new APK (Android still asks the user to allow it once). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:name=".GamutApplication" android:label="Gamut" android:theme="@style/Theme.Gamut" android:usesCleartextTraffic="true" android:enableOnBackInvokedCallback="true">
         <activity android:name=".MainActivity" android:exported="true" android:theme="@style/Theme.Gamut.Splash"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|uiMode|density|fontScale|locale|layoutDirection">
@@ -19,7 +21,8 @@
             <intent-filter><action android:name="androidx.media3.session.MediaSessionService" /></intent-filter>
         </service>
         <service android:name="com.gamut.feature.resolver.DownloadService" android:foregroundServiceType="dataSync" android:exported="false" />
-        <!-- Nothing in the app uses WorkManager: skip its startup initializer (removes work from app launch). -->
+        <receiver android:name="com.gamut.update.UpdateInstallReceiver" android:exported="false" />
+        <!-- WorkManager is started on demand (GamutApplication is its Configuration.Provider): skip its startup initializer, so app launch does no work for it. -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"

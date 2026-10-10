@@ -167,8 +167,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             val appearance by appearanceStore.settings.collectAsState()
             CompositionLocalProvider(LocalAppearance provides appearance) {
-                com.gamut.onboarding.OnboardingGate {
-                    GamutApp(player, resolveTrackSource, audioSources, newPipe, downloadIndex, downloadManager, appearance)
+                // Outermost: nothing else is shown while a required update is pending.
+                com.gamut.update.UpdateGate {
+                    com.gamut.onboarding.OnboardingGate {
+                        GamutApp(player, resolveTrackSource, audioSources, newPipe, downloadIndex, downloadManager, appearance)
+                    }
                 }
             }
         }

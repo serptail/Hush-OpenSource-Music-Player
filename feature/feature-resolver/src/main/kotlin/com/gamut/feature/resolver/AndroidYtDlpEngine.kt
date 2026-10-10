@@ -57,14 +57,11 @@ private data class SearchEntryJson(
 @Singleton
 class AndroidYtDlpEngine @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val updater: YtDlpUpdater,
 ) : YoutubeMusicSearchSource {
 
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     @Volatile private var initialized = false
-    @Volatile private var lastUpdateAtMs = 0L
-    // A forced yt-dlp update is expensive (network round trip) -- only ever do it once per
-    // process lifetime as a bot-check recovery attempt, not on every single failure.
-    @Volatile private var hasForcedUpdateThisSession = false
     private val streamScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val streamCache = ConcurrentHashMap<String, CachedUrl>()
     private val streamInFlight = ConcurrentHashMap<String, Deferred<Result<String>>>()
@@ -86,12 +83,12 @@ class AndroidYtDlpEngine @Inject constructor(
         val musicUrl = searchMusicUrl("https://music.youtube.com/search?q=$encoded", false)
         if (musicUrl.isNotEmpty()) return@withContext musicUrl
         val broad = searchBroad(query)
-        if (broad.isNotEmpty() || hasForcedUpdateThisSession) return@withContext broad
+        if (broad.isNotEmpty()) return@withContext broad
 
-        // An installed yt-dlp binary can be stale even when initialization succeeds. Refresh
-        // once after an entirely empty search, then repeat the complete fallback chain.
-        hasForcedUpdateThisSession = true
-        forceUpdate()
+        // An installed yt-dlp binary can be stale even when initialization succeeds. After an entirely empty
+        // search, update it (rate limited, see YtDlpUpdater) and, only if a newer build really arrived, repeat the
+        // complete fallback chain.
+        if (!updater.recover()) return@withContext broad
         val retryFiltered = searchMusicUrl("https://music.youtube.com/search?q=$encoded$SONGS_FILTER", true)
         if (retryFiltered.isNotEmpty()) return@withContext retryFiltered
         val retryMusic = searchMusicUrl("https://music.youtube.com/search?q=$encoded", false)
@@ -191,12 +188,10 @@ class AndroidYtDlpEngine @Inject constructor(
             withTimeoutOrNull(AUDIO_RESOLVE_TIMEOUT_MS) { resolveAudioUrl(videoId, quality) }
                 ?: error("Timed out resolving a playable source for this track")
         }.recoverCatching { error ->
-            // YouTube changes its bot-check/signature scheme often enough that a stale
-            // yt-dlp build is frequently the actual cause -- force one update (once per
-            // session) and retry before surfacing failure to the user.
-            if (!hasForcedUpdateThisSession) {
-                hasForcedUpdateThisSession = true
-                forceUpdate()
+            // YouTube changes its bot-check/signature scheme often enough that a stale yt-dlp build is frequently
+            // the actual cause: update now (rate limited, and shared with any other caller that failed at the same
+            // time) and retry once if a newer build really arrived, before surfacing failure to the user.
+            if (updater.recover()) {
                 withTimeoutOrNull(AUDIO_RESOLVE_TIMEOUT_MS) { resolveAudioUrl(videoId, quality) }
                     ?: throw error
             } else {
@@ -267,15 +262,10 @@ class AndroidYtDlpEngine @Inject constructor(
         }
     }
 
+    /** Startup: bring yt-dlp up to date if the last check is old. The background job keeps it fresh after that. */
     suspend fun warmUp() = withContext(Dispatchers.IO) {
         ensureReady()
-        val preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
-        val lastUpdate = preferences.getLong(LAST_UPDATE_KEY, 0L)
-        if (System.currentTimeMillis() - lastUpdate >= UPDATE_INTERVAL_MS) {
-            runCatching { YoutubeDL.getInstance().updateYoutubeDL(context, YoutubeDL.UpdateChannel.STABLE) }
-            preferences.edit().putLong(LAST_UPDATE_KEY, System.currentTimeMillis()).apply()
-            lastUpdateAtMs = System.currentTimeMillis()
-        }
+        updater.updateIfDue()
     }
 
     private fun expiryOf(url: String): Long = Regex("[?&]expire=(\\d+)").find(url)?.groupValues?.get(1)
@@ -284,18 +274,8 @@ class AndroidYtDlpEngine @Inject constructor(
 
     private data class CachedUrl(val url: String, val expiresAtMs: Long)
 
-    private fun forceUpdate() {
-        synchronized(this) {
-            runCatching { YoutubeDL.getInstance().updateYoutubeDL(context, YoutubeDL.UpdateChannel.STABLE) }
-            lastUpdateAtMs = System.currentTimeMillis()
-        }
-    }
-
     private companion object {
         const val SONGS_FILTER = "&sp=EgWKAQIIAWoKEAoQAxAEEAkQBQ%3D%3D"
-        const val PREFERENCES = "yt_dlp"
-        const val LAST_UPDATE_KEY = "last_update_ms"
-        const val UPDATE_INTERVAL_MS = 86_400_000L
         const val AUDIO_RESOLVE_TIMEOUT_MS = 12_000L
         const val STREAM_EXPIRY_SAFETY_MS = 120_000L
         const val DEFAULT_STREAM_TTL_MS = 20 * 60_000L
