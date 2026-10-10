@@ -31,6 +31,8 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
     @Volatile var vinyl = 0f              // 0..1   crackle + hiss + a touch of bit-crush
     @Volatile var bassDb = 0f             // low shelf @ 120 Hz
     @Volatile var wobbleCents = 0f        // tape wow/flutter depth
+    @Volatile var mono = false            // fold both channels into one (Playback & Audio settings)
+    @Volatile var balance = 0f            // -1 = left .. +1 = right
 
     private var channels = 2
     private var rate = 44100
@@ -92,7 +94,12 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
         val doVinyl = vin > 0.001f
         val doBass = kotlin.math.abs(bass) > 0.1f
         val doWobble = wob > 0.5f
-        if (!doReverb && !doLp && !doVinyl && !doBass && !doWobble) {
+        val bal = balance.coerceIn(-1f, 1f)
+        val doMono = mono && channels == 2
+        val doBalance = channels == 2 && kotlin.math.abs(bal) > 0.01f
+        val gainL = if (bal > 0f) 1f - bal else 1f
+        val gainR = if (bal < 0f) 1f + bal else 1f
+        if (!doReverb && !doLp && !doVinyl && !doBass && !doWobble && !doMono && !doBalance) {
             if (dirty) { clearState(); dirty = false }
             out.put(inputBuffer)
             out.flip()
@@ -203,6 +210,9 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
                 l += crackle
                 r += crackle
             }
+
+            if (doMono) { val m = (l + r) * 0.5f; l = m; r = m }
+            if (doBalance) { l *= gainL; r *= gainR }
 
             out.putShort((l.coerceIn(-1f, 1f) * 32767f).toInt().toShort())
             if (channels == 2) out.putShort((r.coerceIn(-1f, 1f) * 32767f).toInt().toShort())

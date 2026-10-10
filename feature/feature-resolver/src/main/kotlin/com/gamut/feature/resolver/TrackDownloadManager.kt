@@ -7,6 +7,7 @@ import android.os.SystemClock
 import com.gamut.core.database.DownloadEntity
 import com.gamut.core.database.DownloadIndex
 import com.gamut.core.model.Track
+import com.gamut.core.player.StreamQuality
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.FileOutputStream
@@ -219,7 +220,7 @@ class TrackDownloadManager @Inject constructor(
     /** Highest-bitrate stream (any codec); falls back to the playback resolver (NewPipe m4a, then yt-dlp). */
     private suspend fun bestUrl(videoId: String, refresh: Boolean): String =
         newPipe.bestAudioUrl(videoId).getOrNull()
-            ?: audioSources.audioUrl(videoId, forceRefresh = refresh).getOrThrow()
+            ?: audioSources.audioUrl(videoId, forceRefresh = refresh, quality = StreamQuality.HIGH).getOrThrow()
 
     /**
      * Fetches [url] into [part] in byte ranges (googlevideo throttles one long request), appending after what the file

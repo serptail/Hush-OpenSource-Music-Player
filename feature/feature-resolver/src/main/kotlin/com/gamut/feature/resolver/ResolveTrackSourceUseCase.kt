@@ -6,6 +6,8 @@ import com.gamut.core.model.Track
 import com.gamut.core.model.TrackSource
 import com.gamut.core.network.YoutubeCandidate
 import com.gamut.core.network.YoutubeMusicSearchSource
+import com.gamut.core.player.PlaybackSettings
+import com.gamut.core.player.StreamQuality
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
@@ -31,8 +33,11 @@ class YoutubeCandidateRepositoryImpl @Inject constructor(private val source: You
 }
 
 interface AudioSourceRepository {
-    /** [forceRefresh] drops any cached stream URL first (YouTube URLs expire and are tied to the client's IP). */
-    suspend fun audioUrl(videoId: String, forceRefresh: Boolean = false): Result<String>
+    /**
+     * [forceRefresh] drops any cached stream URL first (YouTube URLs expire and are tied to the client's IP).
+     * [quality] null = whatever the user picked in Playback & Audio settings.
+     */
+    suspend fun audioUrl(videoId: String, forceRefresh: Boolean = false, quality: StreamQuality? = null): Result<String>
 }
 
 // @Singleton: the cache and the in-flight map below only help if the tap path and the player's own next-track resolver
@@ -41,30 +46,34 @@ interface AudioSourceRepository {
 class AudioSourceRepositoryImpl @Inject constructor(
     private val engine: AndroidYtDlpEngine,
     private val newPipe: NewPipeYoutubeSource,
+    private val settings: PlaybackSettings,
     @ApplicationScope private val appScope: CoroutineScope,
 ) : AudioSourceRepository {
     private val cache = java.util.concurrent.ConcurrentHashMap<String, CachedAudio>()
     private val inFlight = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Deferred<Result<String>>>()
 
-    override suspend fun audioUrl(videoId: String, forceRefresh: Boolean): Result<String> {
+    override suspend fun audioUrl(videoId: String, forceRefresh: Boolean, quality: StreamQuality?): Result<String> {
+        val q = quality ?: settings.effectiveQuality()
+        // One entry per (video, quality): changing the quality setting must not hand back a URL of the old one.
+        val key = "$videoId|${q.name}"
         if (forceRefresh) {
-            cache.remove(videoId)
-            inFlight.remove(videoId)
+            cache.keys.removeIf { it.startsWith("$videoId|") }
+            inFlight.keys.removeIf { it.startsWith("$videoId|") }
             engine.forget(videoId)
         }
-        cache[videoId]?.takeIf { it.expiresAtMs > System.currentTimeMillis() }?.let {
+        cache[key]?.takeIf { it.expiresAtMs > System.currentTimeMillis() }?.let {
             return Result.success(it.url)
         }
-        val job = inFlight.computeIfAbsent(videoId) {
+        val job = inFlight.computeIfAbsent(key) {
             appScope.async {
                 try {
-                    val result = kotlinx.coroutines.withTimeoutOrNull(AUDIO_PRIMARY_TIMEOUT_MS) { newPipe.audioUrl(videoId) }
+                    val result = kotlinx.coroutines.withTimeoutOrNull(AUDIO_PRIMARY_TIMEOUT_MS) { newPipe.audioUrl(videoId, q) }
                         ?.fold(
                             onSuccess = { Result.success(it) },
-                            onFailure = { engine.audioUrl(videoId) },
+                            onFailure = { engine.audioUrl(videoId, q) },
                         )
-                        ?: engine.audioUrl(videoId)
-                    result.onSuccess { url -> cache[videoId] = CachedAudio(url, expiryOf(url)) }
+                        ?: engine.audioUrl(videoId, q)
+                    result.onSuccess { url -> cache[key] = CachedAudio(url, expiryOf(url)) }
                     result
                 } catch (e: CancellationException) {
                     throw e
@@ -78,7 +87,7 @@ class AudioSourceRepositoryImpl @Inject constructor(
         // Removed when the job itself completes, not when a caller happens to finish awaiting it: a caller that was
         // cancelled mid-way (e.g. a prefetch) used to leave a finished job in the map, and every later request for
         // this video then got that old (possibly failed or expired) result.
-        job.invokeOnCompletion { inFlight.remove(videoId, job) }
+        job.invokeOnCompletion { inFlight.remove(key, job) }
         return job.await()
     }
 

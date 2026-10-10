@@ -36,6 +36,7 @@ import com.gamut.account.AccountViewModel
 import com.gamut.account.ProfileScreen
 import com.gamut.settings.RecentlyPlayedScreen
 import com.gamut.settings.RecentlyPlayedViewModel
+import com.gamut.settings.PlaybackSettingsScreen
 import com.gamut.settings.SettingsScreen
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -417,12 +418,16 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                         onRecentlyPlayed = { nav.navigate("recently-played") },
                                         onProfile = { nav.navigate("profile") },
                                         onAppearance = { nav.navigate("appearance") },
+                                        onPlaybackAudio = { nav.navigate("playback-audio") },
                                         nowPlaying = nowPlayingDocked,
                                     )
                                 }
                             }
                             composable("appearance") {
                                 AfterEnter { AppearanceScreen(onBack = { nav.popBackStack() }, nowPlaying = nowPlayingDocked) }
+                            }
+                            composable("playback-audio") {
+                                AfterEnter { PlaybackSettingsScreen(onBack = { nav.popBackStack() }, nowPlaying = nowPlayingDocked) }
                             }
                             composable("profile") {
                                 AfterEnter { ProfileScreen(onBack = { nav.popBackStack() }, nowPlaying = nowPlayingDocked) }

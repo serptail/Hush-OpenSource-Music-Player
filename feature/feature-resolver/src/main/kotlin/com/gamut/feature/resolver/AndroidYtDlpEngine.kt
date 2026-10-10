@@ -5,6 +5,7 @@ import com.gamut.core.model.Track
 import com.gamut.core.network.YoutubeCandidate
 import com.gamut.core.network.YoutubeMusicSearchSource
 import com.gamut.core.network.isValidYoutubeVideoId
+import com.gamut.core.player.StreamQuality
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -159,16 +160,18 @@ class AndroidYtDlpEngine @Inject constructor(
      * error instead of leaving the UI hanging indefinitely.
      */
     /** Drops the cached stream URL for [videoId], so the next [audioUrl] resolves a fresh one. */
-    fun forget(videoId: String) { streamCache.remove(videoId) }
+    fun forget(videoId: String) { streamCache.keys.removeIf { it.startsWith("$videoId|") } }
 
-    suspend fun audioUrl(videoId: String): Result<String> {
-        streamCache[videoId]?.takeIf { it.expiresAtMs > System.currentTimeMillis() }?.let {
+    suspend fun audioUrl(videoId: String, quality: StreamQuality = StreamQuality.NORMAL): Result<String> {
+        // Cached per (video, quality), so switching the quality setting never returns a URL of the previous one.
+        val key = "$videoId|${quality.name}"
+        streamCache[key]?.takeIf { it.expiresAtMs > System.currentTimeMillis() }?.let {
             return Result.success(it.url)
         }
-        val deferred = streamInFlight.computeIfAbsent(videoId) {
+        val deferred = streamInFlight.computeIfAbsent(key) {
             streamScope.async {
-                resolveWithRetry(videoId).onSuccess { url ->
-                    streamCache[videoId] = CachedUrl(url, expiryOf(url))
+                resolveWithRetry(videoId, quality).onSuccess { url ->
+                    streamCache[key] = CachedUrl(url, expiryOf(url))
                     if (streamCache.size > MAX_STREAM_CACHE_ENTRIES) {
                         streamCache.keys.firstOrNull()?.let(streamCache::remove)
                     }
@@ -178,14 +181,14 @@ class AndroidYtDlpEngine @Inject constructor(
         return try {
             deferred.await()
         } finally {
-            if (deferred.isCompleted) streamInFlight.remove(videoId, deferred)
+            if (deferred.isCompleted) streamInFlight.remove(key, deferred)
         }
     }
 
-    private suspend fun resolveWithRetry(videoId: String): Result<String> = withContext(Dispatchers.IO) {
+    private suspend fun resolveWithRetry(videoId: String, quality: StreamQuality): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             ensureReady()
-            withTimeoutOrNull(AUDIO_RESOLVE_TIMEOUT_MS) { resolveAudioUrl(videoId) }
+            withTimeoutOrNull(AUDIO_RESOLVE_TIMEOUT_MS) { resolveAudioUrl(videoId, quality) }
                 ?: error("Timed out resolving a playable source for this track")
         }.recoverCatching { error ->
             // YouTube changes its bot-check/signature scheme often enough that a stale
@@ -194,7 +197,7 @@ class AndroidYtDlpEngine @Inject constructor(
             if (!hasForcedUpdateThisSession) {
                 hasForcedUpdateThisSession = true
                 forceUpdate()
-                withTimeoutOrNull(AUDIO_RESOLVE_TIMEOUT_MS) { resolveAudioUrl(videoId) }
+                withTimeoutOrNull(AUDIO_RESOLVE_TIMEOUT_MS) { resolveAudioUrl(videoId, quality) }
                     ?: throw error
             } else {
                 throw error
@@ -202,20 +205,27 @@ class AndroidYtDlpEngine @Inject constructor(
         }
     }
 
-    private fun resolveAudioUrl(videoId: String): String {
+    private fun resolveAudioUrl(videoId: String, quality: StreamQuality): String {
         val request = YoutubeDLRequest("https://www.youtube.com/watch?v=$videoId")
             // Prefer a genuine audio-only stream (m4a first, since ExoPlayer decodes it
             // natively without extra container demuxing); only fall through to a muxed
             // video+audio "best" as a last resort if YouTube truly offers no audio-only
             // format for this video, rather than "best" winning by default and silently
             // pulling down (and decoding) a video track we never render.
-            .addOption("-f", "bestaudio[ext=m4a]/bestaudio/best")
+            .addOption("-f", formatFor(quality))
             .addOption("--no-playlist")
             .addOption("--no-warnings")
             .addOption("--extractor-args", CLIENT_ARGS)
             .addOption("--retries", "2")
         return YoutubeDL.getInstance().getInfo(request).url?.takeIf { it.isNotBlank() }
             ?: error("yt-dlp returned no playable audio URL")
+    }
+
+    /** m4a stays first at Data saver / Normal (cheap to decode); High takes the best bitrate of any codec (Opus). */
+    private fun formatFor(quality: StreamQuality): String = when (quality) {
+        StreamQuality.LOW -> "worstaudio[ext=m4a]/worstaudio/bestaudio/best"
+        StreamQuality.NORMAL -> "bestaudio[ext=m4a]/bestaudio/best"
+        else -> "bestaudio/best"
     }
 
     private fun Throwable.looksLikeBotCheck(): Boolean {

@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
+import android.os.SystemClock
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
@@ -16,6 +17,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DataSource
@@ -40,6 +42,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -69,11 +73,18 @@ import kotlinx.coroutines.withContext
  *  - A stream URL that stops working (expired, or the network changed) is re-resolved and playback resumes where
  *    it stopped, instead of ending in an error.
  *
+ *  - Crossfade (off by default): with it on, a SECOND ExoPlayer prepares the next track a few seconds before the end of
+ *    this one, then both play at once while the volumes cross (equal power) and the second becomes the current player.
+ *    Without it the first player simply flows into the preloaded next item (gapless), as before.
+ *
  * Everything below must be called from the main thread (same as ExoPlayer itself).
  */
 @OptIn(UnstableApi::class)
 @Singleton
-class Media3MusicPlayer @Inject constructor(@ApplicationContext private val context: Context) : MusicPlayer {
+class Media3MusicPlayer @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val settings: PlaybackSettings,
+) : MusicPlayer {
 
     // Created on first use (on ExoPlayer's playback thread), so opening the cache folder never blocks app startup.
     private val cacheFactory: CacheDataSource.Factory by lazy {
@@ -88,50 +99,111 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)   // a broken cache must never break playback
     }
 
-    // Reverb / low-pass / wobble / vinyl / bass. Sits before ExoPlayer's speed stage (see applyMod).
-    private val modProcessor = ModAudioProcessor()
+    private val sound = SoundSettings.get(context)
 
-    private val renderersFactory = object : DefaultRenderersFactory(context) {
-        override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
-            DefaultAudioSink.Builder(context)
-                .setEnableFloatOutput(enableFloatOutput)
-                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                .setAudioProcessors(arrayOf(modProcessor))
-                .build()
-    }
+    private val musicAttributes = AudioAttributes.Builder()
+        .setUsage(C.USAGE_MEDIA)
+        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+        .build()
+
+    /**
+     * An ExoPlayer with its own audio chain: [mod] (reverb / low-pass / wobble / vinyl / bass / mono / balance), then
+     * [engine] (EQ / headroom / crossfeed / width / limiter / dither). Both sit before ExoPlayer's speed stage (see
+     * applyMod). Processors keep state, so each player needs its own.
+     *
+     * There are two players so a crossfade can overlap the end of one track with the start of the next. Only
+     * [activeSlot] is "the player": the queue, the state flows and the media session all follow it. [standbySlot] is
+     * the idle second one (it holds the next track, prepared and silent, shortly before a crossfade); [outgoingSlot] is
+     * the one whose track is fading out.
+     */
+    private class Slot(val mod: ModAudioProcessor, val engine: SoundEngineProcessor, val exo: ExoPlayer)
+
+    private var activeSlot: Slot? = null
+    private var standbySlot: Slot? = null
+    private var outgoingSlot: Slot? = null
 
     // Lazy: ExoPlayer is no longer built on the main thread inside onCreate. It is created by warmUp() once the
     // loading screen is gone, or by the first playback call if that comes first.
-    private val player: ExoPlayer by lazy {
-        ExoPlayer.Builder(context, renderersFactory)
-        .setMediaSourceFactory(DefaultMediaSourceFactory(DataSource.Factory {
-            // Downloaded songs (file:) play straight from disk; copying them into the stream cache would only waste space.
-            SchemeRoutingDataSource(local = DefaultDataSource.Factory(context).createDataSource(), remote = cacheFactory.createDataSource())
-        }))
-        // Start quickly, but download in long bursts rather than a constant trickle: fewer radio wake-ups.
-        .setLoadControl(
-            DefaultLoadControl.Builder()
-                .setBufferDurationsMs(30_000, 90_000, BUFFER_FOR_PLAYBACK_MS, 3_000)
-                .build(),
-        )
-        .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
-        .setHandleAudioBecomingNoisy(true)   // pause when the headphones are unplugged
-        // Without this the CPU and Wi-Fi are allowed to sleep with the screen off, which stalls the stream and the
-        // player then pauses / stops by itself on the lock screen. NETWORK also holds the Wi-Fi lock for streams.
-        .setWakeMode(C.WAKE_MODE_NETWORK)
-        .build()
-        .apply {
-            // This is a music player -- some yt-dlp-resolved sources are muxed video+audio
-            // (YouTube doesn't always expose an audio-only format for a given video without
-            // a PO token). Disabling the video track type means ExoPlayer never allocates a
-            // video decoder or renders frames for those, regardless of what format yt-dlp
-            // picked -- a guaranteed fix at the player layer, independent of the "-f" selector.
-            trackSelectionParameters = trackSelectionParameters
-                .buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
-                .build()
+    private val active: Slot get() = activeSlot ?: createPrimary()
+    private val player: ExoPlayer get() = active.exo
+
+    private fun createPrimary(): Slot {
+        val slot = newSlot(handleFocus = true)
+        activeSlot = slot
+        startSettingsObservers()
+        return slot
+    }
+
+    private fun allSlots(): List<Slot> = listOfNotNull(activeSlot, standbySlot, outgoingSlot)
+
+    /** [handleFocus]: only the current player may hold audio focus, a second request from this app would pause the first. */
+    private fun newSlot(handleFocus: Boolean): Slot {
+        val mod = ModAudioProcessor()
+        val engine = SoundEngineProcessor()
+        val renderers = object : DefaultRenderersFactory(context) {
+            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
+                DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .setAudioProcessors(arrayOf<AudioProcessor>(mod, engine))
+                    .build()
         }
-        .also(::attachPlayerListener)
+        val exo = ExoPlayer.Builder(context, renderers)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(DataSource.Factory {
+                // Downloaded songs (file:) play straight from disk; copying them into the stream cache would only waste space.
+                SchemeRoutingDataSource(local = DefaultDataSource.Factory(context).createDataSource(), remote = cacheFactory.createDataSource())
+            }))
+            // Start quickly, but download in long bursts rather than a constant trickle: fewer radio wake-ups.
+            .setLoadControl(
+                DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(30_000, 90_000, BUFFER_FOR_PLAYBACK_MS, 3_000)
+                    .build(),
+            )
+            .setAudioAttributes(musicAttributes, handleFocus)
+            .setHandleAudioBecomingNoisy(true)   // pause when the headphones are unplugged
+            // Without this the CPU and Wi-Fi are allowed to sleep with the screen off, which stalls the stream and the
+            // player then pauses / stops by itself on the lock screen. NETWORK also holds the Wi-Fi lock for streams.
+            .setWakeMode(C.WAKE_MODE_NETWORK)
+            .build()
+            .apply {
+                // This is a music player -- some yt-dlp-resolved sources are muxed video+audio
+                // (YouTube doesn't always expose an audio-only format for a given video without
+                // a PO token). Disabling the video track type means ExoPlayer never allocates a
+                // video decoder or renders frames for those, regardless of what format yt-dlp
+                // picked -- a guaranteed fix at the player layer, independent of the "-f" selector.
+                trackSelectionParameters = trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+                    .build()
+            }
+        return Slot(mod, engine, exo).also { slot ->
+            attachPlayerListener(slot)
+            applyMod(slot, ModController.state.value.settings)
+            applyPlaybackSettings(slot, settings.state.value)
+            engine.params = sound.state.value.toParams()
+        }
+    }
+
+    /**
+     * Mod, Playback & Audio settings and the sound engine, applied live to every player that exists. Started once, with
+     * the first player. A player built later (the standby) takes the current values in [newSlot].
+     */
+    private fun startSettingsObservers() {
+        // Mod: speed + pitch go through ExoPlayer's playback parameters, the rest into the mod processor.
+        scope.launch { ModController.state.collect { st -> allSlots().forEach { applyMod(it, st.settings) } } }
+        // Playback & Audio settings: skip silence, unplug behaviour, fade, crossfade, mono / balance.
+        scope.launch {
+            settings.state.collect { st ->
+                allSlots().forEach { applyPlaybackSettings(it, st) }
+                onCrossfadeChanged()
+            }
+        }
+        scope.launch {
+            sound.state.collect { st ->
+                val params = st.toParams()
+                allSlots().forEach { it.engine.params = params }
+            }
+        }
     }
 
     override fun warmUp() { player.playbackState }
@@ -142,7 +214,12 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
      * Use THIS (instead of [sessionPlayer]) when building the MediaSession, so the notification /
      * lock-screen / Bluetooth next + previous buttons go through the queue logic below.
      */
-    internal val mediaSessionPlayer: Player by lazy { object : ForwardingPlayer(player) {
+    internal val mediaSessionPlayer: Player get() = queueForwardingPlayer(player)
+
+    /** Set by the media service: called with a fresh wrapper when a crossfade hands over to the other ExoPlayer. */
+    internal var onSessionPlayerChanged: ((Player) -> Unit)? = null
+
+    private fun queueForwardingPlayer(exo: ExoPlayer): Player = object : ForwardingPlayer(exo) {
         private val queueCommands = intArrayOf(
             COMMAND_SEEK_TO_NEXT,
             COMMAND_SEEK_TO_PREVIOUS,
@@ -167,7 +244,7 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
         override fun seekToPreviousMediaItem() = skipPrevious()
         override fun play() = resume()
         override fun pause() = this@Media3MusicPlayer.pause()
-    } }
+    }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val powerManager = context.getSystemService(PowerManager::class.java)
@@ -241,18 +318,21 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
     private var recoveringIsrc: String? = null
     private var recoveries = 0
 
-    private fun attachPlayerListener(exo: ExoPlayer) {
-        // Equalizer: the effects live on ExoPlayer's audio session, which can change (e.g. audio sink re-created).
-        val equalizer = EqualizerController.get(context)
-        equalizer.attach(exo.audioSessionId)
-        // Mod: speed + pitch go through ExoPlayer's playback parameters, the rest into the mod processor. Takes `exo`
-        // (not `player`): this runs inside player's lazy initializer, and Main.immediate starts collecting right away.
-        scope.launch { ModController.state.collect { applyMod(exo, it.settings) } }
-        exo.addListener(object : Player.Listener {
-            override fun onAudioSessionIdChanged(audioSessionId: Int) { equalizer.attach(audioSessionId) }
-
+    /**
+     * Every ExoPlayer reports here, but only the active one counts: the other (the standby, or the track fading out in a
+     * crossfade) must not touch the queue, the state flows or the progress clock.
+     */
+    private fun attachPlayerListener(slot: Slot) {
+        slot.exo.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (isPlaying) startPositionUpdates() else positionJob?.cancel()
+                if (slot !== activeSlot) return
+                if (isPlaying) {
+                    startPositionUpdates()
+                    startCrossfadeWatcher()
+                } else {
+                    positionJob?.cancel()
+                    crossfadeJob?.cancel()
+                }
                 val track = currentTrack ?: return
                 // While the next track is loading, ExoPlayer reporting "not playing" must not flash a Paused state.
                 if (!isPlaying && (transitioning || state.value is PlaybackState.Loading)) return
@@ -269,9 +349,10 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
                 updateAwaiting()
             }
 
-            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) = updateAwaiting()
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) { if (slot === activeSlot) updateAwaiting() }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
+                if (slot !== activeSlot) return
                 updateAwaiting()
                 when (playbackState) {
                     Player.STATE_ENDED -> onTrackEnded()
@@ -293,6 +374,7 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
 
             /** ExoPlayer moved on by itself (the track ended) into the preloaded next item. */
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                if (slot !== activeSlot) return
                 publishStreamDuration()
                 if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && reason != Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) return
                 val id = mediaItem?.mediaId ?: return
@@ -313,6 +395,7 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                if (slot !== activeSlot) return
                 // Network-type failure (expired or IP-bound stream URL, connection switch): re-resolve and resume.
                 val failing = player.currentMediaItem?.mediaId?.let { queuedTrack(it) } ?: currentTrack
                 if (failing != null && error.errorCode / 1000 == 2 && recover(failing, player.currentPosition)) return
@@ -322,12 +405,15 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
         })
     }
 
-    private fun applyMod(exo: ExoPlayer, s: ModSettings) {
+    private fun applyMod(slot: Slot, s: ModSettings) {
+        val exo = slot.exo
         // speed == pitch ratio is the tape / 45-vs-33 RPM sound (nightcore, slowed). Unlinked keeps the key.
         exo.playbackParameters = PlaybackParameters(s.speed, s.pitchRatio)
         // The processor runs BEFORE the speed/pitch stage, so what it produces is then played `speed`x as fast and
         // `pitchRatio`x as high. Pre-compensate times and cutoffs so the panel's numbers are what you hear.
-        modProcessor.apply {
+        // The sound engine sits before the speed stage too: tell it, so a band set to 1 kHz is heard at 1 kHz.
+        slot.engine.pitchRatio = s.pitchRatio
+        slot.mod.apply {
             reverbMix = s.reverbMix
             reverbDecaySec = s.reverbDecaySec * s.speed
             reverbPreDelayMs = s.reverbPreDelayMs * s.speed
@@ -337,6 +423,65 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
             bassDb = s.bassDb
             wobbleCents = s.wobbleCents
         }
+    }
+
+    private var fadeMs = 0
+    private var fadeJob: Job? = null
+
+    private fun applyPlaybackSettings(slot: Slot, s: PlaybackSettings.State) {
+        fadeMs = s.fadeMs
+        crossfadeMs = s.crossfadeMs
+        slot.exo.setSkipSilenceEnabled(s.skipSilence)
+        slot.exo.setHandleAudioBecomingNoisy(s.pauseOnUnplug)
+        slot.mod.mono = s.mono
+        slot.mod.balance = s.balance
+    }
+
+    /** Back to full volume and no fade running. Called wherever a new item starts, so a half-faded pause can't leak. */
+    private fun resetVolume() {
+        fadeJob?.cancel()
+        abortCrossfade()
+        disarm()
+        player.volume = 1f
+    }
+
+    private suspend fun rampVolume(from: Float, to: Float, ms: Int) {
+        val steps = (ms / 20).coerceAtLeast(1)
+        for (i in 1..steps) {
+            player.volume = from + (to - from) * i / steps
+            delay(20L)
+        }
+    }
+
+    /** Pause, fading out first when the fade setting is on. Only a pause of audio that is really playing fades. */
+    private fun pausePlayer() {
+        fadeJob?.cancel()
+        abortCrossfade(keepVolume = true)   // the track that was fading out stops; the new one carries on from where its fade was
+        if (fadeMs <= 0 || !player.isPlaying) {
+            player.volume = 1f
+            player.pause()
+            return
+        }
+        val from = player.volume
+        fadeJob = scope.launch {
+            rampVolume(from, 0f, fadeMs)
+            player.pause()
+            player.volume = 1f
+        }
+    }
+
+    private fun resumePlayer() {
+        fadeJob?.cancel()
+        if (fadeMs <= 0) {
+            player.volume = 1f
+            player.play()
+            return
+        }
+        // Resuming in the middle of a fade-out continues from where the volume is, instead of jumping.
+        val from = if (player.isPlaying) player.volume else 0f
+        player.volume = from
+        player.play()
+        fadeJob = scope.launch { rampVolume(from, 1f, fadeMs) }
     }
 
     // ---- Transport ----
@@ -377,13 +522,13 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
             transitioning = false
             currentTrack?.let { state.value = PlaybackState.Paused(0L, it) }
         }
-        player.pause()
+        pausePlayer()
         updateAwaiting()
     }
 
     override fun resume() {
         val track = currentTrack ?: return
-        if (loadedIsrc == track.isrc) player.play() else loadAtPos(pos)   // not loaded (e.g. failed earlier): retry
+        if (loadedIsrc == track.isrc) resumePlayer() else loadAtPos(pos)   // not loaded (e.g. failed earlier): retry
     }
 
     override fun seekTo(positionMs: Long) { if (!transitioning) player.seekTo(positionMs) }   // ExoPlayer still holds the old track meanwhile
@@ -391,6 +536,10 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
     override fun skipNext() {
         val target = nextPos() ?: return
         val track = trackAt(target) ?: return
+        // Close to the end of a track with crossfade on, the next one is already waiting, prepared: a short crossfade.
+        if (crossfadeActive() && !transitioning && player.isPlaying && target == peekNextPos() &&
+            armedIsrc == track.isrc && standbyReady() && beginCrossfade(minOf(crossfadeMs, MANUAL_CROSSFADE_MS))
+        ) return
         val preloaded = !transitioning &&
             target == peekNextPos() &&
             player.currentMediaItem?.mediaId == currentTrack?.isrc &&
@@ -405,6 +554,7 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
             publishQueue()
             state.value = PlaybackState.Playing(0L, track)
             player.seekToNextMediaItem()
+            resetVolume()
             player.play()
             publishStreamDuration()
         } else {
@@ -510,6 +660,8 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
     }
 
     private fun onTrackEnded() {
+        // Crossfade is on and the next track is already waiting, prepared: start it now (gapless, nothing left to overlap).
+        if (crossfadeActive() && standbyReady() && beginCrossfade(0)) return
         val next = nextPos()
         if (next != null) {
             loadAtPos(next)
@@ -528,6 +680,9 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
             val wanted = peekNextPos()?.let { trackAt(it)?.isrc }
             if (player.getMediaItemAt(i + 1).mediaId != wanted) player.removeMediaItem(i + 1)
         }
+        // A track waiting on the standby player that is no longer the next one (or crossfade was turned off).
+        val nextIsrc = peekNextPos()?.let { trackAt(it)?.isrc }
+        if (armedIsrc != null && (armedIsrc != nextIsrc || !crossfadeActive())) disarm()
         if (currentTrack != null) schedulePrefetch(QUEUE_EDIT_PREFETCH_DELAY_MS)
     }
 
@@ -551,6 +706,7 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
         // Show the new track right away as playing; its audio follows as soon as it is ready.
         transitioning = true
         state.value = PlaybackState.Playing(startPositionMs, track)
+        resetVolume()
         player.pause()   // don't keep playing the old track while the new source is resolved
 
         if (resolver == null) {
@@ -601,6 +757,7 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
             transitioning = false
             state.value = PlaybackState.Loading
         }
+        resetVolume()
         player.setMediaItem(buildMediaItem(track, url), startPositionMs)   // also drops any preloaded next item
         player.prepare()
         player.play()
@@ -651,6 +808,178 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
         }
     }
 
+    // ---- Crossfade ----
+
+    private var crossfadeMs = 0
+    private var armedIsrc: String? = null     // the track the standby player holds: prepared, silent, waiting for its moment
+    private var armedPos = -1                 // ... and its place in the play order
+    private var armTried: String? = null      // "<current>><next>": arming is tried once per pair, a failure just means a normal gap
+    private var armingJob: Job? = null
+    private var crossfadeJob: Job? = null     // the watcher that decides when it is time
+    private var rampJob: Job? = null          // the volume ramp of a crossfade in progress
+
+    private fun crossfadeActive() = crossfadeMs > 0 && repeat.value != RepeatMode.ONE   // repeat-one loops gaplessly instead
+    private fun crossfading() = outgoingSlot != null
+    private fun standbyReady() = armedIsrc != null && standbySlot?.exo?.playbackState == Player.STATE_READY
+
+    private fun onCrossfadeChanged() {
+        if (!crossfadeActive()) {
+            crossfadeJob?.cancel()
+            if (armedIsrc != null || armingJob?.isActive == true) disarm()
+        } else if (activeSlot?.exo?.isPlaying == true) {
+            startCrossfadeWatcher()
+        }
+    }
+
+    private fun startCrossfadeWatcher() {
+        if (!crossfadeActive() || crossfadeJob?.isActive == true) return
+        crossfadeJob = scope.launch { while (isActive) delay(watchCrossfade()) }
+    }
+
+    /** One look at the clock. Returns how long to sleep before the next one. */
+    private fun watchCrossfade(): Long {
+        val track = currentTrack
+        val exo = player
+        if (!crossfadeActive() || track == null || transitioning || crossfading() || !exo.isPlaying ||
+            exo.currentMediaItem?.mediaId != track.isrc
+        ) return WATCH_IDLE_MS
+        val duration = exo.duration
+        if (duration == C.TIME_UNSET || duration <= 0L) return WATCH_IDLE_MS
+        val nextPos = peekNextPos() ?: return WATCH_IDLE_MS   // end of the queue (or a fresh shuffle is due): a normal ending
+        val speed = exo.playbackParameters.speed.coerceAtLeast(0.1f)
+        val remaining = ((duration - exo.currentPosition) / speed).toLong()   // wall-clock ms until this track ends
+        val fade = minOf(crossfadeMs.toLong(), (duration / speed).toLong() / 2)  // never more than half the track
+        val armAt = fade + ARM_LEAD_MS
+        if (remaining > armAt) return (remaining - armAt).coerceIn(250L, 2_000L)
+        arm(nextPos, track)
+        if (remaining > fade) return (remaining - fade).coerceIn(20L, 250L)
+        if (standbyReady()) {
+            beginCrossfade(minOf(fade, remaining).toInt())
+            return WATCH_IDLE_MS
+        }
+        // Not ready yet: keep looking until the track is about to end (then onTrackEnded takes whatever is ready).
+        return if (remaining > 300L) 100L else WATCH_IDLE_MS
+    }
+
+    /** Resolves the next track and prepares it, silent, on the standby player. Honours the user's crossfade choice over battery saver. */
+    private fun arm(nextPos: Int, current: Track) {
+        val next = trackAt(nextPos) ?: return
+        val pair = "${current.isrc}>${next.isrc}"
+        if (armedIsrc == next.isrc || armTried == pair) return
+        armTried = pair
+        armingJob?.cancel()
+        armingJob = scope.launch {
+            val url = resolveUrl(next, forceRefresh = false) ?: return@launch
+            // The queue may have been edited while the URL was being resolved.
+            if (currentTrack?.isrc != current.isrc || peekNextPos()?.let { trackAt(it)?.isrc } != next.isrc) return@launch
+            val slot = standbySlot ?: newSlot(handleFocus = false).also { standbySlot = it }
+            // A gapless next item would switch over without overlapping: take it out.
+            val i = player.currentMediaItemIndex
+            if (player.mediaItemCount > i + 1) player.removeMediaItem(i + 1)
+            slot.exo.volume = 0f
+            slot.exo.playWhenReady = false
+            slot.exo.setMediaItem(buildMediaItem(next, url))
+            slot.exo.prepare()
+            armedIsrc = next.isrc
+            armedPos = nextPos
+        }
+    }
+
+    /** Forget the track waiting on the standby player (the queue or the plan changed). */
+    private fun disarm() {
+        armingJob?.cancel()
+        armedIsrc = null
+        armedPos = -1
+        armTried = null
+        standbySlot?.exo?.let { runCatching { it.stop(); it.clearMediaItems() } }
+    }
+
+    /**
+     * Makes the standby player (holding the next track) the current one and fades the old one out over [fadeMs]; 0 =
+     * switch at once. Bookkeeping is the same as for a skip into a preloaded item. False = it could not start.
+     */
+    private fun beginCrossfade(fadeMs: Int): Boolean {
+        val incoming = standbySlot ?: return false
+        val outgoing = activeSlot ?: return false
+        val isrc = armedIsrc ?: return false
+        val target = armedPos
+        val track = trackAt(target)?.takeIf { it.isrc == isrc } ?: return false
+        if (target != peekNextPos() || incoming.exo.playbackState != Player.STATE_READY) return false
+
+        positionJob?.cancel()
+        fadeJob?.cancel()
+        rampJob?.cancel()
+        pos = target
+        currentTrack = track
+        loadedIsrc = track.isrc
+        streamDuration.value = 0L
+        publishQueue()
+        armedIsrc = null
+        armedPos = -1
+        armTried = null
+        standbySlot = null
+        outgoingSlot?.let { retire(it) }   // a fade that is still running (should not happen) is cut
+        outgoingSlot = outgoing
+        activeSlot = incoming
+
+        // Audio focus belongs to the current player. Handed over in this order, the two never compete for it.
+        outgoing.exo.setAudioAttributes(musicAttributes, false)
+        incoming.exo.setAudioAttributes(musicAttributes, true)
+        incoming.exo.volume = if (fadeMs > 0) 0f else 1f
+        incoming.exo.play()
+        state.value = PlaybackState.Playing(0L, track)
+        learnDuration()
+        publishStreamDuration()
+        updateAwaiting()
+        onSessionPlayerChanged?.invoke(queueForwardingPlayer(incoming.exo))   // notification / lock screen follow the new player
+        prefetchedFor = track.isrc
+        schedulePrefetch(PREFETCH_DELAY_MS)
+
+        if (fadeMs <= 0) {
+            finishCrossfade()
+            return true
+        }
+        rampJob = scope.launch {
+            val started = SystemClock.elapsedRealtime()
+            while (isActive) {
+                val t = ((SystemClock.elapsedRealtime() - started).toFloat() / fadeMs).coerceIn(0f, 1f)
+                // Equal power: sin^2 + cos^2 = 1, so the loudness holds steady through the middle of the fade.
+                incoming.exo.volume = sin(t * HALF_PI)
+                outgoing.exo.volume = cos(t * HALF_PI)
+                if (t >= 1f) break
+                delay(20L)
+            }
+            finishCrossfade()
+        }
+        return true
+    }
+
+    private fun finishCrossfade() {
+        outgoingSlot?.let { retire(it) }
+        outgoingSlot = null
+        activeSlot?.exo?.volume = 1f
+    }
+
+    /** A track change or a pause in the middle of a crossfade: the old track stops at once. */
+    private fun abortCrossfade(keepVolume: Boolean = false) {
+        rampJob?.cancel()
+        val out = outgoingSlot ?: return
+        retire(out)
+        outgoingSlot = null
+        if (!keepVolume) activeSlot?.exo?.volume = 1f
+    }
+
+    /** The player that just faded out becomes the standby, ready to be reused for the next crossfade. */
+    private fun retire(slot: Slot) {
+        runCatching {
+            slot.exo.pause()
+            slot.exo.stop()
+            slot.exo.clearMediaItems()
+            slot.exo.volume = 1f
+        }
+        if (standbySlot == null) standbySlot = slot else runCatching { slot.exo.release() }
+    }
+
     // ---- Looking ahead ----
 
     /**
@@ -689,6 +1018,7 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
 
     /** Puts [track] after the current item in ExoPlayer's playlist, if it is still the right next track. */
     private fun attachNext(track: Track, url: String) {
+        if (crossfadeActive()) return   // crossfade starts the next track itself, on the second player
         if (transitioning || player.currentMediaItem?.mediaId != currentTrack?.isrc) return
         val wanted = peekNextPos()?.let { trackAt(it) } ?: return
         if (wanted.isrc != track.isrc) return   // the queue changed while this was being resolved
@@ -726,6 +1056,9 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
 
     /** Battery saver, low battery or a hot phone: no looking ahead, the next track just loads when it is needed. */
     private fun prefetchAllowed(): Boolean {
+        val s = settings.state.value
+        if (!s.preload) return false
+        if (s.preloadUnmeteredOnly && !settings.onUnmeteredNetwork()) return false
         if (powerManager.isPowerSaveMode) return false
         if (Build.VERSION.SDK_INT >= 29 && powerManager.currentThermalStatus >= PowerManager.THERMAL_STATUS_MODERATE) return false
         val (percent, charging) = batteryState()
@@ -869,6 +1202,17 @@ class Media3MusicPlayer @Inject constructor(@ApplicationContext private val cont
 
         const val RESOLVE_ATTEMPTS = 3
         const val TRANSITION_LOCK_MS = 90_000L
+
+        /** The next track is prepared on the standby player this long before the crossfade starts. */
+        const val ARM_LEAD_MS = 6_000L
+
+        /** How often the crossfade watcher looks when there is nothing to do. */
+        const val WATCH_IDLE_MS = 500L
+
+        /** A skip near the end of a track crossfades for at most this long. */
+        const val MANUAL_CROSSFADE_MS = 1_000
+
+        const val HALF_PI = 1.5707964f
     }
 }
 

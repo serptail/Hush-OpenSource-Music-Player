@@ -11,7 +11,13 @@ class GamutMediaSessionService : MediaSessionService() {
     private var session: MediaSession? = null
     // mediaSessionPlayer (not sessionPlayer): routes notification / lock-screen / Bluetooth next + previous
     // through the queue logic in Media3MusicPlayer instead of ExoPlayer's single-item playlist.
-    override fun onCreate() { super.onCreate(); session = MediaSession.Builder(this, (musicPlayer as Media3MusicPlayer).mediaSessionPlayer).build() }
+    override fun onCreate() {
+        super.onCreate()
+        val player = musicPlayer as Media3MusicPlayer
+        session = MediaSession.Builder(this, player.mediaSessionPlayer).build()
+        // Crossfade hands playback over to a second ExoPlayer: keep the notification / lock screen pointed at the current one.
+        player.onSessionPlayerChanged = { session?.player = it }
+    }
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = session
 
     // While the next track is being resolved the player is briefly paused. Media3 would drop the foreground state
@@ -20,5 +26,8 @@ class GamutMediaSessionService : MediaSessionService() {
     override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
         super.onUpdateNotification(session, startInForegroundRequired || (musicPlayer as Media3MusicPlayer).keepForeground)
     }
-    override fun onDestroy() { session?.release(); session = null; super.onDestroy() }
+    override fun onDestroy() {
+        (musicPlayer as Media3MusicPlayer).onSessionPlayerChanged = null
+        session?.release(); session = null; super.onDestroy()
+    }
 }

@@ -3,6 +3,7 @@ package com.gamut.feature.resolver
 import com.gamut.core.network.YoutubeCandidate
 import com.gamut.core.network.YoutubeMusicSearchSource
 import com.gamut.core.network.isValidYoutubeVideoId
+import com.gamut.core.player.StreamQuality
 import kotlinx.coroutines.CancellationException
 import okhttp3.Headers
 import okhttp3.OkHttpClient
@@ -30,19 +31,11 @@ class NewPipeYoutubeSource @Inject constructor(
      * forceRefresh (a cache down here would hand a dead URL back after a refresh).
      * Cancellation is rethrown, not turned into a failed Result (runCatching swallowed it).
      */
-    suspend fun audioUrl(videoId: String): Result<String> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    suspend fun audioUrl(videoId: String, quality: StreamQuality = StreamQuality.NORMAL): Result<String> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         try {
             ensureInitialized()
             Result.success(
-                StreamInfo.getInfo("https://www.youtube.com/watch?v=$videoId")
-                    .audioStreams
-                    .asSequence()
-                    .filter { it.isUrl }
-                    // AAC/m4a first (same preference as the yt-dlp path: cheaper to decode, plays natively in ExoPlayer),
-                    // then the highest bitrate within that format.
-                    .sortedWith(compareByDescending<AudioStream> { it.format == MediaFormat.M4A }.thenByDescending { it.averageBitrate })
-                    .map { it.content }
-                    .firstOrNull { it.isNotBlank() }
+                StreamInfo.getInfo("https://www.youtube.com/watch?v=$videoId").audioStreams.pickFor(quality)
                     ?: error("NewPipe returned no direct audio stream"),
             )
         } catch (e: CancellationException) {
@@ -50,6 +43,26 @@ class NewPipeYoutubeSource @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * Data saver / Normal prefer AAC/m4a (same preference as the yt-dlp path: cheaper to decode, plays natively in
+     * ExoPlayer): lowest bitrate for Data saver, highest for Normal. High takes the highest bitrate of any codec.
+     * (AUTO is turned into a concrete level before it gets here; it is treated as High if it ever does.)
+     */
+    private fun List<AudioStream>.pickFor(quality: StreamQuality): String? {
+        val usable = filter { it.isUrl && it.content.isNotBlank() }
+        val ordered = when (quality) {
+            StreamQuality.LOW -> usable.sortedWith(
+                compareByDescending<AudioStream> { it.format == MediaFormat.M4A }
+                    .thenBy { if (it.averageBitrate > 0) it.averageBitrate else Int.MAX_VALUE },
+            )
+            StreamQuality.NORMAL -> usable.sortedWith(
+                compareByDescending<AudioStream> { it.format == MediaFormat.M4A }.thenByDescending { it.averageBitrate },
+            )
+            else -> usable.sortedByDescending { it.averageBitrate }
+        }
+        return ordered.firstOrNull()?.content
     }
 
     /**
