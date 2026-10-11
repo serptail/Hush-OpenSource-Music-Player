@@ -61,7 +61,6 @@ import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.fill.Play
 import com.adamglin.phosphoricons.light.ArrowLeft
 import com.adamglin.phosphoricons.light.DotsThreeVertical
-import com.adamglin.phosphoricons.light.VinylRecord
 import com.gamut.core.designsystem.AcrylicCircleButton
 import com.gamut.core.designsystem.AcrylicHost
 import com.gamut.core.designsystem.CoverTheme
@@ -69,7 +68,11 @@ import com.gamut.core.designsystem.HeroListSkeleton
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.TransparentStatusBar
+import com.gamut.core.designsystem.LocalNavSettled
+import androidx.compose.ui.draw.drawBehind
 import com.gamut.core.designsystem.glass
+import com.gamut.core.designsystem.ArtPlaceholder
+import com.gamut.core.designsystem.artTileColor
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.model.Track
@@ -137,6 +140,7 @@ fun AlbumScreen(
     val palette = LocalCoverPalette.current
     // The cover no longer sits under the status bar, so icons simply follow the palette.
     TransparentStatusBar(darkIcons = palette.isLight)
+    val settled = LocalNavSettled.current
     CoverTheme(palette) {
         // Same three-dots flow as Artist / Search / Discover: actions sheet -> share / playlist picker.
         var actionsTrack by remember { mutableStateOf<Track?>(null) }
@@ -148,7 +152,8 @@ fun AlbumScreen(
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     val value = album
                     when {
-                        value != null -> {
+                        // Real content only after the slide has finished; until then (and while loading) the skeleton.
+                        value != null && settled -> {
                             LazyColumn(
                                 Modifier.fillMaxSize(),
                                 contentPadding = PaddingValues(bottom = 24.dp),
@@ -175,7 +180,7 @@ fun AlbumScreen(
                             }
                             BackButton(onBack)
                         }
-                        failed -> {
+                        value == null && failed -> {
                             BackButton(onBack)
                             Text(
                                 "Couldn't load this album. Go back and try again.",
@@ -242,19 +247,16 @@ private fun AlbumHero(album: AlbumDetails, artistImageUrl: String?, onPlay: () -
                     spotColor = Color.Black.copy(alpha = 0.45f),
                 )
                 .clip(RoundedCornerShape(14.dp))
-                .background(ink(0.08f)),
+                // OPAQUE tile: the 28 dp shadow above showed through the old translucent fill as a hazy square.
+                .background(artTileColor()),
         ) {
             SubcomposeAsyncImage(
                 model = album.imageUrl,
                 contentDescription = album.title,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
-                loading = { Box(Modifier.fillMaxSize().background(ink(0.08f))) },
-                error = {
-                    Box(Modifier.fillMaxSize().background(ink(0.08f)), contentAlignment = Alignment.Center) {
-                        Icon(PhosphorIcons.Light.VinylRecord, null, tint = ink(0.4f), modifier = Modifier.size(48.dp))
-                    }
-                },
+                loading = {},   // the tile behind is already flat and opaque
+                error = { ArtPlaceholder() },
             )
         }
 
@@ -386,25 +388,25 @@ private fun AlbumTrackRow(
             .padding(horizontal = 16.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(12.dp))
-            .background(tint)
+            // Read in the draw phase: the press tint animates without recomposing the row.
+            .drawBehind { drawRect(tint) }
             .hoverable(interaction)
             .clickable(interactionSource = interaction, indication = null) { onClick(track) }
             .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(32.dp), contentAlignment = Alignment.CenterStart) {
-            Crossfade(targetState = active, animationSpec = tween(120), label = "rowLead") { on ->
-                if (on) {
-                    Icon(PhosphorIcons.Fill.Play, null, tint = ink(), modifier = Modifier.size(14.dp))
-                } else if (isPlaying) {
-                    NowPlayingBars(color = accent)
-                } else {
-                    Text(
-                        number.toString(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ink(0.4f),
-                    )
-                }
+            // No Crossfade here: one per row meant an animated layer for every visible track.
+            if (active) {
+                Icon(PhosphorIcons.Fill.Play, null, tint = ink(), modifier = Modifier.size(14.dp))
+            } else if (isPlaying) {
+                NowPlayingBars(color = accent)
+            } else {
+                Text(
+                    number.toString(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink(0.4f),
+                )
             }
         }
         Column(Modifier.weight(1f)) {
@@ -454,7 +456,5 @@ private fun BackButton(onBack: () -> Unit) {
 
 @Composable
 private fun ArtistAvatarFallback() {
-    Box(Modifier.fillMaxSize().glass(CircleShape), contentAlignment = Alignment.Center) {
-        Icon(PhosphorIcons.Light.VinylRecord, null, tint = ink(), modifier = Modifier.size(14.dp))
-    }
+    ArtPlaceholder(iconFraction = 0.6f)
 }

@@ -1,6 +1,11 @@
 package com.gamut.onboarding
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import com.gamut.core.designsystem.GamutMotion
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
@@ -85,11 +90,14 @@ fun OnboardingGate(vm: WelcomeViewModel = hiltViewModel(), app: @Composable () -
     var appShown by remember { mutableStateOf(false) }
     if (rawGate == Gate.Ready) appShown = true
     val gate = if (rawGate == Gate.Loading && appShown) Gate.Ready else rawGate
-    when (gate) {
-        Gate.Ready -> app()
-        Gate.Welcome -> AppearanceRoot { WelcomeScreen(vm) }
-        // Same colour as the window background (the saved light/dark look), so there is no visible flash.
-        Gate.Loading -> AppearanceRoot { Box(Modifier.fillMaxSize().background(LocalCoverPalette.current.base)) }
+    // Welcome -> loading -> app used to be hard cuts. Now each swap is a crossfade.
+    Crossfade(targetState = gate, animationSpec = tween(GamutMotion.CROSSFADE_MS, easing = GamutMotion.Standard), label = "onboarding-gate") { g ->
+        when (g) {
+            Gate.Ready -> app()
+            Gate.Welcome -> AppearanceRoot { WelcomeScreen(vm) }
+            // Same colour as the window background (the saved light/dark look), so there is no visible flash.
+            Gate.Loading -> AppearanceRoot { Box(Modifier.fillMaxSize().background(LocalCoverPalette.current.base)) }
+        }
     }
 }
 
@@ -201,7 +209,8 @@ fun WelcomeScreen(
                                 disabledContentColor = Color(0xFF1F1F1F),
                             ),
                         ) {
-                            if (ui.busy) {
+                            Crossfade(targetState = ui.busy, animationSpec = tween(GamutMotion.CONTENT_MS), label = "google-busy") { busy ->
+                            if (busy) {
                                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Color(0xFF1F1F1F))
                             } else {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -210,6 +219,7 @@ fun WelcomeScreen(
                                     Spacer(Modifier.width(12.dp))
                                     Text("Continue with Google", fontWeight = FontWeight.Medium)
                                 }
+                            }
                             }
                         }
                         Spacer(Modifier.height(12.dp))
@@ -234,9 +244,12 @@ fun WelcomeScreen(
                     )
                 }
 
-                ui.error?.let {
+                // Keep the last message while the box collapses, so the text does not blank out mid-animation.
+                var lastError by remember { mutableStateOf<String?>(null) }
+                ui.error?.let { lastError = it }
+                AnimatedVisibility(visible = ui.error != null, enter = GamutMotion.expandIn, exit = GamutMotion.collapseOut) {
                     Text(
-                        it,
+                        lastError.orEmpty(),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
                         textAlign = TextAlign.Center,

@@ -1,6 +1,12 @@
 package com.gamut.settings
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import com.gamut.core.designsystem.GamutMotion
+import com.gamut.core.designsystem.softResize
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -85,14 +91,14 @@ fun AppearanceScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm:
 
         // ---- background ----
         SoftHeader("Background")
-        SoftCard(Modifier.animateContentSize()) {
+        SoftCard(Modifier.softResize()) {
             SoftSwitchRow(
                 "Adaptive background",
                 checked = s.adaptive,
                 onChange = { v -> vm.update { it.copy(adaptive = v) } },
                 subtitle = "Colors flow from the album you're playing",
             )
-            AnimatedVisibility(s.adaptive) {
+            AnimatedVisibility(s.adaptive, enter = GamutMotion.expandIn, exit = GamutMotion.collapseOut) {
                 Column {
                     SoftDivider()
                     OptionBlock(title = "Style") {
@@ -114,7 +120,7 @@ fun AppearanceScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm:
                         onChange = { v -> vm.update { it.copy(flowAnimated = v) } },
                         subtitle = "Slowly drifting color",
                     )
-                    AnimatedVisibility(s.flowAnimated) {
+                    AnimatedVisibility(s.flowAnimated, enter = GamutMotion.expandIn, exit = GamutMotion.collapseOut) {
                         Column {
                             SoftDivider()
                             OptionBlock(title = "Speed") {
@@ -135,7 +141,7 @@ fun AppearanceScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm:
                     }
                 }
             }
-            AnimatedVisibility(!s.adaptive) {
+            AnimatedVisibility(!s.adaptive, enter = GamutMotion.expandIn, exit = GamutMotion.collapseOut) {
                 Column {
                     SoftDivider()
                     OptionBlock(title = "Color", caption = "Fixed colors in light and dark. They don't change with the music.") {
@@ -147,14 +153,14 @@ fun AppearanceScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm:
 
         // ---- glass ----
         SoftHeader("Glass")
-        SoftCard(Modifier.animateContentSize()) {
+        SoftCard(Modifier.softResize()) {
             SoftSwitchRow(
                 "Frosted glass",
                 checked = s.glass,
                 onChange = { v -> vm.update { it.copy(glass = v) } },
                 subtitle = "Blur behind the mini player, bars and buttons. Off is lighter on battery.",
             )
-            AnimatedVisibility(s.glass) {
+            AnimatedVisibility(s.glass, enter = GamutMotion.expandIn, exit = GamutMotion.collapseOut) {
                 Column {
                     SoftDivider()
                     OptionBlock(title = "Density") {
@@ -190,7 +196,12 @@ private fun OptionBlock(title: String? = null, caption: String? = null, content:
         }
         content()
         if (caption != null) {
-            Text(caption, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 10.dp, start = 4.dp))
+            // The caption changes with the choice above: crossfade it and let the card follow its height.
+            Box(Modifier.softResize()) {
+                Crossfade(targetState = caption, animationSpec = tween(GamutMotion.CONTENT_MS), label = "option-caption") { c ->
+                    Text(c, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 10.dp, start = 4.dp))
+                }
+            }
         }
     }
 }
@@ -199,9 +210,11 @@ private fun OptionBlock(title: String? = null, caption: String? = null, content:
 @Composable
 private fun Preview() {
     val palette = LocalCoverPalette.current
+    // This page is pre-composed and parked off-screen: only animate the background while it is actually shown.
+    val active = LocalPageActive.current
     Box(Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(26.dp)).border(1.dp, ink(0.12f), RoundedCornerShape(26.dp))) {
         AcrylicHost(Modifier.fillMaxSize()) {
-            FlowingBackground(palette = palette, isPlaying = true, modifier = Modifier.fillMaxSize().acrylicSource())
+            FlowingBackground(palette = palette, isPlaying = active, visible = active, modifier = Modifier.fillMaxSize().acrylicSource())
             AcrylicPill(Modifier.align(Alignment.Center).padding(horizontal = 28.dp)) {
                 Text("Now playing", style = MaterialTheme.typography.titleMedium, color = ink())
             }
@@ -217,13 +230,16 @@ private fun PresetGrid(selectedId: String, dark: Boolean, onPick: (String) -> Un
                 row.forEach { p ->
                     val pal = if (dark) p.dark else p.light
                     val selected = p.id == selectedId
+                    val ringWidth by animateDpAsState(if (selected) 2.dp else 1.dp, tween(GamutMotion.CONTENT_MS), label = "preset-ring-width")
+                    val ringColor by animateColorAsState(if (selected) ink(0.95f) else ink(0.2f), tween(GamutMotion.CONTENT_MS), label = "preset-ring-color")
+                    val labelColor by animateColorAsState(ink(if (selected) 0.95f else 0.6f), tween(GamutMotion.CONTENT_MS), label = "preset-label")
                     Column(Modifier.weight(1f).pressScale(onClick = { onPick(p.id) }, scaleDown = 0.95f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Box(
                             Modifier.size(52.dp).clip(CircleShape).background(pal.base)
-                                .border(if (selected) 2.dp else 1.dp, if (selected) ink(0.95f) else ink(0.2f), CircleShape),
+                                .border(ringWidth, ringColor, CircleShape),
                             contentAlignment = Alignment.Center,
                         ) { Box(Modifier.size(22.dp).background(pal.accent, CircleShape)) }
-                        Text(p.name, style = MaterialTheme.typography.labelMedium, color = ink(if (selected) 0.95f else 0.6f), modifier = Modifier.padding(top = 6.dp))
+                        Text(p.name, style = MaterialTheme.typography.labelMedium, color = labelColor, modifier = Modifier.padding(top = 6.dp))
                     }
                 }
                 repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }

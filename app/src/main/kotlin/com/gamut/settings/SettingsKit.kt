@@ -1,6 +1,28 @@
 package com.gamut.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
+import com.gamut.core.designsystem.GamutMotion
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -61,11 +83,17 @@ val GamutDestructive = Color(0xFFFF6B6B)
 /** The ONE place that decides which style is a "heading". Point it at your CodeNext-ExtraBold style if the theme's isn't. */
 val GamutHeading: TextStyle @Composable get() = MaterialTheme.typography.headlineMedium
 
+/**
+ * False while a pre-composed page is parked off-screen or closing. Pages must not set the status bar then, and anything
+ * animated inside them (previews, shaders) should pause. Defaults to true for ordinary NavHost screens.
+ */
+val LocalPageActive = androidx.compose.runtime.compositionLocalOf { true }
+
 /** Page: back button + title, scrolling body, the now-playing strip docked underneath. Themed from the ambient palette. */
 @Composable
 fun GamutPage(title: String, onBack: () -> Unit, nowPlaying: @Composable () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     val palette = LocalCoverPalette.current
-    TransparentStatusBar(darkIcons = palette.isLight)
+    if (LocalPageActive.current) TransparentStatusBar(darkIcons = palette.isLight)
     CoverTheme(palette) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 24.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -173,11 +201,13 @@ fun GamutButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifie
 fun GamutSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
     val onInk = if (LocalCoverPalette.current.isLight) Color.White else Color.Black
     val x by animateDpAsState(if (checked) 20.dp else 0.dp, label = "switch")
+    val track by animateColorAsState(if (checked) ink(0.95f) else ink(0.18f), tween(GamutMotion.CONTENT_MS), label = "switch-track")
+    val thumb by animateColorAsState(if (checked) onInk else ink(0.7f), tween(GamutMotion.CONTENT_MS), label = "switch-thumb")
     Box(
         Modifier.pressScale(onClick = { onChange(!checked) }).size(width = 48.dp, height = 28.dp).clip(CircleShape)
-            .background(if (checked) ink(0.95f) else ink(0.18f)).padding(3.dp),
+            .background(track).padding(3.dp),
     ) {
-        Box(Modifier.offset(x = x).size(22.dp).background(if (checked) onInk else ink(0.7f), CircleShape))
+        Box(Modifier.offset(x = x).size(22.dp).background(thumb, CircleShape))
     }
 }
 
@@ -189,11 +219,33 @@ fun GamutCheck(checked: Boolean, label: String, onChange: (Boolean) -> Unit, war
         Modifier.fillMaxWidth().pressScale(onClick = { onChange(!checked) }, scaleDown = 0.98f).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Same colour family on both sides of each blend (alpha 0 instead of Transparent), so it does not darken midway.
+        val fill by animateColorAsState(if (checked) ink(0.95f) else ink(0.95f).copy(alpha = 0f), tween(GamutMotion.CONTENT_MS), label = "check-fill")
+        val edge by animateColorAsState(if (checked) ink(0.3f).copy(alpha = 0f) else ink(0.3f), tween(GamutMotion.CONTENT_MS), label = "check-edge")
         Box(
-            Modifier.size(22.dp).clip(shape)
-                .then(if (checked) Modifier.background(ink(0.95f), shape) else Modifier.border(1.5.dp, ink(0.3f), shape)),
-            contentAlignment = Alignment.Center,
-        ) { if (checked) Icon(PhosphorIcons.Light.Check, null, tint = onInk, modifier = Modifier.size(14.dp)) }
+    Modifier
+        .size(22.dp)
+        .clip(shape)
+        .background(fill, shape)
+        .border(1.5.dp, edge, shape),
+    contentAlignment = Alignment.Center,
+) {
+    androidx.compose.animation.AnimatedVisibility(
+        visible = checked,
+        modifier = Modifier,
+        enter = fadeIn(tween(120)) +
+            scaleIn(tween(160), initialScale = 0.6f),
+        exit = fadeOut(tween(100)),
+        label = "check-visibility",
+    ) {
+        Icon(
+            imageVector = PhosphorIcons.Light.Check,
+            contentDescription = null,
+            tint = onInk,
+            modifier = Modifier.size(14.dp),
+        )
+    }
+}
         Text(
             label, style = MaterialTheme.typography.bodyMedium, color = if (warn && checked) GamutDestructive else ink(0.85f),
             modifier = Modifier.padding(start = 12.dp),
@@ -230,8 +282,20 @@ fun GamutField(
 }
 
 /**
+ * Every close path of the enclosing [GamutDialog] (Cancel, scrim tap, back, and rows inside it that finish the job)
+ * should call this instead of the raw onDismiss: it plays the exit animation first, then dismisses.
+ */
+val LocalDialogDismiss = staticCompositionLocalOf<() -> Unit> { {} }
+
+private const val DIALOG_EXIT_MS = 150
+
+/**
  * The one confirmation dialog. Uses the AMBIENT palette (captured before the Dialog window opens) instead of a fixed
  * Neutral one, so it follows light/dark with the rest of the app.
+ *
+ * Motion: the card fades and scales in, the scrim fades with it, and every close path plays the exit before calling
+ * its callback. Pass [confirmCloses] = false when [onConfirm] can leave the dialog open (validation): that path then
+ * runs at once and the caller decides.
  */
 @Composable
 fun GamutDialog(
@@ -242,24 +306,53 @@ fun GamutDialog(
     destructive: Boolean = false,
     body: String? = null,
     dismissLabel: String? = "Cancel",
+    confirmCloses: Boolean = true,
     content: (@Composable ColumnScope.() -> Unit)? = null,   // keep LAST so `GamutDialog(...) { }` binds here
 ) {
     val palette = LocalCoverPalette.current
-    Dialog(onDismissRequest = onDismiss) {
-        CoverTheme(palette) {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(palette.base).padding(24.dp)) {
-                Text(title, style = MaterialTheme.typography.titleLarge, color = ink())
-                if (body != null) Text(body, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), modifier = Modifier.padding(top = 10.dp))
-                if (content != null) Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(2.dp), content = content)
-                Row(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.End) {
-                    if (dismissLabel != null) Text(
-                        dismissLabel, style = MaterialTheme.typography.titleMedium, color = ink(),
-                        modifier = Modifier.pressScale(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 10.dp),
-                    )
-                    Text(
-                        confirmLabel, style = MaterialTheme.typography.titleMedium, color = if (destructive) GamutDestructive else ink(),
-                        modifier = Modifier.pressScale(onClick = onConfirm).padding(horizontal = 16.dp, vertical = 10.dp),
-                    )
+    val state = remember { MutableTransitionState(false).apply { targetState = true } }
+    var closing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val finish: (() -> Unit) -> Unit = { action ->
+        if (!closing) {
+            closing = true
+            state.targetState = false
+            scope.launch { delay(DIALOG_EXIT_MS + 20L); action() }
+        }
+    }
+    val dismiss: () -> Unit = { finish(onDismiss) }
+    val confirm: () -> Unit = { if (confirmCloses) finish(onConfirm) else onConfirm() }
+
+    Dialog(onDismissRequest = dismiss) {
+        // The window's own dim would pop in and out; take it over and fade it with the card.
+        val window = (LocalView.current.parent as? DialogWindowProvider)?.window
+        SideEffect { window?.setDimAmount(0f) }
+        AnimatedVisibility(
+            visibleState = state,
+            enter = fadeIn(tween(180)) + scaleIn(tween(GamutMotion.CONTENT_MS + 40, easing = GamutMotion.Standard), initialScale = 0.92f),
+            exit = fadeOut(tween(DIALOG_EXIT_MS - 20)) + scaleOut(tween(DIALOG_EXIT_MS, easing = GamutMotion.Standard), targetScale = 0.97f),
+        ) {
+            val dim by transition.animateFloat(label = "dialog-dim", transitionSpec = { tween(GamutMotion.CONTENT_MS) }) {
+                if (it == EnterExitState.Visible) 0.5f else 0f
+            }
+            SideEffect { window?.setDimAmount(dim) }
+            CompositionLocalProvider(LocalDialogDismiss provides dismiss) {
+                CoverTheme(palette) {
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(palette.base).padding(24.dp)) {
+                        Text(title, style = MaterialTheme.typography.titleLarge, color = ink())
+                        if (body != null) Text(body, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), modifier = Modifier.padding(top = 10.dp))
+                        if (content != null) Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(2.dp), content = content)
+                        Row(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.End) {
+                            if (dismissLabel != null) Text(
+                                dismissLabel, style = MaterialTheme.typography.titleMedium, color = ink(),
+                                modifier = Modifier.pressScale(onClick = dismiss).padding(horizontal = 16.dp, vertical = 10.dp),
+                            )
+                            Text(
+                                confirmLabel, style = MaterialTheme.typography.titleMedium, color = if (destructive) GamutDestructive else ink(),
+                                modifier = Modifier.pressScale(onClick = confirm).padding(horizontal = 16.dp, vertical = 10.dp),
+                            )
+                        }
+                    }
                 }
             }
         }

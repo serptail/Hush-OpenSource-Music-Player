@@ -98,6 +98,7 @@ import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.TransparentStatusBar
+import com.gamut.core.designsystem.LocalNavSettled
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.model.Track
@@ -163,6 +164,7 @@ fun PlaylistScreen(
     val focus = LocalFocusManager.current
     val scope = rememberCoroutineScope()
     TransparentStatusBar(darkIcons = palette.isLight)
+    val settled = LocalNavSettled.current
 
     val name = playlist?.name ?: title
     var sheet by remember { mutableStateOf(PlaylistSheet.None) }
@@ -229,7 +231,7 @@ fun PlaylistScreen(
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 TopIcon(PhosphorIcons.Light.ArrowLeft, "Back", onClick = onBack)
             }
-            if (songs.isNotEmpty()) {
+            if (settled && songs.isNotEmpty()) {
                 SearchField(
                     query = query,
                     onChange = { query = it },
@@ -238,7 +240,8 @@ fun PlaylistScreen(
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 4.dp),
                 )
             }
-            LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            // The list composes only after the strip slide has finished (see LocalNavSettled); the slide draws just the bar.
+            if (settled) LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 24.dp)) {
                 // While searching, the results start right under the field instead of below the big header.
                 if (!searching) {
                     item(key = "header") {
@@ -299,7 +302,7 @@ fun PlaylistScreen(
                     )
                 }
                 item(key = "nav-space") { Box(Modifier.navigationBarsPadding()) }
-            }
+            } else Spacer(Modifier.weight(1f))
             nowPlaying()
         }
 

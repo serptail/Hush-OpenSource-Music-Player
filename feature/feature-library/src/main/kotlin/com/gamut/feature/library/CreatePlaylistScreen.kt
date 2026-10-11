@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,6 +74,7 @@ import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
+import com.gamut.core.designsystem.softResize
 import com.gamut.core.model.Track
 
 private val PreviewShape = RoundedCornerShape(20.dp)
@@ -81,8 +83,10 @@ private val PanelShape = RoundedCornerShape(14.dp)
 private const val MAX_NAME_LENGTH = 60
 
 /**
- * "New playlist": a full screen on the same dark background as the queue sheet (it fades in like any other screen,
- * it does not slide up). A cover you pick yourself (a plus button), a big name field, tags, and what to start the playlist with.
+ * "New playlist": a full screen on the app's background. It lives as a persistent slide layer (see SlideLayer in
+ * MainActivity): composed once while the app is idle and slid in with the rest of the strip, never composed during the
+ * motion. [active] is false while it is parked or sliding away. A cover you pick yourself (a plus button), a big name
+ * field, tags, and what to start the playlist with.
  */
 @Composable
 fun CreatePlaylistScreen(
@@ -90,12 +94,18 @@ fun CreatePlaylistScreen(
     /** The song waiting to be added to a playlist (the last one picked), or null. */
     selectedTrack: Track?,
     onBack: () -> Unit,
+    /** False while parked off-screen / closing: the status bar and the keyboard are left alone. */
+    active: Boolean = true,
 ) {
     val playlists by viewModel.playlists.collectAsStateWithLifecycle()
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val notifier = LocalNotifier.current
     val focus = LocalFocusManager.current
-    TransparentStatusBar(darkIcons = false)
+    val palette = LocalCoverPalette.current
+    // Same icon colour as Discover / Library (it was hard-coded light, which flipped the icons on open), and only while on screen.
+    if (active) TransparentStatusBar(darkIcons = palette.isLight)
+    // The layer is never disposed: a focused name field would keep the keyboard open behind the page that is leaving.
+    LaunchedEffect(active) { if (!active) focus.clearFocus() }
 
     // Like Spotify: a ready-made name that is fully selected, so typing replaces it and Create works right away.
     val defaultName = remember { "My playlist #${playlists.size + 1}" }
@@ -127,7 +137,6 @@ fun CreatePlaylistScreen(
         }
     }
 
-    val palette = LocalCoverPalette.current
     CoverTheme(palette) {
         Column(
             Modifier
@@ -147,12 +156,17 @@ fun CreatePlaylistScreen(
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(Modifier.height(20.dp))
                 CoverPreview(coverUri, onPick = pickCover, onClear = { coverUri = null })
-                Text(
-                    if (chosen.isEmpty()) "Starts empty" else songsLabel(chosen.size),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = ink(0.6f),
-                    modifier = Modifier.padding(top = 12.dp),
-                )
+                // Only shown once something is added; the slot grows smoothly instead of the name field jumping.
+                Box(Modifier.fillMaxWidth().softResize(), contentAlignment = Alignment.Center) {
+                    if (chosen.isNotEmpty()) {
+                        Text(
+                            songsLabel(chosen.size),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ink(0.6f),
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                    }
+                }
 
                 NameField(
                     value = name,
@@ -205,19 +219,22 @@ fun CreatePlaylistScreen(
                 )
             }
 
+            // The button warms up when a name is typed instead of snapping from grey to solid.
+            val buttonBg by animateColorAsState(if (canCreate) ink() else ink(0.12f), tween(180), label = "create-bg")
+            val buttonText by animateColorAsState(if (canCreate) palette.base else ink(0.3f), tween(180), label = "create-text")
             Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
                 Box(
                     Modifier
                         .fillMaxWidth()
                         .height(54.dp)
                         .then(if (canCreate) Modifier.pressScale(onClick = create) else Modifier)
-                        .background(if (canCreate) ink() else ink(0.12f), PillShape),
+                        .background(buttonBg, PillShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         "Create playlist",
                         style = MaterialTheme.typography.titleMedium,
-                        color = if (canCreate) palette.base else ink(0.3f),
+                        color = buttonText,
                     )
                 }
             }
@@ -292,7 +309,9 @@ private fun NameField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit,
             },
         )
         Spacer(Modifier.height(10.dp))
-        Box(Modifier.fillMaxWidth().height(if (focused) 2.dp else 1.dp).background(if (focused) ink() else ink(0.25f)))
+        val lineHeight by animateDpAsState(if (focused) 2.dp else 1.dp, tween(160), label = "name-line-h")
+        val lineColor by animateColorAsState(if (focused) ink() else ink(0.25f), tween(160), label = "name-line-c")
+        Box(Modifier.fillMaxWidth().height(lineHeight).background(lineColor))
     }
 }
 

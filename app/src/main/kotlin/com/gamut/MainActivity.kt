@@ -17,6 +17,8 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
@@ -35,14 +37,19 @@ import androidx.compose.foundation.layout.Column
 import com.gamut.account.AccountViewModel
 import com.gamut.account.ProfileScreen
 import com.gamut.settings.RecentlyPlayedScreen
+import com.gamut.settings.LocalPageActive
 import com.gamut.settings.RecentlyPlayedViewModel
 import com.gamut.settings.PlaybackSettingsScreen
 import com.gamut.settings.SettingsScreen
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
+import com.gamut.core.designsystem.GamutMotion
+import com.gamut.core.designsystem.LocalNavSettled
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -219,17 +226,111 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
     val currentRoute = nav.currentBackStackEntryAsState().value?.destination?.route
     // Discover / Library (HomeTabs) stay composed for the whole session and are drawn BELOW the NavHost. They are
     // "showing" on the home route, and also while the player slides over them.
-    val homeShowing = currentRoute == null || currentRoute == "home" ||
-        (currentRoute == "player" && nav.previousBackStackEntry?.destination?.route == "home")
+    val homeShowing = currentRoute == null || currentRoute == "home"
     // Fade-through: home fades out fast (90 ms), and only then does a detail screen fade in (see the NavHost), so
     // two transparent screens never overlap. Coming back, the order is reversed.
     val homeAlpha = animateFloatAsState(
         targetValue = if (homeShowing) 1f else 0f,
-        animationSpec = if (homeShowing) tween(210, delayMillis = 90, easing = FastOutSlowInEasing) else tween(90),
+        // Same duration and easing as the NavHost's strip slide, so the home layer and the detail screen move as one.
+        animationSpec = tween(GamutMotion.NAV_MS, easing = GamutMotion.Standard),
         label = "home-alpha",
     )
     val scope = rememberCoroutineScope()
     var selectedTrack by remember { mutableStateOf<Track?>(null) }
+    // --- Settings sub-pages (Recently played, Appearance, Playback & Audio, Profile) are persistent slide LAYERS, not
+    // NavHost destinations: same mechanism as the Discover <-> Library tabs. Each is composed once while the app is idle
+    // and parked off-screen (alpha 0: not drawn, not hit-testable). Opening one only animates [layerPos] 0 -> 1, which is
+    // read in graphicsLayer lambdas, so nothing recomposes and no screen is composed during the slide.
+    // Only one is ever open (they are all children of Settings), so one shared position is enough.
+    val layerPos = remember { Animatable(0f) }
+    var layerPage by remember { mutableStateOf<SettingsPage?>(null) }   // the one that is (or was last) open
+    var layerOpen by remember { mutableStateOf(false) }
+    var composedPages by remember { mutableStateOf(emptySet<SettingsPage>()) }
+    // One page every 400 ms once the loading screen has gone, so the pre-composition never lands as one big hitch.
+    LaunchedEffect(showLoading) {
+        if (!showLoading) {
+            delay(1200)
+            for (page in SettingsPage.entries) { composedPages = composedPages + page; delay(400) }
+        }
+    }
+    val openLayer: (SettingsPage) -> Unit = { page ->
+        scope.launch {
+            // Tapped before its idle pre-composition: compose it first, then slide.
+            if (page !in composedPages) { composedPages = composedPages + page; withFrameNanos { }; withFrameNanos { } }
+            if (layerPos.value > 0f && layerPage != page) layerPos.snapTo(0f)
+            layerPage = page
+            layerOpen = true
+            layerPos.animateTo(1f, tween(GamutMotion.TAB_MS, easing = GamutMotion.Standard))
+        }
+    }
+    val closeLayer: () -> Unit = {
+        layerOpen = false
+        scope.launch { layerPos.animateTo(0f, tween(GamutMotion.TAB_MS, easing = GamutMotion.Standard)) }
+    }
+    // --- The PLAYER is a persistent layer too (no NavHost route): composed once while idle, parked below the screen with
+    // alpha 0. Opening only animates [playerPos] 0 -> 1 (translationY, read in a graphicsLayer lambda), closing animates it
+    // back, so nothing is composed or recomposed during either slide. It sits ABOVE the NavHost, so it covers whatever
+    // screen is current and going back simply reveals that screen: no back-stack entry, no popUpTo.
+    val playerPos = remember { Animatable(0f) }
+    var playerOpen by remember { mutableStateOf(false) }
+    var playerComposed by remember { mutableStateOf(false) }
+    // True only while the player is fully open and opaque: then the flowing background + the bar underneath can sleep.
+    var playerCovering by remember { mutableStateOf(false) }
+    LaunchedEffect(showLoading) {
+        if (!showLoading) { delay(3200); playerComposed = true }   // after the four settings pages (1.2 s + 4 x 0.4 s)
+    }
+    val openPlayer: () -> Unit = {
+        if (!playerOpen) {
+            playerOpen = true
+            scope.launch {
+                // Tapped before the idle pre-composition: compose it first, then slide.
+                if (!playerComposed) { playerComposed = true; withFrameNanos { }; withFrameNanos { } }
+                playerPos.animateTo(1f, tween(GamutMotion.PLAYER_LAYER_IN_MS, easing = GamutMotion.EmphasizedDecelerate))
+                playerCovering = true   // not reached when a close cancels this animation
+            }
+        }
+    }
+    val closePlayer: () -> Unit = {
+        playerOpen = false
+        playerCovering = false   // wake the background / bar NOW: they are drawn (and opaque-covered) before the drop starts
+        scope.launch { playerPos.animateTo(0f, tween(GamutMotion.PLAYER_LAYER_OUT_MS, easing = GamutMotion.PlayerClose)) }
+    }
+    // --- "New playlist" is a persistent slide layer too (no NavHost route): composed once while idle, parked off-screen,
+    // slid with [createPos] exactly like the Settings pages, and Discover / Library shift left with it (see [homeShift]).
+    // After it has closed, [createSession] is bumped: the form is rebuilt EMPTY while it is parked, so the next opening
+    // starts clean without composing anything during the slide.
+    val createPos = remember { Animatable(0f) }
+    var createOpen by remember { mutableStateOf(false) }
+    var createComposed by remember { mutableStateOf(false) }
+    var createCovering by remember { mutableStateOf(false) }   // fully open and opaque: background + bar underneath can sleep
+    var createSession by remember { mutableIntStateOf(0) }
+    LaunchedEffect(showLoading) {
+        if (!showLoading) { delay(3600); createComposed = true }   // after the settings pages and the player
+    }
+    val openCreate: () -> Unit = {
+        if (!createOpen) {
+            createOpen = true
+            scope.launch {
+                if (!createComposed) { createComposed = true; withFrameNanos { }; withFrameNanos { } }
+                createPos.animateTo(1f, tween(GamutMotion.TAB_MS, easing = GamutMotion.Standard))
+                createCovering = true
+            }
+        }
+    }
+    val closeCreate: () -> Unit = {
+        createOpen = false
+        createCovering = false
+        scope.launch {
+            createPos.animateTo(0f, tween(GamutMotion.TAB_MS, easing = GamutMotion.Standard))
+            createSession++
+        }
+    }
+    // Home slides out when a NavHost screen covers it AND when the New playlist layer comes in: whichever is further along.
+    val homeShift = remember { derivedStateOf { minOf(homeAlpha.value, 1f - createPos.value) } }
+    // Safety: if the route ever returns to home while a layer is open, close it instantly instead of leaving it on Discover.
+    LaunchedEffect(currentRoute) {
+        if (layerOpen && (currentRoute == null || currentRoute == "home")) { layerOpen = false; layerPos.snapTo(0f) }
+    }
     var showConnect by remember { mutableStateOf(false) }
     var resolvingIsrc by remember { mutableStateOf<String?>(null) }
     var resolveJob by remember { mutableStateOf<Job?>(null) }
@@ -279,15 +380,34 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
     val appDark = !palette.isLight
     // Keep the flowing background alive until the player has finished sliding in over it.
     var backgroundVisible by remember { mutableStateOf(true) }
-    LaunchedEffect(currentRoute) {
+    LaunchedEffect(playerCovering, createCovering) {
         // The player and the New playlist screen draw their own opaque background.
-        if (currentRoute == "player" || currentRoute == "create-playlist") { delay(360); backgroundVisible = false } else backgroundVisible = true
+        backgroundVisible = !(playerCovering || createCovering)
     }
+    // When the player slides away, the flowing background fades in under it instead of popping in behind a transparent screen.
+    val bgAlpha by animateFloatAsState(
+        targetValue = if (backgroundVisible) 1f else 0f,
+        animationSpec = tween(1),   // the player is opaque while it covers the background, so switching is instant and invisible
+        label = "background-alpha",
+    )
+    // The app settles in (a slight scale-up) while the loading screen leaves.
+    val appReveal by animateFloatAsState(
+        targetValue = if (showLoading) 0f else 1f,
+        animationSpec = tween(520, easing = GamutMotion.Standard),
+        label = "app-reveal",
+    )
     // Keep the window behind everything in step with the setting, so overscroll / transitions never show the old look.
     val activity = LocalContext.current as? ComponentActivity
     SideEffect { activity?.window?.setBackgroundDrawable(ColorDrawable(neutralPalette.base.toArgb())) }
     GamutTheme(dark = appDark) {
         Box(Modifier.fillMaxSize()) {
+            Box(
+                Modifier.fillMaxSize().graphicsLayer {
+                    val scale = 0.95f + 0.05f * appReveal
+                    scaleX = scale
+                    scaleY = scale
+                },
+            ) {
             GamutBackdrop {
                 // One shared acrylic state for the whole app. The flowing background is registered as a source on it
                 // (beneath everything, zIndex -1), so any glass in the app (the mini player) frosts that same background.
@@ -296,11 +416,10 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                         palette = palette,
                         isPlaying = isPlayingNow,
                         visible = backgroundVisible,
-                        modifier = Modifier.fillMaxSize().acrylicSource(zIndex = -1f),
+                        modifier = Modifier.fillMaxSize().graphicsLayer { alpha = bgAlpha }.acrylicSource(zIndex = -1f),
                     )
                     CompositionLocalProvider(LocalCoverPalette provides palette, LocalNotifier provides notifier) {
                         // The strip docks onto the bottom bar of Search and Library (their `nowPlaying` slot).
-                        val openPlayer = { nav.navigate("player") { launchSingleTop = true }; Unit }
                         val openArtist: (String) -> Unit = { artist -> nav.navigate("artist-name/${Uri.encode(artist)}") }
                         val openConnect = { showConnect = true }
                         val nowPlaying: @Composable () -> Unit = { NowPlayingStrip(player, docked = false, onOpen = openPlayer, onDevicesClick = openConnect) }
@@ -313,7 +432,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                             // was paused and just open the player, instead of re-resolving and restarting it.
                             if (loadedTrack?.isrc == track.isrc) {
                                 if (!isPlayingNow) player.resume()
-                                nav.navigate("player") { launchSingleTop = true }
+                                openPlayer()
                                 return@tap
                             }
                             // Same song is still being resolved from an earlier tap: let that one finish.
@@ -332,7 +451,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                     com.gamut.feature.playerui.components.WaveformSource.register(track, localFile.absolutePath)
                                     player.play(track, Uri.fromFile(localFile).toString())
                                     resolvingIsrc = null
-                                    nav.navigate("player") { launchSingleTop = true }
+                                    openPlayer()
                                     return@launch
                                 }
                                 // Instant feedback on the tap: the pill stays until the song starts or fails. A newer tap
@@ -348,7 +467,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                                 com.gamut.feature.playerui.components.WaveformSource.register(track, audioUrl)
                                                 player.play(track, audioUrl)
                                                 notifier.dismiss(noticeId)
-                                                nav.navigate("player") { launchSingleTop = true }
+                                                openPlayer()
                                             },
                                             onFailure = { notifier.error("Couldn\u2019t play this song") },
                                         )
@@ -368,10 +487,10 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                             }
                         }
                         HomeTabs(
-                            active = currentRoute == null || currentRoute == "home",
-                            homeAlpha = homeAlpha,
+                            active = (currentRoute == null || currentRoute == "home") && !createOpen,
+                            homeAlpha = homeShift,
                             // Under the (opaque) player the bar + strip would keep blurring for nothing: drop them once it has settled.
-                            showBar = currentRoute != "player" || backgroundVisible,
+                            showBar = !(playerCovering || createCovering),
                             searchVm = searchVm,
                             libraryVm = appLibraryVm,
                             resolvingIsrc = resolvingIsrc,
@@ -383,73 +502,70 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                             onAlbumSelected = { item -> nav.navigate(albumRoute(item)) },
                             onTrackArtist = { t -> openArtist(t.artist) },
                             onOpenPlaylist = { id -> nav.navigate(if (id == "liked") "favorites" else "playlist/$id") },
-                            onCreatePlaylist = { nav.navigate("create-playlist") { launchSingleTop = true } },
+                            onCreatePlaylist = { openCreate() },
                             openSearchTick = openSearchTick,
                             openLibraryTick = openLibraryTick,
                             onProfile = { nav.navigate("settings") { launchSingleTop = true } },
                             onShazam = onShazam,
                             nowPlaying = nowPlaying,
                         )
+                        // Settings sub-pages: BELOW the NavHost (so the player still slides over them), above HomeTabs.
+                        SlideLayer(composed = SettingsPage.Recent in composedPages, selected = layerPage == SettingsPage.Recent, open = layerOpen, position = layerPos, onClose = closeLayer) {
+                            val recent by recentVm.tracks.collectAsState()
+                            RecentlyPlayedScreen(tracks = recent, onBack = closeLayer, onTrackSelected = playTrackWithQueue, nowPlaying = nowPlayingDocked)
+                        }
+                        SlideLayer(composed = SettingsPage.Appearance in composedPages, selected = layerPage == SettingsPage.Appearance, open = layerOpen, position = layerPos, onClose = closeLayer) {
+                            AppearanceScreen(onBack = closeLayer, nowPlaying = nowPlayingDocked)
+                        }
+                        SlideLayer(composed = SettingsPage.Playback in composedPages, selected = layerPage == SettingsPage.Playback, open = layerOpen, position = layerPos, onClose = closeLayer) {
+                            PlaybackSettingsScreen(onBack = closeLayer, nowPlaying = nowPlayingDocked)
+                        }
+                        SlideLayer(composed = SettingsPage.Profile in composedPages, selected = layerPage == SettingsPage.Profile, open = layerOpen, position = layerPos, onClose = closeLayer) {
+                            ProfileScreen(onBack = closeLayer, nowPlaying = nowPlayingDocked)
+                        }
+                        // New playlist: same mechanism as the Settings pages (own position, Discover / Library shift with it).
+                        SlideLayer(composed = createComposed, selected = true, open = createOpen, position = createPos, onClose = closeCreate) {
+                            key(createSession) {
+                                CreatePlaylistScreen(
+                                    viewModel = appLibraryVm,
+                                    selectedTrack = selectedTrack,
+                                    onBack = closeCreate,
+                                    active = LocalPageActive.current,
+                                )
+                            }
+                        }
                         NavHost(
                             navController = nav,
                             startDestination = "home",
-                            // Fade-through with a small slide. The incoming screen starts fading in only after the old one is
-                            // gone, which is also exactly when its heavy first composition (see AfterEnter) has finished.
-                            enterTransition = {
-                                fadeIn(tween(210, delayMillis = 90, easing = FastOutSlowInEasing)) +
-                                    slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { it / 12 }
-                            },
-                            exitTransition = {
-                                if (targetState.destination.route == "player") ExitTransition.None else fadeOut(tween(90))
-                            },
-                            popEnterTransition = {
-                                if (initialState.destination.route == "player") EnterTransition.None
-                                else fadeIn(tween(210, delayMillis = 90, easing = FastOutSlowInEasing))
-                            },
-                            popExitTransition = {
-                                fadeOut(tween(90)) + slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { it / 12 }
-                            },
+                            // Detail screens form ONE STRIP like the tabs (see GamutMotion.navPushEnter): translation only, no alpha.
+                            enterTransition = { GamutMotion.navPushEnter },
+                            exitTransition = { GamutMotion.navPushExit },
+                            popEnterTransition = { GamutMotion.navPopEnter },
+                            popExitTransition = { GamutMotion.navPopExit },
                         ) {
                             // "home" is drawn by HomeTabs above and never leaves composition, so this destination is empty.
                             composable("home") {}
                             composable("settings") {
+                                // Settings slides left in step with whichever sub-page layer opens (one strip, like the tabs).
+                                Box(Modifier.fillMaxSize().graphicsLayer { translationX = -layerPos.value * size.width }) {
                                 AfterEnter {
                                     SettingsScreen(
                                         onBack = { nav.popBackStack() },
                                         onLikedSongs = { nav.navigate("favorites") },
                                         onPlaylists = { openLibraryTick++; nav.popBackStack("home", false) },
-                                        onRecentlyPlayed = { nav.navigate("recently-played") },
-                                        onProfile = { nav.navigate("profile") },
-                                        onAppearance = { nav.navigate("appearance") },
-                                        onPlaybackAudio = { nav.navigate("playback-audio") },
+                                        onRecentlyPlayed = { openLayer(SettingsPage.Recent) },
+                                        onProfile = { openLayer(SettingsPage.Profile) },
+                                        onAppearance = { openLayer(SettingsPage.Appearance) },
+                                        onPlaybackAudio = { openLayer(SettingsPage.Playback) },
                                         nowPlaying = nowPlayingDocked,
                                     )
                                 }
-                            }
-                            composable("appearance") {
-                                AfterEnter { AppearanceScreen(onBack = { nav.popBackStack() }, nowPlaying = nowPlayingDocked) }
-                            }
-                            composable("playback-audio") {
-                                AfterEnter { PlaybackSettingsScreen(onBack = { nav.popBackStack() }, nowPlaying = nowPlayingDocked) }
-                            }
-                            composable("profile") {
-                                AfterEnter { ProfileScreen(onBack = { nav.popBackStack() }, nowPlaying = nowPlayingDocked) }
-                            }
-                            composable("recently-played") {
-                                val recent by recentVm.tracks.collectAsState()
-                                AfterEnter {
-                                    RecentlyPlayedScreen(
-                                        tracks = recent,
-                                        onBack = { nav.popBackStack() },
-                                        onTrackSelected = playTrackWithQueue,
-                                        nowPlaying = nowPlayingDocked,
-                                    )
                                 }
                             }
                             composable("favorites") {
                                 val favorites by appLibraryVm.favorites.collectAsState()
                                 val downloadsVm = hiltViewModel<PlaylistDownloadsViewModel>()
-                                AfterEnter {
+                                Settled {
                                     FavoritesScreen(
                                         tracks = favorites,
                                         onBack = { nav.popBackStack() },
@@ -465,15 +581,6 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                     )
                                 }
                             }
-                            composable("create-playlist") {
-                                AfterEnter {
-                                    CreatePlaylistScreen(
-                                        viewModel = appLibraryVm,
-                                        selectedTrack = selectedTrack,
-                                        onBack = { nav.popBackStack() },
-                                    )
-                                }
-                            }
                             composable("playlist/{id}") { entry ->
                                 // ViewModels are created at once (their loading starts now); only the UI is deferred.
                                 val playlistVm = hiltViewModel<com.gamut.feature.library.PlaylistViewModel>()
@@ -482,7 +589,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                 val allPlaylists by appLibraryVm.playlists.collectAsState()
                                 val favoriteIsrcs by appLibraryVm.favoriteIsrcs.collectAsState()
                                 val id = entry.arguments?.getString("id").orEmpty()
-                                AfterEnter {
+                                Settled {
                                     PlaylistScreen(
                                         playlistId = id,
                                         title = allPlaylists.firstOrNull { it.id.toString() == id }?.name ?: "Playlist",
@@ -509,7 +616,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                             }
                             composable("artist/{artistId}") {
                                 val vm = hiltViewModel<ArtistViewModel>()
-                                AfterEnter {
+                                Settled {
                                     ArtistRoute(
                                         viewModel = vm,
                                         libraryVm = appLibraryVm,
@@ -524,7 +631,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                             }
                             composable("artist-real/{artistId}") {
                                 val vm = hiltViewModel<ArtistViewModel>()
-                                AfterEnter {
+                                Settled {
                                     ArtistRoute(
                                         viewModel = vm,
                                         libraryVm = appLibraryVm,
@@ -539,7 +646,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                             }
                             composable("artist-name/{artistName}") {
                                 val vm = hiltViewModel<ArtistViewModel>()
-                                AfterEnter {
+                                Settled {
                                     ArtistRoute(
                                         viewModel = vm,
                                         libraryVm = appLibraryVm,
@@ -557,7 +664,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                 arguments = listOf("title", "subtitle", "art").map { navArgument(it) { defaultValue = "" } },
                             ) {
                                 val vm = hiltViewModel<AlbumViewModel>()
-                                AfterEnter {
+                                Settled {
                                     AlbumRoute(
                                         viewModel = vm,
                                         libraryVm = appLibraryVm,
@@ -569,32 +676,34 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                     )
                                 }
                             }
-                            composable(
-                                "player",
-                                enterTransition = { slideInVertically(tween(200, easing = LinearOutSlowInEasing)) { it } },
-                                // Plain slide, opaque, no fade: what is revealed underneath is already drawn (see backgroundVisible).
-                                popExitTransition = { slideOutVertically(tween(160, easing = FastOutLinearInEasing)) { it } },
-                            ) {
-                                val libraryVm = appLibraryVm
-                                val favoriteIsrcs by libraryVm.favoriteIsrcs.collectAsState()
-                                val playlists by libraryVm.playlists.collectAsState()
-                                PlayerScreen(
-                                    player,
-                                    onBack = { nav.popBackStack() },
-                                    favoriteIsrcs = favoriteIsrcs,
-                                    onToggleFavorite = { t ->
-                                        libraryVm.toggleFavorite(t)
-                                        if (t.isrc in favoriteIsrcs) notifier.info("Removed from Favorites") else notifier.success("Added to Favorites")
-                                    },
-                                    playlists = playlists.map { PlaylistPickerItem(id = it.id.toString(), name = it.name, coverUrl = it.coverUri) },
-                                    onAddToPlaylist = { t, playlistId ->
-                                        playlists.firstOrNull { it.id.toString() == playlistId }?.let { libraryVm.addTrack(it.id, t) }
-                                    },
-                                    // The player pops itself first (onBack), then this opens the artist page on top of what was below.
-                                    onGoToArtist = { t -> openArtist(t.artist) },
-                                )
-                            }
                         }
+                        // Above the NavHost, below the notices / sheets. Pre-composed once, slid with playerPos.
+                        PlayerLayer(composed = playerComposed, open = playerOpen, position = playerPos) { active ->
+                            val libraryVm = appLibraryVm
+                            val favoriteIsrcs by libraryVm.favoriteIsrcs.collectAsState()
+                            val playlists by libraryVm.playlists.collectAsState()
+                            PlayerScreen(
+                                player,
+                                onBack = closePlayer,
+                                active = active,
+                                favoriteIsrcs = favoriteIsrcs,
+                                onToggleFavorite = { t ->
+                                    libraryVm.toggleFavorite(t)
+                                    if (t.isrc in favoriteIsrcs) notifier.info("Removed from Favorites") else notifier.success("Added to Favorites")
+                                },
+                                playlists = playlists.map { PlaylistPickerItem(id = it.id.toString(), name = it.name, coverUrl = it.coverUri) },
+                                onAddToPlaylist = { t, playlistId ->
+                                    playlists.firstOrNull { it.id.toString() == playlistId }?.let { libraryVm.addTrack(it.id, t) }
+                                },
+                                // The artist page slides in (NavHost) while the player drops away: two independent translations.
+                                onGoToArtist = { t ->
+                                    closePlayer()
+                                    nav.navigate("artist-name/${Uri.encode(t.artist)}")
+                                },
+                            )
+                        }
+                        BackHandler(enabled = layerOpen && currentRoute == "settings" && !playerOpen) { closeLayer() }
+                        BackHandler(enabled = createOpen && !playerOpen) { closeCreate() }
                         if (shazamState !is ShazamState.Idle) {
                             val shazamLevel by shazamVm.level.collectAsState()
                             val favoriteIsrcs by appLibraryVm.favoriteIsrcs.collectAsState()
@@ -622,7 +731,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                             }
                         }
                         // Last child = drawn above every screen. Needs its own CoverTheme (it is outside the screens').
-                        CoverTheme(if (currentRoute == "player" || currentRoute == "create-playlist") neutralPalette else palette) { NoticeHost() }
+                        CoverTheme(if (playerOpen || createOpen) neutralPalette else palette) { NoticeHost() }
                         // Connect sheet (Bluetooth + output devices), opened from the mini player's devices icon.
                         if (showConnect) {
                             CoverTheme(palette) {
@@ -632,7 +741,12 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                     }
                 }
             }
-            AnimatedVisibility(showLoading, exit = fadeOut(tween(400))) {
+            }
+            AnimatedVisibility(
+                showLoading,
+                exit = fadeOut(tween(450, easing = GamutMotion.Standard)) +
+                    scaleOut(tween(450, easing = GamutMotion.Standard), targetScale = 1.05f),
+            ) {
                 GamutLoadingScreen(dataReady = dataReady, onFinished = { showLoading = false })
             }
         }
@@ -692,8 +806,21 @@ private fun albumRoute(item: DiscoverItem) =
     "album/${Uri.encode(item.id)}?title=${Uri.encode(item.title)}&subtitle=${Uri.encode(item.subtitle)}&art=${Uri.encode(item.imageUrl)}"
 
 /** Length of the Discover <-> Library slide, and the fling speed (px/s) that counts as "go to the other tab". */
-private const val TAB_SWITCH_MS = 240
+private const val TAB_SWITCH_MS = GamutMotion.TAB_MS
 private const val TAB_FLING_VELOCITY = 700f
+
+/**
+ * For the screens that are expensive to compose (artist, album, playlist, favorites): provides [LocalNavSettled], which is
+ * false while the strip slide is running and true once it has finished. The screen shows a skeleton until then and
+ * composes its real content afterwards, so the motion itself only ever draws a cheap placeholder.
+ */
+@Composable
+private fun AnimatedVisibilityScope.Settled(content: @Composable () -> Unit) {
+    var settled by remember { mutableStateOf(false) }
+    LaunchedEffect(transition.currentState) { if (transition.currentState == EnterExitState.Visible) settled = true }
+    LaunchedEffect(Unit) { delay(700); settled = true }   // never trap the user behind a skeleton
+    CompositionLocalProvider(LocalNavSettled provides settled) { content() }
+}
 
 /**
  * Composes [content] two frames AFTER the screen was entered, instead of in the very frame of the navigation.
@@ -709,7 +836,8 @@ private fun AfterEnter(content: @Composable () -> Unit) {
         withFrameNanos { }
         ready = true
     }
-    if (ready) content()
+    // No fade of its own: the NavHost already fades the screen once (a second fade made it blink in).
+    if (ready) Box(Modifier.fillMaxSize()) { content() }
 }
 
 /**
@@ -768,7 +896,7 @@ private fun HomeTabs(
 
     fun goTo(target: Int) {
         tab = target
-        scope.launch { position.animateTo(target.toFloat(), tween(TAB_SWITCH_MS, easing = FastOutSlowInEasing)) }
+        scope.launch { position.animateTo(target.toFloat(), tween(TAB_SWITCH_MS, easing = GamutMotion.Standard)) }
     }
 
     // Empty-state buttons ("Find artists", "Find songs") ask for the search tab.
@@ -782,10 +910,12 @@ private fun HomeTabs(
         Modifier
             .fillMaxSize()
             .graphicsLayer {
-                alpha = homeAlpha.value
-                // Fully hidden: also park the layer off-screen. Discover's list is a Haze blur source on the app-wide
-                // state, so at alpha 0 it could still be frosted through glass on the screen above (Favorites, Artist).
-                if (alpha == 0f) translationX = size.width
+                // Slides out to the left in step with the detail screen (one strip, no alpha, so no offscreen layer).
+                // Fully hidden: parked off-screen and not drawn. Discover's list is a Haze blur source on the app-wide
+                // state, so a hidden layer must not stay where glass on the screen above could frost it.
+                val shown = homeAlpha.value
+                translationX = -(1f - shown) * size.width
+                if (shown <= 0f) alpha = 0f
             }
             .then(if (active) Modifier else Modifier.consumeTouches().clearAndSetSemantics {}),
     ) {
@@ -862,6 +992,85 @@ private fun HomeTabs(
             }
         }
     }
+}
+
+/** The Settings sub-pages that live as persistent slide layers (see [SlideLayer]). Order = pre-composition order. */
+private enum class SettingsPage { Recent, Appearance, Playback, Profile }
+
+/**
+ * A screen that is composed once and slid with a shared [position] (0 = closed, 1 = open), exactly like [TabLayer].
+ * Not [selected] or fully closed: parked off-screen with alpha 0 (not drawn, not hit-testable, hidden from accessibility).
+ * Its translation is applied in the draw phase, and Settings travels with it. Swiping right closes it, with the same
+ * fling rule as the tabs. While it is not live (not selected, or closing), [LocalPageActive] is false, so screens can
+ * pause anything animated (see AppearanceScreen's preview) and do not touch the status bar.
+ */
+@Composable
+private fun SlideLayer(
+    composed: Boolean,
+    selected: Boolean,
+    open: Boolean,
+    position: Animatable<Float, AnimationVector1D>,
+    onClose: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    if (!composed) return
+    val scope = rememberCoroutineScope()
+    var widthPx by remember { mutableFloatStateOf(1f) }
+    val live = selected && open
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onSizeChanged { widthPx = it.width.toFloat().coerceAtLeast(1f) }
+            .graphicsLayer {
+                val rel = if (selected) 1f - position.value else 1f
+                translationX = rel * size.width
+                if (rel >= 1f) alpha = 0f
+            }
+            .then(if (live) Modifier else Modifier.clearAndSetSemantics {})
+            .draggable(
+                orientation = Orientation.Horizontal,
+                enabled = live,
+                state = rememberDraggableState { dx ->
+                    scope.launch { position.snapTo((position.value - dx / widthPx).coerceIn(0f, 1f)) }
+                },
+                onDragStarted = { position.stop() },
+                onDragStopped = { velocity ->
+                    val close = velocity > TAB_FLING_VELOCITY || (velocity > -TAB_FLING_VELOCITY && position.value < 0.5f)
+                    if (close) onClose() else position.animateTo(1f, tween(TAB_SWITCH_MS, easing = GamutMotion.Standard))
+                },
+            ),
+    ) {
+        CompositionLocalProvider(LocalPageActive provides live) { content() }
+    }
+}
+
+/**
+ * The player as a persistent layer: composed once, parked below the screen (alpha 0: not drawn, not hit-testable, hidden from
+ * accessibility) and slid vertically with [position] (0 = parked, 1 = open). The position is read only inside the graphicsLayer
+ * lambda, so opening and closing never recompose or lay out anything. While open it swallows touches so nothing underneath can
+ * be tapped through it. [content] receives `active` (open and not closing), which the player uses to pause everything costly.
+ */
+@Composable
+private fun PlayerLayer(
+    composed: Boolean,
+    open: Boolean,
+    position: Animatable<Float, AnimationVector1D>,
+    content: @Composable (active: Boolean) -> Unit,
+) {
+    if (!composed) return
+    Box(
+        Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                val rel = 1f - position.value
+                translationY = rel * size.height
+                if (rel >= 1f) alpha = 0f
+            }
+            .then(
+                if (open) Modifier.pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
+                else Modifier.clearAndSetSemantics {},
+            ),
+    ) { content(open) }
 }
 
 /**

@@ -1,5 +1,9 @@
 package com.gamut.feature.playerui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.getValue
+import com.gamut.core.designsystem.GamutMotion
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -83,15 +87,18 @@ internal fun PlayerOptionsSheet(
 
 @Composable
 private fun OptionRow(icon: ImageVector, label: String, status: String?, active: Boolean, accent: Color, onClick: () -> Unit) {
+    // Toggles (lyrics, favorite, ...) stay open: their colour eases instead of snapping.
+    val iconTint by animateColorAsState(if (active) accent else ink(0.85f), tween(GamutMotion.CONTENT_MS), label = "option-icon")
+    val statusTint by animateColorAsState(if (active) accent else ink(0.5f), tween(GamutMotion.CONTENT_MS), label = "option-status")
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, tint = if (active) accent else ink(0.85f), modifier = Modifier.size(24.dp))
+        Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(16.dp))
         Text(label, style = MaterialTheme.typography.bodyLarge, color = ink(), modifier = Modifier.weight(1f))
         if (status != null) {
-            Text(status, style = MaterialTheme.typography.bodyMedium, color = if (active) accent else ink(0.5f))
+            Text(status, style = MaterialTheme.typography.bodyMedium, color = statusTint)
         }
     }
 }

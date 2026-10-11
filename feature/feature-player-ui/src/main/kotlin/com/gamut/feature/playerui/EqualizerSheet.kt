@@ -3,6 +3,9 @@ package com.gamut.feature.playerui
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import com.gamut.core.designsystem.GamutMotion
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -150,13 +153,15 @@ private fun EnableButton(enabled: Boolean, accent: Color, onClick: () -> Unit) {
 
 @Composable
 private fun PresetChip(text: String, selected: Boolean, accent: Color, onClick: () -> Unit) {
+    val chipText by animateColorAsState(if (selected) accent else ink(0.5f), tween(GamutMotion.CONTENT_MS), label = "chip-text")
+    val chipBg by animateColorAsState(if (selected) accent.copy(alpha = 0.16f) else accent.copy(alpha = 0f), tween(GamutMotion.CONTENT_MS), label = "chip-bg")
     Text(
         text,
-        color = if (selected) accent else ink(0.5f),
+        color = chipText,
         style = MaterialTheme.typography.labelLarge,
         modifier = Modifier
             .clip(RoundedCornerShape(50))
-            .background(if (selected) accent.copy(alpha = 0.16f) else Color.Transparent)
+            .background(chipBg)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     )

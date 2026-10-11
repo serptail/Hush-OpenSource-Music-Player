@@ -3,6 +3,10 @@ package com.gamut.feature.playerui
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import com.gamut.core.designsystem.GamutMotion
+import com.gamut.core.designsystem.softResize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -59,7 +63,7 @@ internal fun ModSheet(accent: Color, onDismiss: () -> Unit) {
 
     GamutSheet(onDismiss = onDismiss, sheetState = sheetState) {
         Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding()
+            Modifier.softResize().fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding()
                 .padding(horizontal = 20.dp).padding(bottom = 16.dp),
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -103,12 +107,14 @@ internal fun ModSheet(accent: Color, onDismiss: () -> Unit) {
 @Composable
 private fun PresetCell(preset: ModPreset, selected: Boolean, accent: Color, modifier: Modifier, onClick: () -> Unit) {
     val shape = RoundedCornerShape(16.dp)
+    val cellBg by animateColorAsState(if (selected) accent.copy(alpha = 0.22f) else ink(0.07f), tween(GamutMotion.CONTENT_MS), label = "mod-cell-bg")
+    val cellEdge by animateColorAsState(if (selected) accent else ink(0.08f), tween(GamutMotion.CONTENT_MS), label = "mod-cell-edge")
     Column(
         modifier
             .height(68.dp)
             .clip(shape)
-            .background(if (selected) accent.copy(alpha = 0.22f) else ink(0.07f))
-            .border(BorderStroke(1.dp, if (selected) accent else ink(0.08f)), shape)
+            .background(cellBg)
+            .border(BorderStroke(1.dp, cellEdge), shape)
             .bounceTap(onClick = onClick)
             .padding(horizontal = 8.dp),
         verticalArrangement = Arrangement.Center,

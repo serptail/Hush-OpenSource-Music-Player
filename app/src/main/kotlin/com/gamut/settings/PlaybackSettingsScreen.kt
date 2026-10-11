@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.softResize
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.player.BandType
 import com.gamut.core.player.Crossfeed
@@ -170,7 +171,7 @@ fun PlaybackSettingsScreen(
                 subtitle = "Songs overlap as one ends and the next begins. Off keeps them gapless.",
             )
             SoftDivider()
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+            Column(Modifier.softResize().padding(horizontal = 20.dp, vertical = 16.dp)) {
                 Text("Fade on pause and resume", style = MaterialTheme.typography.titleMedium, color = ink())
                 Spacer(Modifier.height(12.dp))
                 SegmentedControl(
@@ -252,7 +253,7 @@ fun PlaybackSettingsScreen(
                 subtitle = "Adds a whisper of triangular noise when the sound is processed, so quiet detail is not rounded away.",
             )
             SoftDivider()
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+            Column(Modifier.softResize().padding(horizontal = 20.dp, vertical = 16.dp)) {
                 Text("Headphone crossfeed", style = MaterialTheme.typography.titleMedium, color = ink())
                 Text(
                     "Lets a little of the lows cross over between ears, like speakers do.",

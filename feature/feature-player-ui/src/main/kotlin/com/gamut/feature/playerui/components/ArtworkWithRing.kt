@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
@@ -55,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import com.adamglin.PhosphorIcons
+import com.gamut.core.designsystem.ArtPlaceholder
 import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.light.Pause
 import com.adamglin.phosphoricons.light.Play
@@ -182,7 +184,7 @@ internal fun ArtworkWithRing(
             ) {
                 if (enabled) {
                     if (shownUrl == null) {
-                        ArtworkPlaceholder()
+                        CoverPlaceholder()
                     } else {
                         // The whole image is shown (Fit) in a box of its own shape, so nothing is cut off.
                         // If it still doesn't fill the box (an outlier), a heavily blurred copy of it fills
@@ -216,7 +218,7 @@ internal fun ArtworkWithRing(
                                     Box(Modifier.fillMaxSize())   // empty: a light placeholder reads as a white flash on entry
                                 }
                             },
-                            error = { ArtworkPlaceholder() },
+                            error = { CoverPlaceholder() },
                             // This URL doesn't exist / failed: try the next candidate (past the last one: placeholder).
                             onError = { if (attempt < candidates.size) attempt++ },
                             onSuccess = { state ->
@@ -490,4 +492,19 @@ private fun outerRingPath(coverW: Float, coverH: Float, marginPx: Float, gapPx: 
         arcTo(Rect(left, top, left + d, top + d), 180f, 90f, false)
         close()
     }
+}
+
+/**
+ * Shown when the track has no cover (or every candidate url failed): the app's flat placeholder with fixed player colours
+ * (the player is outside CoverTheme). Opaque, so the cover's drop shadow cannot bleed through it. The note sits in the upper
+ * part of the cover so it does not collide with the play / pause glyph in the middle.
+ */
+@Composable
+private fun CoverPlaceholder() {
+    ArtPlaceholder(
+        tile = Color(0xFF232327),
+        tint = Color(0xFF6B6B72),
+        iconFraction = 0.28f,
+        iconAlignment = BiasAlignment(0f, -0.45f),
+    )
 }

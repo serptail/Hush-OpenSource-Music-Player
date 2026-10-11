@@ -59,7 +59,6 @@ import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.light.ArrowLeft
 import com.adamglin.phosphoricons.light.DotsThreeVertical
-import com.adamglin.phosphoricons.light.MusicNote
 import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.TrackRowSkeleton
 import com.gamut.core.designsystem.shimmer
@@ -67,10 +66,13 @@ import androidx.compose.foundation.layout.Spacer
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.TransparentStatusBar
+import com.gamut.core.designsystem.LocalNavSettled
+import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.designsystem.fadeEdges
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.VerticalTabs
+import com.gamut.core.designsystem.ArtPlaceholder
 import com.gamut.core.designsystem.glass
 import com.gamut.core.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -152,8 +154,10 @@ fun ArtistScreen(
     val failed by viewModel.failed.collectAsStateWithLifecycle()
     val palette = LocalCoverPalette.current
     TransparentStatusBar(darkIcons = palette.isLight)
+    val settled = LocalNavSettled.current
     CoverTheme(palette) {
-        if (artist == null) {
+        // Skeleton while loading AND while the slide runs; the real page composes once the slide has finished.
+        if (artist == null || !settled) {
             Box(Modifier.fillMaxSize().statusBarsPadding()) {
                 if (!failed) {
                     // Placeholder in the final layout (round portrait + song rows) instead of a lone spinner.
@@ -346,7 +350,7 @@ private fun AlbumGrid(albums: List<DiscoverItem>, onAlbum: (DiscoverItem) -> Uni
 private fun AlbumCard(album: DiscoverItem, onClick: (DiscoverItem) -> Unit, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth().pressScale(onClick = { onClick(album) }, scaleDown = 0.97f)) {
         AsyncImage(
-            model = album.imageUrl,
+            model = remember(album.imageUrl) { squareArtUrl(album.imageUrl, 480) },
             contentDescription = album.title,
             modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(10.dp)).background(ink(0.08f)),
             contentScale = ContentScale.Crop,
@@ -363,7 +367,8 @@ private fun TrackLine(track: Track, isPlaying: Boolean, accent: Color, onClick: 
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AsyncImage(
-            model = track.albumArtUrl,
+            // Same 200 px url as the other lists, so covers already seen elsewhere come straight from the cache.
+            model = remember(track.albumArtUrl) { squareArtUrl(track.albumArtUrl, 200) },
             contentDescription = null,
             modifier = Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)).background(ink(0.08f)),
             contentScale = ContentScale.Crop,
@@ -446,7 +451,6 @@ private fun AlbumLine(album: DiscoverItem) {
 
 @Composable
 private fun ArtistPlaceholder() {
-    Box(Modifier.fillMaxSize().background(ink(0.08f)), contentAlignment = Alignment.Center) {
-        Icon(PhosphorIcons.Light.MusicNote, null, tint = ink(0.45f), modifier = Modifier.size(24.dp))
-    }
+    // Opaque and flat on purpose: AlbumLine puts a shadow behind this, and a translucent tile let it bleed through as haze.
+    ArtPlaceholder()
 }

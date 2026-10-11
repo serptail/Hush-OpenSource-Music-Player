@@ -254,6 +254,7 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
         GamutDialog(
             title = "Export backup",
             confirmLabel = "Choose location",
+            confirmCloses = false,   // a password mismatch keeps the dialog open
             onDismiss = { exportDialog = false },
             onConfirm = {
                 if (exportPassword.isNotEmpty() && exportPassword != exportConfirm) {

@@ -43,7 +43,7 @@ fun SettingsScaffold(
 ) {
     // Same as every other screen: ink() (white on dark covers, near-black on light ones) comes from CoverTheme.
     val palette = LocalCoverPalette.current
-    TransparentStatusBar(darkIcons = palette.isLight)
+    if (LocalPageActive.current) TransparentStatusBar(darkIcons = palette.isLight)
     CoverTheme(palette) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {

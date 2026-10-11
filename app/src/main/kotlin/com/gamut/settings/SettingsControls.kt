@@ -121,12 +121,14 @@ fun <T> GamutChoiceDialog(
         dismissLabel = null,
         body = note,
     ) {
+        // Rows close through the dialog's own animated dismiss, not the raw callback.
+        val close = LocalDialogDismiss.current
         // Scrolls when there are many options (the equalizer presets).
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
             choices.forEach { choice ->
                 Row(
                     Modifier.fillMaxWidth()
-                        .pressScale(onClick = { onSelect(choice.value); onDismiss() }, scaleDown = 0.98f)
+                        .pressScale(onClick = { onSelect(choice.value); close() }, scaleDown = 0.98f)
                         .padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

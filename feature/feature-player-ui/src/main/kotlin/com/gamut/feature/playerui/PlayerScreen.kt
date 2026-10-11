@@ -9,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import com.gamut.core.designsystem.GamutMotion
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -122,8 +123,13 @@ fun PlayerScreen(
     playlists: List<PlaylistPickerItem> = emptyList(),
     /** Called when the user taps a playlist in the list-plus sheet: add [Track] to the playlist with this id. */
     onAddToPlaylist: (Track, String) -> Unit = { _, _ -> },
-    /** "Go to artist" (options sheet, and a tap on the artist photo / name). The player closes itself first. */
+    /** "Go to artist" (options sheet, and a tap on the artist photo / name). The CALLER must close the player layer. */
     onGoToArtist: (Track) -> Unit = {},
+    /**
+     * False while the screen is parked off-screen (the player lives as a persistent layer, see PlayerLayer in MainActivity) or
+     * sliding away. Everything that costs something (lyrics / artist / waveform lookups, the per-frame clock) only runs while true.
+     */
+    active: Boolean = true,
 ) {
     val state by player.playbackState.collectAsState()
     // `state` changes every position tick. It is only read inside derivedStateOf, so this screen recomposes when
@@ -184,17 +190,17 @@ fun PlayerScreen(
     var lyricsOn by remember { mutableStateOf(prefs.getBoolean(PrefLyricsOn, true)) }
     var lyricsPanelOpen by remember { mutableStateOf(false) }
 
-    // Set the moment the user leaves. From then on the screen is a still picture (see the notes in PlayerClock).
-    var leaving by remember { mutableStateOf(false) }
-    val leave = remember(onBack) { { if (!leaving) { leaving = true; onBack() } } }
-    BackHandler(enabled = !leaving && !lyricsPanelOpen) { leave() }
-    BackHandler(enabled = lyricsPanelOpen) { lyricsPanelOpen = false }   // declared last: wins while the panel is open
-    var settled by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { delay(260); settled = true }
+    // `active` goes false the moment the user leaves: from then on the screen is a still picture (see PlayerClock).
+    // It is a persistent layer now, so it is never disposed: reset the lyrics panel once the slide-away is over.
+    val leave: () -> Unit = { if (active) onBack() }
+    BackHandler(enabled = active && !lyricsPanelOpen) { leave() }
+    BackHandler(enabled = active && lyricsPanelOpen) { lyricsPanelOpen = false }   // declared last: wins while the panel is open
+    LaunchedEffect(active) { if (!active) { delay(GamutMotion.PLAYER_LAYER_OUT_MS + 120L); lyricsPanelOpen = false } }
     val clock = remember { PlayerClock() }
     LaunchedEffect(modState.settings.speed) { clock.setSpeed(modState.settings.speed) }
     LaunchedEffect(player) { clock.follow(player) }
-    LaunchedEffect(clock.live, duration, leaving) { if (clock.live && !leaving) clock.tick(duration) }
+    // The per-frame tick only runs while the player is on screen (a parked layer must not keep the display refreshing).
+    LaunchedEffect(clock.live, duration, active) { if (clock.live && active) clock.tick(duration) }
 
     // While the progress line is dragged, the line and time label follow the finger; the real seek happens on release.
     var scrubFraction by remember { mutableStateOf<Float?>(null) }
@@ -244,9 +250,9 @@ fun PlayerScreen(
     // Lyrics are matched against the length of the audio that is really playing: once the stream's length is known
     // it replaces the catalog's. Synced lyrics are final; plain ones are looked up once more if the length changed.
     val lyricsSeconds = (effectiveDurationMs / 1000).toInt()
-    LaunchedEffect(lyricsKey, lyricsRetry, lyricsOn, lyricsSeconds) {
+    LaunchedEffect(lyricsKey, lyricsRetry, lyricsOn, lyricsSeconds, active) {
         val t = track ?: return@LaunchedEffect
-        if (!lyricsOn) return@LaunchedEffect
+        if (!lyricsOn || !active) return@LaunchedEffect   // parked: no network for a screen nobody sees
         val shown = lyricsState
         if (shown is LyricsState.Loaded && (shown.isSynced || lyricsTriedSeconds == lyricsSeconds)) return@LaunchedEffect
         if (shown !is LyricsState.Loaded) lyricsState = LyricsState.Loading
@@ -274,8 +280,9 @@ fun PlayerScreen(
     // Artist photo + credits (Deezer / MusicBrainz, see ArtistInfoRepository). Nothing here blocks the player.
     var artistInfo by remember(lyricsKey) { mutableStateOf(track?.let { ArtistInfoRepository.cached(it) }) }
     var artistLoading by remember(lyricsKey) { mutableStateOf(artistInfo == null) }
-    LaunchedEffect(lyricsKey) {
+    LaunchedEffect(lyricsKey, active) {
         val t = track ?: return@LaunchedEffect
+        if (!active) return@LaunchedEffect
         if (artistInfo != null) { artistLoading = false; return@LaunchedEffect }
         var attempt = 0
         while (artistInfo == null && attempt < 3) {   // offline -> online recovers on its own
@@ -294,7 +301,7 @@ fun PlayerScreen(
         WaveformSource.init(context)
         WaveformSource.provider = { t -> player.sourceUrlFor(t.isrc) }
     }
-    val waveform = rememberWaveform(track)
+    val waveform = rememberWaveform(track.takeIf { active })   // parked: no audio analysis
     // Word timing refined with the loudness envelope (skips real silences inside a line). The envelope fills in from
     // the start; refine only once nearly all of it is measured. Line timestamps are unchanged, so activeIndex still
     // uses lyricsState.
@@ -306,7 +313,8 @@ fun PlayerScreen(
         else s
     }
 
-    val goToArtist: () -> Unit = { track?.let { t -> leave(); onGoToArtist(t) } }
+    // The player does NOT close itself here: the caller closes the layer and navigates, so the two slides run together.
+    val goToArtist: () -> Unit = { track?.let { t -> onGoToArtist(t) } }
 
     // The glass (sheets) takes its backing color from LocalCoverPalette; the player has its own dark backdrop, so
     // inside it the palette is pinned to the neutral one (the same color as the screen, and still).
@@ -318,7 +326,7 @@ fun PlayerScreen(
             // The sideways volume swipe on the cover is dead while the lyrics panel covers the screen.
             .then(if (lyricsPanelOpen) Modifier else Modifier.swipeVolumeGesture(volumeHud)),
     ) {
-        if (artUrl != null) PlayerBackdrop(artUrl, animateChanges = settled && !leaving)
+        if (artUrl != null) PlayerBackdrop(artUrl, animateChanges = active)
 
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             PlayerTopBar(leave, onMore = { showMore = true }, modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 14.dp))
@@ -439,8 +447,8 @@ fun PlayerScreen(
         // The "opened mini player": every lyric on a gradient from the cover, with the controls at the bottom.
         AnimatedVisibility(
             visible = lyricsPanelOpen && track != null,
-            enter = slideInVertically(tween(320)) { it } + fadeIn(tween(200)),
-            exit = slideOutVertically(tween(260)) { it } + fadeOut(tween(200)),
+            enter = slideInVertically(tween(GamutMotion.PLAYER_IN_MS, easing = GamutMotion.EmphasizedDecelerate)) { it } + fadeIn(tween(200)),
+            exit = slideOutVertically(tween(GamutMotion.PLAYER_OUT_MS, easing = GamutMotion.EmphasizedAccelerate)) { it } + fadeOut(tween(200)),
         ) {
             FullLyricsPanel(
                 title = track?.title.orEmpty(),

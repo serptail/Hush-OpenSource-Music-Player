@@ -1,5 +1,9 @@
 package com.gamut.feature.playerui
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import com.gamut.core.designsystem.GamutMotion
+import com.gamut.core.designsystem.softResize
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
@@ -99,7 +103,10 @@ fun TrackActionsSheet(
                 )
             }
             item {
-                if (creating) {
+                // "New playlist..." turns into the name field: crossfade, and let the sheet follow the height.
+                Box(Modifier.softResize()) {
+                Crossfade(targetState = creating, animationSpec = tween(GamutMotion.CONTENT_MS), label = "new-playlist") { isCreating ->
+                if (isCreating) {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -129,6 +136,8 @@ fun TrackActionsSheet(
                     }
                 } else {
                     ActionRow("New playlist\u2026") { creating = true }
+                }
+                }
                 }
             }
             items(playlists, key = { it.id }) { playlist ->

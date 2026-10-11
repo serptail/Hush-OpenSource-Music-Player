@@ -88,6 +88,7 @@ import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.TransparentStatusBar
+import com.gamut.core.designsystem.LocalNavSettled
 import com.gamut.core.designsystem.glass
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
@@ -148,6 +149,7 @@ fun FavoritesScreen(
 
     val palette = LocalCoverPalette.current
     TransparentStatusBar(darkIcons = palette.isLight)
+    val settled = LocalNavSettled.current
 
     CoverTheme(palette) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -206,6 +208,8 @@ fun FavoritesScreen(
                         color = ink(0.6f),
                     )
                 }
+            } else if (!settled) {
+                Spacer(Modifier.weight(1f))
             } else {
                 SongWheel(
                     songs = songs,

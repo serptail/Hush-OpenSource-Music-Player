@@ -3,6 +3,13 @@ package com.gamut.feature.playerui
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import com.gamut.core.designsystem.GamutMotion
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -78,12 +85,16 @@ internal fun AddToPlaylistSheet(
             Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (addedId != null) {
-                Icon(PhosphorIcons.Light.Check, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
-                Spacer(Modifier.width(10.dp))
-                Text("Added to playlist", style = MaterialTheme.typography.titleLarge, color = accent)
-            } else {
-                Text("Add to playlist", style = MaterialTheme.typography.titleLarge, color = ink())
+            Crossfade(targetState = addedId != null, animationSpec = tween(GamutMotion.CONTENT_MS), label = "add-title") { added ->
+                if (added) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(PhosphorIcons.Light.Check, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text("Added to playlist", style = MaterialTheme.typography.titleLarge, color = accent)
+                    }
+                } else {
+                    Text("Add to playlist", style = MaterialTheme.typography.titleLarge, color = ink())
+                }
             }
         }
 
@@ -100,6 +111,7 @@ internal fun AddToPlaylistSheet(
         LazyColumn(contentPadding = PaddingValues(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
             items(playlists, key = { it.id }) { playlist ->
                 val picked = playlist.id == addedId
+                val nameColor by animateColorAsState(if (picked) accent else ink(), tween(GamutMotion.CONTENT_MS), label = "picked-name")
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -130,7 +142,7 @@ internal fun AddToPlaylistSheet(
                         Text(
                             playlist.name,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = if (picked) accent else ink(),
+                            color = nameColor,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -142,7 +154,7 @@ internal fun AddToPlaylistSheet(
                             )
                         }
                     }
-                    if (picked) {
+                    AnimatedVisibility(picked, enter = fadeIn(tween(160)) + scaleIn(tween(220), initialScale = 0.5f)) {
                         Icon(PhosphorIcons.Light.Check, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
                     }
                 }
