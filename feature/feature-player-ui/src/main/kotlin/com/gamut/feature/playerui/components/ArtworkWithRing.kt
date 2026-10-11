@@ -64,8 +64,8 @@ import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 
-private val CoverShape = RoundedCornerShape(30.dp)
-private val CoverCornerRadius = 30.dp   // same corner as the album cards on Discover
+private val CoverShape = RoundedCornerShape(12.dp)   // was 30dp: squarer, closer to a real album sleeve
+private val CoverCornerRadius = 12.dp   // keep equal to CoverShape: the progress ring follows this radius
 private val MaxCoverSize = 360.dp   // upper bound only; the real size comes from the space available (the width between prev / next)
 private val RingGap = 3.5.dp     // same gap distance as before, now measured outward instead of inward
 private val RingStrokeWidth = 1.5.dp
@@ -75,8 +75,8 @@ private const val PausedCoverScale = 0.96f   // the cover settles a touch smalle
 
 // Scrubbing visuals (shown while the progress line is being dragged). Everything here has to fit in
 // the space between the ring and the edge of its box: RingInset - (RingGap + stroke/2) ~= 13.75dp.
-private val WaveBarWidth = 2.dp
-private val WaveBarPitch = 6.dp          // distance between bar centers along the line
+private val WaveBarWidth = 2.2.dp
+private val WaveBarPitch = 3.dp          // distance between bar centers along the line (was 6dp: sparse, 'hairy')
 private val WaveStartOffset = 2.5.dp     // gap between the line's center and the base of a bar
 private val WaveMinLength = 1.dp         // quietest bar
 private val WaveMaxLength = 10.dp        // tallest bar; base + length + cap (~17dp) pokes a few dp past the box, which is fine: nothing clips it
@@ -98,6 +98,8 @@ internal fun ArtworkWithRing(
     progress: () -> Float,
     isPlaying: Boolean,
     enabled: Boolean,
+    /** True while the next track is being resolved: the play / pause glyph on the cover turns into a spinner. */
+    loading: Boolean = false,
     waveform: FloatArray,
     onTogglePlay: () -> Unit,
     onScrub: (Float?) -> Unit,
@@ -185,21 +187,23 @@ internal fun ArtworkWithRing(
                         // The whole image is shown (Fit) in a box of its own shape, so nothing is cut off.
                         // If it still doesn't fill the box (an outlier), a heavily blurred copy of it fills
                         // the space around it instead of bars.
-                        AsyncImage(
-                            model = shownUrl,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .graphicsLayer { scaleX = 1.3f; scaleY = 1.3f }
-                                .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(28.dp) else Modifier),
-                        )
-                        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
+                        if (isThumb) {
+                            AsyncImage(
+                                model = shownUrl,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer { scaleX = 1.3f; scaleY = 1.3f }
+                                    .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(28.dp) else Modifier),
+                            )
+                            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
+                        }
                         SubcomposeAsyncImage(
                             model = shownUrl,
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Fit,
+                            contentScale = if (isThumb) ContentScale.Fit else ContentScale.Crop,
                             loading = {
                                 if (placeholderUrl != null && placeholderUrl != shownUrl) {
                                     AsyncImage(
@@ -228,14 +232,18 @@ internal fun ArtworkWithRing(
                     Box(
                         Modifier
                             .size(64.dp)
-                            .graphicsLayer { alpha = iconAlpha },
+                            .graphicsLayer { alpha = if (loading) 1f else iconAlpha },
                         contentAlignment = Alignment.Center,
                     ) {
-                        DepthIcon(
-                            if (isPlaying) PhosphorIcons.Light.Pause else PhosphorIcons.Light.Play,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
-                            size = 44.dp,
-                        )
+                        if (loading) {
+                            PlayerSpinner(Modifier.size(40.dp), Color.White, 3.dp)
+                        } else {
+                            DepthIcon(
+                                if (isPlaying) PhosphorIcons.Light.Pause else PhosphorIcons.Light.Play,
+                                contentDescription = if (isPlaying) "Pause" else "Play",
+                                size = 44.dp,
+                            )
+                        }
                     }
                 }
             }
@@ -266,7 +274,7 @@ internal fun ArtworkWithRing(
                         // still mean play/pause.
                         val coverInner = Rect(marginPx, marginPx, marginPx + coverW, marginPx + coverH)
                             .deflate(10.dp.toPx())
-                        val hitRadius = 20.dp.toPx()
+                        val hitRadius = 16.dp.toPx()   // a bit tighter than before: the cover now reaches near the screen edge, where the volume gesture lives
                         fun nearLine(p: Offset) =
                             !coverInner.contains(p) && pts.minOf { hypot(it.x - p.x, it.y - p.y) } < hitRadius
                         // Where along the line (0..1) the finger is, from the closest sampled point.

@@ -2,6 +2,7 @@ package com.gamut.feature.playerui.components
 
 import android.media.AudioManager
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -9,16 +10,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -30,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -45,8 +49,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import com.adamglin.phosphoricons.Light
 import com.adamglin.PhosphorIcons
+import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.light.SpeakerHigh
 import com.adamglin.phosphoricons.light.SpeakerLow
 import com.adamglin.phosphoricons.light.SpeakerX
@@ -65,18 +69,17 @@ internal class VolumeHud(private val audio: AudioManager, private val haptic: Ha
     var fraction by mutableFloatStateOf(0f)
         private set
 
-    /** Which edge the current drag started on. Kept after release so the pill fades out on the same side. */
-    var onRight by mutableStateOf(false)
-        private set
-
-    /** Where the artwork row sits on screen; the pills are centered on it. Set by [volumeHudAnchor]. */
+    /** Where the cover sits on screen. The swipe is only live on the cover, and the pill sits just above it. */
     var anchor by mutableStateOf(Rect.Zero)
+        internal set
+
+    /** Bottom edge (root coordinates) of the title + artist block: the pill is centered between it and the cover. */
+    var headerBottom by mutableFloatStateOf(0f)
         internal set
 
     private fun current(): Float = audio.getStreamVolume(AudioManager.STREAM_MUSIC) / maxSteps.toFloat()
 
-    fun begin(right: Boolean) {
-        onRight = right
+    fun begin() {
         fraction = current()
         lastStep = (fraction * maxSteps).roundToInt()
         holding = true
@@ -97,33 +100,44 @@ internal class VolumeHud(private val audio: AudioManager, private val haptic: Ha
     fun fractionNow(): Float = fraction
 }
 
-/** Put this on the artwork row: the volume pills line up with it. */
+/** Put this on the cover (the box that holds the artwork and its ring): the swipe lives on it. */
 internal fun Modifier.volumeHudAnchor(hud: VolumeHud): Modifier =
     onGloballyPositioned { hud.anchor = it.boundsInRoot() }
 
+/** Put this on the title + artist block: the pill is centered in the gap between it and the cover. */
+internal fun Modifier.volumeHudHeaderAnchor(hud: VolumeHud): Modifier =
+    onGloballyPositioned { hud.headerBottom = it.boundsInRoot().bottom }
+
+/** The artwork sits this far inside the cover box (the room for the progress ring + waveform). Keep equal to RingInset. */
+private val CoverArtInset = 18.dp
+
+/** A swipe only counts when it starts this far inside the cover box: the ring band around the art belongs to the scrubber. */
+private val CoverSwipeInset = 28.dp
+
 /**
- * Drag up / down along the left or right edge of the screen to change the volume. No hold needed.
+ * Swipe sideways on the cover to change the volume: left to right = louder, right to left = quieter.
  *
- *  - only the outer [edgeWidth] strips react (the player keeps 24 dp side padding, so nothing else lives there);
- *  - it only claims the touch once the finger has clearly moved vertically, so taps and sideways swipes pass through;
- *  - relative: the volume moves by the drag distance from where it is, so it never jumps.
+ *  - Only a touch that starts on the artwork itself reacts (not the ring band around it, which scrubs the song).
+ *  - It only claims the touch once the finger has clearly moved horizontally: taps (play / pause) and vertical
+ *    scrolling pass through untouched.
+ *  - Relative: the volume moves by the drag distance from where it is, so it never jumps.
  *
- * Put it BEFORE any padding on the full-screen container so the strips are measured against the real screen edges.
+ * Put it BEFORE any padding on the full-screen container, so positions line up with [VolumeHud.anchor] (root coordinates).
  */
-internal fun Modifier.edgeVolumeGesture(
+internal fun Modifier.swipeVolumeGesture(
     hud: VolumeHud,
-    edgeWidth: Dp = 32.dp,
-    fullRange: Dp = 300.dp,   // finger travel for 0 -> 100 %
+    fullRange: Dp = 240.dp,   // finger travel for 0 -> 100 %
 ): Modifier = pointerInput(hud) {
-    val edgePx = edgeWidth.toPx()
     val rangePx = fullRange.toPx()
+    val insetPx = CoverSwipeInset.toPx()
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-        if (down.position.x > edgePx && down.position.x < size.width - edgePx) return@awaitEachGesture
+        val zone = hud.anchor.deflate(insetPx)
+        if (zone.width <= 0f || zone.height <= 0f || !zone.contains(down.position)) return@awaitEachGesture
 
         val slop = viewConfiguration.touchSlop
         var claimed = false
-        var startY = down.position.y
+        var startX = down.position.x
         var startFraction = 0f
         while (true) {
             val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -133,18 +147,18 @@ internal fun Modifier.edgeVolumeGesture(
                 if (c.isConsumed || event.changes.size > 1) break
                 val dx = c.position.x - down.position.x
                 val dy = c.position.y - down.position.y
-                if (abs(dy) > slop) {
-                    if (abs(dy) > abs(dx) * 1.5f) {
+                if (abs(dx) > slop) {
+                    if (abs(dx) > abs(dy) * 1.5f) {
                         claimed = true
-                        hud.begin(right = down.position.x > size.width / 2f)
+                        hud.begin()
                         startFraction = hud.fractionNow()
-                        startY = c.position.y
+                        startX = c.position.x
                         c.consume()
                     } else break
                 }
             } else {
                 c.consume()
-                hud.set(startFraction + (startY - c.position.y) / rangePx)
+                hud.set(startFraction + (c.position.x - startX) / rangePx)
             }
         }
         if (claimed) hud.end()
@@ -152,66 +166,80 @@ internal fun Modifier.edgeVolumeGesture(
 }
 
 /**
- * One thin pill on the edge being dragged (left or right), level with the artwork row. Draw on top of the screen (takes no touches);
- * they fade out shortly after release.
+ * One small horizontal pill with an icon and the level as a number, centered between the title / artist block and the
+ * cover. Draw it on top of the screen (it takes no touches); it fades out shortly after release.
  */
 @Composable
 internal fun VolumeHudOverlay(hud: VolumeHud, modifier: Modifier = Modifier) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(hud.holding) {
-        if (hud.holding) visible = true else { delay(600); visible = false }
+        if (hud.holding) visible = true else { delay(700); visible = false }
     }
     var origin by remember { mutableStateOf(Offset.Zero) }
-    val pillHeight = 150.dp
-    val pillHeightPx = with(LocalDensity.current) { pillHeight.toPx() }
-    val top = (hud.anchor.center.y - origin.y - pillHeightPx / 2f).roundToInt()
+    val density = LocalDensity.current
+    val pillHeightPx = with(density) { PillHeight.toPx() }
+    // Halfway between the bottom of the title block and the top of the artwork (not of its ring room).
+    val artTop = hud.anchor.top + with(density) { CoverArtInset.toPx() }
+    val centerY = if (hud.headerBottom > 0f && hud.anchor.height > 0f) (hud.headerBottom + artTop) / 2f else hud.anchor.top
+    val top = (centerY - origin.y - pillHeightPx / 2f - with(density) { PillLift.toPx() }).roundToInt()
 
     Box(modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
         AnimatedVisibility(
             visible = visible,
             enter = fadeIn(tween(120)),
-            exit = fadeOut(tween(240)),
+            exit = fadeOut(tween(260)),
         ) {
             Box(Modifier.fillMaxSize()) {
-                if (hud.onRight) {
-                    VolumePill(hud.fraction, pillHeight, Modifier.align(Alignment.TopEnd).offset { IntOffset(0, top) }.padding(end = 8.dp))
-                } else {
-                    VolumePill(hud.fraction, pillHeight, Modifier.align(Alignment.TopStart).offset { IntOffset(0, top) }.padding(start = 8.dp))
-                }
+                VolumePill(hud.fraction, Modifier.align(Alignment.TopCenter).offset { IntOffset(0, top) })
             }
         }
     }
 }
 
+private val PillWidth = 176.dp
+private val PillHeight = 34.dp
+
+/** Nudge up from the exact middle of the gap, so the pill keeps clear of the cover's ring. */
+private val PillLift = 9.dp
+
 @Composable
-private fun VolumePill(fraction: Float, height: Dp, modifier: Modifier = Modifier) {
-    val f = fraction.coerceIn(0f, 1f)
+private fun VolumePill(fraction: Float, modifier: Modifier = Modifier) {
+    val f by animateFloatAsState(fraction.coerceIn(0f, 1f), tween(60), label = "volume-fill")
     val icon = when {
         f <= 0f -> PhosphorIcons.Light.SpeakerX
         f < 0.5f -> PhosphorIcons.Light.SpeakerLow
         else -> PhosphorIcons.Light.SpeakerHigh
     }
-    // The icon sits at the bottom of the pill: dark while the white fill is behind it, white once the fill drops below it.
-    val iconTint = if (f > 0.16f) Color.Black.copy(alpha = 0.8f) else Color.White
+    val shape = RoundedCornerShape(PillHeight / 2)
+    // Icon at the start, number at the end: each turns dark while the white fill is behind it, white otherwise.
+    val iconTint = if (f > 0.15f) Color.Black.copy(alpha = 0.8f) else Color.White
+    val numberTint = if (f > 0.88f) Color.Black.copy(alpha = 0.8f) else Color.White
     Box(
         modifier
-            .width(22.dp)
-            .height(height)
-            .clip(RoundedCornerShape(11.dp))
-            .background(Color.White.copy(alpha = 0.16f)),
+            .width(PillWidth)
+            .height(PillHeight)
+            .shadow(14.dp, shape, clip = false, ambientColor = Color.Black.copy(alpha = 0.4f), spotColor = Color.Black.copy(alpha = 0.5f))
+            .clip(shape)
+            .background(Color.Black.copy(alpha = 0.42f)),
     ) {
         Box(
             Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .fillMaxHeight(f)
-                .background(Color.White.copy(alpha = 0.92f)),
+                .align(Alignment.CenterStart)
+                .fillMaxHeight()
+                .fillMaxWidth(f)
+                .background(Color.White.copy(alpha = 0.95f)),
         )
         Icon(
             imageVector = icon,
             contentDescription = null,
             tint = iconTint,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp).size(14.dp),
+            modifier = Modifier.align(Alignment.CenterStart).padding(start = 12.dp).size(18.dp),
+        )
+        Text(
+            "${(f * 100).roundToInt()}",
+            color = numberTint,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp),
         )
     }
 }

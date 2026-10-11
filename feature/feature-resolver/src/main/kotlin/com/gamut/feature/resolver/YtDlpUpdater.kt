@@ -82,12 +82,15 @@ class YtDlpUpdater @Inject constructor(@ApplicationContext private val context: 
 
     private fun attempt(): Boolean {
         val ytdl = YoutubeDL.getInstance()
-        runCatching { ytdl.init(context) }   // does nothing when the engine already did it
+        // Does nothing when the engine already did it. A failure here would make every update fail, so log it.
+        runCatching { ytdl.init(context) }.onFailure { Log.w(TAG, "yt-dlp init failed", it) }
         val before = installedVersion(ytdl)
         Log.i(TAG, "checking for a newer yt-dlp (installed: $before)")
         var error: String? = null
         for ((name, channel) in CHANNELS) {
             val result = runCatching { ytdl.updateYoutubeDL(context, channel) }
+            // Full stack trace: the library's own message ("failed to update youtube-dl") hides the real cause.
+            result.exceptionOrNull()?.let { Log.w(TAG, "update on $name channel threw", it) }
             if (result.isSuccess) {
                 val after = installedVersion(ytdl)
                 val changed = after != null && after != before
@@ -102,7 +105,8 @@ class YtDlpUpdater @Inject constructor(@ApplicationContext private val context: 
                 Log.i(TAG, "$name channel: ${if (changed) "updated $before -> $after" else "already current ($after)"}")
                 return changed
             }
-            error = "$name: ${result.exceptionOrNull()?.message ?: "update failed"}"
+            val e = result.exceptionOrNull()
+            error = "$name: ${e?.message ?: "update failed"}${e?.cause?.let { " (${it.javaClass.simpleName}: ${it.message})" }.orEmpty()}"
             Log.w(TAG, "update failed on $error")
         }
         prefs.edit().putString(K_ERROR, error).apply()

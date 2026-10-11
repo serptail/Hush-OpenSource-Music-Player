@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -61,9 +62,9 @@ import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.fill.Heart
 import com.adamglin.phosphoricons.light.Heart
-import com.adamglin.phosphoricons.light.Waveform
 import com.gamut.core.designsystem.AlertTick
 import com.gamut.core.designsystem.CoverPalette
+import com.gamut.core.designsystem.R
 import com.gamut.core.designsystem.ErrorTick
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.model.Playlist
@@ -163,7 +164,7 @@ private fun ListeningContent(level: Float, searching: Boolean, onCancel: () -> U
             }
             Box(
                 Modifier
-                    .size(104.dp)
+                    .size(128.dp)
                     .graphicsLayer {
                         val s = 1f + 0.3f * smoothLevel.value
                         scaleX = s
@@ -171,8 +172,11 @@ private fun ListeningContent(level: Float, searching: Boolean, onCancel: () -> U
                     }
                     .background(ink(0.14f), CircleShape),
             )
-            Box(Modifier.size(76.dp).background(ink(), CircleShape), contentAlignment = Alignment.Center) {
-                Icon(PhosphorIcons.Light.Waveform, null, tint = LocalCoverPalette.current.base, modifier = Modifier.size(34.dp))
+            // ic_shazam is a circle with the S carved out of it, so it is drawn as the white circle itself.
+            // A base-coloured disc sits behind it so the carved S reads as solid dark instead of showing the pulsing core.
+            Box(Modifier.size(88.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(82.dp).background(LocalCoverPalette.current.base, CircleShape))
+                Icon(painterResource(R.drawable.ic_shazam), null, tint = ink(), modifier = Modifier.size(88.dp))
             }
         }
         Spacer(Modifier.height(8.dp))

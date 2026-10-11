@@ -230,11 +230,13 @@ internal fun Modifier.fadingEdges(fade: Float = 0.12f): Modifier = this
         )
     }
 
-private const val BounceSpeedDpPerSecond = 45f  // how fast an overlong title glides
+private const val BounceSpeedDpPerSecond = 26f  // how fast an overlong title glides
+private const val BounceRestStartMs = 2400L   // pause before the first glide, and each time it is back at the start
+private const val BounceRestEndMs = 1700L     // pause once the end of the title is showing
 
 /**
- * One-line text. If it is too long for its box it glides to the far end so everything gets shown,
- * then straight away glides back to the start, and repeats, like a ball bouncing between two walls.
+ * One-line text. If it is too long for its box it rests a moment, glides to the far end so everything gets shown,
+ * rests again, glides back to the start, and repeats.
  * Text that fits stays still.
  */
 @Composable
@@ -251,8 +253,10 @@ internal fun BouncingText(text: String, style: TextStyle, color: Color, modifier
         if (overflowPx <= 0) return@LaunchedEffect
         val travelMs = (overflowPx / density.density / BounceSpeedDpPerSecond * 1000f).toInt().coerceAtLeast(400)
         while (true) {
-            offset.animateTo(overflowPx.toFloat(), tween(travelMs, easing = LinearEasing))
-            offset.animateTo(0f, tween(travelMs, easing = LinearEasing))
+            delay(BounceRestStartMs)   // rest at the start so the title can be read
+            offset.animateTo(overflowPx.toFloat(), tween(travelMs, easing = FastOutSlowInEasing))
+            delay(BounceRestEndMs)     // rest at the end, too: no more instant ping-pong
+            offset.animateTo(0f, tween(travelMs, easing = FastOutSlowInEasing))
         }
     }
 
@@ -407,24 +411,29 @@ internal fun waveformAt(wave: FloatArray, index: Int, count: Int): Float {
 }
 
 /**
- * Heights (0..1) for [count] bars. Each bar first takes the loudest sample of its slice, then every bar is ranked
- * against all the others: the quietest bar becomes 0, the loudest 1, the median 0.5. A song's loudness values
- * tend to bunch up in a narrow band, which makes bars look alike; ranking spreads them evenly over the whole range.
+ * Heights (0..1) for [count] bars. Each bar takes the loudest sample of its slice, the row is smoothed so neighbours
+ * flow into each other (a song's loudness is continuous: phrases swell and fall, they don't flicker bar to bar), and
+ * then stretched between the 8th and 97th percentile so quiet parts sit low and loud parts high. The old version
+ * RANKED the bars, which spreads them evenly over 0..1 and is, by construction, random-looking noise.
  */
 internal fun barHeights(wave: FloatArray, count: Int): FloatArray {
     if (wave.isEmpty() || count <= 0) return FloatArray(maxOf(count, 0))
-    val raw = FloatArray(count) { waveformAt(wave, it, count) }
-    if (count == 1) return floatArrayOf(raw[0])
-    val sorted = raw.sortedArray()
-    return FloatArray(count) { i ->
-        var lo = 0
-        var hi = count   // first index whose value is >= raw[i]
-        while (lo < hi) {
-            val mid = (lo + hi) ushr 1
-            if (sorted[mid] < raw[i]) lo = mid + 1 else hi = mid
+    var row = FloatArray(count) { waveformAt(wave, it, count) }
+    if (count < 5) return row
+    repeat(2) {   // two passes of a 1-2-1 kernel ~ a gentle gaussian, 5 bars wide
+        val next = FloatArray(count)
+        for (i in 0 until count) {
+            val l = row[(i - 1).coerceAtLeast(0)]
+            val r = row[(i + 1).coerceAtMost(count - 1)]
+            next[i] = 0.25f * l + 0.5f * row[i] + 0.25f * r
         }
-        lo.toFloat() / (count - 1)
+        row = next
     }
+    val sorted = row.sortedArray()
+    val lo = sorted[(count * 0.08f).toInt().coerceIn(0, count - 1)]
+    val hi = sorted[(count * 0.97f).toInt().coerceIn(0, count - 1)]
+    val range = (hi - lo).coerceAtLeast(1e-3f)
+    return FloatArray(count) { ((row[it] - lo) / range).coerceIn(0f, 1f) }
 }
 
 /**
@@ -443,18 +452,33 @@ object WaveformSource {
         appContext = context.applicationContext
     }
 
+    private val recent = java.util.ArrayDeque<String>()
+
+    /**
+     * Call right before `player.play(track, audioUrl)`, and also wherever the queue resolves the NEXT song's URL.
+     * [audioUrl] may be an https URL, an absolute file path, file:// or content:// (offline / downloaded songs).
+     */
     fun register(track: Track, audioUrl: String) {
         val key = keyOf(track)
         urls[key] = audioUrl
-        // Songs we moved on from no longer need their waveform: stop spending CPU on them.
-        waveformEntries.keys.toList().forEach { k ->
-            if (k != key) waveformEntries.remove(k)?.job?.cancel()
+        // Keep this song and the one before it: the queue can register the next song while the current one is still
+        // being measured, and cancelling the current one left its ring flat. Anything older is dropped.
+        val stale = synchronized(recent) {
+            recent.remove(key)
+            recent.addLast(key)
+            buildList { while (recent.size > 2) add(recent.removeFirst()) }
         }
-        // Start measuring right now, at song launch, so it is (nearly) ready by the time the player screen opens.
+        stale.forEach { k -> waveformEntries.remove(k)?.job?.cancel() }
         waveformEntry(track)
     }
 
-    internal fun urlFor(track: Track): String? = urls[keyOf(track)]
+    /**
+     * Where the audio of a track can be found when nobody called [register]: the player screen points this at
+     * `MusicPlayer.sourceUrlFor`, so the current song, the queued next one and offline files are all found.
+     */
+    @Volatile internal var provider: ((Track) -> String?)? = null
+
+    internal fun urlFor(track: Track): String? = urls[keyOf(track)] ?: provider?.invoke(track)
 }
 
 /** Number of samples in a track's envelope. More than the ring has bars, so every bar gets real data. */
@@ -494,17 +518,61 @@ private fun waveformEntry(track: Track): WaveformEntry {
     synchronized(waveformCache) { waveformCache[key] }?.let { cached ->
         return WaveformEntry().also { it.data.value = cached }
     }
-    return waveformEntries.computeIfAbsent(key) { k ->
-        val entry = WaveformEntry()
-        entry.job = waveformScope.launch {
-            try {
-                val real = loadWaveform(track) { partial -> entry.data.value = partial }
-                if (real != null && real.isNotEmpty()) entry.data.value = real
-            } finally {
-                waveformEntries.remove(k)   // done, failed or cancelled: the cache (or a retry) takes over
+    var created: WaveformEntry? = null
+    val entry = waveformEntries.computeIfAbsent(key) { k ->
+        WaveformEntry().also { e ->
+            // LAZY + start() after the entry is in the map: a job that ends instantly can no longer remove an entry
+            // that was not inserted yet (which left a dead entry behind and the ring flat for good).
+            e.job = waveformScope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+                try {
+                    // Let playback start and settle first: this work must never compete with the stream's first seconds.
+                    delay(WaveformStartDelayMs)
+                    val real = loadWaveform(track) { partial -> e.data.value = partial }
+                    if (real != null && real.isNotEmpty()) e.data.value = real
+                } finally {
+                    waveformEntries.remove(k, e)   // done, failed or cancelled: the cache (or a retry) takes over
+                }
             }
+            created = e
         }
-        entry
+    }
+    if (created === entry) entry.job?.start()
+    return entry
+}
+
+private const val WaveformStartDelayMs = 400L   // was 2.5 s: the ring is only shown while scrubbing, the download is cheap
+
+/** One measurement at a time: the queue can register the next song early, and two downloads + decodes at once stutter playback. */
+private val waveformGate = kotlinx.coroutines.sync.Semaphore(1)
+
+/** Runs [block] on a background-priority thread and puts the thread's priority back (pool threads are shared). */
+private inline fun <T> lowPriority(block: () -> T): T {
+    val old = android.os.Process.getThreadPriority(android.os.Process.myTid())
+    android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+    try {
+        return block()
+    } finally {
+        android.os.Process.setThreadPriority(old)
+    }
+}
+
+private class LocalAudio(val file: java.io.File, val temp: Boolean)
+
+/** The audio as a local file when [source] is a path / file:// / content:// (offline songs); null for network URLs. */
+private fun asLocalAudio(source: String): LocalAudio? {
+    fun existing(path: String?): java.io.File? = path?.let { java.io.File(it) }?.takeIf { it.isFile && it.length() > 0 }
+    return when {
+        source.startsWith("/") -> existing(source)?.let { LocalAudio(it, false) }
+        source.startsWith("file:") -> existing(android.net.Uri.parse(source).path)?.let { LocalAudio(it, false) }
+        source.startsWith("content:") -> {
+            val ctx = WaveformSource.appContext ?: return null
+            val tmp = java.io.File.createTempFile("waveform", ".audio")
+            val ok = runCatching {
+                ctx.contentResolver.openInputStream(android.net.Uri.parse(source))?.use { input -> tmp.outputStream().use { out -> input.copyTo(out) } }
+            }.isSuccess && tmp.length() > 0
+            if (ok) LocalAudio(tmp, true) else { tmp.delete(); null }
+        }
+        else -> null
     }
 }
 
@@ -516,11 +584,11 @@ private fun waveformEntry(track: Track): WaveformEntry {
 private suspend fun loadWaveform(track: Track, onPartial: (FloatArray) -> Unit): FloatArray? {
     val key = WaveformSource.keyOf(track)
     synchronized(waveformCache) { waveformCache[key] }?.let { return it }
-    // The URL is registered right before playback starts; give it a moment in case this was asked for first.
+    // The URL is registered right before playback starts (or when the queue resolves it); wait up to 20 s for it.
     var url = WaveformSource.urlFor(track)
     var tries = 0
-    while (url == null && tries < 10) {
-        delay(300)
+    while (url == null && tries < 40) {
+        delay(500)
         url = WaveformSource.urlFor(track)
         tries++
     }
@@ -528,22 +596,20 @@ private suspend fun loadWaveform(track: Track, onPartial: (FloatArray) -> Unit):
         Log.w(WaveformTag, "No audio URL registered for \"${track.title}\" (played without WaveformSource.register?)")
         return null
     }
+    waveformGate.acquire()
     val startedAt = System.currentTimeMillis()
     val result = try {
-        val file = withContext(Dispatchers.IO) {
-            val job = currentCoroutineContext()[Job]
-            downloadAudio(source) { job?.isActive != false }
-        }
-        val downloadedAt = System.currentTimeMillis()
-        if (file == null) {
-            null
-        } else {
-            try {
-                withContext(Dispatchers.IO) { sampleEnvelope(file.path) }.also {
-                    Log.i(WaveformTag, "download ${downloadedAt - startedAt} ms, measuring ${System.currentTimeMillis() - downloadedAt} ms")
+        withContext(Dispatchers.IO) {
+            lowPriority {
+                val local = asLocalAudio(source)
+                if (local != null) {
+                    // Offline / downloaded song: measure the file directly, no network at all.
+                    try { sampleEnvelope(local.file.path) } finally { if (local.temp) local.file.delete() }
+                } else {
+                    val job = currentCoroutineContext()[Job]
+                    val file = downloadAudio(source) { job?.isActive != false }
+                    if (file == null) null else try { sampleEnvelope(file.path) } finally { file.delete() }
                 }
-            } finally {
-                file.delete()
             }
         }
     } catch (e: CancellationException) {
@@ -551,6 +617,8 @@ private suspend fun loadWaveform(track: Track, onPartial: (FloatArray) -> Unit):
     } catch (e: Throwable) {
         Log.w(WaveformTag, "Decoding failed for \"${track.title}\"", e)
         null
+    } finally {
+        waveformGate.release()
     }
     if (result == null) Log.w(WaveformTag, "No waveform for \"${track.title}\"")
     else Log.i(
@@ -562,54 +630,71 @@ private suspend fun loadWaveform(track: Track, onPartial: (FloatArray) -> Unit):
     return result
 }
 
+private const val DownloadParallel = 4
+
+/** One ranged request: (HTTP code, bytes). Null on failure. */
+private fun fetchChunk(url: String, start: Long, chunked: Boolean): Pair<Int, ByteArray>? {
+    val end = start + DownloadChunk - 1
+    val connection = java.net.URL(if (chunked) "$url&range=$start-$end" else url).openConnection() as java.net.HttpURLConnection
+    return try {
+        connection.connectTimeout = 10_000
+        connection.readTimeout = 15_000
+        connection.setRequestProperty("User-Agent", WaveformUserAgent)
+        if (!chunked) connection.setRequestProperty("Range", "bytes=$start-$end")
+        val code = connection.responseCode
+        if (code == 416) return code to ByteArray(0)   // asked past the end
+        if (code !in 200..299) {
+            Log.w(WaveformTag, "Download failed: HTTP $code")
+            return null
+        }
+        code to connection.inputStream.use { it.readBytes() }
+    } catch (e: java.io.IOException) {
+        Log.w(WaveformTag, "Download failed", e)
+        null
+    } finally {
+        connection.disconnect()
+    }
+}
+
 /**
- * Downloads the audio into a temp file, a chunk at a time (YouTube's servers throttle one long request, but not
- * ranged ones). Returns null on failure; the caller deletes the file.
+ * Downloads the audio into a temp file. The first chunk goes alone (it shows whether the server honours ranges at
+ * all); the rest comes [DownloadParallel] chunks at a time, which is several times faster than one after another
+ * (YouTube throttles each request, not the connection). Returns null on failure; the caller deletes the file.
  */
 private fun downloadAudio(url: String, stillActive: () -> Boolean): java.io.File? {
     val file = java.io.File.createTempFile("waveform", ".audio")
     var ok = false
+    val pool = java.util.concurrent.Executors.newFixedThreadPool(DownloadParallel)
     try {
         val chunked = url.contains("googlevideo.com") && !url.contains("range=")
-        var start = 0L
         file.outputStream().use { out ->
-            val buffer = ByteArray(64 * 1024)
-            while (start < MaxDownload) {
+            val first = fetchChunk(url, 0L, chunked) ?: return null
+            out.write(first.second)
+            var start = first.second.size.toLong()
+            // A server that ignores Range (200, not 206) already sent the whole file; a short chunk is the last one.
+            var more = first.second.size >= DownloadChunk && (chunked || first.first == 206)
+            while (more && start < MaxDownload) {
                 if (!stillActive()) return null
-                val end = start + DownloadChunk - 1
-                val connection = java.net.URL(if (chunked) "$url&range=$start-$end" else url).openConnection() as java.net.HttpURLConnection
-                connection.connectTimeout = 10_000
-                connection.readTimeout = 15_000
-                connection.setRequestProperty("User-Agent", WaveformUserAgent)
-                if (!chunked) connection.setRequestProperty("Range", "bytes=$start-$end")
-                try {
-                    val code = connection.responseCode
-                    if (code == 416) break   // asked past the end
-                    if (code !in 200..299) {
-                        Log.w(WaveformTag, "Download failed: HTTP $code")
-                        return null
-                    }
-                    var got = 0L
-                    connection.inputStream.use { input ->
-                        while (true) {
-                            val n = input.read(buffer)
-                            if (n < 0) break
-                            out.write(buffer, 0, n)
-                            got += n
-                        }
-                    }
-                    start += got
-                    // A server that ignores Range sends the whole file at once; a short chunk is the last one.
-                    if (got == 0L || got < DownloadChunk || (!chunked && code == 200)) break
-                } finally {
-                    connection.disconnect()
+                val base = start
+                val wave = (0 until DownloadParallel).map { i ->
+                    pool.submit<Pair<Int, ByteArray>?> { fetchChunk(url, base + i.toLong() * DownloadChunk, chunked) }
                 }
+                var done = false
+                for (f in wave) {
+                    if (done) { f.cancel(true); continue }
+                    val r = f.get() ?: return null
+                    out.write(r.second)
+                    start += r.second.size
+                    if (r.first == 416 || r.second.size < DownloadChunk) done = true
+                }
+                more = !done
             }
         }
         ok = file.length() > 0
         if (!ok) Log.w(WaveformTag, "Download returned no data")
         return if (ok) file else null
     } finally {
+        pool.shutdownNow()
         if (!ok) file.delete()
     }
 }
@@ -691,7 +776,18 @@ internal fun shapeWaveform(wave: FloatArray): FloatArray {
 @Composable
 internal fun rememberWaveform(track: Track?): FloatArray {
     val key = track?.let(WaveformSource::keyOf)
-    val entry = remember(key) { track?.let { waveformEntry(it) } }
+    var entry by remember(key) { mutableStateOf(track?.let { waveformEntry(it) }) }
+    // A measurement that ended with nothing (URL registered late, network blip) is retried a few times, with growing
+    // pauses, while this song is on screen. Before, the ring stayed flat until the player screen was reopened.
+    LaunchedEffect(key) {
+        val t = track ?: return@LaunchedEffect
+        repeat(4) { attempt ->
+            delay(8_000L * (attempt + 1))
+            val e = entry ?: return@LaunchedEffect
+            if (e.data.value.isNotEmpty()) return@LaunchedEffect
+            if (e.job?.isActive != true) entry = waveformEntry(t)
+        }
+    }
     return entry?.data?.value ?: NoWaveform
 }
 
@@ -732,7 +828,13 @@ internal fun rememberCoverAccent(url: String?): Color {
  * so vivid pixels dominate and greys / near-blacks are ignored. The winning sector's average hue
  * is returned with saturation clamped and brightness lifted, so it always reads on a dark background.
  */
-private fun accentFromBitmap(bitmap: Bitmap): Color? {
+private fun accentFromBitmap(bitmap: Bitmap): Color? = accentsFromBitmap(bitmap).first
+
+/** The cover's second colour (e.g. the gold on a pink cover), or null when the cover really has only one hue. */
+private fun subAccentFromBitmap(bitmap: Bitmap): Color? = accentsFromBitmap(bitmap).second
+
+/** (main accent, sub accent). The sub accent is the strongest hue at least ~45 degrees away from the main one. */
+private fun accentsFromBitmap(bitmap: Bitmap): Pair<Color?, Color?> {
     val size = 40
     val sample = Bitmap.createScaledBitmap(bitmap, size, size, true)
     val bins = 12
@@ -757,10 +859,107 @@ private fun accentFromBitmap(bitmap: Bitmap): Color? {
     }
     var best = 0
     for (i in 1 until bins) if (weight[i] > weight[best]) best = i
-    if (count[best] < 12 || weight[best] <= 0f) return null // effectively a grey cover
+    if (count[best] < 12 || weight[best] <= 0f) return null to null // effectively a grey cover
     val hue = sumH[best] / weight[best]
     val sat = (sumS[best] / weight[best]).coerceIn(0.5f, 0.85f)
-    return Color(android.graphics.Color.HSVToColor(floatArrayOf(hue, sat, 0.96f)))
+    val main = Color(android.graphics.Color.HSVToColor(floatArrayOf(hue, sat, 0.96f)))
+
+    return main to subAccentFor(bitmap)
+}
+
+private fun hueDistance(a: Float, b: Float): Float = kotlin.math.abs(a - b).let { if (it > 180f) 360f - it else it }
+
+/**
+ * The cover's second colour: the hue FAMILY that contrasts most with the main one.
+ *
+ * Hues are first grouped into families, so pink / dark pink / maroon / magenta count as ONE colour instead of competing
+ * with each other (that is why the first version kept answering "pink" on a pink cover). Every family other than the
+ * dominant one is then scored by contrast, not by size: how far its hue is from the main hue, how vivid it is, and only
+ * the square root of how much of the cover it covers, so a small but striking colour (a pink dress on a blue sky, the
+ * gold lettering on a magenta cover) beats a bigger, duller one. Null when nothing distinct and visible is left.
+ */
+private fun subAccentFor(bitmap: Bitmap): Color? {
+    val size = 64
+    val sample = Bitmap.createScaledBitmap(bitmap, size, size, true)
+    val fine = 36                      // 10 degree bins
+    val binW = FloatArray(fine)
+    val binN = IntArray(fine)
+    val binS = FloatArray(fine)        // weighted sums, for the family averages
+    val binV = FloatArray(fine)
+    val hsv = FloatArray(3)
+    var total = 0f
+    var pixels = 0
+    for (x in 0 until size) for (y in 0 until size) {
+        android.graphics.Color.colorToHSV(sample[x, y], hsv)
+        if (hsv[1] < 0.22f || hsv[2] < 0.30f) continue   // greys, near-blacks and washed-out pixels carry no colour
+        val w = hsv[1] * hsv[2]
+        val bin = ((hsv[0] / 360f) * fine).toInt().coerceIn(0, fine - 1)
+        binW[bin] += w; binN[bin]++; binS[bin] += hsv[1] * w; binV[bin] += hsv[2] * w
+        total += w; pixels++
+    }
+    if (pixels < 20 || total <= 0f) return null
+
+    // Group bins into families: heaviest bin first, it takes every unclaimed bin within 30 degrees of it.
+    val claimed = BooleanArray(fine)
+    class Family(val weight: Float, val count: Int, val hue: Float, val sat: Float, val value: Float)
+    val families = ArrayList<Family>()
+    for (seed in (0 until fine).sortedByDescending { binW[it] }) {
+        if (binW[seed] <= 0f || claimed[seed]) continue
+        val seedHue = seed * 10f + 5f
+        var w = 0f; var n = 0; var s = 0f; var v = 0f; var cx = 0f; var cy = 0f
+        for (j in 0 until fine) {
+            if (claimed[j] || binW[j] <= 0f || hueDistance(seedHue, j * 10f + 5f) > 30f) continue
+            claimed[j] = true
+            val rad = Math.toRadians((j * 10f + 5f).toDouble())
+            w += binW[j]; n += binN[j]; s += binS[j]; v += binV[j]
+            cx += binW[j] * kotlin.math.cos(rad).toFloat(); cy += binW[j] * kotlin.math.sin(rad).toFloat()
+        }
+        val hue = ((Math.toDegrees(kotlin.math.atan2(cy.toDouble(), cx.toDouble())).toFloat()) + 360f) % 360f
+        families.add(Family(w, n, hue, s / w, v / w))
+    }
+
+    // The reference is the family that covers the most of the cover (the sky, the curtains), NOT the main accent: the
+    // accent only looks at strongly saturated pixels, so on a pale-sky cover it was the small pink dress itself.
+    val dominant = families.maxByOrNull { it.weight } ?: return null
+    var best: Family? = null
+    var bestScore = 0f
+    for (f in families) {
+        if (f === dominant) continue
+        val distance = hueDistance(f.hue, dominant.hue)
+        if (distance < 35f) continue                              // too close to the dominant colour to read as different
+        if (f.weight < total * 0.02f || f.count < pixels * 0.012f) continue   // a few stray pixels, not a colour on the cover
+        val score = kotlin.math.sqrt(f.weight / total) * f.sat * (0.6f + 0.4f * f.value) * (minOf(distance, 110f) / 110f)
+        if (score > bestScore) { bestScore = score; best = f }
+    }
+    val pick = best ?: return null
+    return Color(android.graphics.Color.HSVToColor(floatArrayOf(pick.hue, (pick.sat * 1.15f).coerceIn(0.55f, 0.92f), 1f)))
+}
+
+private val subAccentCache = HashMap<String, Color?>()
+
+/**
+ * The cover's second colour (the gold on a pink cover), for things that should not use the main accent. Falls back to
+ * [fallback] when the cover has no distinct second hue. Animates when the track changes.
+ */
+@Composable
+internal fun rememberCoverSubAccent(url: String?, fallback: Color): Color {
+    val context = LocalContext.current
+    var sub by remember { mutableStateOf<Color?>(url?.let { subAccentCache[it] }) }
+    LaunchedEffect(url) {
+        if (url.isNullOrBlank()) { sub = null; return@LaunchedEffect }
+        if (subAccentCache.containsKey(url)) { sub = subAccentCache[url]; return@LaunchedEffect }
+        sub = withContext(Dispatchers.IO) {
+            runCatching {
+                val request = ImageRequest.Builder(context).data(url).allowHardware(false).build()
+                val result = context.imageLoader.execute(request)
+                val bitmap = (result as? SuccessResult)?.drawable?.toBitmapOrNull() ?: return@runCatching null
+                subAccentFromBitmap(bitmap)
+            }.getOrNull()
+        }
+        subAccentCache[url] = sub
+    }
+    val animated by animateColorAsState(sub ?: fallback, tween(600), label = "lyrics-sub-accent")
+    return animated
 }
 
 /**

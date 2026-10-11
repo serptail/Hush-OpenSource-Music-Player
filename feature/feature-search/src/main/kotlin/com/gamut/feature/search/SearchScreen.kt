@@ -137,7 +137,7 @@ fun SearchScreen(
     onTrackSelected: (Track, List<Track>) -> Unit,
     onArtistSelected: (Long) -> Unit,
     onAlbumSelected: (DiscoverItem) -> Unit,
-    /** The round "what's this song?" button next to the profile icon. */
+    /** The round "what's this song?" button next to the profile icon (same 34dp circle as the profile avatar). */
     onShazam: () -> Unit,
     /** Profile icon: opens the account / sync / backup screen. */
     onProfile: () -> Unit = {},
@@ -212,7 +212,7 @@ fun SearchScreen(
                                 painterResource(com.gamut.core.designsystem.R.drawable.ic_shazam),
                                 "Identify a song",
                                 tint = ink(0.9f),
-                                modifier = Modifier.size(22.dp),
+                                modifier = Modifier.size(34.dp),
                             )
                         }
                         Spacer(Modifier.width(8.dp))

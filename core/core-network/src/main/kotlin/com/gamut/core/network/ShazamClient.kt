@@ -1,5 +1,6 @@
 package com.gamut.core.network
 
+import android.util.Log
 import com.gamut.core.model.Track
 import com.gamut.core.model.TrackSource
 import java.io.IOException
@@ -31,7 +32,10 @@ sealed interface ShazamResult {
  * Plain HttpURLConnection + org.json on purpose: no extra dependencies.
  */
 @Singleton
-class ShazamClient @Inject constructor() {
+class ShazamClient @Inject constructor(private val configs: ShazamConfigStore) {
+
+    /** One try: the outcome, and whether the failure looks like the request itself is outdated (a fresh config may fix it). */
+    private class Sent(val result: ShazamResult, val configProblem: Boolean = false)
 
     /** [pcm] = raw 16 kHz mono 16-bit little-endian PCM (what MicRecorder produces), ideally 5 to 12 seconds. */
     suspend fun recognize(pcm: ByteArray): ShazamResult = withContext(Dispatchers.IO) {
@@ -40,8 +44,18 @@ class ShazamClient @Inject constructor() {
         } catch (e: Exception) {
             return@withContext ShazamResult.Failure("Couldn't analyse the audio")
         }
+        configs.refreshIfDue()   // at most one short lookup every few hours
+        val first = send(signature, configs.current())
+        if (first.configProblem && configs.refreshNow()) {
+            Log.i(TAG, "retrying with the newer request config")
+            return@withContext send(signature, configs.current()).result
+        }
+        first.result
+    }
+
+    private suspend fun send(signature: ShazamSignature.Result, config: ShazamConfig): Sent {
         val body = JSONObject()
-            .put("timezone", "Europe/Paris")
+            .put("timezone", config.timezone)
             .put("signature", JSONObject().put("uri", signature.uri).put("samplems", signature.sampleMs))
             .put("timestamp", System.currentTimeMillis())
             .put("context", JSONObject())
@@ -49,44 +63,48 @@ class ShazamClient @Inject constructor() {
             .toString()
             .toByteArray()
 
-        val url = "https://amp.shazam.com/discovery/v5/en-US/GB/android/-/tag/" +
-            "${UUID.randomUUID().toString().uppercase()}/${UUID.randomUUID().toString().uppercase()}" +
-            "?sync=true&webv3=true&sampling=true&connected=&shazamapiversion=v3&sharehub=true" +
-            "&hubv5minorversion=v5.1&hidelb=true&video=v3"
+        val url = config.endpoint
+            .replace("{uuid1}", UUID.randomUUID().toString().uppercase())
+            .replace("{uuid2}", UUID.randomUUID().toString().uppercase())
 
         val connection = try {
             URL(url).openConnection() as HttpURLConnection
         } catch (e: Exception) {
-            return@withContext ShazamResult.Failure("Recognition failed")
+            return Sent(ShazamResult.Failure("Recognition failed"), configProblem = true)
         }
         // A blocking socket read can't be interrupted, but closing the connection from here makes it throw.
         val onCancel = currentCoroutineContext().job.invokeOnCompletion { cause -> if (cause != null) connection.disconnect() }
-        try {
+        return try {
             connection.requestMethod = "POST"
             connection.connectTimeout = CONNECT_TIMEOUT_MS
             connection.readTimeout = READ_TIMEOUT_MS
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json")
-            connection.setRequestProperty("X-Shazam-Platform", "IPHONE")
-            connection.setRequestProperty("X-Shazam-AppVersion", "14.1.0")
+            connection.setRequestProperty("X-Shazam-Platform", config.platform)
+            connection.setRequestProperty("X-Shazam-AppVersion", config.appVersion)
             connection.setRequestProperty("Accept", "*/*")
-            connection.setRequestProperty("Accept-Language", "en-US")
-            connection.setRequestProperty("User-Agent", USER_AGENT)
+            connection.setRequestProperty("Accept-Language", config.language)
+            connection.setRequestProperty("User-Agent", config.userAgent)
+            config.headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
             connection.setFixedLengthStreamingMode(body.size)
             connection.outputStream.use { it.write(body) }
 
             when (val code = connection.responseCode) {
-                200 -> parse(connection.inputStream.bufferedReader().use { it.readText() })
-                204 -> ShazamResult.NoMatch
-                429 -> ShazamResult.Failure("Too many tries, wait a moment and try again")
-                else -> ShazamResult.Failure("Shazam had a problem ($code)")
+                200 -> Sent(parse(connection.inputStream.bufferedReader().use { it.readText() }))
+                204 -> Sent(ShazamResult.NoMatch)
+                429 -> Sent(ShazamResult.Failure("Too many tries, wait a moment and try again"))
+                else -> {
+                    val snippet = connection.errorStream?.bufferedReader()?.use { it.readText().take(200) }.orEmpty()
+                    Log.w(TAG, "Shazam answered HTTP $code: $snippet")
+                    Sent(ShazamResult.Failure("Shazam had a problem ($code)"), configProblem = true)
+                }
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
-            ShazamResult.Failure("Couldn't reach Shazam")
+            Sent(ShazamResult.Failure("Couldn't reach Shazam"))
         } catch (e: Exception) {
-            ShazamResult.Failure("Recognition failed")
+            Sent(ShazamResult.Failure("Recognition failed"))
         } finally {
             onCancel.dispose()
             connection.disconnect()
@@ -189,7 +207,7 @@ class ShazamClient @Inject constructor() {
         const val CONNECT_TIMEOUT_MS = 8_000
         const val READ_TIMEOUT_MS = 20_000
         const val ITUNES_TIMEOUT_MS = 2_000
-        const val USER_AGENT = "Dalvik/2.1.0 (Linux; U; Android 13; Pixel 6 Build/TQ3A.230901.001)"
+        const val TAG = "ShazamClient"
         val BRACKETS = Regex("[(\\[].*?[)\\]]")
     }
 }

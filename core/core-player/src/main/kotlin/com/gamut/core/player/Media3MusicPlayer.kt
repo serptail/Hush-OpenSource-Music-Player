@@ -308,10 +308,27 @@ class Media3MusicPlayer @Inject constructor(
     private val awaiting = MutableStateFlow(false)
     override val awaitingAudio: StateFlow<Boolean> = awaiting
 
+    private val loadingFlow = MutableStateFlow(false)
+    override val loadingTrack: StateFlow<Boolean> = loadingFlow
+
+    // The URLs of the last few items handed to ExoPlayer (current, next, standby). Read from other threads (waveform).
+    private val sourceUrls = object : LinkedHashMap<String, String>(8, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > 6
+    }
+    override fun currentPositionMs(): Long {
+        val track = currentTrack ?: return -1L
+        if (activeSlot == null || transitioning || state.value is PlaybackState.Loading) return -1L
+        if (player.currentMediaItem?.mediaId != track.isrc) return -1L
+        return player.currentPosition.coerceAtLeast(0L)
+    }
+
+    override fun sourceUrlFor(isrc: String): String? = synchronized(sourceUrls) { sourceUrls[isrc] }
+
     /** "Playing" on screen but silent: moving to a track ExoPlayer doesn't hold yet, loading, or re-buffering. */
     private fun updateAwaiting() {
         awaiting.value = transitioning || state.value is PlaybackState.Loading ||
             (player.playWhenReady && player.playbackState == Player.STATE_BUFFERING)
+        loadingFlow.value = transitioning || state.value is PlaybackState.Loading
     }
     private var prefetchJob: Job? = null
     private var prefetchedFor: String? = null
@@ -375,8 +392,10 @@ class Media3MusicPlayer @Inject constructor(
             /** ExoPlayer moved on by itself (the track ended) into the preloaded next item. */
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 if (slot !== activeSlot) return
-                publishStreamDuration()
-                if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && reason != Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) return
+                if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && reason != Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
+                    publishStreamDuration()
+                    return
+                }
                 val id = mediaItem?.mediaId ?: return
                 if (id != currentTrack?.isrc) {
                     val newPos = positionOfTransition(id) ?: return
@@ -388,6 +407,13 @@ class Media3MusicPlayer @Inject constructor(
                     state.value = if (player.isPlaying) PlaybackState.Playing(player.currentPosition, track)
                     else PlaybackState.Paused(player.currentPosition, track)
                 }
+                // currentTrack now points at the new item, so its duration can be published (before, this ran too early
+                // and published 0, leaving the UI at 0:00 / 0:00 after an automatic advance).
+                streamDuration.value = 0L
+                learnDuration()
+                publishStreamDuration()
+                // A gapless hand-over keeps isPlaying true, so nothing else restarts the position ticker: make sure it runs.
+                if (player.isPlaying) startPositionUpdates()
                 // Keep ExoPlayer's playlist at [current, next]: drop what already played, then look ahead again.
                 while (player.currentMediaItemIndex > 0) player.removeMediaItem(0)
                 prefetchedFor = id
@@ -1111,6 +1137,7 @@ class Media3MusicPlayer @Inject constructor(
     }
 
     private fun buildMediaItem(track: Track, url: String): MediaItem = MediaItem.Builder()
+        .also { synchronized(sourceUrls) { sourceUrls[track.isrc] = url } }
         .setUri(url)
         .setMediaId(track.isrc)
         .setCustomCacheKey(cacheKeyFor(url))
@@ -1169,6 +1196,7 @@ class Media3MusicPlayer @Inject constructor(
                 if (track != null && !transitioning && state.value !is PlaybackState.Loading &&
                     player.isPlaying && player.currentMediaItem?.mediaId == track.isrc
                 ) {
+                    if (streamDuration.value == 0L) { learnDuration(); publishStreamDuration() }
                     state.value = PlaybackState.Playing(player.currentPosition, track)
                 }
                 delay(if (powerManager.isInteractive) 500L else 2_000L)

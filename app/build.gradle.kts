@@ -1,4 +1,3 @@
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -43,6 +42,13 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    // Brand logos live in the repo-root gamut-brandkit/ folder; this makes them part of R.drawable.
+    sourceSets {
+        getByName("main") {
+            res.srcDir("${rootDir}/gamut-brandkit/res")
+        }
     }
 
     packaging {

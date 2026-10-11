@@ -303,9 +303,9 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                         val openPlayer = { nav.navigate("player") { launchSingleTop = true }; Unit }
                         val openArtist: (String) -> Unit = { artist -> nav.navigate("artist-name/${Uri.encode(artist)}") }
                         val openConnect = { showConnect = true }
-                        val nowPlaying: @Composable () -> Unit = { NowPlayingStrip(player, docked = false, onOpen = openPlayer, onArtistClick = openArtist, onDevicesClick = openConnect) }
+                        val nowPlaying: @Composable () -> Unit = { NowPlayingStrip(player, docked = false, onOpen = openPlayer, onDevicesClick = openConnect) }
                         // Screens without a bottom bar (playlist, artist): the strip sits alone at the bottom edge.
-                        val nowPlayingDocked: @Composable () -> Unit = { NowPlayingStrip(player, docked = true, onOpen = openPlayer, onArtistClick = openArtist, onDevicesClick = openConnect) }
+                        val nowPlayingDocked: @Composable () -> Unit = { NowPlayingStrip(player, docked = true, onOpen = openPlayer, onDevicesClick = openConnect) }
                         // [queue] is the list the track was picked from (so next / shuffle / the queue sheet have something
                         // to work with); empty = just this one track.
                         val playTrackWithQueue: (Track, List<Track>) -> Unit = tap@{ track, queue ->
@@ -590,6 +590,8 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                     onAddToPlaylist = { t, playlistId ->
                                         playlists.firstOrNull { it.id.toString() == playlistId }?.let { libraryVm.addTrack(it.id, t) }
                                     },
+                                    // The player pops itself first (onBack), then this opens the artist page on top of what was below.
+                                    onGoToArtist = { t -> openArtist(t.artist) },
                                 )
                             }
                         }
@@ -639,7 +641,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
 
 /** Reads the player state and feeds [MiniPlayerStrip]; slides open when a track is loaded, closed when not. */
 @Composable
-private fun NowPlayingStrip(player: MusicPlayer, docked: Boolean, onOpen: () -> Unit, onArtistClick: (String) -> Unit, onDevicesClick: () -> Unit) {
+private fun NowPlayingStrip(player: MusicPlayer, docked: Boolean, onOpen: () -> Unit, onDevicesClick: () -> Unit) {
     val outputs = rememberOutputDevices()
     val state by player.playbackState.collectAsState()
     val trackState by remember { derivedStateOf { (state as? PlaybackState.Playing)?.track ?: (state as? PlaybackState.Paused)?.track } }
@@ -678,7 +680,7 @@ private fun NowPlayingStrip(player: MusicPlayer, docked: Boolean, onOpen: () -> 
                 onOpen = onOpen,
                 onTogglePlay = { if (isPlaying) player.pause() else player.resume() },
                 onNext = player::skipNext,
-                onArtistClick = { shown?.artist?.let(onArtistClick) },
+                onPrevious = player::skipPrevious,
                 onDevicesClick = onDevicesClick,
                 devicesActive = outputs.any { it.isActive && it.isBluetooth },
                 dockedToEdge = docked,

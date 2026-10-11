@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 private val NeverAwaiting = MutableStateFlow(false)
 private val NoStreamDuration = MutableStateFlow(0L)
+private val NeverLoadingTrack = MutableStateFlow(false)
 
 /**
  * Turns a [Track] into a playable stream URL. The player owns the queue, so when the user skips
@@ -49,6 +50,22 @@ interface MusicPlayer {
      * "full" for the rest of the song.
      */
     val streamDurationMs: StateFlow<Long> get() = NoStreamDuration
+
+    /**
+     * True while a track change is in progress and the new track's audio is not there yet: [playbackState] is Loading,
+     * OR it already shows the new track as Playing (a queue skip) while its URL is still being resolved. Only then is
+     * [loadProgress] meaningful; after the load it stays at 1, so the UI must not show it any other time.
+     */
+    val loadingTrack: StateFlow<Boolean> get() = NeverLoadingTrack
+
+    /** The stream URL / file the player holds (or has queued) for the track with this [isrc]; null if it has none. */
+    fun sourceUrlFor(isrc: String): String? = null
+
+    /**
+     * The player's own live position (ms) in the current track, or -1 when it isn't known right now (loading,
+     * switching tracks). Lets a freshly opened screen start from the real position instead of the last published one.
+     */
+    fun currentPositionMs(): Long = -1L
 
     /** Plays [track] from [sourceUrl]. If the track is part of the queue the queue position follows it. */
     fun play(track: Track, sourceUrl: String)

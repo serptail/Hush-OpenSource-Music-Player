@@ -72,6 +72,7 @@ import java.net.UnknownHostException
 import java.net.URLEncoder
 import java.util.Collections
 import kotlin.coroutines.cancellation.CancellationException
+import android.util.Log
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
@@ -119,6 +120,7 @@ private class FetchedLyrics(val lines: List<LyricsLine>, val isSynced: Boolean)
 object LyricsRepository {
     private const val BASE_URL = "https://lrclib.net/api"
     private const val USER_AGENT = "Gamut/1.0 (Android)"
+    private const val TAG = "Lyrics"
 
     /** A synced result whose length differs from the track by more than this is probably another version (live, remix). */
     private const val MAX_DURATION_DIFF_S = 10.0
@@ -144,17 +146,29 @@ object LyricsRepository {
 
     private fun cacheKey(track: Track) = track.isrc.orEmpty().ifBlank { "${track.title}|${track.artist}" }
 
+    // The length (whole seconds) each cached result was looked up with: plain lyrics are looked up again when the
+    // length of the audio that actually plays turns out to differ.
+    private val cachedSeconds = Collections.synchronizedMap(HashMap<String, Int>())
+
     /** Lyrics already fetched for [track] this session, or null. Lets the player skip the spinner on re-open. */
     fun cached(track: Track): LyricsState.Loaded? = cache[cacheKey(track)]
 
-    suspend fun fetchLyrics(track: Track): LyricsState {
-        cached(track)?.let { return it }
+    /**
+     * [durationMs] is the length of the audio that is actually playing (the stream's, once known): synced lyrics only
+     * fit the version they were timed against, so that is what the lookup matches. Defaults to the catalog length.
+     */
+    suspend fun fetchLyrics(track: Track, durationMs: Long = track.durationMs): LyricsState {
+        val key = cacheKey(track)
+        val seconds = (durationMs / 1000).toInt()
+        cache[key]?.let { hit -> if (hit.isSynced || cachedSeconds[key] == seconds) return hit }
         return try {
-            val found = withContext(Dispatchers.IO) { lookup(track) }
+            val found = withContext(Dispatchers.IO) { lookup(track, durationMs) }
             if (found == null || found.lines.isEmpty()) {
+                Log.i(TAG, "\"${track.title}\": nothing found (looked up with ${seconds}s)")
                 LyricsState.NotAvailable("No lyrics found for this track")
             } else {
-                LyricsState.Loaded(found.lines, found.isSynced).also { cache[cacheKey(track)] = it }
+                Log.i(TAG, "\"${track.title}\": ${if (found.isSynced) "synced" else "PLAIN (not synced)"}, ${found.lines.size} lines (looked up with ${seconds}s)")
+                LyricsState.Loaded(found.lines, found.isSynced).also { cache[key] = it; cachedSeconds[key] = seconds }
             }
         } catch (e: CancellationException) {
             throw e
@@ -184,12 +198,12 @@ object LyricsRepository {
         return titleOk && (artistOk || durationOk)
     }
 
-    private fun lookup(track: Track): FetchedLyrics? {
+    private fun lookup(track: Track, durationMs: Long): FetchedLyrics? {
         val title = cleanTitle(track.title)
         val coreTitle = title.substringBefore(" (").substringBefore(" - ").trim().ifBlank { title }
         val artist = track.artist.replace(featuringNoise, "").trim().ifBlank { track.artist }
         val lead = primaryArtist(track.artist)
-        val seconds = track.durationMs / 1000.0
+        val seconds = durationMs / 1000.0
         // A network failure on one request must not end the lookup: later requests may still work. Only when nothing
         // was found AND something failed is the answer "error, try again" rather than "no lyrics exist".
         var failed = false
@@ -205,11 +219,21 @@ object LyricsRepository {
             }
         }
 
+        // LRCLIB often holds several records of one song, and the best metadata match can be the one that only has
+        // plain text. A plain hit is therefore kept as a fallback while the search for a synced record goes on.
+        var plainFallback: FetchedLyrics? = null
+        fun synced(found: FetchedLyrics?): FetchedLyrics? {
+            if (found == null) return null
+            if (found.isSynced) return found
+            if (plainFallback == null) plainFallback = found
+            return null
+        }
+
         // 1. Exact match by title + artist + length. One small request, and the right version of the song.
         if (seconds > 0) {
             for (a in listOf(artist, lead).distinct()) {
                 val exact = get("$BASE_URL/get?track_name=${enc(title)}&artist_name=${enc(a)}&duration=${seconds.roundToInt()}")
-                if (exact != null) runCatching { toLyrics(JSONObject(exact)) }.getOrNull()?.let { return it }
+                if (exact != null) runCatching { toLyrics(JSONObject(exact)) }.getOrNull()?.let { r -> synced(r)?.let { return it } }
             }
         }
 
@@ -229,8 +253,9 @@ object LyricsRepository {
             val results = runCatching { JSONArray(body) }.getOrNull() ?: continue
             var items = List(results.length()) { results.getJSONObject(it) }
             if (strict) items = items.filter { looksLike(it, coreTitle, lead, seconds) }
-            pickBest(items, seconds)?.let { return it }
+            synced(pickBest(items, seconds))?.let { return it }
         }
+        plainFallback?.let { return it }
         if (failed) throw IOException("lyrics lookup failed")
         return null
     }
@@ -239,6 +264,7 @@ object LyricsRepository {
         fun diff(o: JSONObject) = if (seconds > 0 && o.has("duration") && !o.isNull("duration")) abs(o.optDouble("duration") - seconds) else 0.0
         val synced = items.filter { hasText(it, "syncedLyrics") }.minByOrNull(::diff)
         if (synced != null && diff(synced) <= MAX_DURATION_DIFF_S) return toLyrics(synced)
+        if (synced != null) Log.i(TAG, "synced version exists but its length is ${"%.1f".format(diff(synced))}s off the audio: not used")
         // No well-matching synced version: plain text beats highlighting against the wrong timing.
         val plain = items.filter { hasText(it, "plainLyrics") }.minByOrNull(::diff)
         if (plain != null) return toLyrics(plain, preferPlain = true)
@@ -577,7 +603,7 @@ private fun LyricsPreviewMessage(message: String) {
 
 /** Empty state for lyrics. */
 @Composable
-private fun LyricsEmptyState(message: String, onClick: (() -> Unit)? = null) {
+internal fun LyricsEmptyState(message: String, onClick: (() -> Unit)? = null) {
     Box(
         Modifier.fillMaxSize().let { if (onClick != null) it.tapTarget(onClick) else it },
         contentAlignment = Alignment.Center,
@@ -748,7 +774,7 @@ private fun LyricLine(
 }
 
 /** Index of the last line that has started at [positionMs], or -1 before the first line. */
-private fun activeLineIndex(lines: List<LyricsLine>, positionMs: Long): Int {
+internal fun activeLineIndex(lines: List<LyricsLine>, positionMs: Long): Int {
     var lo = 0
     var hi = lines.lastIndex
     var answer = -1

@@ -34,6 +34,7 @@ import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.light.Devices
 import com.adamglin.phosphoricons.light.Pause
 import com.adamglin.phosphoricons.light.Play
+import com.adamglin.phosphoricons.light.SkipBack
 import com.adamglin.phosphoricons.light.SkipForward
 
 /**
@@ -54,7 +55,8 @@ fun MiniPlayerStrip(
     onOpen: () -> Unit,
     onTogglePlay: () -> Unit,
     onNext: () -> Unit,
-    onArtistClick: () -> Unit = {},
+    /** Previous track (past the first seconds it restarts the current one, like everywhere else in the app). */
+    onPrevious: () -> Unit = {},
     /** Opens the Connect sheet (Bluetooth + output devices). */
     onDevicesClick: () -> Unit = {},
     /** True when audio is routed to an external device (Bluetooth etc.): the devices icon takes the accent. */
@@ -80,7 +82,7 @@ fun MiniPlayerStrip(
             Box(Modifier.fillMaxHeight().fillMaxWidth(animated).background(accent))
         }
         Row(
-            Modifier.fillMaxWidth().height(60.dp).padding(start = 14.dp, end = 4.dp),
+            Modifier.fillMaxWidth().height(60.dp).padding(start = 14.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val artShape = RoundedCornerShape(8.dp)
@@ -103,11 +105,13 @@ fun MiniPlayerStrip(
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.pressScale(onClick = onArtistClick, scaleDown = 0.98f),
                 )
             }
-            Box(Modifier.size(44.dp).pressScale(onClick = onDevicesClick, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
-                Icon(PhosphorIcons.Light.Devices, "Connect to a device", tint = if (devicesActive) accent else ink(0.75f), modifier = Modifier.size(24.dp))
+            Box(Modifier.size(40.dp).pressScale(onClick = onDevicesClick, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
+                Icon(PhosphorIcons.Light.Devices, "Connect to a device", tint = if (devicesActive) accent else ink(0.75f), modifier = Modifier.size(22.dp))
+            }
+            Box(Modifier.size(40.dp).pressScale(onClick = onPrevious, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
+                Icon(PhosphorIcons.Light.SkipBack, "Previous", tint = ink(0.9f), modifier = Modifier.size(22.dp))
             }
             Box(Modifier.size(48.dp).pressScale(onClick = onTogglePlay, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
                 Crossfade(if (isLoading) 2 else if (isPlaying) 1 else 0, animationSpec = tween(160), label = "mini-play") { s ->
@@ -118,8 +122,8 @@ fun MiniPlayerStrip(
                     }
                 }
             }
-            Box(Modifier.size(48.dp).pressScale(onClick = onNext, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
-                Icon(PhosphorIcons.Light.SkipForward, "Next", tint = ink(0.9f), modifier = Modifier.size(24.dp))
+            Box(Modifier.size(40.dp).pressScale(onClick = onNext, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
+                Icon(PhosphorIcons.Light.SkipForward, "Next", tint = ink(0.9f), modifier = Modifier.size(22.dp))
             }
         }
     }

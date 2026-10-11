@@ -1,13 +1,23 @@
 package com.gamut.feature.playerui
 
+import android.content.Context
+import android.content.Intent
 import android.media.AudioManager
 import android.os.Build
 import android.os.SystemClock
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,10 +25,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -31,7 +44,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.activity.compose.BackHandler
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
@@ -48,7 +60,9 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.adamglin.PhosphorIcons
+import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.fill.Heart as HeartFilled
 import com.adamglin.phosphoricons.light.CaretDown
 import com.adamglin.phosphoricons.light.DotsThreeVertical
 import com.adamglin.phosphoricons.light.Heart
@@ -56,10 +70,11 @@ import com.adamglin.phosphoricons.light.ListPlus
 import com.adamglin.phosphoricons.light.Queue
 import com.adamglin.phosphoricons.light.Repeat
 import com.adamglin.phosphoricons.light.RepeatOnce
+import com.adamglin.phosphoricons.light.ShareNetwork
 import com.adamglin.phosphoricons.light.Shuffle
-import com.adamglin.phosphoricons.light.Sparkle
 import com.adamglin.phosphoricons.light.SkipBack
 import com.adamglin.phosphoricons.light.SkipForward
+import com.adamglin.phosphoricons.light.Sparkle
 import com.gamut.core.designsystem.AcrylicHost
 import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.designsystem.LocalCoverPalette
@@ -74,22 +89,27 @@ import com.gamut.core.player.MusicPlayer
 import com.gamut.feature.playerui.components.ArtworkWithRing
 import com.gamut.feature.playerui.components.BouncingText
 import com.gamut.feature.playerui.components.DepthIcon
-import com.gamut.feature.playerui.components.LoadingVinyl
 import com.gamut.feature.playerui.components.TimeRow
+import com.gamut.feature.playerui.components.WaveformSource
 import com.gamut.feature.playerui.components.VolumeHud
 import com.gamut.feature.playerui.components.VolumeHudOverlay
-import com.gamut.feature.playerui.components.edgeVolumeGesture
-import com.gamut.feature.playerui.components.volumeHudAnchor
 import com.gamut.feature.playerui.components.backdropArtUrl
 import com.gamut.feature.playerui.components.bounceTap
+import com.gamut.feature.playerui.components.swipeVolumeGesture
 import com.gamut.feature.playerui.components.rememberCoverAccent
+import com.gamut.feature.playerui.components.rememberCoverSubAccent
+import com.gamut.feature.playerui.components.rememberCoverTint
 import com.gamut.feature.playerui.components.rememberWaveform
 import com.gamut.feature.playerui.components.tapTarget
+import com.gamut.feature.playerui.components.volumeHudAnchor
+import com.gamut.feature.playerui.components.volumeHudHeaderAnchor
 import kotlin.math.abs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 
 private val FavoriteColor = Color(0xFFFF4D6D)   // the heart when the track is a favorite
+private const val PrefsName = "player_ui"
+private const val PrefLyricsOn = "lyrics_on"
 
 @Composable
 fun PlayerScreen(
@@ -102,34 +122,50 @@ fun PlayerScreen(
     playlists: List<PlaylistPickerItem> = emptyList(),
     /** Called when the user taps a playlist in the list-plus sheet: add [Track] to the playlist with this id. */
     onAddToPlaylist: (Track, String) -> Unit = { _, _ -> },
+    /** "Go to artist" (options sheet, and a tap on the artist photo / name). The player closes itself first. */
+    onGoToArtist: (Track) -> Unit = {},
 ) {
     val state by player.playbackState.collectAsState()
     // `state` changes every position tick. It is only read inside derivedStateOf, so this screen recomposes when
     // the track / play state really changes, not twice a second.
-    val trackState by remember { derivedStateOf { (state as? PlaybackState.Playing)?.track ?: (state as? PlaybackState.Paused)?.track } }
-    val track: Track? = trackState
+    val liveTrack by remember { derivedStateOf { (state as? PlaybackState.Playing)?.track ?: (state as? PlaybackState.Paused)?.track } }
+    // No loading screen any more: while the next track resolves (state = Loading, no track) the player simply keeps
+    // showing the last one, with the spinner on the cover and the real load progress on the ring. This also removes
+    // the flash of an empty screen between two queue items.
+    var lastTrack by remember { mutableStateOf<Track?>(null) }
+    LaunchedEffect(liveTrack) { liveTrack?.let { lastTrack = it } }
+    val track: Track? = liveTrack ?: lastTrack
+
     val isPlaying by remember { derivedStateOf { state is PlaybackState.Playing } }
-    // What the cover shows as "playing". A seek (dragging the progress line) makes ExoPlayer report "not playing" for
-    // a moment while it re-buffers, then "playing" again. Shown as is, that flickered the pause/play icon and made the
-    // cover shrink and spring back. So a drop to "paused" only counts if it lasts; "playing" shows at once, and a
-    // tap on the cover flips it immediately (see onTogglePlay).
+    // What the cover shows as "playing". A seek makes ExoPlayer report "not playing" for a moment while it
+    // re-buffers; a drop to "paused" only counts if it lasts, "playing" shows at once, and a tap flips it immediately.
     var shownPlaying by remember { mutableStateOf(isPlaying) }
     LaunchedEffect(isPlaying) {
         if (isPlaying) shownPlaying = true else { delay(700); shownPlaying = false }
     }
-    val isLoadingState by remember { derivedStateOf { state is PlaybackState.Loading } }
-    val loadProgress by player.loadProgress.collectAsState()
-    // The stream's real length wins over the catalog's: when they differ (another version of the song) the bar used
-    // to hit 100% at the catalog length and stay full for the rest of the track.
+    // True while a track change is in progress (state Loading, or a queue skip that already shows the new track as
+    // Playing while its URL resolves). Only then is loadProgress meaningful; afterwards it sits at 1.
+    val showLoading by player.loadingTrack.collectAsState()
+    val loadProgressState = player.loadProgress.collectAsState()
+    // The spinner also covers a re-buffer in the middle of a song, but only once it lasts, so a seek doesn't flash it.
+    val awaiting by player.awaitingAudio.collectAsState()
+    var bufferingShown by remember { mutableStateOf(false) }
+    LaunchedEffect(awaiting) { if (awaiting) { delay(500); bufferingShown = true } else bufferingShown = false }
+    val spinnerOn = showLoading || bufferingShown
+
+    // The stream's real length wins over the catalog's (another version of the song), but only when it is plausible:
+    // right after a track change this value can still belong to the PREVIOUS song, which gave a full or empty bar.
     val streamDuration by player.streamDurationMs.collectAsState()
-    val effectiveDurationMs = if (streamDuration > 0L) streamDuration else (track?.durationMs ?: 0L)
+    val catalogDuration = track?.durationMs ?: 0L
+    val streamPlausible = streamDuration > 0L &&
+        (catalogDuration <= 0L || streamDuration in (catalogDuration / 2)..(catalogDuration * 2))
+    val effectiveDurationMs = if (streamPlausible) streamDuration else catalogDuration
     val duration = effectiveDurationMs.coerceAtLeast(1L)
     val shuffleOn by player.shuffleEnabled.collectAsState()
     val repeatMode by player.repeatMode.collectAsState()
     val queueState by player.queue.collectAsState()
     var showQueue by remember { mutableStateOf(false) }
 
-    // Equalizer (app-wide singleton, attached to the audio session elsewhere), sleep timer, edge-hold volume.
     val context = LocalContext.current
     val eq = remember { EqualizerController.get(context) }
     val eqState by eq.state.collectAsState()
@@ -143,179 +179,313 @@ fun PlayerScreen(
     val haptic = LocalHapticFeedback.current
     val volumeHud = remember { VolumeHud(context.getSystemService(AudioManager::class.java), haptic) }
 
-    // Smooth progress clock (see PlayerClock). Everything below only reads it inside lambdas, so the per-frame
-    // position invalidates the small pieces that draw it instead of recomposing the whole screen.
-    // Set the moment the user leaves. From then on the screen is a still picture: the per-frame clock, the lyrics
-    // glass and the blur stop invalidating, so the slide-out only moves one cached layer (no jank, no flash).
+    // "Lyrics: On / Off" from the options sheet. Remembered across launches.
+    val prefs = remember { context.getSharedPreferences(PrefsName, Context.MODE_PRIVATE) }
+    var lyricsOn by remember { mutableStateOf(prefs.getBoolean(PrefLyricsOn, true)) }
+    var lyricsPanelOpen by remember { mutableStateOf(false) }
+
+    // Set the moment the user leaves. From then on the screen is a still picture (see the notes in PlayerClock).
     var leaving by remember { mutableStateOf(false) }
     val leave = remember(onBack) { { if (!leaving) { leaving = true; onBack() } } }
-    BackHandler(enabled = !leaving) { leave() }
-    // False while the screen slides in (and once it is leaving): the backdrop must not fade or change then, it
-    // is just a still picture riding the slide.
+    BackHandler(enabled = !leaving && !lyricsPanelOpen) { leave() }
+    BackHandler(enabled = lyricsPanelOpen) { lyricsPanelOpen = false }   // declared last: wins while the panel is open
     var settled by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { delay(260); settled = true }
     val clock = remember { PlayerClock() }
-    LaunchedEffect(modState.settings.speed) { clock.setSpeed(modState.settings.speed) }   // media time runs at `speed` x wall time
+    LaunchedEffect(modState.settings.speed) { clock.setSpeed(modState.settings.speed) }
     LaunchedEffect(player) { clock.follow(player) }
     LaunchedEffect(clock.live, duration, leaving) { if (clock.live && !leaving) clock.tick(duration) }
 
     // While the progress line is dragged, the line and time label follow the finger; the real seek happens on release.
     var scrubFraction by remember { mutableStateOf<Float?>(null) }
-    // A track whose length is not known yet (duration 1 here) must show an empty bar, not a full one.
     val durationKnown = effectiveDurationMs > 0L
-    // The clock is re-anchored asynchronously after a track change; until it has been anchored to THIS track its
-    // position still belongs to the previous one (often near its end), which drew a full bar for a few frames.
     val currentKey = track?.let { it.isrc.orEmpty() + "|" + it.title }
-    val progressProvider = remember(duration, durationKnown, currentKey) {
-        { scrubFraction ?: if (durationKnown && clock.anchoredKey == currentKey) (clock.positionMs / duration).coerceIn(0f, 1f) else 0f }
+    val progressProvider = remember(duration, durationKnown, currentKey, showLoading) {
+        {
+            // Read the clock's state FIRST, unconditionally: the ring's draw scope and TimeRow's derivedStateOf only
+            // subscribe to what they read. On a fresh open the clock isn't anchored yet, so the branch below used to
+            // return 0f without touching positionMs, and nothing ever redrew once the clock started.
+            val clockPosition = clock.positionMs
+            val clockKey = clock.anchoredKey
+            scrubFraction ?: when {
+                // Loading the next song: the ring shows the real load progress (it replaces the old loading screen's bar).
+                showLoading -> loadProgressState.value.coerceIn(0f, 1f)
+                // Not anchored to THIS track yet: the clock still holds the previous song's position.
+                durationKnown && clockKey == currentKey -> (clockPosition / duration).coerceIn(0f, 1f)
+                else -> 0f
+            }
+        }
     }
-    val positionProvider = remember(duration) { { (progressProvider() * duration).toLong() } }
+    val positionProvider = remember(progressProvider, duration) { { (progressProvider() * duration).toLong() } }
     val lyricsPosition = remember(clock) { { clock.positionMs.toLong() + LyricsSyncOffsetMs } }
-    val frozenLyricsPosition = remember(leaving) { val p = clock.positionMs.toLong() + LyricsSyncOffsetMs; { p } }
 
-    // Lyrics. Keyed on the track (ISRC if there is one, else title + artist: lyrics only need those), so a track
-    // without an ISRC still gets lyrics, and the previous song's lines never show for a frame on a track change.
+    val seekToFraction: (Float) -> Unit = { fraction ->
+        val target = (fraction * duration).toLong()
+        clock.anchor(target)   // move the line right away instead of waiting for the player's next tick
+        player.seekTo(target)
+    }
+    val seekToMs: (Long) -> Unit = { ms ->
+        val target = (ms - LyricsSyncOffsetMs).coerceAtLeast(0L)
+        clock.anchor(target)
+        player.seekTo(target)
+    }
+    val togglePlay: () -> Unit = {
+        if (shownPlaying) player.pause() else player.resume()
+        shownPlaying = !shownPlaying
+    }
+
+    // Lyrics. Keyed on the track so the previous song's lines never show for a frame on a track change.
     val lyricsKey = track?.let { it.isrc.orEmpty().ifBlank { "${it.title}|${it.artist}" } }
     var lyricsState by remember(lyricsKey) {
         mutableStateOf<LyricsState>(track?.let { LyricsRepository.cached(it) } ?: LyricsState.Loading)
     }
-    var lyricsRetry by remember(lyricsKey) { mutableIntStateOf(0) }   // bumped by tapping the lyrics card after a failure
-    LaunchedEffect(lyricsKey, lyricsRetry) {
+    var lyricsRetry by remember(lyricsKey) { mutableIntStateOf(0) }   // bumped by tapping the card after a failure
+    var lyricsTriedSeconds by remember(lyricsKey) { mutableIntStateOf(-1) }
+    // Lyrics are matched against the length of the audio that is really playing: once the stream's length is known
+    // it replaces the catalog's. Synced lyrics are final; plain ones are looked up once more if the length changed.
+    val lyricsSeconds = (effectiveDurationMs / 1000).toInt()
+    LaunchedEffect(lyricsKey, lyricsRetry, lyricsOn, lyricsSeconds) {
         val t = track ?: return@LaunchedEffect
-        if (lyricsState is LyricsState.Loaded) return@LaunchedEffect
-        lyricsState = LyricsState.Loading
-        // A failed lookup is usually a slow / busy lyrics service or no network, not "no lyrics": keep retrying with
-        // growing pauses (capped), so lyrics appear on their own as soon as the connection is back.
+        if (!lyricsOn) return@LaunchedEffect
+        val shown = lyricsState
+        if (shown is LyricsState.Loaded && (shown.isSynced || lyricsTriedSeconds == lyricsSeconds)) return@LaunchedEffect
+        if (shown !is LyricsState.Loaded) lyricsState = LyricsState.Loading
+        lyricsTriedSeconds = lyricsSeconds
+        // A failed lookup is usually a slow service or no network, not "no lyrics": keep retrying with growing pauses.
         var attempt = 0
         while (true) {
-            val result = LyricsRepository.fetchLyrics(t)
-            lyricsState = result
+            val result = LyricsRepository.fetchLyrics(t, effectiveDurationMs)
+            // A failed re-check must not wipe plain lyrics that are already on screen.
+            if (result is LyricsState.Loaded || shown !is LyricsState.Loaded) lyricsState = result
             if (result !is LyricsState.Error || ++attempt >= 20) break
             delay((2_000L * attempt).coerceAtMost(15_000L))
         }
     }
-    var lyricsExpanded by remember { mutableStateOf(true) }
+    // Index of the line being sung. A derived state: it only notifies when the line changes, so the one-line view,
+    // the preview card and the panel recompose once per line, not once per frame.
+    val activeLine = remember(lyricsState, clock) {
+        derivedStateOf {
+            val s = lyricsState
+            if (s is LyricsState.Loaded && s.isSynced) activeLineIndex(s.lines, lyricsPosition()) else -1
+        }
+    }
+    val activeIndex: () -> Int = remember(activeLine) { { activeLine.value } }
+
+    // Artist photo + credits (Deezer / MusicBrainz, see ArtistInfoRepository). Nothing here blocks the player.
+    var artistInfo by remember(lyricsKey) { mutableStateOf(track?.let { ArtistInfoRepository.cached(it) }) }
+    var artistLoading by remember(lyricsKey) { mutableStateOf(artistInfo == null) }
+    LaunchedEffect(lyricsKey) {
+        val t = track ?: return@LaunchedEffect
+        if (artistInfo != null) { artistLoading = false; return@LaunchedEffect }
+        var attempt = 0
+        while (artistInfo == null && attempt < 3) {   // offline -> online recovers on its own
+            artistInfo = ArtistInfoRepository.fetch(t).takeIf { it.imageUrl != null || it.credits.size > 1 }
+            if (artistInfo == null) { attempt++; if (attempt < 3) delay(10_000L * attempt) }
+        }
+        artistLoading = false   // gave up: the section just shows the name + cover, no spinner
+    }
 
     val rawArt = track?.albumArtUrl
-    val artUrl = remember(rawArt) { backdropArtUrl(rawArt) }   // blurred backdrop + accent
+    val artUrl = remember(rawArt) { backdropArtUrl(rawArt) }   // blurred backdrop + accent + gradient tint
     val accent = rememberCoverAccent(artUrl)
+    val lyricHighlight = rememberCoverSubAccent(artUrl, fallback = accent)   // the cover's second colour for the sung words
+    val tint = rememberCoverTint(artUrl)
+    SideEffect {
+        WaveformSource.init(context)
+        WaveformSource.provider = { t -> player.sourceUrlFor(t.isrc) }
+    }
     val waveform = rememberWaveform(track)
+    // Word timing refined with the loudness envelope (skips real silences inside a line). The envelope fills in from
+    // the start; refine only once nearly all of it is measured. Line timestamps are unchanged, so activeIndex still
+    // uses lyricsState.
+    val waveformDone = waveform.isNotEmpty() && waveform.indexOfLast { it > 0f } >= waveform.size * 9 / 10
+    val shownLyrics = remember(lyricsState, waveformDone, effectiveDurationMs) {
+        val s = lyricsState
+        if (s is LyricsState.Loaded && s.isSynced && waveformDone)
+            LyricsState.Loaded(LyricsAudioAligner.refine(s.lines, waveform, effectiveDurationMs), true)
+        else s
+    }
 
-    // Base = the same flat fill as Discover / Library; with a track loaded, the acrylic backdrop goes on top.
-    // The glass (lyrics card, sheets) takes its opaque backing color from LocalCoverPalette. That is the APP's cover
-    // palette, which animates for 1.4 s on every track change and can be near-white. If the blur has no source for a
-    // frame (back press, transition, re-record), the glass shows just that backing color: the flash. The player has
-    // its own dark backdrop, so its glass is pinned to the neutral palette: the same color as the screen, and still.
+    val goToArtist: () -> Unit = { track?.let { t -> leave(); onGoToArtist(t) } }
+
+    // The glass (sheets) takes its backing color from LocalCoverPalette; the player has its own dark backdrop, so
+    // inside it the palette is pinned to the neutral one (the same color as the screen, and still).
     CompositionLocalProvider(LocalCoverPalette provides CoverPalette.Neutral) {
     AcrylicHost(
         Modifier
             .fillMaxSize()
             .background(CoverPalette.Neutral.base)
-            .edgeVolumeGesture(volumeHud),
+            // The sideways volume swipe on the cover is dead while the lyrics panel covers the screen.
+            .then(if (lyricsPanelOpen) Modifier else Modifier.swipeVolumeGesture(volumeHud)),
     ) {
         if (artUrl != null) PlayerBackdrop(artUrl, animateChanges = settled && !leaving)
 
-        // Nothing playing (or still loading): just a black record turning in the middle of the flat background.
-        if (track == null) {
-            LoadingVinyl(if (isLoadingState) loadProgress else null, Modifier.align(Alignment.Center))
-            return@AcrylicHost
-        }
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+            PlayerTopBar(leave, onMore = { showMore = true }, modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 14.dp))
 
-        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp)) {
-            PlayerTopBar(leave, onMore = { showMore = true }, modifier = Modifier.fillMaxWidth())
-
-            Spacer(Modifier.height(20.dp))
-            TrackHeader(track, isFavorite = track.isrc in favoriteIsrcs, onToggleFavorite = { onToggleFavorite(track) })
-
-            // Gap between the title row and the cover: bigger = cover + controls sit lower / more central.
-            Spacer(Modifier.height(48.dp))
-
-            Row(
+            // Everything below the top bar scrolls: controls first, then the lyrics card, then the artist.
+            Column(
                 Modifier
+                    .weight(1f)
                     .fillMaxWidth()
-                    // Let the cover row grow past the screen padding on both sides (the lyrics card, which takes
-                    // the leftover height, gets a bit shorter in return). Raise ArtworkExtraWidth for a bigger cover.
-                    .layout { measurable, constraints ->
-                        val extra = ArtworkExtraWidth.roundToPx()
-                        val w = constraints.maxWidth + extra * 2
-                        val placeable = measurable.measure(Constraints(minWidth = w, maxWidth = w))
-                        layout(constraints.maxWidth, placeable.height) { placeable.place(-extra, 0) }
-                    }
-                    .volumeHudAnchor(volumeHud), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                DepthIcon(PhosphorIcons.Light.SkipBack, "Previous", Modifier.bounceTap(onClick = player::skipPrevious).padding(4.dp), size = 28.dp)
-                ArtworkWithRing(
-                    modifier = Modifier.weight(1f),
-                    url = rawArt,
-                    progress = progressProvider,
-                    onScrub = { scrubFraction = it },
-                    isPlaying = shownPlaying,
-                    enabled = true,
-                    waveform = waveform,
-                    onTogglePlay = {
-                        if (shownPlaying) player.pause() else player.resume()
-                        shownPlaying = !shownPlaying
-                    },
-                    onSeekFraction = { fraction ->
-                        // Move the line right away instead of waiting for the player's next position tick.
-                        val target = (fraction * duration).toLong()
-                        clock.anchor(target)
-                        player.seekTo(target)
-                    },
-                )
-                DepthIcon(PhosphorIcons.Light.SkipForward, "Next", Modifier.bounceTap(onClick = player::skipNext).padding(4.dp), size = 28.dp)
-            }
-
-            Spacer(Modifier.height(14.dp))
-            TimeRow(positionProvider, effectiveDurationMs)
-
-            Spacer(Modifier.height(10.dp))
-            ModeRow(
-                shuffleOn = shuffleOn,
-                repeatMode = repeatMode,
-                accent = accent,
-                onShuffle = { player.setShuffle(!shuffleOn) },
-                onRepeat = {
-                    player.setRepeatMode(
-                        when (repeatMode) {
-                            PlaybackRepeatMode.OFF -> PlaybackRepeatMode.ALL
-                            PlaybackRepeatMode.ALL -> PlaybackRepeatMode.ONE
-                            PlaybackRepeatMode.ONE -> PlaybackRepeatMode.OFF
-                        },
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp),
+            ) {
+                Spacer(Modifier.height(10.dp))
+                Box(Modifier.volumeHudHeaderAnchor(volumeHud)) {
+                    TrackHeader(
+                        title = track?.title.orEmpty(),
+                        artist = track?.artist.orEmpty(),
+                        isFavorite = track?.isrc?.let { it in favoriteIsrcs } == true,
+                        onToggleFavorite = { track?.let(onToggleFavorite) },
                     )
-                },
-                modActive = modState.preset != ModPreset.ORIGINAL,
-                onQueue = { showQueue = true },
-                onAddToPlaylist = { showAddToPlaylist = true },
-                onMod = { showMod = true },
-            )
+                }
+                Spacer(Modifier.height(36.dp))   // the cover sits lower, closer to the middle of the screen
 
-            Spacer(Modifier.height(16.dp))
+                // [previous] cover [next]. The row may reach ArtworkExtraWidth past the screen padding on each side, and
+                // the cover takes whatever the two buttons leave. Play / pause is a tap on the cover itself.
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .layout { measurable, constraints ->
+                            val extra = ArtworkExtraWidth.roundToPx()
+                            val w = constraints.maxWidth + extra * 2
+                            val placeable = measurable.measure(Constraints(minWidth = w, maxWidth = w))
+                            layout(constraints.maxWidth, placeable.height) { placeable.place(-extra, 0) }
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    DepthIcon(
+                        PhosphorIcons.Light.SkipBack, "Previous",
+                        Modifier.bounceTap(onClick = player::skipPrevious).padding(SideButtonPadding),
+                        size = SideButtonSize,
+                    )
+                    Box(Modifier.weight(1f).volumeHudAnchor(volumeHud), contentAlignment = Alignment.Center) {
+                        ArtworkWithRing(
+                            modifier = Modifier.fillMaxWidth(),
+                            url = rawArt,
+                            progress = progressProvider,
+                            onScrub = { scrubFraction = it },
+                            isPlaying = shownPlaying,
+                            enabled = true,
+                            loading = spinnerOn,
+                            waveform = waveform,
+                            onTogglePlay = togglePlay,
+                            onSeekFraction = seekToFraction,
+                        )
+                    }
+                    DepthIcon(
+                        PhosphorIcons.Light.SkipForward, "Next",
+                        Modifier.bounceTap(onClick = player::skipNext).padding(SideButtonPadding),
+                        size = SideButtonSize,
+                    )
+                }
 
-            // Lyrics: a collapsible card that takes whatever space is left below the controls.
-            LyricsSection(
-                lyricsState = lyricsState,
-                positionMs = if (leaving) frozenLyricsPosition else lyricsPosition,
-                accent = accent,
-                expanded = lyricsExpanded,
-                onToggle = { lyricsExpanded = !lyricsExpanded },
-                onRetry = { lyricsRetry++ },
-                modifier = Modifier.fillMaxWidth().weight(1f).padding(bottom = 16.dp),
-            )
+                Spacer(Modifier.height(10.dp))
+                TimeRow(positionProvider, effectiveDurationMs)
+
+                // The line being sung: right under the cover and the time codes.
+                if (lyricsOn) CurrentLyricLine(shownLyrics, activeIndex, lyricsPosition, tint, highlight = lyricHighlight)
+
+                Spacer(Modifier.height(4.dp))
+                ControlsGrid(
+                    shuffleOn = shuffleOn,
+                    repeatMode = repeatMode,
+                    accent = accent,
+                    modActive = modState.preset != ModPreset.ORIGINAL,
+                    onShuffle = { player.setShuffle(!shuffleOn) },
+                    onQueue = { showQueue = true },
+                    onAddToPlaylist = { showAddToPlaylist = true },
+                    onRepeat = {
+                        player.setRepeatMode(
+                            when (repeatMode) {
+                                PlaybackRepeatMode.OFF -> PlaybackRepeatMode.ALL
+                                PlaybackRepeatMode.ALL -> PlaybackRepeatMode.ONE
+                                PlaybackRepeatMode.ONE -> PlaybackRepeatMode.OFF
+                            },
+                        )
+                    },
+                    onShare = { track?.let { shareTrack(context, it) } },
+                    onMod = { showMod = true },
+                )
+
+                Spacer(Modifier.height(28.dp))
+                if (lyricsOn) {
+                    LyricsPreviewCard(
+                        lyricsState = lyricsState,
+                        activeIndex = activeIndex,
+                        tint = tint,
+                        onShowLyrics = { lyricsPanelOpen = true },
+                        onRetry = { lyricsRetry++ },
+                    )
+                    Spacer(Modifier.height(24.dp))
+                }
+                if (track != null) {
+                    ArtistAboutSection(
+                        artistName = track.artist,
+                        info = artistInfo,
+                        loading = artistLoading,
+                        fallbackArtUrl = rawArt,
+                        onArtistClick = goToArtist,
+                    )
+                }
+                Spacer(Modifier.height(32.dp).navigationBarsPadding())
+            }
         }
 
-        // Volume pill: drawn above everything, takes no touches.
+        // Volume pill: drawn above the page, takes no touches.
         VolumeHudOverlay(volumeHud)
 
+        // The "opened mini player": every lyric on a gradient from the cover, with the controls at the bottom.
+        AnimatedVisibility(
+            visible = lyricsPanelOpen && track != null,
+            enter = slideInVertically(tween(320)) { it } + fadeIn(tween(200)),
+            exit = slideOutVertically(tween(260)) { it } + fadeOut(tween(200)),
+        ) {
+            FullLyricsPanel(
+                title = track?.title.orEmpty(),
+                artist = track?.artist.orEmpty(),
+                lyricsState = shownLyrics,
+                positionMs = lyricsPosition,
+                activeIndex = activeIndex,
+                tint = tint,
+                isPlaying = shownPlaying,
+                isLoading = spinnerOn,
+                progress = progressProvider,
+                labelPositionMs = positionProvider,
+                durationMs = effectiveDurationMs,
+                onScrub = { scrubFraction = it },
+                onSeekFraction = seekToFraction,
+                onSeekToMs = seekToMs,
+                onClose = { lyricsPanelOpen = false },
+                onShare = { track?.let { shareTrack(context, it) } },
+                onMore = { showMore = true },
+                onTogglePlay = togglePlay,
+                onPrevious = player::skipPrevious,
+                onNext = player::skipNext,
+                onRetry = { lyricsRetry++ },
+            )
+        }
     }
     }
 
-    // Sheets sit OUTSIDE the Neutral pin above: the pin keeps the player's glass still over its dark backdrop, but a
-    // sheet is its own window, so inside the pin it would always be dark. Out here it follows the app's light/dark look.
+    // Sheets sit OUTSIDE the Neutral pin: a sheet is its own window and follows the app's light / dark look.
     if (showMore) {
         PlayerOptionsSheet(
             accent = accent,
+            isFavorite = track?.isrc?.let { it in favoriteIsrcs } == true,
+            lyricsOn = lyricsOn,
             eqActive = eqState.enabled,
             sleepActive = sleepEndsAt != null,
+            onShare = { showMore = false; track?.let { shareTrack(context, it) } },
+            onToggleLyrics = {
+                lyricsOn = !lyricsOn
+                prefs.edit().putBoolean(PrefLyricsOn, lyricsOn).apply()
+                if (!lyricsOn) lyricsPanelOpen = false
+            },
+            onToggleFavorite = { track?.let(onToggleFavorite) },
+            onAddToPlaylist = { showMore = false; showAddToPlaylist = true },
+            onGoToArtist = { showMore = false; goToArtist() },
             onEqualizer = { showMore = false; showEq = true },
             onSleepTimer = { showMore = false; showSleep = true },
             onDismiss = { showMore = false },
@@ -338,7 +508,6 @@ fun PlayerScreen(
             onDismiss = { showSleep = false },
         )
     }
-
     if (showQueue) {
         QueueSheet(
             queue = queueState,
@@ -348,6 +517,14 @@ fun PlayerScreen(
             onRemove = player::removeFromQueue,
         )
     }
+}
+
+private fun shareTrack(context: Context, track: Track) {
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, "${track.title} \u2014 ${track.artist}")
+    }
+    context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
 
 @Composable
@@ -360,23 +537,23 @@ private fun PlayerTopBar(onBack: () -> Unit, onMore: () -> Unit, modifier: Modif
 }
 
 @Composable
-private fun TrackHeader(track: Track, isFavorite: Boolean, onToggleFavorite: () -> Unit) {
+private fun TrackHeader(title: String, artist: String, isFavorite: Boolean, onToggleFavorite: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f)) {
             BouncingText(
-                text = track.title,
+                text = title,
                 style = MaterialTheme.typography.headlineLarge.copy(letterSpacing = (-0.3).sp),
                 color = Color.White,
             )
             Spacer(Modifier.height(2.dp))
             BouncingText(
-                text = track.artist,
+                text = artist,
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color.White.copy(alpha = 0.65f),
             )
         }
         DepthIcon(
-            PhosphorIcons.Light.Heart,
+            if (isFavorite) PhosphorIcons.Fill.HeartFilled else PhosphorIcons.Light.Heart,
             if (isFavorite) "Remove from favorites" else "Add to favorites",
             Modifier.bounceTap(onClick = onToggleFavorite).padding(4.dp),
             tint = if (isFavorite) FavoriteColor else Color.White,
@@ -385,50 +562,75 @@ private fun TrackHeader(track: Track, isFavorite: Boolean, onToggleFavorite: () 
     }
 }
 
+/**
+ * Two rows on a four-column grid, so the second row sits centered under the first:
+ *   Shuffle   Queue   Add to playlist   Repeat
+ *             Share   Mod
+ */
 @Composable
-private fun ModeRow(
+private fun ControlsGrid(
     shuffleOn: Boolean,
     repeatMode: PlaybackRepeatMode,
     accent: Color,
     modActive: Boolean,
     onShuffle: () -> Unit,
-    onRepeat: () -> Unit,
     onQueue: () -> Unit,
     onAddToPlaylist: () -> Unit,
+    onRepeat: () -> Unit,
+    onShare: () -> Unit,
     onMod: () -> Unit,
 ) {
     val idle = Color.White.copy(alpha = 0.85f)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-        DepthIcon(
-            PhosphorIcons.Light.Shuffle,
-            if (shuffleOn) "Shuffle on" else "Shuffle off",
-            Modifier.bounceTap(onClick = onShuffle).padding(8.dp),
-            tint = if (shuffleOn) accent else idle,
-            size = 22.dp,
-        )
-        DepthIcon(
-            if (repeatMode == PlaybackRepeatMode.ONE) PhosphorIcons.Light.RepeatOnce else PhosphorIcons.Light.Repeat,
-            when (repeatMode) {
-                PlaybackRepeatMode.OFF -> "Repeat off"
-                PlaybackRepeatMode.ALL -> "Repeat all"
-                PlaybackRepeatMode.ONE -> "Repeat one"
-            },
-            Modifier.bounceTap(onClick = onRepeat).padding(8.dp),
-            tint = if (repeatMode != PlaybackRepeatMode.OFF) accent else idle,
-            size = 22.dp,
-        )
-        DepthIcon(PhosphorIcons.Light.Queue, "Queue", Modifier.bounceTap(onClick = onQueue).padding(8.dp), tint = idle, size = 22.dp)
-        DepthIcon(PhosphorIcons.Light.ListPlus, "Add to playlist", Modifier.bounceTap(onClick = onAddToPlaylist).padding(8.dp), tint = idle, size = 22.dp)
-        DepthIcon(
-            PhosphorIcons.Light.Sparkle,
-            if (modActive) "Mod on" else "Mod",
-            Modifier.bounceTap(onClick = onMod).padding(8.dp),
-            tint = if (modActive) accent else idle,
-            size = 22.dp,
-        )
+    val iconSize = 24.dp
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            GridCell {
+                DepthIcon(
+                    PhosphorIcons.Light.Shuffle,
+                    if (shuffleOn) "Shuffle on" else "Shuffle off",
+                    Modifier.bounceTap(onClick = onShuffle).padding(8.dp),
+                    tint = if (shuffleOn) accent else idle,
+                    size = iconSize,
+                )
+            }
+            GridCell { DepthIcon(PhosphorIcons.Light.Queue, "Queue", Modifier.bounceTap(onClick = onQueue).padding(8.dp), tint = idle, size = iconSize) }
+            GridCell { DepthIcon(PhosphorIcons.Light.ListPlus, "Add to playlist", Modifier.bounceTap(onClick = onAddToPlaylist).padding(8.dp), tint = idle, size = iconSize) }
+            GridCell {
+                DepthIcon(
+                    if (repeatMode == PlaybackRepeatMode.ONE) PhosphorIcons.Light.RepeatOnce else PhosphorIcons.Light.Repeat,
+                    when (repeatMode) {
+                        PlaybackRepeatMode.OFF -> "Repeat off"
+                        PlaybackRepeatMode.ALL -> "Repeat all"
+                        PlaybackRepeatMode.ONE -> "Repeat one"
+                    },
+                    Modifier.bounceTap(onClick = onRepeat).padding(8.dp),
+                    tint = if (repeatMode != PlaybackRepeatMode.OFF) accent else idle,
+                    size = iconSize,
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            GridCell {}
+            GridCell { DepthIcon(PhosphorIcons.Light.ShareNetwork, "Share", Modifier.bounceTap(onClick = onShare).padding(8.dp), tint = idle, size = iconSize) }
+            GridCell {
+                DepthIcon(
+                    PhosphorIcons.Light.Sparkle,
+                    if (modActive) "Mod on" else "Mod",
+                    Modifier.bounceTap(onClick = onMod).padding(8.dp),
+                    tint = if (modActive) accent else idle,
+                    size = iconSize,
+                )
+            }
+            GridCell {}
+        }
     }
 }
 
+@Composable
+private fun RowScope.GridCell(content: @Composable () -> Unit) {
+    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { content() }
+}
 
 /**
  * How far the lyrics highlight runs ahead of the player's reported position. The position the player reports is
@@ -438,8 +640,12 @@ private fun ModeRow(
  */
 internal const val LyricsSyncOffsetMs = 250L
 
-/** How far (per side) the artwork row reaches past the screen's horizontal padding. Bigger = bigger cover. */
+/** How far (per side) the cover row reaches past the screen's horizontal padding. Bigger = bigger cover. */
 private val ArtworkExtraWidth = 14.dp
+
+/** The previous / next buttons beside the cover: glyph size and the touch padding around it. Smaller = bigger cover. */
+private val SideButtonSize = 30.dp
+private val SideButtonPadding = 4.dp
 
 private const val RESYNC_THRESHOLD_MS = 400L   // ignore tick differences smaller than this
 
@@ -457,7 +663,7 @@ internal class PlayerClock {
     private var speed = 1f   // playback speed: the position advances this many ms per wall-clock ms
 
     /** Key of the track the position currently belongs to (null = none yet). */
-    var anchoredKey: String? = null
+    var anchoredKey by mutableStateOf<String?>(null)
         private set
 
     /** True while audio is actually playing. */
@@ -490,8 +696,10 @@ internal class PlayerClock {
             val reported: Long
             val track: Track
             when (s) {
-                is PlaybackState.Playing -> { reported = s.positionMs; track = s.track }
-                is PlaybackState.Paused -> { reported = s.positionMs; track = s.track }
+                // The player's live position wins over the last published one, which can be stale (e.g. right after a
+                // gapless hand-over to the next track); -1 = unknown right now, use the published value.
+                is PlaybackState.Playing -> { reported = player.currentPositionMs().takeIf { it >= 0L } ?: s.positionMs; track = s.track }
+                is PlaybackState.Paused -> { reported = player.currentPositionMs().takeIf { it >= 0L } ?: s.positionMs; track = s.track }
                 else -> {
                     // Loading / idle / error: the next track is not playing yet. Without this the clock kept the
                     // PREVIOUS track's end position, so the bar showed full while the new song loaded.

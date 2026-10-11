@@ -93,36 +93,60 @@ class UpdateInstaller(private val context: Context) {
         context.startActivity(intent)
     }
 
-    /** Fetches the APK into the cache (reusing a finished copy), verifying its SHA-256. [onProgress] is 0..1. */
+    /**
+     * Fetches the APK into the cache (reusing a finished copy), verifying its SHA-256. [onProgress] is 0..1.
+     * An interrupted download keeps its .part file: the next call hashes what is there and asks GitHub only for the rest.
+     */
     suspend fun download(info: UpdateInfo, onProgress: (Float) -> Unit): File = withContext(Dispatchers.IO) {
         if (!info.apkUrl.startsWith("https://github.com/")) throw IOException("Unexpected download address")
         val dir = File(context.cacheDir, "update").apply { mkdirs() }
         val target = File(dir, "gamut-${info.versionCode}.apk")
-        dir.listFiles()?.filter { it != target }?.forEach { it.delete() }
+        val part = File(dir, "gamut-${info.versionCode}.part")
+        dir.listFiles()?.filter { it != target && it != part }?.forEach { it.delete() }
         if (target.exists() && sha256(target).equals(info.sha256, ignoreCase = true)) return@withContext target
         target.delete()
 
-        val part = File(dir, "gamut-${info.versionCode}.part")
         val digest = MessageDigest.getInstance("SHA-256")
-        client.newCall(Request.Builder().url(info.apkUrl).build()).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("Download failed (HTTP ${response.code})")
-            val body = response.body ?: throw IOException("Empty download")
-            val total = body.contentLength().takeIf { it > 0 } ?: info.sizeBytes
-            var done = 0L
-            var lastPercent = -1
-            body.byteStream().use { input ->
-                part.outputStream().use { out ->
-                    val buffer = ByteArray(64 * 1024)
-                    while (true) {
-                        currentCoroutineContext().ensureActive()
-                        val n = input.read(buffer)
-                        if (n < 0) break
-                        out.write(buffer, 0, n)
-                        digest.update(buffer, 0, n)
-                        done += n
-                        if (total > 0) {
-                            val percent = (done * 100 / total).toInt()
-                            if (percent != lastPercent) { lastPercent = percent; onProgress(percent / 100f) }
+        var done = 0L
+        if (part.exists()) {
+            part.inputStream().use { input ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val n = input.read(buffer)
+                    if (n < 0) break
+                    digest.update(buffer, 0, n)
+                    done += n
+                }
+            }
+            if (info.sizeBytes > 0 && done > info.sizeBytes) { part.delete(); digest.reset(); done = 0L }   // not ours: start over
+        }
+
+        // Everything is already here (the app stopped between the last byte and the rename): nothing left to ask for.
+        if (info.sizeBytes <= 0 || done != info.sizeBytes) {
+            val request = Request.Builder().url(info.apkUrl).apply { if (done > 0) header("Range", "bytes=$done-") }.build()
+            client.newCall(request).execute().use { response ->
+                if (response.code == 416) { part.delete(); throw IOException("The download restarted. Trying again.") }
+                if (!response.isSuccessful) throw IOException("Download failed (HTTP ${response.code})")
+                val body = response.body ?: throw IOException("Empty download")
+                val resumed = response.code == 206 && done > 0
+                if (!resumed) { digest.reset(); done = 0L }   // a full answer (or a fresh start): from the first byte
+                val total = info.sizeBytes.takeIf { it > 0 } ?: body.contentLength().takeIf { it > 0 }?.let { done + it } ?: 0L
+                var lastPercent = -1
+                if (total > 0) { lastPercent = (done * 100 / total).toInt(); onProgress(lastPercent / 100f) }
+                body.byteStream().use { input ->
+                    java.io.FileOutputStream(part, resumed).use { out ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            currentCoroutineContext().ensureActive()
+                            val n = input.read(buffer)
+                            if (n < 0) break
+                            out.write(buffer, 0, n)
+                            digest.update(buffer, 0, n)
+                            done += n
+                            if (total > 0) {
+                                val percent = (done * 100 / total).toInt()
+                                if (percent != lastPercent) { lastPercent = percent; onProgress(percent / 100f) }
+                            }
                         }
                     }
                 }
