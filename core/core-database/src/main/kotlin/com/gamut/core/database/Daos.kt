@@ -14,6 +14,8 @@ interface TrackDao {
     /** Used when pulling from the server: never overwrite a richer local row. */
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertIgnore(tracks: List<TrackEntity>)
     @Query("SELECT * FROM tracks WHERE isrc = :isrc") suspend fun get(isrc: String): TrackEntity?
+    /** Used by the Storage screen to show title / artist for downloaded songs. Callers pass at most a few hundred ids. */
+    @Query("SELECT * FROM tracks WHERE isrc IN (:isrcs)") suspend fun getByIsrcs(isrcs: List<String>): List<TrackEntity>
     @Query("SELECT * FROM tracks ORDER BY title") fun observeAll(): Flow<List<TrackEntity>>
     @Query("DELETE FROM tracks WHERE isrc = :isrc") suspend fun delete(isrc: String)
 }

@@ -46,6 +46,9 @@ fun SettingsScreen(
     onProfile: () -> Unit,
     onAppearance: () -> Unit,
     onPlaybackAudio: () -> Unit,
+    onStorage: () -> Unit,
+    onFeedback: () -> Unit,
+    onAbout: () -> Unit,
     nowPlaying: @Composable () -> Unit,
     vm: AccountViewModel = hiltViewModel(),
 ) {
@@ -79,10 +82,10 @@ fun SettingsScreen(
         GroupLabel("Preferences")
         Cell("Appearance", icon = PhosphorIcons.Light.Palette, subtitle = "Theme, colors and glass", onClick = onAppearance)
         Cell("Playback & Audio", icon = PhosphorIcons.Light.Waveform, subtitle = "Quality, equalizer, fades and more", onClick = onPlaybackAudio)
-        Cell("Storage & Downloads", icon = PhosphorIcons.Light.HardDrives, subtitle = "Cache and offline songs", onClick = soon)
+        Cell("Storage & Downloads", icon = PhosphorIcons.Light.HardDrives, subtitle = "Cache and offline songs", onClick = onStorage)
 
         GroupLabel("Support")
-        Cell("Help & Feedback", icon = PhosphorIcons.Light.Question, onClick = soon)
-        Cell("About Gamut", icon = PhosphorIcons.Light.Info, onClick = soon)
+        Cell("Help & Feedback", icon = PhosphorIcons.Light.Question, subtitle = "Report a bug or share an idea", onClick = onFeedback)
+        Cell("About Gamut", icon = PhosphorIcons.Light.Info, subtitle = "Version, license and credits", onClick = onAbout)
     }
 }

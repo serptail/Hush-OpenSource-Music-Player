@@ -38,6 +38,9 @@ interface AudioSourceRepository {
      * [quality] null = whatever the user picked in Playback & Audio settings.
      */
     suspend fun audioUrl(videoId: String, forceRefresh: Boolean = false, quality: StreamQuality? = null): Result<String>
+
+    /** Forgets every cached stream URL (Storage > Clear cache). They are simply resolved again on the next play. */
+    fun clearCache() {}
 }
 
 // @Singleton: the cache and the in-flight map below only help if the tap path and the player's own next-track resolver
@@ -51,6 +54,11 @@ class AudioSourceRepositoryImpl @Inject constructor(
 ) : AudioSourceRepository {
     private val cache = java.util.concurrent.ConcurrentHashMap<String, CachedAudio>()
     private val inFlight = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Deferred<Result<String>>>()
+
+    override fun clearCache() {
+        cache.clear()
+        engine.forgetAll()
+    }
 
     override suspend fun audioUrl(videoId: String, forceRefresh: Boolean, quality: StreamQuality?): Result<String> {
         val q = quality ?: settings.effectiveQuality()

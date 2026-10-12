@@ -12,7 +12,19 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <!-- Lets the in-app updater install the new APK (Android still asks the user to allow it once). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <application android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:name=".GamutApplication" android:label="Gamut" android:theme="@style/Theme.Gamut" android:usesCleartextTraffic="true" android:enableOnBackInvokedCallback="true">
+    <!-- Share sheet: lets the app list installed apps that accept a shared image / text (hidden by default on Android 11+). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="image/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/plain" />
+        </intent>
+        <package android:name="com.instagram.android" />
+    </queries>
+    <application android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:name=".GamutApplication" android:label="Gamut" android:theme="@style/Theme.Gamut" android:usesCleartextTraffic="true" tools:replace="android:usesCleartextTraffic" android:enableOnBackInvokedCallback="true">
         <activity android:name=".MainActivity" android:exported="true" android:theme="@style/Theme.Gamut.Splash"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|uiMode|density|fontScale|locale|layoutDirection">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
@@ -32,6 +44,16 @@
                 android:name="androidx.work.WorkManagerInitializer"
                 android:value="androidx.startup"
                 tools:node="remove" />
+        </provider>
+        <!-- Share sheet: serves the rendered share-card PNG (cache/share/) to the app the user picks. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.share"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/share_file_paths" />
         </provider>
     </application>
 </manifest>

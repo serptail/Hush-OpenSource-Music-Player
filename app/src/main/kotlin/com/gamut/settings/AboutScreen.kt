@@ -1,0 +1,145 @@
+package com.gamut.settings
+
+import android.content.Context
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import com.adamglin.PhosphorIcons
+import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.light.ArrowUpRight
+import com.adamglin.phosphoricons.light.Code
+import com.adamglin.phosphoricons.light.GithubLogo
+import com.adamglin.phosphoricons.light.Globe
+import com.adamglin.phosphoricons.light.PaintBrush
+import com.adamglin.phosphoricons.light.Scales
+import com.adamglin.phosphoricons.light.User
+import com.gamut.core.designsystem.LocalNotifier
+import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.R as DesignR
+
+private const val REPO_URL = "https://github.com/serptail/Hush-Open-Source-Music-App"
+private const val REPO_LABEL = "github.com/serptail/Hush-Open-Source-Music-App"
+private const val LICENSE_URL = "$REPO_URL/blob/main/LICENSE"
+private const val AUTHOR_URL = "https://github.com/serptail"
+private const val AUTHOR_NAME = "serptail"
+private const val LOGO_AUTHOR_URL = "https://github.com/serptail"
+private const val LOGO_AUTHOR_NAME = "serptail"
+
+/** Third-party pieces Gamut is built on. Shown in the "Open source libraries" dialog. */
+private val Libraries = listOf(
+    Choice("Jetpack Compose, Media3, Hilt", "AndroidX & Google", "Apache License 2.0"),
+    Choice("NewPipe Extractor", "TeamNewPipe", "GPL-3.0"),
+    Choice("Phosphor Icons", "Phosphor Icons", "MIT License"),
+)
+
+private fun versionLabel(context: Context): String = runCatching {
+    val info = context.packageManager.getPackageInfo(context.packageName, 0)
+    "Version ${info.versionName}"
+}.getOrDefault("")
+
+/** Settings > About Gamut. Slides in as a persistent layer, like Playback & Audio. */
+@Composable
+fun AboutScreen(
+    onBack: () -> Unit,
+    nowPlaying: @Composable () -> Unit,
+) {
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val notifier = LocalNotifier.current
+    val version = remember { versionLabel(context) }
+    var showLibraries by remember { mutableStateOf(false) }
+
+    val open: (String) -> Unit = { url ->
+        runCatching { uriHandler.openUri(url) }.onFailure { notifier.info("No app can open this link") }
+    }
+    val external: @Composable () -> Unit = {
+        Icon(PhosphorIcons.Light.ArrowUpRight, null, tint = ink(0.45f), modifier = Modifier.size(18.dp))
+    }
+
+    GamutPage(title = "About", onBack = onBack, nowPlaying = nowPlaying) {
+        Column(
+            Modifier.fillMaxWidth().padding(top = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            // The colour mark is drawn as-is: no tint, it keeps its own palette on every cover theme.
+            Image(
+                painter = painterResource(DesignR.drawable.ic_gamut_mark_color),
+                contentDescription = "Gamut logo",
+                modifier = Modifier.size(96.dp),
+            )
+            Spacer(Modifier.height(12.dp))
+            Text("Gamut", style = MaterialTheme.typography.headlineMedium, color = ink())
+            if (version.isNotEmpty()) {
+                Text(version, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f))
+            }
+            Text(
+                "A free, open-source music player.",
+                style = MaterialTheme.typography.bodyMedium, color = ink(0.7f),
+                textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+
+        GroupLabel("Project")
+        Cell(
+            "Website", icon = PhosphorIcons.Light.Globe, subtitle = REPO_LABEL,
+            onClick = { open(REPO_URL) }, trailing = external,
+        )
+        Cell(
+            "Source code", icon = PhosphorIcons.Light.GithubLogo, subtitle = "Browse, fork and contribute on GitHub",
+            onClick = { open(REPO_URL) }, trailing = external,
+        )
+
+        GroupLabel("Credits")
+        Cell(
+            "Developer", icon = PhosphorIcons.Light.User, subtitle = AUTHOR_NAME,
+            onClick = { open(AUTHOR_URL) }, trailing = external,
+        )
+        Cell(
+            "Logo", icon = PhosphorIcons.Light.PaintBrush, subtitle = "Designed by $LOGO_AUTHOR_NAME",
+            onClick = { open(LOGO_AUTHOR_URL) }, trailing = external,
+        )
+
+        GroupLabel("Legal")
+        // Put the SPDX name in the subtitle once it is settled (e.g. "GPL-3.0").
+        Cell(
+            "Open source license", icon = PhosphorIcons.Light.Scales, subtitle = "Read the license on GitHub",
+            onClick = { open(LICENSE_URL) }, trailing = external,
+        )
+        Cell(
+            "Open source libraries", icon = PhosphorIcons.Light.Code, subtitle = "What Gamut is built on",
+            onClick = { showLibraries = true },
+        )
+    }
+
+    if (showLibraries) {
+        GamutChoiceDialog(
+            title = "Open source libraries",
+            choices = Libraries,
+            selected = "",
+            onSelect = {},
+            onDismiss = { showLibraries = false },
+            note = "Gamut stands on the work of these projects. Thank you.",
+        )
+    }
+}

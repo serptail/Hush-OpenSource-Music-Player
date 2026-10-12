@@ -39,6 +39,15 @@ class DiscoverDiskCache @Inject constructor(@ApplicationContext context: Context
         }.getOrNull()
     }
 
+    /** Size of the cached Discover on disk (0 when there is none). */
+    suspend fun sizeBytes(): Long = withContext(Dispatchers.IO) {
+        file.length() + File(file.parentFile, "discover.json.tmp").length()
+    }
+
+    suspend fun clear() = withContext(Dispatchers.IO) {
+        runCatching { file.delete(); File(file.parentFile, "discover.json.tmp").delete() }
+    }
+
     suspend fun write(state: DiscoverState) = withContext(Dispatchers.IO) {
         runCatching {
             val root = JSONObject()
@@ -60,6 +69,10 @@ class DiscoverDiskCache @Inject constructor(@ApplicationContext context: Context
         .put("id", id).put("title", title).put("subtitle", subtitle).put("imageUrl", imageUrl)
         .put("artistId", artistId ?: JSONObject.NULL)
         .put("track", track?.toJson() ?: JSONObject.NULL)
+        .put("followers", followers ?: JSONObject.NULL)
+        .put("meta", meta ?: JSONObject.NULL)
+        .put("trend", trend?.name ?: JSONObject.NULL)
+        .put("trendDelta", trendDelta)
 
     private fun Track.toJson() = JSONObject()
         .put("isrc", isrc).put("musicBrainzId", musicBrainzId ?: JSONObject.NULL)
@@ -74,6 +87,10 @@ class DiscoverDiskCache @Inject constructor(@ApplicationContext context: Context
         imageUrl = getString("imageUrl"),
         track = optJSONObject("track")?.toTrack(),
         artistId = if (isNull("artistId")) null else getLong("artistId"),
+        followers = if (isNull("followers")) null else optLong("followers"),
+        meta = str("meta"),
+        trend = str("trend")?.let { runCatching { Trend.valueOf(it) }.getOrNull() },
+        trendDelta = optInt("trendDelta"),
     )
 
     private fun JSONObject.toTrack() = Track(
@@ -93,5 +110,6 @@ class DiscoverDiskCache @Inject constructor(@ApplicationContext context: Context
     private fun JSONArray.objects(): List<JSONObject> = List(length()) { getJSONObject(it) }
 
     // 3: drops copies saved while Billboard art was unresolved (Deezer quota errors) so they are not shown as "stale".
-    private companion object { const val VERSION = 3 }
+    // 4: items carry meta / trend (Billboard movement, release age) and followers.
+    private companion object { const val VERSION = 4 }
 }

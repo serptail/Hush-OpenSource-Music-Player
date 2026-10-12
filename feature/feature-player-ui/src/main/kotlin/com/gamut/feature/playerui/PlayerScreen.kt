@@ -1,7 +1,6 @@
 package com.gamut.feature.playerui
 
 import android.content.Context
-import android.content.Intent
 import android.media.AudioManager
 import android.os.Build
 import android.os.SystemClock
@@ -87,6 +86,11 @@ import com.gamut.core.player.EqualizerController
 import com.gamut.core.player.ModController
 import com.gamut.core.player.ModPreset
 import com.gamut.core.player.MusicPlayer
+import com.gamut.core.designsystem.ShareSheet
+import com.gamut.core.designsystem.ArtistLine
+import com.gamut.core.designsystem.ArtistPickerSheet
+import com.gamut.core.designsystem.rememberArtistTap
+import com.gamut.core.designsystem.splitArtists
 import com.gamut.feature.playerui.components.ArtworkWithRing
 import com.gamut.feature.playerui.components.BouncingText
 import com.gamut.feature.playerui.components.DepthIcon
@@ -178,6 +182,7 @@ fun PlayerScreen(
     var showEq by remember { mutableStateOf(false) }
     var showSleep by remember { mutableStateOf(false) }
     var showMore by remember { mutableStateOf(false) }
+    var showShare by remember { mutableStateOf(false) }
     var showAddToPlaylist by remember { mutableStateOf(false) }
     val modState by ModController.state.collectAsState()
     var showMod by remember { mutableStateOf(false) }
@@ -314,7 +319,12 @@ fun PlayerScreen(
     }
 
     // The player does NOT close itself here: the caller closes the layer and navigates, so the two slides run together.
-    val goToArtist: () -> Unit = { track?.let { t -> onGoToArtist(t) } }
+    // One artist: straight to their page. Several: the picker sheet opens first (placed next to the other sheets below).
+    // The picked name goes to the caller as track.copy(artist = name), so the existing by-name lookup just works.
+    val artistTap = rememberArtistTap(track?.artist.orEmpty(), track?.album) { name ->
+        track?.let { t -> onGoToArtist(t.copy(artist = name)) }
+    }
+    val goToArtist: () -> Unit = artistTap.onClick
 
     // The glass (sheets) takes its backing color from LocalCoverPalette; the player has its own dark backdrop, so
     // inside it the palette is pinned to the neutral one (the same color as the screen, and still).
@@ -344,6 +354,8 @@ fun PlayerScreen(
                     TrackHeader(
                         title = track?.title.orEmpty(),
                         artist = track?.artist.orEmpty(),
+                        albumTitle = track?.album,
+                        onArtist = { name -> track?.let { t -> onGoToArtist(t.copy(artist = name)) } },
                         isFavorite = track?.isrc?.let { it in favoriteIsrcs } == true,
                         onToggleFavorite = { track?.let(onToggleFavorite) },
                     )
@@ -413,7 +425,7 @@ fun PlayerScreen(
                             },
                         )
                     },
-                    onShare = { track?.let { shareTrack(context, it) } },
+                    onShare = { showShare = true },
                     onMod = { showMod = true },
                 )
 
@@ -466,7 +478,7 @@ fun PlayerScreen(
                 onSeekFraction = seekToFraction,
                 onSeekToMs = seekToMs,
                 onClose = { lyricsPanelOpen = false },
-                onShare = { track?.let { shareTrack(context, it) } },
+                onShare = { showShare = true },
                 onMore = { showMore = true },
                 onTogglePlay = togglePlay,
                 onPrevious = player::skipPrevious,
@@ -485,7 +497,7 @@ fun PlayerScreen(
             lyricsOn = lyricsOn,
             eqActive = eqState.enabled,
             sleepActive = sleepEndsAt != null,
-            onShare = { showMore = false; track?.let { shareTrack(context, it) } },
+            onShare = { showMore = false; showShare = true },
             onToggleLyrics = {
                 lyricsOn = !lyricsOn
                 prefs.edit().putBoolean(PrefLyricsOn, lyricsOn).apply()
@@ -498,6 +510,12 @@ fun PlayerScreen(
             onSleepTimer = { showMore = false; showSleep = true },
             onDismiss = { showMore = false },
         )
+    }
+    artistTap.Sheet()
+    if (showShare) {
+        track?.let { t ->
+            ShareSheet(title = t.title, artist = t.artist, artUrl = t.albumArtUrl, onDismiss = { showShare = false })
+        }
     }
     if (showAddToPlaylist) {
         AddToPlaylistSheet(
@@ -527,14 +545,6 @@ fun PlayerScreen(
     }
 }
 
-private fun shareTrack(context: Context, track: Track) {
-    val send = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, "${track.title} \u2014 ${track.artist}")
-    }
-    context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-}
-
 @Composable
 private fun PlayerTopBar(onBack: () -> Unit, onMore: () -> Unit, modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -545,7 +555,14 @@ private fun PlayerTopBar(onBack: () -> Unit, onMore: () -> Unit, modifier: Modif
 }
 
 @Composable
-private fun TrackHeader(title: String, artist: String, isFavorite: Boolean, onToggleFavorite: () -> Unit) {
+private fun TrackHeader(
+    title: String,
+    artist: String,
+    albumTitle: String?,
+    onArtist: (String) -> Unit,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
+) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f)) {
             BouncingText(
@@ -554,11 +571,16 @@ private fun TrackHeader(title: String, artist: String, isFavorite: Boolean, onTo
                 color = Color.White,
             )
             Spacer(Modifier.height(2.dp))
-            BouncingText(
-                text = artist,
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color.White.copy(alpha = 0.65f),
-            )
+            // Several artists: a faded stack of portraits before the names; the line opens the artist / the picker.
+            ArtistLine(artist, albumTitle, onArtist, stackSize = 22.dp) { m ->
+                Box(m) {
+                    BouncingText(
+                        text = artist,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White.copy(alpha = 0.65f),
+                    )
+                }
+            }
         }
         DepthIcon(
             if (isFavorite) PhosphorIcons.Fill.HeartFilled else PhosphorIcons.Light.Heart,

@@ -62,6 +62,14 @@ internal fun BillboardEntry.toDiscoverItem(resolved: Track?): DiscoverItem {
     return DiscoverItem(
         id = "billboard:$key", title = title, subtitle = artist,
         imageUrl = track.albumArtUrl.orEmpty(), track = track,
+        meta = "Peak #$peak \u00B7 $weeks ${if (weeks == 1) "wk" else "wks"}",
+        trend = when {
+            lastWeek == null -> Trend.NEW
+            lastWeek > rank -> Trend.UP
+            lastWeek < rank -> Trend.DOWN
+            else -> Trend.SAME
+        },
+        trendDelta = lastWeek?.let { kotlin.math.abs(it - rank) } ?: 0,
     )
 }
 
@@ -79,6 +87,12 @@ class BillboardRepository @Inject constructor(
 
     @Volatile private var snapshot: Snapshot? = null
     private val resolvedCache = ConcurrentHashMap<String, Track>()
+
+    /** Forgets the chart and every resolved track (Storage > Clear cache). */
+    fun clearCache() {
+        snapshot = null
+        resolvedCache.clear()
+    }
 
     /** Never throws (except cancellation): on failure returns the last good chart, or empty. */
     suspend fun chart(): List<BillboardEntry> {

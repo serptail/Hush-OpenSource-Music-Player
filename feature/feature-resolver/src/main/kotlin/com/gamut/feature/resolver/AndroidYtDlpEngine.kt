@@ -159,6 +159,9 @@ class AndroidYtDlpEngine @Inject constructor(
     /** Drops the cached stream URL for [videoId], so the next [audioUrl] resolves a fresh one. */
     fun forget(videoId: String) { streamCache.keys.removeIf { it.startsWith("$videoId|") } }
 
+    /** Drops every cached stream URL. */
+    fun forgetAll() { streamCache.clear() }
+
     suspend fun audioUrl(videoId: String, quality: StreamQuality = StreamQuality.NORMAL): Result<String> {
         // Cached per (video, quality), so switching the quality setting never returns a URL of the previous one.
         val key = "$videoId|${quality.name}"

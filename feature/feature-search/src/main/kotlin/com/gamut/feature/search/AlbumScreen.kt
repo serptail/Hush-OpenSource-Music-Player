@@ -64,6 +64,11 @@ import com.adamglin.phosphoricons.light.DotsThreeVertical
 import com.gamut.core.designsystem.AcrylicCircleButton
 import com.gamut.core.designsystem.AcrylicHost
 import com.gamut.core.designsystem.CoverTheme
+import com.gamut.core.designsystem.ShareSheet
+import com.gamut.core.designsystem.ArtistLine
+import com.gamut.core.designsystem.ArtistPickerSheet
+import com.gamut.core.designsystem.rememberArtistTap
+import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.designsystem.HeroListSkeleton
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.NowPlayingBars
@@ -137,6 +142,7 @@ fun AlbumScreen(
     val album by viewModel.state.collectAsStateWithLifecycle()
     val failed by viewModel.failed.collectAsStateWithLifecycle()
     val artistImage by viewModel.artistImage.collectAsStateWithLifecycle()
+    var artistPickTrack by remember { mutableStateOf<Track?>(null) }
     val palette = LocalCoverPalette.current
     // The cover no longer sits under the status bar, so icons simply follow the palette.
     TransparentStatusBar(darkIcons = palette.isLight)
@@ -163,6 +169,8 @@ fun AlbumScreen(
                                         album = value,
                                         artistImageUrl = artistImage,
                                         onPlay = { value.tracks.firstOrNull()?.let { onTrackSelected(it, value.tracks) } },
+                                        // The album header has no track of its own: borrow the first one as the carrier.
+                                        onArtist = { name -> value.tracks.firstOrNull()?.let { onTrackArtist(it.copy(artist = name)) } },
                                     )
                                 }
                                 // Index in the key: duplicate ISRCs in one album would otherwise crash LazyColumn.
@@ -171,6 +179,7 @@ fun AlbumScreen(
                                         number = index + 1,
                                         track = track,
                                         showArtist = !track.artist.equals(value.artist, ignoreCase = true),
+                                        onArtist = { name -> onTrackArtist(track.copy(artist = name)) },
                                         isPlaying = track.isrc == nowPlayingIsrc,
                                         accent = accent,
                                         onMore = { actionsTrack = it },
@@ -208,7 +217,18 @@ fun AlbumScreen(
                 onShare = { actionsTrack = null; shareTrack = t },
                 onToggleFavorite = { onToggleFavorite(t) },
                 onAddToPlaylist = { actionsTrack = null; pickerTrack = t },
-                onGoToArtist = { actionsTrack = null; onTrackArtist(t) },
+                onGoToArtist = {
+                    actionsTrack = null
+                    if (splitArtists(t.artist).size > 1) artistPickTrack = t else onTrackArtist(t)
+                },
+            )
+        }
+        artistPickTrack?.let { t ->
+            ArtistPickerSheet(
+                names = splitArtists(t.artist),
+                albumTitle = t.album,
+                onPick = { name -> onTrackArtist(t.copy(artist = name)) },
+                onDismiss = { artistPickTrack = null },
             )
         }
         pickerTrack?.let { t ->
@@ -221,12 +241,12 @@ fun AlbumScreen(
                 onDismiss = { pickerTrack = null },
             )
         }
-        shareTrack?.let { t -> ShareSheet(track = t, onDismiss = { shareTrack = null }) }
+        shareTrack?.let { t -> ShareSheet(title = t.title, artist = t.artist, artUrl = t.albumArtUrl, onDismiss = { shareTrack = null }) }
     }
 }
 
 @Composable
-private fun AlbumHero(album: AlbumDetails, artistImageUrl: String?, onPlay: () -> Unit) {
+private fun AlbumHero(album: AlbumDetails, artistImageUrl: String?, onPlay: () -> Unit, onArtist: (String) -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -278,16 +298,23 @@ private fun AlbumHero(album: AlbumDetails, artistImageUrl: String?, onPlay: () -
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.size(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    ArtistAvatar(artistImageUrl, album.artist)
-                    Spacer(Modifier.width(8.dp))
+                // One artist: the verified portrait + name. Several: a faded stack of portraits + the joined names.
+                // Either way the whole line opens the artist (or the picker when there are several).
+                ArtistLine(
+                    credit = album.artist,
+                    albumTitle = album.title,
+                    onArtist = onArtist,
+                    stackSize = 24.dp,
+                    showSingle = true,
+                    singlePhoto = artistImageUrl,
+                ) { m ->
                     Text(
                         album.artist,
                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                         color = ink(0.85f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
+                        modifier = m,
                     )
                 }
                 Spacer(Modifier.size(2.dp))
@@ -361,6 +388,7 @@ private fun AlbumTrackRow(
     number: Int,
     track: Track,
     showArtist: Boolean,
+    onArtist: (String) -> Unit,
     isPlaying: Boolean,
     accent: Color,
     onMore: (Track) -> Unit,
@@ -417,14 +445,18 @@ private fun AlbumTrackRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (showArtist) {
-                Text(
-                    track.artist,
-                    color = ink(0.55f),
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            // Shown when it differs from the album artist (features, compilations) or when there are several.
+            if (showArtist || splitArtists(track.artist).size > 1) {
+                ArtistLine(track.artist, track.album, onArtist, stackSize = 16.dp, modifier = Modifier.padding(vertical = 2.dp)) { m ->
+                    Text(
+                        track.artist,
+                        color = ink(0.55f),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = m,
+                    )
+                }
             }
         }
         AlbumMoreButton { onMore(track) }

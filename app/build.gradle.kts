@@ -130,5 +130,8 @@ dependencies {
     // Startup and baseline profiles
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.profileinstaller)
+
+    implementation("com.github.hcaptcha:hcaptcha-android-sdk:5.0.1")
+
     baselineProfile(project(":baselineprofile"))
 }

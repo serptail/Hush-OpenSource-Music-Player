@@ -69,6 +69,13 @@ class DiscoverRepository @Inject constructor(
     // Written from several coroutines (album screens opening while Discover loads): must be thread-safe.
     private val albumCache = ConcurrentHashMap<String, AlbumDetails>()
 
+    /** Drops everything held in memory (the disk copy is [DiscoverDiskCache]'s). The next Discover load fetches fresh data. */
+    fun clearCache() {
+        cachedDiscover = null
+        albumCache.clear()
+        billboard.clearCache()
+    }
+
     /** Like runCatching, but never swallows cancellation (runCatching would eat timeouts and scope cancels). */
     private inline fun <T> safe(block: () -> T): Result<T> =
         try { Result.success(block()) } catch (e: CancellationException) { throw e } catch (e: Exception) { Result.failure(e) }
@@ -112,7 +119,7 @@ class DiscoverRepository @Inject constructor(
             if (bb.isNotEmpty()) {
                 add(DiscoverTab("Billboard", "Billboard Hot 100", bb.take(BILLBOARD_TAB_LIMIT).map { it.toDiscoverItem(resolved[it.key]) }))
             }
-            if (latest.isNotEmpty()) add(DiscoverTab("Latest", "New on the charts", latest.map { it.toDiscoverItem() }))
+            if (latest.isNotEmpty()) add(DiscoverTab("Latest", "New on the charts", latest.map { it.toDiscoverItem().copy(meta = releasedAgo(it.releaseDate)) }))
             add(DiscoverTab("Albums", "Apple Music top albums", albums.map { it.toDiscoverAlbum() }))
         }
 
@@ -270,10 +277,24 @@ class DiscoverRepository @Inject constructor(
         const val CHART_TIMEOUT_MS = 6_000L
         const val ARTIST_IMAGES_TIMEOUT_MS = 6_000L
         const val ALBUM_TIMEOUT_MS = 10_000L
-        const val BILLBOARD_RESOLVE_TIMEOUT_MS = 25_000L // Deezer is rate-limited to ~8 req/s in NetworkModule
-        const val BILLBOARD_TAB_LIMIT = 50 // tab rows are composed eagerly inside one LazyColumn item (no per-row laziness)
+        const val BILLBOARD_RESOLVE_TIMEOUT_MS = 45_000L // 100 entries; Deezer is rate-limited to ~8 req/s in NetworkModule
+        const val BILLBOARD_TAB_LIMIT = 100 // the full Hot 100; tab rows are separate lazy items now
         const val PUSH_THROTTLE_MS = 500L
         const val BLEND_WEIGHT = 0.5
         const val ALBUM_BOOST_CAP = 30.0
+    }
+}
+/** "Today", "Yesterday", "3 days ago", "2 weeks ago", else "Mar 2026". Null when the date is missing or unparsable. */
+private fun releasedAgo(releaseDate: String?): String? {
+    val date = runCatching { LocalDate.parse(releaseDate.orEmpty().take(10)) }.getOrNull() ?: return null
+    val days = java.time.temporal.ChronoUnit.DAYS.between(date, LocalDate.now())
+    return when {
+        days < 0 -> null
+        days == 0L -> "Today"
+        days == 1L -> "Yesterday"
+        days < 7 -> "$days days ago"
+        days < 14 -> "1 week ago"
+        days < 31 -> "${days / 7} weeks ago"
+        else -> date.month.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH) + " " + date.year
     }
 }

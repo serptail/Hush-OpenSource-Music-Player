@@ -88,6 +88,7 @@ import com.adamglin.phosphoricons.light.MagnifyingGlass
 import com.adamglin.phosphoricons.light.PencilSimple
 import com.adamglin.phosphoricons.light.Plus
 import com.adamglin.phosphoricons.light.RowsPlusTop
+import com.adamglin.phosphoricons.light.ShareNetwork
 import com.adamglin.phosphoricons.light.Shuffle
 import com.adamglin.phosphoricons.light.Trash
 import com.adamglin.phosphoricons.light.User
@@ -97,6 +98,11 @@ import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.NowPlayingBars
+import com.gamut.core.designsystem.ShareSheet
+import com.gamut.core.designsystem.ArtistLine
+import com.gamut.core.designsystem.ArtistPickerSheet
+import com.gamut.core.designsystem.rememberArtistTap
+import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.LocalNavSettled
 import com.gamut.core.designsystem.ink
@@ -175,6 +181,8 @@ fun PlaylistScreen(
     var draftCover by remember { mutableStateOf<String?>(null) }
     val draftTags = remember { mutableStateListOf<String>() }
     var menuIndex by remember { mutableStateOf<Int?>(null) }
+    var shareTrack by remember { mutableStateOf<Track?>(null) }
+    var artistPickTrack by remember { mutableStateOf<Track?>(null) }
     var query by remember { mutableStateOf("") }
     var searchFocused by remember { mutableStateOf(false) }
     val searching = query.isNotBlank()
@@ -250,7 +258,7 @@ fun PlaylistScreen(
                             coverUrl = coverUrl,
                             tags = playlist?.tags.orEmpty(),
                             songCount = songs.size,
-                            artistCount = songs.map { it.artist }.distinct().size,
+                            artistCount = songs.flatMap { splitArtists(it.artist) }.distinctBy { it.lowercase() }.size,
                             statusLine = when (downloadUi.status) {
                                 PlaylistDownloadStatus.Active -> "Downloading ${minOf(downloadUi.done + 1, downloadUi.total)} of ${downloadUi.total}"
                                 PlaylistDownloadStatus.Done -> null   // shown under the tags: "Available offline"
@@ -296,6 +304,7 @@ fun PlaylistScreen(
                         downloadState = downloadStates[song.isrc],
                         onDownload = { downloads.download(listOf(song)) },
                         onCancelDownload = { downloads.cancel(listOf(song.isrc)) },
+                        onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
                         onClick = { onTrackSelected(song) },
                         onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); menuIndex = item.index },
                         onMore = { menuIndex = item.index },
@@ -320,11 +329,24 @@ fun PlaylistScreen(
                 canMoveDown = !searching && i < songs.lastIndex,
                 onPlay = { onTrackSelected(menuTrack) },
                 onToggleFavorite = { onToggleFavorite(menuTrack) },
-                onGoToArtist = { onTrackArtist(menuTrack) },
+                onGoToArtist = { if (splitArtists(menuTrack.artist).size > 1) artistPickTrack = menuTrack else onTrackArtist(menuTrack) },
+                onShare = { shareTrack = menuTrack },
                 onMoveUp = { viewModel.move(i, i - 1) },
                 onMoveDown = { viewModel.move(i, i + 1) },
                 onRemove = { viewModel.removeAt(i) },
                 onDismiss = { menuIndex = null },
+            )
+        }
+
+        shareTrack?.let { t ->
+            ShareSheet(title = t.title, artist = t.artist, artUrl = t.albumArtUrl, onDismiss = { shareTrack = null })
+        }
+        artistPickTrack?.let { t ->
+            ArtistPickerSheet(
+                names = splitArtists(t.artist),
+                albumTitle = t.album,
+                onPick = { name -> onTrackArtist(t.copy(artist = name)) },
+                onDismiss = { artistPickTrack = null },
             )
         }
 
@@ -639,6 +661,7 @@ private fun PlaylistTrackRow(
     downloadState: DownloadState?,
     onDownload: () -> Unit,
     onCancelDownload: () -> Unit,
+    onArtist: (String) -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onMore: () -> Unit,
@@ -666,7 +689,9 @@ private fun PlaylistTrackRow(
                     modifier = Modifier.weight(1f, fill = false),
                 )
             }
-            Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            ArtistLine(track.artist, track.album, onArtist, stackSize = 18.dp, modifier = Modifier.padding(vertical = 1.dp)) { m ->
+                Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = m)
+            }
             // Fixed 2dp slot so the row doesn't change height when the progress line appears.
             Box(Modifier.padding(top = 5.dp).height(2.dp)) { DownloadProgressLine(downloadState) }
         }
@@ -690,6 +715,7 @@ private fun TrackOptionsPanel(
     onPlay: () -> Unit,
     onToggleFavorite: () -> Unit,
     onGoToArtist: () -> Unit,
+    onShare: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
     onRemove: () -> Unit,
@@ -724,7 +750,8 @@ private fun TrackOptionsPanel(
                 if (isFavorite) "Remove from Favorites" else "Add to Favorites",
                 true,
             ) { onToggleFavorite(); onDismiss() }
-            PanelAction(PhosphorIcons.Light.User, "Go to artist", true) { onGoToArtist(); onDismiss() }
+            PanelAction(PhosphorIcons.Light.User, if (splitArtists(track.artist).size > 1) "Go to artist\u2026" else "Go to artist", true) { onGoToArtist(); onDismiss() }
+            PanelAction(PhosphorIcons.Light.ShareNetwork, "Share", true) { onShare(); onDismiss() }
             PanelAction(PhosphorIcons.Light.ArrowUp, "Move up", canMoveUp) { onMoveUp(); onDismiss() }
             PanelAction(PhosphorIcons.Light.ArrowDown, "Move down", canMoveDown) { onMoveDown(); onDismiss() }
             PanelAction(PhosphorIcons.Light.Trash, "Remove from playlist", true) { onRemove(); onDismiss() }

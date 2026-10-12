@@ -1,0 +1,4 @@
+<!-- res/xml/share_file_paths.xml -->
+<paths>
+    <cache-path name="share" path="share/" />
+</paths>

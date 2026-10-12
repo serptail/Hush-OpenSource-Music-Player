@@ -2,10 +2,14 @@ package com.gamut.feature.resolver
 
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.SystemClock
 import com.gamut.core.database.DownloadEntity
 import com.gamut.core.database.DownloadIndex
+import com.gamut.core.database.TrackDao
+import com.gamut.core.database.toEntity
 import com.gamut.core.model.Track
 import com.gamut.core.player.StreamQuality
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -48,7 +52,8 @@ sealed interface DownloadState {
 }
 
 /** Overall progress of the current run of downloads (drives the notification). total == 0 means idle. */
-data class DownloadBatch(val done: Int = 0, val total: Int = 0, val current: String? = null)
+/** [waitingForWifi] is true while "Download on Wi-Fi only" is on and the queue is held back by a metered / missing network. */
+data class DownloadBatch(val done: Int = 0, val total: Int = 0, val current: String? = null, val waitingForWifi: Boolean = false)
 
 /**
  * What a finished run of downloads came to (emitted once per run, see [TrackDownloadManager.summaries]).
@@ -72,9 +77,14 @@ class TrackDownloadManager @Inject constructor(
     private val newPipe: NewPipeYoutubeSource,
     @Named("youtube") private val client: OkHttpClient,
     private val index: DownloadIndex,
+    private val trackDao: TrackDao,
+    private val storageSettings: StorageSettings,
     @ApplicationScope private val appScope: CoroutineScope,
 ) {
     private val dir = File(context.filesDir, "downloads")
+
+    /** Where finished (and half-written) downloads live. The Storage screen measures and tidies it. */
+    val downloadsDir: File get() = dir
 
     /** Queued / active / failed tracks (finished ones are read from [index]). */
     private val transient = MutableStateFlow<Map<String, DownloadState>>(emptyMap())
@@ -104,6 +114,8 @@ class TrackDownloadManager @Inject constructor(
     /** Tracks cancelled while still waiting in [queue]; skipped when their turn comes. */
     private val cancelled = ConcurrentHashMap.newKeySet<String>()
     @Volatile private var running: Pair<String, Job>? = null
+    /** Tracks that failed in this session, so "Retry failed" has something to re-queue. */
+    private val failedTracks = ConcurrentHashMap<String, Track>()
 
     init {
         appScope.launch(Dispatchers.IO) {
@@ -112,6 +124,7 @@ class TrackDownloadManager @Inject constructor(
         }
         appScope.launch {
             for (track in queue) {
+                awaitNetworkAllowed(track.isrc)
                 if (cancelled.remove(track.isrc)) continue
                 val job = launch { process(track) }
                 running = track.isrc to job
@@ -132,6 +145,7 @@ class TrackDownloadManager @Inject constructor(
             // A new run takes the label as is; joining a run in progress keeps it only if both agree.
             runLabel = if (batchState.value.total == 0 || runLabel == label) label else null
         }
+        fresh.forEach { failedTracks.remove(it.isrc) }
         transient.update { it + fresh.associate { track -> track.isrc to DownloadState.Queued } }
         batchState.update { it.copy(total = it.total + fresh.size) }
         fresh.forEach { queue.trySend(it) }
@@ -148,8 +162,30 @@ class TrackDownloadManager @Inject constructor(
         running?.takeIf { it.first in ids }?.second?.cancel()
     }
 
-    /** Deletes the downloaded files (and stops anything in progress for them). */
+    /** Stops everything that is queued or downloading. Finished downloads are untouched. */
+    fun cancelAll() {
+        cancel(transient.value.filterValues { it is DownloadState.Queued || it is DownloadState.Active }.keys.toList())
+    }
+
+    /** Re-queues every track that failed in this session. */
+    fun retryFailed() {
+        val again = failedTracks.values.toList()
+        if (again.isNotEmpty()) download(again)
+    }
+
+    /** Forgets failed downloads (they disappear from [states]). */
+    fun clearFailed() {
+        failedTracks.clear()
+        transient.update { current -> current.filterValues { it !is DownloadState.Failed } }
+    }
+
+    /**
+     * Deletes the downloaded files (and stops anything in progress for them). Everything else follows from [index]:
+     * [states] drops the "Done" entry, so every badge / playlist / library screen updates, and playback stops finding
+     * a local file and streams instead.
+     */
     suspend fun remove(isrcs: Collection<String>) = withContext(Dispatchers.IO) {
+        isrcs.forEach { failedTracks.remove(it) }
         cancel(isrcs)
         isrcs.forEach { id -> index.remove(id)?.let { File(it).delete() } }
         val ids = isrcs.toSet()
@@ -164,6 +200,7 @@ class TrackDownloadManager @Inject constructor(
         setState(id, DownloadState.Active(0f))
         try {
             val file = fetch(track)
+            saveMetadata(track)   // before the index row, so the Storage screen can show title / artist at once
             index.save(DownloadEntity(id, file.absolutePath, System.currentTimeMillis(), file.length()))
             setState(id, DownloadState.Done)
             recordResult(track.title, ok = true)
@@ -171,6 +208,7 @@ class TrackDownloadManager @Inject constructor(
             transient.update { it - id }
             throw e
         } catch (e: Exception) {
+            failedTracks[id] = track
             setState(id, DownloadState.Failed(e.message ?: "Download failed"))
             recordResult(track.title, ok = false)
         } finally {
@@ -217,10 +255,18 @@ class TrackDownloadManager @Inject constructor(
         target
     }
 
-    /** Highest-bitrate stream (any codec); falls back to the playback resolver (NewPipe m4a, then yt-dlp). */
-    private suspend fun bestUrl(videoId: String, refresh: Boolean): String =
-        newPipe.bestAudioUrl(videoId).getOrNull()
-            ?: audioSources.audioUrl(videoId, forceRefresh = refresh, quality = StreamQuality.HIGH).getOrThrow()
+    /**
+     * "Best": highest-bitrate stream (any codec); falls back to the playback resolver (NewPipe m4a, then yt-dlp).
+     * "Standard" (Storage settings): AAC / m4a straight from the playback resolver, smaller files.
+     */
+    private suspend fun bestUrl(videoId: String, refresh: Boolean): String {
+        val best = storageSettings.current.downloadQuality == DownloadQuality.BEST
+        if (best) newPipe.bestAudioUrl(videoId).getOrNull()?.let { return it }
+        return audioSources.audioUrl(
+            videoId, forceRefresh = refresh,
+            quality = if (best) StreamQuality.HIGH else StreamQuality.NORMAL,
+        ).getOrThrow()
+    }
 
     /**
      * Fetches [url] into [part] in byte ranges (googlevideo throttles one long request), appending after what the file
@@ -272,6 +318,32 @@ class TrackDownloadManager @Inject constructor(
     }
 
     // ---- helpers ----
+
+    /** Keeps title / artist / duration of what was downloaded, so the Storage screen can list it by name. */
+    private suspend fun saveMetadata(track: Track) {
+        try { trackDao.upsert(track.toEntity()) } catch (e: CancellationException) { throw e } catch (_: Exception) { }
+    }
+
+    /** With "Download on Wi-Fi only", the queue waits here (the track stays Queued) until an unmetered network is up. */
+    private suspend fun awaitNetworkAllowed(isrc: String) {
+        var waited = false
+        while (!networkAllowed() && !cancelled.contains(isrc)) {
+            if (!waited) { waited = true; batchState.update { it.copy(waitingForWifi = true) } }
+            delay(2_000)
+        }
+        if (waited) batchState.update { it.copy(waitingForWifi = false) }
+    }
+
+    private fun networkAllowed(): Boolean {
+        if (!storageSettings.current.wifiOnly) return true
+        return try {
+            val cm = context.getSystemService(ConnectivityManager::class.java) ?: return true
+            val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+        } catch (_: SecurityException) {
+            true   // ACCESS_NETWORK_STATE missing: do not block downloads over it
+        }
+    }
 
     private fun setState(id: String, state: DownloadState) = transient.update { it + (id to state) }
 

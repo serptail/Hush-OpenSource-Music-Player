@@ -81,10 +81,17 @@ import com.adamglin.phosphoricons.light.BoxArrowDown
 import com.adamglin.phosphoricons.light.DotsSixVertical
 import com.adamglin.phosphoricons.light.DotsThreeVertical
 import com.adamglin.phosphoricons.light.Plus
+import com.adamglin.phosphoricons.light.ShareNetwork
+import com.adamglin.phosphoricons.light.User
 import com.adamglin.phosphoricons.light.Shuffle
 import com.adamglin.phosphoricons.light.Trash
 import com.adamglin.phosphoricons.light.TrashSimple
 import com.gamut.core.designsystem.CoverTheme
+import com.gamut.core.designsystem.ShareSheet
+import com.gamut.core.designsystem.ArtistLine
+import com.gamut.core.designsystem.ArtistPickerSheet
+import com.gamut.core.designsystem.rememberArtistTap
+import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.TransparentStatusBar
@@ -140,6 +147,8 @@ fun FavoritesScreen(
     onAddToPlaylist: ((Track) -> Unit)? = null,
     /** Manage sheet: the favorites in their new order (also used to undo a removal). The caller saves it. */
     onReorder: (List<Track>) -> Unit = {},
+    /** Opens the artist page of a track (by name). For several artists the picked name arrives as track.copy(artist = name). */
+    onTrackArtist: (Track) -> Unit = {},
     downloads: PlaylistDownloadsViewModel,
     nowPlaying: @Composable () -> Unit = {},
 ) {
@@ -219,6 +228,7 @@ fun FavoritesScreen(
                     onAddToPlaylist = onAddToPlaylist,
                     onDownload = { downloads.download(listOf(it)) },
                     onRemoveDownload = { downloads.remove(listOf(it.isrc)) },
+                    onTrackArtist = onTrackArtist,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                 )
             }
@@ -267,10 +277,13 @@ private fun SongWheel(
     onAddToPlaylist: ((Track) -> Unit)?,
     onDownload: (Track) -> Unit,
     onRemoveDownload: (Track) -> Unit,
+    onTrackArtist: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val ordered = remember(songs) { wheelOrder(songs) }
     var menuTrack by remember { mutableStateOf<Track?>(null) }
+    var shareTrack by remember { mutableStateOf<Track?>(null) }
+    var artistPickTrack by remember { mutableStateOf<Track?>(null) }
     val haptics = LocalHapticFeedback.current
 
     BoxWithConstraints(modifier) {
@@ -307,6 +320,7 @@ private fun SongWheel(
                         menuTrack = song
                     },
                     onPlay = { if (state.focusOf(index) > 0.5f) onTrackSelected(song, songs) },
+                    onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
                 )
             }
         }
@@ -320,9 +334,24 @@ private fun SongWheel(
             onRemoveDownload = { onRemoveDownload(track) },
             onDismiss = { menuTrack = null },
             onPlay = { onTrackSelected(track, songs) },
+            onShare = { shareTrack = track },
             onAddToPlaylist = onAddToPlaylist?.let { add -> { add(track) } },
+            onGoToArtist = {
+                if (splitArtists(track.artist).size > 1) artistPickTrack = track else onTrackArtist(track)
+            },
             onRemove = { onRemove(track) },
         )
+    }
+    artistPickTrack?.let { t ->
+        ArtistPickerSheet(
+            names = splitArtists(t.artist),
+            albumTitle = t.album,
+            onPick = { name -> onTrackArtist(t.copy(artist = name)) },
+            onDismiss = { artistPickTrack = null },
+        )
+    }
+    shareTrack?.let { t ->
+        ShareSheet(title = t.title, artist = t.artist, artUrl = t.albumArtUrl, onDismiss = { shareTrack = null })
     }
 }
 
@@ -337,6 +366,7 @@ private fun WheelRow(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onPlay: () -> Unit,
+    onArtist: (String) -> Unit,
 ) {
     val pillHeight = itemHeight - 20.dp
     val coverSize = pillHeight - PillInset * 2
@@ -385,13 +415,16 @@ private fun WheelRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    song.artist,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = ink(0.6f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                ArtistLine(song.artist, song.album, onArtist, stackSize = 20.dp) { m ->
+                    Text(
+                        song.artist,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ink(0.6f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = m,
+                    )
+                }
                 // Under the title and artist. Skipped on very short wheels, where it would not fit inside the pill.
                 if (offline && itemHeight >= 96.dp) {
                     Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -431,7 +464,9 @@ private fun TrackActionsSheet(
     onRemoveDownload: () -> Unit,
     onDismiss: () -> Unit,
     onPlay: () -> Unit,
+    onShare: () -> Unit,
     onAddToPlaylist: (() -> Unit)?,
+    onGoToArtist: () -> Unit,
     onRemove: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -481,6 +516,11 @@ private fun TrackActionsSheet(
                 null, is DownloadState.Failed -> SheetAction("Download", PhosphorIcons.Light.ArrowCircleDown) { close(onDownload) }
                 else -> Unit   // queued / downloading
             }
+            SheetAction(
+                if (splitArtists(track.artist).size > 1) "Go to artist\u2026" else "Go to artist",
+                PhosphorIcons.Light.User,
+            ) { close(onGoToArtist) }
+            SheetAction("Share", PhosphorIcons.Light.ShareNetwork) { close(onShare) }
             if (onAddToPlaylist != null) {
                 SheetAction("Add to playlist", PhosphorIcons.Light.Plus) { close(onAddToPlaylist) }
             }

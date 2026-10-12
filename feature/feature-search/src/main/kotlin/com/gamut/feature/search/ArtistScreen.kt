@@ -60,6 +60,11 @@ import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.light.ArrowLeft
 import com.adamglin.phosphoricons.light.DotsThreeVertical
 import com.gamut.core.designsystem.CoverTheme
+import com.gamut.core.designsystem.ShareSheet
+import com.gamut.core.designsystem.ArtistLine
+import com.gamut.core.designsystem.ArtistPickerSheet
+import com.gamut.core.designsystem.rememberArtistTap
+import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.designsystem.TrackRowSkeleton
 import com.gamut.core.designsystem.shimmer
 import androidx.compose.foundation.layout.Spacer
@@ -182,6 +187,7 @@ fun ArtistScreen(
         // Same three-dots flow as the Search screen and Discover: actions sheet -> share / playlist picker.
         var actionsTrack by remember { mutableStateOf<Track?>(null) }
         var shareTrack by remember { mutableStateOf<Track?>(null) }
+        var artistPickTrack by remember { mutableStateOf<Track?>(null) }
         var pickerTrack by remember { mutableStateOf<Track?>(null) }
         val accent = MaterialTheme.colorScheme.primary
         var selectedTab by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
@@ -239,7 +245,10 @@ fun ArtistScreen(
                 onShare = { actionsTrack = null; shareTrack = t },
                 onToggleFavorite = { onToggleFavorite(t) },
                 onAddToPlaylist = { actionsTrack = null; pickerTrack = t },
-                onGoToArtist = { actionsTrack = null; onTrackArtist(t) },
+                onGoToArtist = {
+                    actionsTrack = null
+                    if (splitArtists(t.artist).size > 1) artistPickTrack = t else onTrackArtist(t)
+                },
             )
         }
         pickerTrack?.let { t ->
@@ -252,7 +261,15 @@ fun ArtistScreen(
                 onDismiss = { pickerTrack = null },
             )
         }
-        shareTrack?.let { t -> ShareSheet(track = t, onDismiss = { shareTrack = null }) }
+        artistPickTrack?.let { t ->
+            ArtistPickerSheet(
+                names = splitArtists(t.artist),
+                albumTitle = t.album,
+                onPick = { name -> onTrackArtist(t.copy(artist = name)) },
+                onDismiss = { artistPickTrack = null },
+            )
+        }
+        shareTrack?.let { t -> ShareSheet(title = t.title, artist = t.artist, artUrl = t.albumArtUrl, onDismiss = { shareTrack = null }) }
     }
 }
 

@@ -30,6 +30,9 @@ data class SearchResult(val tracks: List<Track>, val isFinal: Boolean, val artis
 
 interface SearchRepository {
     fun search(query: String): Flow<SearchResult>
+
+    /** Forgets cached query results (Storage > Clear cache). */
+    fun clearCache() {}
 }
 
 class SearchRepositoryImpl @Inject constructor(
@@ -42,6 +45,8 @@ class SearchRepositoryImpl @Inject constructor(
     // cache-control worth respecting, and its own soft rate limit (~20 req/min/IP) means a
     // user backspacing to a query they already typed should never re-hit the network.
     private val resultCache = ConcurrentHashMap<String, CachedResult>()
+
+    override fun clearCache() { resultCache.clear() }
 
     private val itunesRateGate = Mutex()
     private val itunesRequestTimes = ArrayDeque<Long>()

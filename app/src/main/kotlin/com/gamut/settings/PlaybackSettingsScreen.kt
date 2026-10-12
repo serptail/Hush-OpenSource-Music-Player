@@ -315,7 +315,7 @@ fun PlaybackSettingsScreen(
             selected = s.streamQuality,
             onSelect = { q -> settings.update { it.copy(streamQuality = q) } },
             onDismiss = { dialog = null },
-            note = "Applies from the next track you play. Downloads always use the best quality.",
+            note = "Applies from the next track you play. Downloads have their own quality setting in Storage & Downloads.",
         )
         PlaybackDialog.PRESET -> GamutChoiceDialog(
             title = "Equalizer preset",
