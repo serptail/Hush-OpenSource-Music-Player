@@ -1,5 +1,6 @@
 package com.gamut.feature.search
 
+import android.util.Log
 import com.gamut.core.model.Track
 import com.gamut.core.model.TrackSource
 import com.gamut.core.network.AppleChartItem
@@ -15,6 +16,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
@@ -81,6 +83,46 @@ class DiscoverRepository @Inject constructor(
         try { Result.success(block()) } catch (e: CancellationException) { throw e } catch (e: Exception) { Result.failure(e) }
 
     /**
+     * A chart request that is retried: a timeout, an exception OR an empty answer counts as a miss (Apple/Deezer fail
+     * transiently). Without this one bad request made a whole section (albums, artists) vanish for the session.
+     */
+    private suspend fun <T> fetchList(label: String, timeoutMs: Long, attempts: Int = 3, block: suspend () -> List<T>): List<T> {
+        repeat(attempts) { n ->
+            // The first attempt gets the full budget (cold radio, DNS, TLS on a slow network); retries only cover a hiccup.
+            val budget = if (n == 0) timeoutMs else timeoutMs * 2 / 3
+            var failure: Throwable? = null
+            val rows = withTimeoutOrNull(budget) { safe { block() }.onFailure { failure = it }.getOrNull() }
+            if (!rows.isNullOrEmpty()) return rows
+            // Say WHY it missed: timeout, exception (network / parsing) or an empty answer. Filter logcat on TAG.
+            val why = when {
+                failure != null -> "failed: $failure"
+                rows == null -> "timed out after ${budget}ms"
+                else -> "returned an empty list"
+            }
+            logW("$label attempt ${n + 1}/$attempts $why")
+            if (n < attempts - 1) delay(500L * (n + 1))
+        }
+        return emptyList()
+    }
+
+    private suspend fun <T : Any> fetchOne(attempts: Int = 3, label: String = "fetchOne", block: suspend () -> T?): T? {
+        var last: Throwable? = null
+        repeat(attempts) { n ->
+            val result = safe { block() }
+            result.getOrNull()?.let { return it }
+            result.exceptionOrNull()?.let { last = it }
+            if (n < attempts - 1) delay(600L * (n + 1))
+        }
+        logW("$label gave up after $attempts attempts: ${last ?: "no result"}")
+        return null
+    }
+
+    /** Logging must never be able to break a load (Log is not mocked in plain unit tests). */
+    private fun logW(message: String) {
+        try { Log.w(TAG, message) } catch (_: Throwable) { }
+    }
+
+    /**
      * Emits Discover in stages: the charts as soon as they arrive (that is all the loading screen waits for), then
      * artist portraits and Billboard resolutions (artwork + playable tracks) as they land. A finished load is cached
      * for the rest of the process and on disk.
@@ -91,23 +133,16 @@ class DiscoverRepository @Inject constructor(
         val stale = diskCache.read()
         if (stale != null) send(stale)
         val (songs, rawAlbums, bb) = coroutineScope {
-            val songsJob = async {
-                withTimeoutOrNull(CHART_TIMEOUT_MS) {
-                    safe { apple.topSongs(100).feed.results }.getOrDefault(emptyList())
-                }.orEmpty()
-            }
-            val albumsJob = async {
-                withTimeoutOrNull(CHART_TIMEOUT_MS) {
-                    safe { apple.topAlbums(20).feed.results.take(20) }.getOrDefault(emptyList())
-                }.orEmpty()
-            }
+            val songsJob = async { fetchList("apple top songs", CHART_TIMEOUT_MS) { apple.topSongs(100).feed.results } }
+            val albumsJob = async { fetchList("apple top albums", CHART_TIMEOUT_MS) { apple.topAlbums(20).feed.results.take(20) } }
             // chart() never throws; a Billboard outage just means Discover stays Apple-only.
             val billboardJob = async { withTimeoutOrNull(CHART_TIMEOUT_MS) { billboard.chart() }.orEmpty() }
             Triple(songsJob.await(), albumsJob.await(), billboardJob.await())
         }
         if (songs.isEmpty() && rawAlbums.isEmpty()) {
             // Offline or charts down: keep showing last session's Discover rather than replacing it with an error.
-            if (stale == null) send(DiscoverState(isLoading = false, error = "Discover is unavailable"))
+            logW("charts unavailable (songs and albums both empty); stale copy " + if (stale != null) "kept on screen" else "missing -> error state")
+            if (stale == null) send(DiscoverState(isLoading = false, error = "Discover is unavailable. Check your connection and try again."))
             return@channelFlow
         }
         val albums = boostAlbums(rawAlbums, bb)
@@ -115,38 +150,45 @@ class DiscoverRepository @Inject constructor(
         val resolved = HashMap<String, Track>() // Billboard key -> playable track; guarded by [lock]
 
         fun buildTabs(): List<DiscoverTab> = buildList {
-            add(DiscoverTab("Trending", "Trending now", blendTrending(songs, bb, resolved)))
+            blendTrending(songs, bb, resolved).takeIf { it.isNotEmpty() }?.let { add(DiscoverTab("Trending", "Trending now", it)) }
             if (bb.isNotEmpty()) {
                 add(DiscoverTab("Billboard", "Billboard Hot 100", bb.take(BILLBOARD_TAB_LIMIT).map { it.toDiscoverItem(resolved[it.key]) }))
             }
             if (latest.isNotEmpty()) add(DiscoverTab("Latest", "New on the charts", latest.map { it.toDiscoverItem().copy(meta = releasedAgo(it.releaseDate)) }))
-            add(DiscoverTab("Albums", "Apple Music top albums", albums.map { it.toDiscoverAlbum() }))
+            if (albums.isNotEmpty()) add(DiscoverTab("Albums", "Apple Music top albums", albums.map { it.toDiscoverAlbum() }))
         }
+
+        // Chart items carry Apple's artistId, so there is no name matching and no namesake problem.
+        val seeds = songs.mapNotNull { item -> item.artistId?.toLongOrNull()?.let { Triple(it, item.artistName, item) } }
+            .distinctBy { it.first }.take(10)
+        val slots = arrayOfNulls<DiscoverItem>(seeds.size)
+        // Until a real portrait lands (or if it never does) the circle shows the song's cover, so the row is never empty.
+        fun placeholder(seed: Triple<Long, String, AppleChartItem>) = DiscoverItem(
+            id = "artist-seed:${seed.first}", title = seed.second, subtitle = "", imageUrl = seed.third.artworkUrl100.big(), artistId = seed.first,
+        )
+        fun shown(): List<DiscoverItem> = seeds.mapIndexed { i, s -> slots[i] ?: placeholder(s) }
 
         // With a stale copy on screen its portraits stay until the fresh ones are all in (one swap, no shrinking row).
         val progressive = stale == null || stale.artists.isEmpty()
-        val albumRow = albums.take(10).map { it.toDiscoverAlbum() } // the row stays at 10; the Albums tab has all 20
-        var artistsNow: List<DiscoverItem> = if (progressive) emptyList() else stale!!.artists
+        var artistsNow: List<DiscoverItem> = if (progressive) shown() else stale!!.artists
+        // The row stays at 10; the Albums tab has all 20. If the albums request failed, last session's row stays.
+        val albumRow = if (albums.isNotEmpty()) albums.take(10).map { it.toDiscoverAlbum() } else stale?.albums.orEmpty()
         var tabsNow = buildTabs()
         fun state() = DiscoverState(albums = albumRow, artists = artistsNow, tabs = tabsNow, isLoading = false)
         send(state())
 
-        // Chart items carry Apple's artistId, so there is no name matching and no namesake problem.
-        val ids = songs.mapNotNull { item -> item.artistId?.toLongOrNull()?.let { it to item.artistName } }
-            .distinctBy { it.first }.take(10)
-        val slots = arrayOfNulls<DiscoverItem>(ids.size)
         val lock = Mutex()
         val gate = Semaphore(4)
         coroutineScope {
             launch {
                 withTimeoutOrNull(ARTIST_IMAGES_TIMEOUT_MS) {
                     coroutineScope {
-                        ids.forEachIndexed { index, (id, name) ->
+                        seeds.forEachIndexed { index, (id, name, _) ->
                             launch {
-                                val card = gate.withPermit { catalog.artistCard(id, name) } ?: return@launch
+                                val card = gate.withPermit { fetchOne(label = "artist card $name") { catalog.artistCard(id, name) } } ?: return@launch
                                 lock.withLock {
                                     slots[index] = card
-                                    if (progressive) { artistsNow = slots.filterNotNull(); send(state()) } // chart order is kept
+                                    if (progressive) { artistsNow = shown(); send(state()) } // chart order is kept
                                 }
                             }
                         }
@@ -171,17 +213,31 @@ class DiscoverRepository @Inject constructor(
                 lock.withLock { tabsNow = buildTabs(); send(state()) } // whatever resolved before the timeout
             }
         }
+        val portraitsComplete = seeds.isNotEmpty() && slots.all { it != null }
         lock.withLock {
-            val fresh = slots.filterNotNull()
-            if (fresh.isNotEmpty()) artistsNow = fresh
+            // A partial refresh never replaces a complete stale row (it would shrink); a fresh row always wins when complete.
+            if (portraitsComplete || progressive) artistsNow = shown()
             send(state())
         }
-        if (artistsNow.isNotEmpty()) {
-            val finalState = state()
+        // Only a COMPLETE load is remembered. A half-loaded one (missing portraits, albums or Billboard) would otherwise be
+        // served as-is for the rest of the process and the missing section would never come back.
+        val finalState = state()
+        if (portraitsComplete && rawAlbums.isNotEmpty() && bb.isNotEmpty()) {
             cachedDiscover = finalState
-            diskCache.write(finalState)
+            safe { diskCache.write(finalState) }
+        } else if (finalState.tabs.isNotEmpty()) {
+            // The disk copy is only the "something is better than nothing" fallback for the next cold start, so a PARTIAL
+            // load is worth saving too (before, a slow Billboard or one missing portrait meant no fallback at all).
+            // Placeholder artists are never persisted: they would make a later load think the row is already complete.
+            val partial = finalState.copy(artists = if (portraitsComplete) finalState.artists else stale?.artists.orEmpty())
+            // ...but it must never replace a better saved copy.
+            if (stale == null || partial.quality() >= stale.quality()) safe { diskCache.write(partial) }
         }
     }
+
+    /** How much a saved state is worth: more tabs, albums and real portraits (not placeholders) beat fewer. */
+    private fun DiscoverState.quality(): Int =
+        tabs.size * 10 + (if (albums.isNotEmpty()) 5 else 0) + artists.count { !it.id.startsWith("artist-seed:") }
 
     /**
      * Trending = Apple and Billboard blended 50/50 by chart position (101 - rank). A song on both charts scores up to
@@ -274,8 +330,9 @@ class DiscoverRepository @Inject constructor(
     )
 
     private companion object {
-        const val CHART_TIMEOUT_MS = 6_000L
-        const val ARTIST_IMAGES_TIMEOUT_MS = 6_000L
+        const val TAG = "DiscoverRepo"
+        const val CHART_TIMEOUT_MS = 10_000L // first attempt; retries get 2/3 of it. 6 s was too tight for a cold mobile connection
+        const val ARTIST_IMAGES_TIMEOUT_MS = 20_000L // each portrait is retried up to 3x behind a 4-wide gate
         const val ALBUM_TIMEOUT_MS = 10_000L
         const val BILLBOARD_RESOLVE_TIMEOUT_MS = 45_000L // 100 entries; Deezer is rate-limited to ~8 req/s in NetworkModule
         const val BILLBOARD_TAB_LIMIT = 100 // the full Hot 100; tab rows are separate lazy items now

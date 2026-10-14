@@ -9,8 +9,15 @@ import com.gamut.core.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlin.math.abs
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +27,27 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 private const val STOP_TIMEOUT_MS = 5_000L
+private const val SAME_SONG_DURATION_SLACK_MS = 5_000L
+
+private fun norm(s: String) = s.trim().lowercase().replace(Regex("\\s+"), " ")
+
+/**
+ * "Is this the same song?" The ISRC is not enough on its own: the same recording reaches the app from different sources
+ * (search, album page, Shazam, ...) and can carry a different or missing ISRC. So the same title + artist counts too,
+ * as long as the lengths agree (this keeps two different songs called "Intro" apart, and live / radio-edit versions).
+ */
+internal fun sameSong(a: Track, b: Track): Boolean {
+    if (a.isrc.isNotBlank() && a.isrc.trim().equals(b.isrc.trim(), ignoreCase = true)) return true
+    if (norm(a.title) != norm(b.title) || norm(a.artist) != norm(b.artist)) return false
+    return a.durationMs <= 0L || b.durationMs <= 0L || abs(a.durationMs - b.durationMs) <= SAME_SONG_DURATION_SLACK_MS
+}
+
+/** Keeps the first occurrence of every song, in order. */
+internal fun List<Track>.withoutDuplicates(): List<Track> {
+    val out = ArrayList<Track>(size)
+    for (t in this) if (out.none { sameSong(it, t) }) out += t
+    return out
+}
 
 /** What a Library row shows for a playlist: the cover of the song added last, and how many songs it holds. */
 data class PlaylistInfo(val coverUrl: String?, val songCount: Int, /** Every song is downloaded: shows the "available offline" mark. */ val offline: Boolean = false)
@@ -68,12 +96,42 @@ class LibraryViewModel @Inject constructor(
         if (name.isBlank()) return
         viewModelScope.launch {
             val id = repository.createPlaylist(name.trim(), tags, coverUri)
-            tracks.forEach { repository.appendTrack(id, it) }
+            tracks.withoutDuplicates().forEach { repository.appendTrack(id, it) }
         }
     }
 
+    // Serializes adds, so two quick taps (or two sources) on the same song cannot both pass the "already there?" check.
+    private val addMutex = Mutex()
+    private val _duplicateAdds = MutableSharedFlow<String>(extraBufferCapacity = 8)
+
+    /** Emits the playlist name whenever an add was skipped because the song is already in it (MainActivity shows one toast). */
+    val duplicateAdds: SharedFlow<String> = _duplicateAdds.asSharedFlow()
+
+    /** THE entry point for "add to playlist" (search, artist, album, player, Shazam all come through here). Skips songs already in it. */
     fun addTrack(playlistId: Long, track: Track) {
-        viewModelScope.launch { repository.appendTrack(playlistId, track) }
+        viewModelScope.launch {
+            addMutex.withLock {
+                val existing = repository.observeTracks(playlistId).first()
+                if (existing.any { sameSong(it, track) }) {
+                    _duplicateAdds.tryEmit(playlists.value.firstOrNull { it.id == playlistId }?.name ?: "this playlist")
+                    return@withLock
+                }
+                repository.appendTrack(playlistId, track)
+            }
+        }
+    }
+
+    // One-time repair of duplicates that are already saved: every playlist, first copy kept, only rewritten if something changed.
+    init {
+        viewModelScope.launch {
+            addMutex.withLock {
+                repository.observePlaylists().first().forEach { p ->
+                    val current = repository.observeTracks(p.id).first()
+                    val clean = current.withoutDuplicates()
+                    if (clean.size != current.size) repository.replaceTracks(p.id, clean)
+                }
+            }
+        }
     }
 
     fun createPlaylistAndAdd(name: String, track: Track) {

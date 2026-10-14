@@ -80,6 +80,29 @@ data class PlaylistSongPull(
     val songs: SongDto? = null,
 )
 
+// ---- artist follows ----
+@Serializable
+data class FollowRow(
+    @SerialName("user_id") val userId: String,
+    val provider: String,
+    @SerialName("provider_artist_id") val providerArtistId: String,
+    val name: String,
+    @SerialName("artwork_url") val artworkUrl: String? = null,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("deleted_at") val deletedAt: String? = null,
+)
+
+@Serializable
+data class FollowPull(
+    val provider: String,
+    @SerialName("provider_artist_id") val providerArtistId: String,
+    val name: String,
+    @SerialName("artwork_url") val artworkUrl: String? = null,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("updated_at") val updatedAt: String,
+    @SerialName("deleted_at") val deletedAt: String? = null,
+)
+
 internal const val SONG_EMBED =
     "songs(provider,provider_song_id,title,duration_ms,artwork_url,artist:artists(name),album:albums(title))"
 
@@ -106,3 +129,6 @@ internal fun parseIsrc(isrc: String): Pair<String, String>? {
     return if (provider in PROVIDERS && Regex("^[A-Za-z0-9_-]{1,32}$").matches(id)) provider to id else null
 }
 private val PROVIDERS = setOf("deezer", "itunes", "apple", "youtube")
+
+/** "deezer:123" -> ("deezer", "123"). Same shape and validation as a song key. */
+internal fun parseArtistKey(key: String): Pair<String, String>? = parseIsrc(key)

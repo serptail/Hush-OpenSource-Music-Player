@@ -86,9 +86,19 @@ data class RecentEntity(@PrimaryKey val isrc: String, val playedAtEpochMs: Long)
 @Entity(tableName = "sync_state")
 data class SyncStateEntity(@PrimaryKey val name: String, val value: String)
 
+/** An artist the user follows. artistKey = "<provider>:<provider_artist_id>", e.g. "deezer:123". No counts are kept. */
+@Entity(tableName = "artist_follows")
+data class FollowEntity(
+    @PrimaryKey val artistKey: String,
+    val name: String,
+    val imageUrl: String?,
+    val followedAtEpochMs: Long,
+)
+
 object SyncTypes {
     const val FAV = "fav"        // itemKey = isrc
     const val PL = "pl"          // itemKey = local playlist id (name/tags changed or playlist created)
     const val PLS = "pls"        // itemKey = "<local playlist id>|<isrc>", payload = position, null = removed
     const val PL_DEL = "pl_del"  // itemKey = remote playlist uuid
+    const val FOLLOW = "follow"  // itemKey = artistKey; row present locally = follow, absent = unfollow
 }

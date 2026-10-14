@@ -1,6 +1,7 @@
 package com.gamut.core.player
 
 import android.app.PendingIntent
+import android.content.Intent
 import android.os.Bundle
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.CommandButton
@@ -43,9 +44,12 @@ class GamutMediaSessionService : MediaSessionService() {
         super.onCreate()
         val player = musicPlayer as Media3MusicPlayer
 
-        // Small status-bar icon: drop a white-on-transparent vector named ic_stat_gamut into any module's res/drawable
-        // and it is used; without it Media3's generic icon stays.
-        val icon = resources.getIdentifier("ic_stat_gamut", "drawable", packageName)
+        // Small status-bar / notification-header icon: the Gamut mark. It must be the white-on-transparent one, because
+        // Android draws small icons as a flat mask (the colour version would turn into a solid blob). An optional
+        // ic_stat_gamut vector wins if you ever add one; without either, Media3's generic icon stays.
+        val icon = listOf("ic_stat_gamut", "ic_gamut_mark_white")
+            .map { resources.getIdentifier(it, "drawable", packageName) }
+            .firstOrNull { it != 0 } ?: 0
         if (icon != 0) {
             setMediaNotificationProvider(DefaultMediaNotificationProvider.Builder(this).build().also { it.setSmallIcon(icon) })
         }
@@ -133,6 +137,12 @@ class GamutMediaSessionService : MediaSessionService() {
     // for that gap.
     override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
         super.onUpdateNotification(session, startInForegroundRequired || (musicPlayer as Media3MusicPlayer).keepForeground)
+    }
+
+    // Swiping the app out of recents: keep going if audio is playing, otherwise shut the service down.
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        val player = session?.player
+        if (player == null || !player.playWhenReady || player.mediaItemCount == 0) stopSelf()
     }
 
     override fun onDestroy() {

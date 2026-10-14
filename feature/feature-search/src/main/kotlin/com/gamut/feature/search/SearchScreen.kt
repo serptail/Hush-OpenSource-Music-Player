@@ -35,6 +35,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -315,12 +318,15 @@ fun SearchScreen(
             }
         }
 
+        // Pull down at the top of Discover: slingshot stretch + refresh button, reloads Discover from scratch.
+        val refresh = rememberSlingshotRefresh(enabled = showingDiscover && !showingRecents, onRefresh = { viewModel.refreshDiscover() })
+
         AcrylicHost(Modifier.fillMaxSize(), state = LocalAcrylicState.current ?: remember { HazeState() }) {
-            Box(Modifier.fillMaxSize().padding(bottom = tabsHeight).acrylicSource()) {
+            Box(Modifier.fillMaxSize().padding(bottom = tabsHeight).acrylicSource().nestedScroll(refresh.connection)) {
                 val resultsAlpha by animateFloatAsState(if (state.isLoading) 0.55f else 1f, tween(150), label = "results-alpha")
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().offset { IntOffset(0, refresh.pull.coerceAtLeast(0f).roundToInt()) },
                     contentPadding = PaddingValues(bottom = stripHeight + 32.dp),
                 ) {
                     item(key = "header") { header(Modifier.padding(horizontal = 24.dp)) }
@@ -361,6 +367,7 @@ fun SearchScreen(
                             onAlbumClick = onAlbumSelected,
                             chartExpanded = chartExpanded,
                             onToggleChartExpanded = { chartExpanded = !chartExpanded },
+                            onRetry = { viewModel.refreshDiscover() },
                         )
                     } else {
                         val loadingEmpty = state.tracks.isEmpty() && (state.isLoading || !settled)
@@ -452,6 +459,7 @@ fun SearchScreen(
                         }
                     }
                 }
+                SlingshotIndicator(refresh)
             }
         }
 
@@ -820,8 +828,7 @@ private fun ArtistHit(item: DiscoverItem, onClick: (Long) -> Unit) {
                 // Big enough artists get the seal-check badge (follower count decides, see VerifiedBadge.kt).
                 if (isVerifiedArtist(item.followers)) VerifiedBadge(Modifier.padding(start = 8.dp), size = 22.dp)
             }
-            val fans = item.followers?.toLong()?.takeIf { it > 0 }?.let { "Artist \u00B7 ${formatCount(it)} fans" } ?: "Artist"
-            Text(fans, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+            Text("Artist", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
         }
         // The arrow nudges forward on hover/press: a quiet "this opens".
         val slide by animateDpAsState(

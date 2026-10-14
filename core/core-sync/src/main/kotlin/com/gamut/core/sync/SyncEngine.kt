@@ -2,6 +2,8 @@ package com.gamut.core.sync
 
 import com.gamut.core.database.FavoriteDao
 import com.gamut.core.database.FavoriteEntity
+import com.gamut.core.database.FollowDao
+import com.gamut.core.database.FollowEntity
 import com.gamut.core.database.PendingSyncDao
 import com.gamut.core.database.PendingSyncEntity
 import com.gamut.core.database.PlaylistDao
@@ -41,6 +43,7 @@ class SyncEngine @Inject constructor(
     private val favorites: FavoriteDao,
     private val playlists: PlaylistDao,
     private val playlistTracks: PlaylistTrackDao,
+    private val follows: FollowDao,
 ) {
     /** isrc -> server song uuid, so a song is resolved at most once per process. */
     private val songIds = ConcurrentHashMap<String, String>()
@@ -71,6 +74,7 @@ class SyncEngine @Inject constructor(
             playlistTracks.isrcsFor(p.id).forEachIndexed { i, isrc -> mark(SyncTypes.PLS, "${p.id}|$isrc", i.toString()) }
         }
         favorites.all().forEach { mark(SyncTypes.FAV, it.isrc) }
+        follows.all().forEach { mark(SyncTypes.FOLLOW, it.artistKey) }
         state.put(SyncStateEntity(OWNER, uid))
     }
 
@@ -122,6 +126,31 @@ class SyncEngine @Inject constructor(
         favUpserts.chunked(200).forEach { supabase.from("favorites").upsert(it) { onConflict = "user_id,song_id" } }
         favRemovals.chunked(100).forEach { chunk ->
             supabase.from("favorites").update({ set("deleted_at", now) }) { filter { isIn("song_id", chunk) } }
+        }
+
+        // artist follows: row still present locally = follow (upsert revives a tombstone), absent = unfollow
+        val followUpserts = ArrayList<FollowRow>()
+        val followRemovals = HashMap<String, MutableList<String>>()
+        for (e in byType[SyncTypes.FOLLOW].orEmpty()) {
+            done += e.id
+            val (provider, pid) = parseArtistKey(e.itemKey) ?: continue
+            val local = follows.get(e.itemKey)
+            if (local != null) followUpserts += FollowRow(
+                uid, provider, pid, local.name.trim().take(200).ifBlank { "Unknown artist" },
+                local.imageUrl?.takeIf { it.startsWith("https://") }?.take(500),
+                Instant.ofEpochMilli(local.followedAtEpochMs).toString(),
+            )
+            else followRemovals.getOrPut(provider) { ArrayList() } += pid
+        }
+        followUpserts.chunked(200).forEach {
+            supabase.from("artist_follows").upsert(it) { onConflict = "user_id,provider,provider_artist_id" }
+        }
+        followRemovals.forEach { (provider, pids) ->
+            pids.chunked(100).forEach { chunk ->
+                supabase.from("artist_follows").update({ set("deleted_at", now) }) {
+                    filter { eq("provider", provider); isIn("provider_artist_id", chunk) }
+                }
+            }
         }
 
         val songUpserts = ArrayList<PlaylistSongRow>()
@@ -214,6 +243,17 @@ class SyncEngine @Inject constructor(
                 if (r.deletedAt != null) favorites.remove(isrc) else favorites.add(FavoriteEntity(isrc, ms(r.createdAt)))
             }
         }
+
+        pageThrough<FollowPull>(
+            "artist_follows", "provider,provider_artist_id,name,artwork_url,created_at,updated_at,deleted_at",
+            CUR_FOLLOWS, { it.updatedAt },
+        ) { rows ->
+            for (r in rows) {
+                val key = "${r.provider}:${r.providerArtistId}"
+                if (pending.has(SyncTypes.FOLLOW, key)) continue          // local change not pushed yet wins
+                if (r.deletedAt != null) follows.remove(key) else follows.add(FollowEntity(key, r.name, r.artworkUrl, ms(r.createdAt)))
+            }
+        }
     }
 
     /** Reads every row with updated_at >= cursor (idempotent re-apply of the boundary row), then advances the cursor. */
@@ -252,7 +292,8 @@ class SyncEngine @Inject constructor(
         const val CUR_PLAYLISTS = "cur_playlists"
         const val CUR_PLAYLIST_SONGS = "cur_playlist_songs"
         const val CUR_FAVORITES = "cur_favorites"
-        val CURSORS = listOf(CUR_PLAYLISTS, CUR_PLAYLIST_SONGS, CUR_FAVORITES)
+        const val CUR_FOLLOWS = "cur_follows"
+        val CURSORS = listOf(CUR_PLAYLISTS, CUR_PLAYLIST_SONGS, CUR_FAVORITES, CUR_FOLLOWS)
         const val TOMBSTONE_WINDOW_MS = 90L * 24 * 60 * 60 * 1000
     }
 }

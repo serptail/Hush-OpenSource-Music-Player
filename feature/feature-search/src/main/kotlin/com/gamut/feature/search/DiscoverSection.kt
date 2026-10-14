@@ -73,18 +73,30 @@ internal fun LazyListScope.discoverItems(
     onAlbumClick: (DiscoverItem) -> Unit,
     chartExpanded: Boolean = false,
     onToggleChartExpanded: () -> Unit = {},
+    onRetry: () -> Unit = {},
 ) {
     // Nothing yet: placeholders with the final shape, so the page does not jump when data lands.
     if (state.tabs.isEmpty()) {
         if (state.error != null && !state.isLoading) {
             item(key = "discover-error") {
-                Text(
-                    state.error,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 40.dp, vertical = 48.dp),
-                )
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 40.dp, vertical = 48.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        state.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "Try again",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = TextPrimary,
+                        modifier = Modifier.pressScale(onClick = onRetry, scaleDown = 0.92f).padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
             }
         } else {
             item(key = "discover-skeleton-hero") {
@@ -276,9 +288,6 @@ private fun ArtistBubble(item: DiscoverItem, onClick: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
         )
-        item.followers?.toLong()?.takeIf { it > 0 }?.let {
-            Text("${formatCount(it)} fans", style = MaterialTheme.typography.labelMedium, color = TextTertiary, maxLines = 1)
-        }
     }
 }
 

@@ -1,6 +1,11 @@
 package com.gamut.feature.library
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -13,6 +18,7 @@ import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -48,7 +54,9 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +71,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -94,6 +104,7 @@ import com.gamut.core.designsystem.rememberArtistTap
 import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNotifier
+import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.LocalNavSettled
 import com.gamut.core.designsystem.glass
@@ -105,6 +116,8 @@ import kotlin.math.abs
 import kotlin.math.asin
 import kotlin.math.cos
 import kotlin.math.pow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /** How many songs fit on the wheel at once: the centered one, two above and two below. */
@@ -112,14 +125,14 @@ private const val VisibleSlots = 5
 
 private val WheelCoverShape = RoundedCornerShape(18.dp)
 private val WheelPillShape = RoundedCornerShape(30.dp)
-private val PlayButtonSize = 52.dp
+private val PlayButtonSize = 48.dp
 private val ShufflePill = RoundedCornerShape(20.dp)
 
 // Quick-actions sheet: background and text follow the app palette (GamutSheet + ink()).
 private val SheetDestructive = Color(0xFFFF6B6B)
 
-private val SideInset = 20.dp   // screen edge to pill
-private val PillInset = 10.dp   // pill edge to cover
+private val SideInset = 24.dp   // screen edge to pill
+private val PillInset = 8.dp    // pill edge to cover
 
 /**
  * Favorites. Songs ride on a wheel: the centered song is flat, full size, in a soft pill with a Play button.
@@ -132,6 +145,10 @@ private val PillInset = 10.dp   // pill edge to cover
  * Long-pressing a song opens a small sheet with quick actions (play, add to playlist, download, remove).
  * The three dots in the header open the manage sheet: the whole list to reorder (hold + drag), remove (tap),
  * and download for offline. Downloaded songs show an "Available offline" badge under their title on the wheel.
+ *
+ * The song that is playing is marked on the wheel (accent title, animated bars, "Playing now") no matter where playback
+ * was started from: it is matched by [nowPlayingIsrc], not by what was tapped here. The wheel opens centered on it, and
+ * a "Now playing" chip jumps back to it after you scroll away.
  */
 @Composable
 fun FavoritesScreen(
@@ -149,6 +166,8 @@ fun FavoritesScreen(
     onReorder: (List<Track>) -> Unit = {},
     /** Opens the artist page of a track (by name). For several artists the picked name arrives as track.copy(artist = name). */
     onTrackArtist: (Track) -> Unit = {},
+    /** ISRC of the track loaded in the player (from anywhere), or null. */
+    nowPlayingIsrc: String? = null,
     downloads: PlaylistDownloadsViewModel,
     nowPlaying: @Composable () -> Unit = {},
 ) {
@@ -185,7 +204,11 @@ fun FavoritesScreen(
                             modifier = Modifier.padding(start = 8.dp).size(16.dp),
                         )
                     }
-                    Text("${songs.size} songs", style = MaterialTheme.typography.bodyMedium, color = ink(0.6f))
+                    val totalMs = songs.sumOf { it.durationMs }
+                    Text(
+                        (if (songs.size == 1) "1 song" else "${songs.size} songs") + if (totalMs > 0) " \u00B7 ${formatTotal(totalMs)}" else "",
+                        style = MaterialTheme.typography.bodyMedium, color = ink(0.6f),
+                    )
                 }
                 Row(
                     Modifier.pressScale(onClick = { if (songs.isNotEmpty()) onShuffle(songs) }).glass(ShufflePill).padding(horizontal = 16.dp, vertical = 9.dp),
@@ -210,11 +233,20 @@ fun FavoritesScreen(
             }
 
             if (songs.isEmpty()) {
-                Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp)) {
+                Column(
+                    Modifier.weight(1f).fillMaxWidth().padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Box(Modifier.size(72.dp).background(ink(0.07f), CircleShape), contentAlignment = Alignment.Center) {
+                        Icon(PhosphorIcons.Fill.Heart, null, tint = ink(0.45f), modifier = Modifier.size(30.dp))
+                    }
+                    Spacer(Modifier.height(18.dp))
+                    Text("No favorites yet", style = MaterialTheme.typography.titleLarge, color = ink(), textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(6.dp))
                     Text(
-                        "Nothing here yet. Like songs from Discover.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ink(0.6f),
+                        "Tap the + on any song in Discover to save it here.",
+                        style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), textAlign = TextAlign.Center,
                     )
                 }
             } else if (!settled) {
@@ -229,6 +261,7 @@ fun FavoritesScreen(
                     onDownload = { downloads.download(listOf(it)) },
                     onRemoveDownload = { downloads.remove(listOf(it.isrc)) },
                     onTrackArtist = onTrackArtist,
+                    nowPlayingIsrc = nowPlayingIsrc,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                 )
             }
@@ -278,9 +311,12 @@ private fun SongWheel(
     onDownload: (Track) -> Unit,
     onRemoveDownload: (Track) -> Unit,
     onTrackArtist: (Track) -> Unit,
+    nowPlayingIsrc: String?,
     modifier: Modifier = Modifier,
 ) {
     val ordered = remember(songs) { wheelOrder(songs) }
+    val accent = MaterialTheme.colorScheme.primary
+    val playingIndex = remember(ordered, nowPlayingIsrc) { ordered.indexOfFirst { it.isrc == nowPlayingIsrc && nowPlayingIsrc != null } }
     var menuTrack by remember { mutableStateOf<Track?>(null) }
     var shareTrack by remember { mutableStateOf<Track?>(null) }
     var artistPickTrack by remember { mutableStateOf<Track?>(null) }
@@ -291,10 +327,22 @@ private fun SongWheel(
         val itemHeight = (maxHeight / VisibleSlots).coerceIn(84.dp, 140.dp)
         // Half the free height as padding lets any item (even the first or last) reach the exact center.
         val pad = ((maxHeight - itemHeight) / 2).coerceAtLeast(0.dp)
-        // The first song is the one in the center. Songs above it are the 3rd, 5th, ... so there are (n - 1) / 2.
-        val start = remember { (songs.size - 1) / 2 }
+        // Opens on the playing song when it is a favorite; otherwise the first song is the one in the center.
+        // Songs above it are the 3rd, 5th, ... so there are (n - 1) / 2.
+        val start = remember { if (playingIndex >= 0) playingIndex else (songs.size - 1) / 2 }
         val state = rememberLazyListState(initialFirstVisibleItemIndex = start)
         val scope = rememberCoroutineScope()
+
+        // A light tick every time a new song rolls into the center.
+        LaunchedEffect(state) {
+            snapshotFlow {
+                val info = state.layoutInfo
+                val c = (info.viewportStartOffset + info.viewportEndOffset) / 2f
+                info.visibleItemsInfo.minByOrNull { abs(it.offset + it.size / 2f - c) }?.key
+            }.distinctUntilChanged().drop(1).collect { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+        }
+        // "Now playing" chip: only while the playing favorite is scrolled away from the center.
+        val showJump by remember(playingIndex) { derivedStateOf { playingIndex >= 0 && state.focusOf(playingIndex) < 0.5f } }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -310,6 +358,8 @@ private fun SongWheel(
                     itemHeight = itemHeight,
                     state = state,
                     offline = downloadStates[song.isrc] == DownloadState.Done,
+                    playing = index == playingIndex,
+                    accent = accent,
                     onClick = {
                         // The centered song plays, any other song rolls to the center first.
                         if (state.focusOf(index) > 0.5f) onTrackSelected(song, songs)
@@ -321,6 +371,29 @@ private fun SongWheel(
                     },
                     onPlay = { if (state.focusOf(index) > 0.5f) onTrackSelected(song, songs) },
                     onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = showJump,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp),
+            enter = fadeIn() + slideInVertically { -it / 2 },
+            exit = fadeOut() + slideOutVertically { -it / 2 },
+        ) {
+            Row(
+                Modifier
+                    .pressScale(onClick = { scope.launch { state.animateScrollToItem(playingIndex) } })
+                    .glass(RoundedCornerShape(50))
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                NowPlayingBars(color = ink())
+                Text(
+                    "Now playing",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = ink(),
+                    modifier = Modifier.padding(start = 8.dp),
                 )
             }
         }
@@ -363,12 +436,14 @@ private fun WheelRow(
     itemHeight: Dp,
     state: LazyListState,
     offline: Boolean,
+    playing: Boolean,
+    accent: Color,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onPlay: () -> Unit,
     onArtist: (String) -> Unit,
 ) {
-    val pillHeight = itemHeight - 20.dp
+    val pillHeight = itemHeight - 28.dp
     val coverSize = pillHeight - PillInset * 2
 
     // Tap + long press on the whole row, with the same subtle press scale as pressScale().
@@ -398,7 +473,8 @@ private fun WheelRow(
                 .fillMaxWidth()
                 .height(pillHeight)
                 .padding(horizontal = SideInset)
-                .graphicsLayer { alpha = state.focusOf(index) }
+                // The playing song keeps a faint pill even when it is off-center, so it is easy to spot.
+                .graphicsLayer { alpha = maxOf(state.focusOf(index), if (playing) 0.55f else 0f) }
                 .background(ink(0.07f), WheelPillShape)
                 .border(1.dp, ink(0.08f), WheelPillShape),
         )
@@ -411,7 +487,7 @@ private fun WheelRow(
                 Text(
                     song.title,
                     style = MaterialTheme.typography.titleLarge,
-                    color = ink(),
+                    color = if (playing) accent else ink(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -426,7 +502,16 @@ private fun WheelRow(
                     )
                 }
                 // Under the title and artist. Skipped on very short wheels, where it would not fit inside the pill.
-                if (offline && itemHeight >= 96.dp) {
+                if (playing && itemHeight >= 96.dp) {
+                    Text(
+                        "Playing now",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = accent,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                } else if (offline && itemHeight >= 96.dp) {
                     Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(PhosphorIcons.Fill.CheckCircle, null, tint = ink(0.6f), modifier = Modifier.size(13.dp))
                         Text(
@@ -443,15 +528,24 @@ private fun WheelRow(
             Box(
                 Modifier
                     .size(PlayButtonSize)
-                    .graphicsLayer { alpha = state.focusOf(index) }
+                    .graphicsLayer { alpha = maxOf(state.focusOf(index), if (playing) 1f else 0f) }
                     .background(ink(0.14f), CircleShape)
                     .pressScale(onClick = onPlay),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(PhosphorIcons.Fill.Play, "Play", tint = ink(), modifier = Modifier.size(22.dp))
+                if (playing) NowPlayingBars(color = accent)
+                else Icon(PhosphorIcons.Fill.Play, "Play", tint = ink(), modifier = Modifier.size(22.dp))
             }
         }
     }
+}
+
+/** "3 hr 20 min" / "45 min". */
+private fun formatTotal(ms: Long): String {
+    val minutes = (ms / 60_000).coerceAtLeast(1)
+    val h = minutes / 60
+    val m = minutes % 60
+    return if (h > 0) "$h hr $m min" else "$m min"
 }
 
 /** Small bottom sheet with quick actions for one favorite. */

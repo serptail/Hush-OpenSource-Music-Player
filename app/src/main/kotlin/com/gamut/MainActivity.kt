@@ -40,6 +40,7 @@ import com.gamut.account.ProfileScreen
 import com.gamut.settings.RecentlyPlayedScreen
 import com.gamut.settings.LocalPageActive
 import com.gamut.settings.RecentlyPlayedViewModel
+import com.gamut.settings.StatsViewModel
 import com.gamut.settings.PlaybackSettingsScreen
 import com.gamut.settings.StorageSettingsScreen
 import com.gamut.settings.FeedbackScreen
@@ -76,6 +77,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.foundation.layout.Box
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -96,6 +98,7 @@ import com.gamut.core.designsystem.BottomBarItem
 import com.gamut.core.designsystem.GamutBottomBar
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.foundation.layout.fillMaxSize
+import com.gamut.core.designsystem.GamutBoot
 import com.gamut.core.designsystem.GamutLoadingScreen
 import androidx.compose.ui.Modifier
 import com.gamut.core.designsystem.AcrylicHost
@@ -153,6 +156,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -184,6 +188,12 @@ class MainActivity : FragmentActivity() {
         val startPalette = appearanceStore.settings.value.neutralPalette(systemDark)
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = startPalette.isLight
         window.setBackgroundDrawable(ColorDrawable(startPalette.base.toArgb()))
+        // Last resort for the back button: when no screen, sheet or layer wants it (their handlers are registered later, so
+        // they run first), send the app to the background instead of finishing it. Finishing throws away every
+        // ViewModel and replays the loading screen on the next launch; backgrounding keeps everything as it was.
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() { moveTaskToBack(true) }
+        })
         setContent {
             val appearance by appearanceStore.settings.collectAsState()
             CompositionLocalProvider(LocalAppearance provides appearance) {
@@ -226,8 +236,9 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
     var openSearchTick by remember { mutableIntStateOf(0) }
     // Bumped by Settings > Your Playlists: HomeTabs slides to the Library tab.
     var openLibraryTick by remember { mutableIntStateOf(0) }
-    // Saveable: if the system recreates the activity (file picker, background, rotation) we must NOT replay the splash.
-    var showLoading by rememberSaveable { mutableStateOf(true) }
+    // Never replay the splash once it has played in this process (GamutBoot, survives the activity and the composition),
+    // nor after the system recreates the activity (rememberSaveable restores the saved value, also after process death).
+    var showLoading by rememberSaveable { mutableStateOf(!GamutBoot.finished) }
     var forceReady by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) { delay(10_000); forceReady = true } // never trap the user if Discover fails
     val dataReady = forceReady || discover.tabs.isNotEmpty() || (!discover.isLoading && discover.error != null)
@@ -369,9 +380,29 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
     val shazamVm = hiltViewModel<ShazamViewModel>()
     val shazamState by shazamVm.state.collectAsState()
     val appLibraryVm = hiltViewModel<LibraryViewModel>()
+    // One toast for every "add to playlist" entry point (search, artist, album, player, Shazam): the song was already there.
+    LaunchedEffect(appLibraryVm) { appLibraryVm.duplicateAdds.collect { name -> notifier.info("Already in \u201C$name\u201D") } }
     // Recently played: whatever the player loads (tap, skip, auto-advance) is recorded once it starts.
     val recentVm = hiltViewModel<RecentlyPlayedViewModel>()
     LaunchedEffect(loadedTrack?.isrc) { loadedTrack?.let(recentVm::record) }
+    // Statistics (Recently played > Statistics): a song counts as played when it is actually PLAYING, once per start.
+    // A track restored paused does not count, pause/resume does not count again, skipping away and back does, and so
+    // does the same song starting over from the beginning (repeat one, replay). Reads the position inside snapshotFlow,
+    // so the root composable still does not recompose on every tick. The two values survive rotation.
+    val statsVm = hiltViewModel<StatsViewModel>()
+    var countedIsrc by rememberSaveable { mutableStateOf<String?>(null) }
+    var lastPositionMs by rememberSaveable { mutableStateOf(0L) }
+    LaunchedEffect(Unit) {
+        snapshotFlow { (playback as? PlaybackState.Playing)?.let { it.track to it.positionMs } }
+            .filterNotNull()
+            .collect { (track, positionMs) ->
+                val isNewSong = track.isrc != countedIsrc
+                val startedOver = !isNewSong && positionMs < 2_000L && lastPositionMs > 10_000L
+                if (isNewSong || startedOver) statsVm.record(track)
+                countedIsrc = track.isrc
+                lastPositionMs = positionMs
+            }
+    }
     val context = LocalContext.current
     var resumeAfterShazam by remember { mutableStateOf(false) }
     val startShazam = {
@@ -613,6 +644,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                         onRemove = { appLibraryVm.toggleFavorite(it) },
                                         onReorder = { appLibraryVm.setFavoriteOrder(it) },
                                         onTrackArtist = { t -> openArtist(t.artist) },
+                                        nowPlayingIsrc = loadedTrack?.isrc,
                                         downloads = downloadsVm,
                                         nowPlaying = nowPlayingDocked,
                                     )
@@ -748,7 +780,10 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                         if (shazamState !is ShazamState.Idle) {
                             val shazamLevel by shazamVm.level.collectAsState()
                             val favoriteIsrcs by appLibraryVm.favoriteIsrcs.collectAsState()
-                            val playlists by appLibraryVm.playlists.collectAsState()
+                            val libraryPlaylists by appLibraryVm.playlists.collectAsState()
+                            val playlists = remember(libraryPlaylists) {
+                                libraryPlaylists.map { TrackPlaylistOption(id = it.id.toString(), name = it.name, coverUrl = it.coverUri) }
+                            }
                             // Sheets sit outside the screens' CoverTheme, so they get their own: light/dark applies here too.
                             CoverTheme(palette) {
                                 ShazamSheet(
@@ -766,8 +801,8 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                     onPlay = { track -> shazamVm.dismiss(); playTrackWithQueue(track, emptyList()) },
                                     onToggleFavorite = appLibraryVm::toggleFavorite,
                                     onAddToQueue = { track -> player.addToQueue(track) },
-                                    onAddToPlaylist = { playlist, track -> appLibraryVm.addTrack(playlist.id, track) },
-                                    onCreatePlaylist = { name, track -> appLibraryVm.createPlaylistAndAdd(name, track) },
+                                    onAddToPlaylist = { track, id -> appLibraryVm.addTrack(id.toLong(), track) },
+                                    onTrackArtist = { track -> shazamVm.dismiss(); openArtist(track.artist) },
                                 )
                             }
                         }
@@ -1159,7 +1194,11 @@ private fun ArtistRoute(
     val playlistOptions = remember(libraryPlaylists) {
         libraryPlaylists.map { TrackPlaylistOption(id = it.id.toString(), name = it.name, coverUrl = it.coverUri) }
     }
+    val followVm = hiltViewModel<com.gamut.core.sync.FollowViewModel>()
+    val followedKeys by followVm.followedKeys.collectAsState()
     DiscoverArtistScreen(
+        followedKeys = followedKeys,
+        onToggleFollow = followVm::toggle,
         viewModel = viewModel,
         onBack = onBack,
         onTrackSelected = onTrackSelected,

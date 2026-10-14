@@ -44,6 +44,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gamut.core.designsystem.CoverPalette
@@ -67,15 +69,29 @@ internal fun ModSheet(accent: Color, onDismiss: () -> Unit) {
                 .padding(horizontal = 20.dp).padding(bottom = 16.dp),
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Mod", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = ink(), modifier = Modifier.weight(1f))
+                Column(Modifier.weight(1f)) {
+                    Text("Mod", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = ink())
+                    Text(
+                        when (state.preset) {
+                            ModPreset.ORIGINAL -> "Pick a mod to reshape the sound"
+                            ModPreset.CUSTOM -> "Custom mix"
+                            else -> "${state.preset.label} \u00B7 ${presetHint(state.preset)}"
+                        },
+                        fontSize = 13.sp, color = ink(0.55f), modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
                 if (state.preset != ModPreset.ORIGINAL && state.settings != state.preset.defaults()) {
                     Text(
-                        "Reset", fontSize = 14.sp, color = accent,
-                        modifier = Modifier.bounceTap(onClick = ModController::reset).padding(8.dp),
+                        "Reset", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = accent,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .border(1.dp, accent.copy(alpha = 0.6f), RoundedCornerShape(50))
+                            .bounceTap(onClick = ModController::reset)
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
                     )
                 }
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(16.dp))
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 ModPreset.entries.chunked(3).forEach { rowPresets ->
@@ -93,12 +109,19 @@ internal fun ModSheet(accent: Color, onDismiss: () -> Unit) {
                 }
             }
 
-            Spacer(Modifier.height(20.dp))
             val controls = ModControl.entries.filter { it in state.preset.controls }
-            if (controls.isEmpty()) {
-                Text("Pick a mod to reshape the sound.", fontSize = 14.sp, color = ink(0.55f))
-            } else {
-                controls.forEach { ControlRow(it, state.settings, accent) }
+            if (controls.isNotEmpty()) {
+                Spacer(Modifier.height(20.dp))
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(ink(0.06f))
+                        .border(1.dp, ink(0.06f), RoundedCornerShape(20.dp))
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                ) {
+                    controls.forEach { ControlRow(it, state.settings, accent) }
+                }
             }
         }
     }
@@ -106,23 +129,32 @@ internal fun ModSheet(accent: Color, onDismiss: () -> Unit) {
 
 @Composable
 private fun PresetCell(preset: ModPreset, selected: Boolean, accent: Color, modifier: Modifier, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(16.dp)
-    val cellBg by animateColorAsState(if (selected) accent.copy(alpha = 0.22f) else ink(0.07f), tween(GamutMotion.CONTENT_MS), label = "mod-cell-bg")
-    val cellEdge by animateColorAsState(if (selected) accent else ink(0.08f), tween(GamutMotion.CONTENT_MS), label = "mod-cell-edge")
+    val shape = RoundedCornerShape(18.dp)
+    val cellBg by animateColorAsState(if (selected) accent.copy(alpha = 0.20f) else ink(0.06f), tween(GamutMotion.CONTENT_MS), label = "mod-cell-bg")
+    val cellEdge by animateColorAsState(if (selected) accent else ink(0.07f), tween(GamutMotion.CONTENT_MS), label = "mod-cell-edge")
+    val chipBg by animateColorAsState(if (selected) accent.copy(alpha = 0.28f) else ink(0.07f), tween(GamutMotion.CONTENT_MS), label = "mod-chip-bg")
     Column(
         modifier
-            .height(68.dp)
+            .height(76.dp)
             .clip(shape)
             .background(cellBg)
-            .border(BorderStroke(1.dp, cellEdge), shape)
+            .border(BorderStroke(if (selected) 1.5.dp else 1.dp, cellEdge), shape)
             .bounceTap(onClick = onClick)
-            .padding(horizontal = 8.dp),
+            .padding(horizontal = 6.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(preset.label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = ink(), maxLines = 1)
-        Spacer(Modifier.height(2.dp))
-        Text(presetHint(preset), fontSize = 11.sp, color = ink(0.55f), maxLines = 1)
+        // Two lines allowed: a long name ("Slowed + Reverb") used to be clipped to "Slowed +".
+        Text(
+            preset.label, fontSize = 13.sp, lineHeight = 15.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, color = ink(),
+            maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(5.dp))
+        Text(
+            presetHint(preset), fontSize = 10.5.sp, color = if (selected) ink() else ink(0.6f), maxLines = 1,
+            modifier = Modifier.clip(RoundedCornerShape(50)).background(chipBg).padding(horizontal = 8.dp, vertical = 2.dp),
+        )
     }
 }
 
@@ -177,11 +209,11 @@ private fun ControlRow(control: ModControl, settings: ModSettings, accent: Color
     }
     val spec = specFor(control) ?: return
     val value = spec.get(settings).coerceIn(spec.min, spec.max)
-    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Row {
             Text(spec.label, color = ink(0.8f), style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.weight(1f))
-            Text(spec.format(value), color = ink(0.5f), style = MaterialTheme.typography.bodyMedium)
+            Text(spec.format(value), color = accent, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyMedium)
         }
         LineSlider(
             value = value, min = spec.min, max = spec.max, step = spec.step, accent = accent,
@@ -213,11 +245,11 @@ private fun TogglePill(on: Boolean, accent: Color, onClick: () -> Unit) {
 @Composable
 private fun LineSlider(value: Float, min: Float, max: Float, step: Float, accent: Color, onChange: (Float) -> Unit) {
     val onChangeNow by rememberUpdatedState(onChange)
-    val trackC = ink(0.14f); val tickC = ink(0.3f); val dotC = ink()
+    val trackC = ink(0.16f); val tickC = ink(0.3f); val dotC = ink()
     Canvas(
         Modifier
             .fillMaxWidth()
-            .height(28.dp)
+            .height(32.dp)
             .pointerInput(min, max, step) {
                 awaitEachGesture {
                     val pad = 6.dp.toPx()
@@ -238,9 +270,10 @@ private fun LineSlider(value: Float, min: Float, max: Float, step: Float, accent
         val pad = 6.dp.toPx()
         val cy = size.height / 2f
         val x = pad + (value - min) / (max - min) * (size.width - 2 * pad)
-        val stroke = 2.dp.toPx()
+        val stroke = 4.dp.toPx()
         drawLine(trackC, Offset(pad, cy), Offset(size.width - pad, cy), stroke, StrokeCap.Round)
         drawLine(accent, Offset(pad, cy), Offset(x, cy), stroke, StrokeCap.Round)
-        drawCircle(dotC, 6.dp.toPx(), Offset(x, cy))
+        drawCircle(accent.copy(alpha = 0.25f), 12.dp.toPx(), Offset(x, cy))   // soft halo
+        drawCircle(dotC, 7.dp.toPx(), Offset(x, cy))
     }
 }

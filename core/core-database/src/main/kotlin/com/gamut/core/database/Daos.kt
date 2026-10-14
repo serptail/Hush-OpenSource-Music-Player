@@ -121,3 +121,14 @@ interface SyncStateDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(entry: SyncStateEntity)
     @Query("SELECT value FROM sync_state WHERE name = :name") suspend fun get(name: String): String?
 }
+
+@Dao
+interface FollowDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun add(follow: FollowEntity)
+    @Query("DELETE FROM artist_follows WHERE artistKey = :key") suspend fun remove(key: String)
+    @Query("SELECT * FROM artist_follows WHERE artistKey = :key") suspend fun get(key: String): FollowEntity?
+    @Query("SELECT * FROM artist_follows") suspend fun all(): List<FollowEntity>
+    @Query("SELECT EXISTS(SELECT 1 FROM artist_follows WHERE artistKey = :key)") suspend fun isFollowing(key: String): Boolean
+    @Query("SELECT artistKey FROM artist_follows") fun observeKeys(): Flow<List<String>>
+    @Query("SELECT * FROM artist_follows ORDER BY followedAtEpochMs DESC") fun observeAll(): Flow<List<FollowEntity>>
+}

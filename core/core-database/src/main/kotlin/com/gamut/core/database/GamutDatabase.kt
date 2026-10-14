@@ -17,8 +17,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PendingSyncEntity::class,
         SyncStateEntity::class,
         RecentEntity::class,
+        FollowEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class GamutDatabase : RoomDatabase() {
@@ -32,6 +33,7 @@ abstract class GamutDatabase : RoomDatabase() {
     abstract fun pendingSyncDao(): PendingSyncDao
     abstract fun syncStateDao(): SyncStateDao
     abstract fun recentDao(): RecentDao
+    abstract fun followDao(): FollowDao
 }
 
 val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -85,5 +87,15 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
 val MIGRATION_6_7 = object : Migration(6, 7) {
     override fun migrate(database: SupportSQLiteDatabase) {
         database.execSQL("CREATE TABLE IF NOT EXISTS recently_played (isrc TEXT NOT NULL, playedAtEpochMs INTEGER NOT NULL, PRIMARY KEY(isrc))")
+    }
+}
+
+/** Followed artists. Register it next to the others. */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL(
+            "CREATE TABLE IF NOT EXISTS artist_follows (artistKey TEXT NOT NULL, name TEXT NOT NULL, " +
+                "imageUrl TEXT, followedAtEpochMs INTEGER NOT NULL, PRIMARY KEY(artistKey))",
+        )
     }
 }

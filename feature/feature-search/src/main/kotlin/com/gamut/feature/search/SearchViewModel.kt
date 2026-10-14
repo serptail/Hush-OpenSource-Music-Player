@@ -9,6 +9,8 @@ import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +37,10 @@ data class SearchUiState(
 /** Only the first results are likely to be played; prefetching all of them wastes network and CPU. */
 private const val PREFETCH_LIMIT = 5
 private const val MIN_QUERY_LENGTH = 2
+private const val DISCOVER_ERROR = "Discover is unavailable. Check your connection and try again."
+
+/** Pauses before the automatic retries of a Discover load that ended with nothing to show (offline, charts down). */
+private val DISCOVER_RETRY_DELAYS_MS = longArrayOf(4_000L, 12_000L, 30_000L)
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -76,18 +82,49 @@ class SearchViewModel @Inject constructor(
         hit?.takeIf { SearchRanking.showArtistCard(ui.query, it.title, signal, ui.tracks) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    init {
-        viewModelScope.launch {
-            try {
-                discoverRepository.discoverFlow().collect { _discover.value = it }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                // keep the empty DiscoverState; the UI shows its empty state
+    private var discoverJob: Job? = null
+
+    private fun loadDiscover() {
+        discoverJob?.cancel()
+        discoverJob = viewModelScope.launch {
+            var autoRetries = 0
+            while (true) {
+                try {
+                    discoverRepository.discoverFlow().collect { _discover.value = it }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // handled below
+                }
+                // Never leave the UI on the skeleton forever: surface a retryable error unless something is already shown.
+                val now = _discover.value
+                if (now.tabs.isEmpty() && (now.isLoading || now.error == null)) {
+                    _discover.value = DiscoverState(isLoading = false, error = DISCOVER_ERROR)
+                }
+                if (_discover.value.tabs.isNotEmpty() || autoRetries >= DISCOVER_RETRY_DELAYS_MS.size) break
+                // Still nothing: try again on its own (the network often comes back a moment later). The error stays up
+                // while waiting, then the skeleton shows while the retry runs. The "Try again" button and pull-to-refresh
+                // restart this whole loop.
+                delay(DISCOVER_RETRY_DELAYS_MS[autoRetries++])
+                _discover.value = DiscoverState()
             }
         }
+    }
+
+    /** Pull-to-refresh / "Try again": drops the in-memory copy and loads Discover from scratch (cancels a load still running). */
+    fun refreshDiscover() {
+        discoverRepository.clearCache()
+        // From the error screen show the skeleton at once, so the tap visibly does something.
+        _discover.update { if (it.tabs.isEmpty()) DiscoverState() else it }
+        loadDiscover()
+    }
+
+    init {
+        loadDiscover()
         viewModelScope.launch {
-            query.debounce(250).distinctUntilChanged().flatMapLatest { value ->
+            // No distinctUntilChanged: updateQuery marks the state as loading on every change, so a search must always
+            // follow (typing "ab" -> "abc" -> "ab" inside the debounce would otherwise leave it loading forever).
+            query.debounce(250).flatMapLatest { value ->
                 if (value.trim().length < MIN_QUERY_LENGTH) flowOf(SearchResult(emptyList(), true) to false)
                 else repository.search(value)
                     .map { it to false }
@@ -112,9 +149,16 @@ class SearchViewModel @Inject constructor(
     }
 
     fun updateQuery(value: String) {
+        val changed = query.value != value
         query.value = value
         if (value.isBlank()) artistSignal.value = null
+        val searching = value.trim().length >= MIN_QUERY_LENGTH
         // Atomic update: the result collector writes to the same state from another coroutine.
-        _state.update { if (value.isBlank()) SearchUiState() else it.copy(query = value, error = null) }
+        // Loading starts NOW, not when the debounced request begins: otherwise the screen sat "settled and empty" for a
+        // moment and flashed "No results" before the real results arrived.
+        _state.update {
+            if (value.isBlank()) SearchUiState()
+            else it.copy(query = value, error = null, isLoading = if (searching) changed || it.isLoading else false)
+        }
     }
 }

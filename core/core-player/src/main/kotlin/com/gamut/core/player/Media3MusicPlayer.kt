@@ -521,7 +521,14 @@ class Media3MusicPlayer @Inject constructor(
         if (controllerFuture != null) return
         runCatching {
             val token = androidx.media3.session.SessionToken(context, ComponentName(context, GamutMediaSessionService::class.java))
-            val future = androidx.media3.session.MediaController.Builder(context, token).buildAsync()
+            val future = androidx.media3.session.MediaController.Builder(context, token)
+                .setListener(object : androidx.media3.session.MediaController.Listener {
+                    // Service was stopped (notification swiped, task removed): allow a fresh bind next time.
+                    override fun onDisconnected(controller: androidx.media3.session.MediaController) {
+                        controllerFuture = null
+                    }
+                })
+                .buildAsync()
             controllerFuture = future
             // A failed connection must not block every later attempt: the service would then never start.
             future.addListener(
@@ -554,6 +561,7 @@ class Media3MusicPlayer @Inject constructor(
 
     override fun resume() {
         val track = currentTrack ?: return
+        ensureSessionService()   // the service may have been stopped by a notification swipe
         if (loadedIsrc == track.isrc) resumePlayer() else loadAtPos(pos)   // not loaded (e.g. failed earlier): retry
     }
 

@@ -3,6 +3,7 @@ package com.gamut.feature.search
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -42,6 +43,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -97,6 +99,9 @@ class ArtistViewModel @Inject constructor(
     private val artistId = savedStateHandle.get<String>("artistId")?.toLongOrNull()
     private val _state = MutableStateFlow<ArtistDetails?>(null)
     val state: StateFlow<ArtistDetails?> = _state.asStateFlow()
+    private val _followKey = MutableStateFlow<String?>(null)
+    /** "<provider>:<id>" of this artist, the key follows are stored and synced under. Null until resolved. */
+    val followKey: StateFlow<String?> = _followKey.asStateFlow()
     private val _failed = MutableStateFlow(false)
     /** True when the artist could not be loaded at all (so the screen stops spinning). */
     val failed: StateFlow<Boolean> = _failed.asStateFlow()
@@ -104,6 +109,7 @@ class ArtistViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val id = artistId ?: repository.findArtistId(savedStateHandle.get<String>("artistName").orEmpty())
+            _followKey.value = id?.let { "deezer:$it" }      // assumes Deezer artist ids
             val base = id?.let { repository.artistOverview(it) }
             _state.value = base          // the page is usable here: top songs + albums
             _failed.value = base == null
@@ -154,6 +160,9 @@ fun ArtistScreen(
     /** ISRC of the track loaded in the player: its row gets the accent title + animated bars (like Search / Discover). */
     nowPlayingIsrc: String? = null,
     nowPlaying: @Composable () -> Unit = {},
+    /** Keys ("deezer:123") of the artists the user follows. */
+    followedKeys: Set<String> = emptySet(),
+    onToggleFollow: (key: String, name: String, imageUrl: String?) -> Unit = { _, _, _ -> },
 ) {
     val artist by viewModel.state.collectAsStateWithLifecycle()
     val failed by viewModel.failed.collectAsStateWithLifecycle()
@@ -183,6 +192,15 @@ fun ArtistScreen(
             return@CoverTheme
         }
         val value = artist ?: return@CoverTheme
+        val followKey by viewModel.followKey.collectAsStateWithLifecycle()
+        val notifier = com.gamut.core.designsystem.LocalNotifier.current
+        val following = followKey != null && followKey in followedKeys
+        val onFollowClick: () -> Unit = {
+            followKey?.let { key ->
+                onToggleFollow(key, value.name, value.imageUrl)
+                if (following) notifier.info("Unfollowed ${value.name}") else notifier.success("Following ${value.name}")
+            }
+        }
         val tabs = listOf("Overview", "Songs", "Albums", "Latest")
         // Same three-dots flow as the Search screen and Discover: actions sheet -> share / playlist picker.
         var actionsTrack by remember { mutableStateOf<Track?>(null) }
@@ -227,6 +245,8 @@ fun ArtistScreen(
                             onAlbum = onAlbumSelected,
                             onArtist = onSimilarArtist,
                             onViewAll = { selectedTab = 1 },
+                            following = following,
+                            onFollowClick = onFollowClick,
                         )
                         1 -> TrackList(value.songs, loading = !value.songsLoaded, nowPlayingIsrc = nowPlayingIsrc, accent = accent, onMore = { actionsTrack = it }) { picked -> onTrackSelected(picked, value.songs) }
                         2 -> AlbumGrid(value.albums, onAlbumSelected)
@@ -286,6 +306,8 @@ private fun ArtistOverview(
     onAlbum: (DiscoverItem) -> Unit,
     onArtist: (String) -> Unit,
     onViewAll: () -> Unit,
+    following: Boolean,
+    onFollowClick: () -> Unit,
 ) {
     LazyColumn(Modifier.fillMaxSize().fadeEdges(), contentPadding = PaddingValues(start = 12.dp, end = 24.dp, bottom = 24.dp)) {
         item {
@@ -298,7 +320,7 @@ private fun ArtistOverview(
                     loading = { ArtistPlaceholder() },
                     error = { ArtistPlaceholder() },
                 )
-                if (artist.listeners.isNotBlank()) Text(artist.listeners, color = ink(0.6f), modifier = Modifier.padding(top = 14.dp))
+                FollowButton(following, onFollowClick, Modifier.padding(top = 14.dp))
             }
             Row(Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Popular songs", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.weight(1f))
@@ -470,4 +492,27 @@ private fun AlbumLine(album: DiscoverItem) {
 private fun ArtistPlaceholder() {
     // Opaque and flat on purpose: AlbumLine puts a shadow behind this, and a translucent tile let it bleed through as haze.
     ArtPlaceholder()
+}
+
+/** Colours come from [ink] (the cover-adaptive foreground), so the button reads on light and dark covers alike. */
+@Composable
+private fun FollowButton(following: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val fg = ink()
+    val onFg = if (fg.luminance() > 0.5f) Color.Black else Color.White   // text on the solid pill
+    val shape = RoundedCornerShape(50)
+    Box(
+        modifier
+            .clip(shape)
+            .background(if (following) ink(0.12f) else fg, shape)
+            .then(if (following) Modifier.border(1.dp, ink(0.35f), shape) else Modifier)
+            .pressScale(onClick = onClick, scaleDown = 0.96f)
+            .padding(horizontal = 28.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            if (following) "Following" else "Follow",
+            color = if (following) fg else onFg,
+            style = MaterialTheme.typography.titleMedium,
+        )
+    }
 }

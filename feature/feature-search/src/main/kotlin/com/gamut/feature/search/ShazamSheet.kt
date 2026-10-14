@@ -15,7 +15,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,13 +22,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -46,13 +40,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -61,22 +52,27 @@ import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.fill.Heart
+import com.adamglin.phosphoricons.light.DotsThree
 import com.adamglin.phosphoricons.light.Heart
 import com.gamut.core.designsystem.AlertTick
+import com.gamut.core.designsystem.ArtistPickerSheet
+import com.gamut.core.designsystem.ShareSheet
+import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.designsystem.R
 import com.gamut.core.designsystem.ErrorTick
 import com.gamut.core.designsystem.pressScale
-import com.gamut.core.model.Playlist
 import com.gamut.core.model.Track
 
 private val FavoriteRed = Color(0xFFFF4D6D)
 
 /**
  * The "what's this song?" sheet. It shows what the app is doing (listening, identifying), and when a song is found,
- * the result with the cover art and ways to keep it: play it, favorite it, queue it, or put it in a playlist.
- * Pure UI: the caller decides what each action does, and the sheet stays open after saving so a song can go to
- * several places. Dismissing it (swipe down, tap outside) stops listening.
+ * the result with the cover art and the same actions Search offers on a song: play, favorite (the heart saves, then
+ * offers the playlists, like the + in Search), and the three-dots sheet with share, add to playlist and go to artist,
+ * all through the shared TrackActionsSheet / SavedInSheet / ShareSheet / ArtistPickerSheet. Pure UI: the caller decides
+ * what each action does, and the sheet stays open so a song can go to several places. Dismissing it (swipe down, tap
+ * outside) stops listening.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,15 +80,17 @@ fun ShazamSheet(
     state: ShazamState,
     level: Float,
     favoriteIsrcs: Set<String>,
-    playlists: List<Playlist>,
+    playlists: List<TrackPlaylistOption>,
     onDismiss: () -> Unit,
     onRetry: () -> Unit,
     onOpenSettings: () -> Unit,
     onPlay: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
-    onAddToPlaylist: (Playlist, Track) -> Unit,
-    onCreatePlaylist: (String, Track) -> Unit,
+    /** Adds the track to the playlist with this id (same shape as SearchScreen's onAddToPlaylist). */
+    onAddToPlaylist: (Track, String) -> Unit,
+    /** Opens the artist page of the track (by name). The caller closes the Shazam sheet. */
+    onTrackArtist: (Track) -> Unit,
 ) {
     GamutSheet(onDismiss = onDismiss) {
         when (state) {
@@ -105,7 +103,7 @@ fun ShazamSheet(
                 onToggleFavorite = onToggleFavorite,
                 onAddToQueue = onAddToQueue,
                 onAddToPlaylist = onAddToPlaylist,
-                onCreatePlaylist = onCreatePlaylist,
+                onTrackArtist = onTrackArtist,
             )
             ShazamState.NotFound -> MessageContent(
                 icon = AlertTick,
@@ -227,134 +225,138 @@ private fun MessageContent(icon: ImageVector, title: String, message: String, ac
 private fun FoundContent(
     track: Track,
     isFavorite: Boolean,
-    playlists: List<Playlist>,
+    playlists: List<TrackPlaylistOption>,
     onPlay: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
-    onAddToPlaylist: (Playlist, Track) -> Unit,
-    onCreatePlaylist: (String, Track) -> Unit,
+    onAddToPlaylist: (Track, String) -> Unit,
+    onTrackArtist: (Track) -> Unit,
 ) {
-    var creating by remember { mutableStateOf(false) }
-    var name by remember { mutableStateOf("") }
-    // What the last action did, so tapping "Add to queue" or a playlist visibly worked without closing the sheet.
+    val accent = MaterialTheme.colorScheme.primary
+    // The same four follow-up sheets Search uses, opened from this one.
+    var actionsOpen by remember { mutableStateOf(false) }
+    var savedOpen by remember { mutableStateOf(false) }
+    var pickerOpen by remember { mutableStateOf(false) }
+    var shareOpen by remember { mutableStateOf(false) }
+    var artistPickOpen by remember { mutableStateOf(false) }
+    // What the last action did, so "Add to queue" visibly worked without closing the sheet.
     var note by remember { mutableStateOf<String?>(null) }
-    val submitNew = {
-        if (name.isNotBlank()) {
-            onCreatePlaylist(name.trim(), track)
-            note = "Saved to the new playlist \u201C${name.trim()}\u201D"
-            creating = false
-            name = ""
-        }
-    }
 
-    LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
-        item {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(
-                    model = track.albumArtUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(104.dp).clip(RoundedCornerShape(14.dp)).background(ink(0.08f)),
-                )
-                Column(Modifier.weight(1f).padding(start = 16.dp)) {
-                    Text(track.title, style = MaterialTheme.typography.titleLarge, color = ink(), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(track.artist, style = MaterialTheme.typography.bodyLarge, color = ink(0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    track.album?.let {
-                        Text(it, style = MaterialTheme.typography.bodyMedium, color = ink(0.5f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
+    Column(Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            AsyncImage(
+                model = track.albumArtUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(104.dp).clip(RoundedCornerShape(14.dp)).background(ink(0.08f)),
+            )
+            Column(Modifier.weight(1f).padding(start = 16.dp)) {
+                Text(track.title, style = MaterialTheme.typography.titleLarge, color = ink(), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(track.artist, style = MaterialTheme.typography.bodyLarge, color = ink(0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                track.album?.let {
+                    Text(it, style = MaterialTheme.typography.bodyMedium, color = ink(0.5f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
-        item {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .pressScale(onClick = { onPlay(track) })
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(ink()),
-                    contentAlignment = Alignment.Center,
-                ) { Text("Play", style = MaterialTheme.typography.labelLarge, color = LocalCoverPalette.current.base) }
-                Spacer(Modifier.width(12.dp))
-                Box(
-                    Modifier
-                        .size(48.dp)
-                        .pressScale(
-                            onClick = {
-                                note = if (isFavorite) "Removed from favorites" else "Added to favorites"
-                                onToggleFavorite(track)
-                            },
-                            scaleDown = 0.88f,
-                        )
-                        .clip(CircleShape)
-                        .background(ink(0.12f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        if (isFavorite) PhosphorIcons.Fill.Heart else PhosphorIcons.Light.Heart,
-                        if (isFavorite) "Remove from favorites" else "Add to favorites",
-                        tint = if (isFavorite) FavoriteRed else ink(),
-                        modifier = Modifier.size(24.dp),
+        Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .weight(1f)
+                    .pressScale(onClick = { onPlay(track) })
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(ink()),
+                contentAlignment = Alignment.Center,
+            ) { Text("Play", style = MaterialTheme.typography.labelLarge, color = LocalCoverPalette.current.base) }
+            Spacer(Modifier.width(12.dp))
+            // Like the + in Search: saves straight to favorites, then offers the playlists. Tapping again undoes the save.
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .pressScale(
+                        onClick = {
+                            note = null
+                            onToggleFavorite(track)
+                            if (!isFavorite) savedOpen = true
+                        },
+                        scaleDown = 0.88f,
                     )
-                }
+                    .clip(CircleShape)
+                    .background(ink(0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (isFavorite) PhosphorIcons.Fill.Heart else PhosphorIcons.Light.Heart,
+                    if (isFavorite) "Remove from favorites" else "Add to favorites",
+                    tint = if (isFavorite) FavoriteRed else ink(),
+                    modifier = Modifier.size(24.dp),
+                )
             }
+            Spacer(Modifier.width(8.dp))
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .pressScale(onClick = { actionsOpen = true }, scaleDown = 0.88f)
+                    .clip(CircleShape)
+                    .background(ink(0.12f)),
+                contentAlignment = Alignment.Center,
+            ) { Icon(PhosphorIcons.Light.DotsThree, "More", tint = ink(), modifier = Modifier.size(24.dp)) }
         }
         note?.let { message ->
-            item {
-                Text(
-                    message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = ink(0.6f),
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
-                )
-            }
-        }
-        item { ActionRow("Add to queue") { onAddToQueue(track); note = "Added to the queue" } }
-        item {
             Text(
-                "Add to playlist",
-                style = MaterialTheme.typography.labelLarge,
+                message,
+                style = MaterialTheme.typography.bodyMedium,
                 color = ink(0.6f),
-                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 4.dp),
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
             )
         }
-        item {
-            if (creating) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .background(ink(0.1f), RoundedCornerShape(12.dp))
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                    ) {
-                        if (name.isEmpty()) {
-                            Text("Playlist name", color = ink(0.4f), style = MaterialTheme.typography.bodyLarge)
-                        }
-                        BasicTextField(
-                            value = name,
-                            onValueChange = { name = it },
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodyLarge.merge(TextStyle(color = ink())),
-                            cursorBrush = SolidColor(ink()),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { submitNew() }),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = { submitNew() }, enabled = name.isNotBlank()) { Text("Create") }
-                }
-            } else {
-                ActionRow("New playlist\u2026") { creating = true }
-            }
-        }
-        items(playlists, key = { it.id }) { playlist ->
-            ActionRow(playlist.name) {
-                onAddToPlaylist(playlist, track)
-                note = "Added to \u201C${playlist.name}\u201D"
-            }
-        }
+        ActionRow("Add to queue") { onAddToQueue(track); note = "Added to the queue" }
+    }
+
+    if (actionsOpen) {
+        TrackActionsSheet(
+            track = track,
+            isFavorite = isFavorite,
+            onDismiss = { actionsOpen = false },
+            onShare = { actionsOpen = false; shareOpen = true },
+            onToggleFavorite = { onToggleFavorite(track) },
+            onAddToPlaylist = { actionsOpen = false; pickerOpen = true },
+            onGoToArtist = {
+                actionsOpen = false
+                if (splitArtists(track.artist).size > 1) artistPickOpen = true else onTrackArtist(track)
+            },
+        )
+    }
+    if (savedOpen) {
+        SavedInSheet(
+            track = track,
+            playlists = playlists,
+            accent = accent,
+            showFavorites = true,
+            onAddToPlaylist = { id -> onAddToPlaylist(track, id) },
+            onDismiss = { savedOpen = false },
+        )
+    }
+    if (pickerOpen) {
+        SavedInSheet(
+            track = track,
+            playlists = playlists,
+            accent = accent,
+            showFavorites = false,
+            onAddToPlaylist = { id -> onAddToPlaylist(track, id) },
+            onDismiss = { pickerOpen = false },
+        )
+    }
+    if (artistPickOpen) {
+        ArtistPickerSheet(
+            names = splitArtists(track.artist),
+            albumTitle = track.album,
+            onPick = { name -> onTrackArtist(track.copy(artist = name)) },
+            onDismiss = { artistPickOpen = false },
+        )
+    }
+    if (shareOpen) {
+        ShareSheet(title = track.title, artist = track.artist, artUrl = track.albumArtUrl, onDismiss = { shareOpen = false })
     }
 }
 

@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.light.CaretRight
 import com.adamglin.phosphoricons.light.Check
 import com.adamglin.phosphoricons.light.Clock
 import com.adamglin.phosphoricons.light.DownloadSimple
@@ -254,21 +255,21 @@ fun StorageSettingsScreen(
         // ---------------- Cache ----------------
         SoftHeader("Cache")
         SoftCard {
-            SoftValueRow(
+            StorageValueRow(
                 "Images & temporary files",
                 value = fmt(snap?.imageCacheBytes ?: 0L),
                 subtitle = "Artwork and other files that are fetched again when needed.",
                 onClick = { if ((snap?.imageCacheBytes ?: 0L) > 0) confirm = Confirm.ClearImages else notifier.info("Already empty") },
             )
             SoftDivider()
-            SoftValueRow(
+            StorageValueRow(
                 "Discover & search",
                 value = fmt(snap?.discoverCacheBytes ?: 0L),
                 subtitle = "Charts, search results and stream links. Rebuilt on the next load.",
                 onClick = { confirm = Confirm.ClearDiscover },
             )
             SoftDivider()
-            SoftValueRow(
+            StorageValueRow(
                 "Cache limit",
                 value = limitLabel(cfg.cacheLimitMb),
                 subtitle = "When the image cache passes this, the oldest files go first.",
@@ -288,7 +289,7 @@ fun StorageSettingsScreen(
                 subtitle = "On mobile data, queued songs wait until you are back on Wi-Fi.",
             )
             SoftDivider()
-            SoftValueRow(
+            StorageValueRow(
                 "Download quality",
                 value = cfg.downloadQuality.label,
                 subtitle = cfg.downloadQuality.hint,
@@ -318,7 +319,7 @@ fun StorageSettingsScreen(
             Column {
                 SoftHeader("Tidy up")
                 SoftCard {
-                    SoftValueRow(
+                    StorageValueRow(
                         "Leftover files",
                         value = fmt(snap?.leftoverBytes ?: 0L),
                         subtitle = "${snap?.leftoverCount ?: 0} files that no song uses. Safe to delete.",
@@ -603,6 +604,30 @@ private fun EmptyDownloads() {
             "Download a song or a whole playlist and it plays without a connection. It will show up here.",
             style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp),
         )
+    }
+}
+
+/**
+ * Tappable setting row: title on the left, value + chevron pinned to the right of the title line, and the description
+ * on its own full-width line below, so long text can use the whole row instead of a narrow squeezed column.
+ */
+@Composable
+private fun StorageValueRow(title: String, value: String, subtitle: String? = null, onClick: () -> Unit) {
+    Column(
+        Modifier
+            .softResize()
+            .fillMaxWidth()
+            .pressScale(onClick = onClick, scaleDown = 0.985f)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = ink(), modifier = Modifier.weight(1f).padding(end = 12.dp))
+            Text(value, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1)
+            Icon(PhosphorIcons.Light.CaretRight, null, tint = ink(0.4f), modifier = Modifier.padding(start = 6.dp).size(14.dp))
+        }
+        if (subtitle != null) {
+            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 4.dp))
+        }
     }
 }
 

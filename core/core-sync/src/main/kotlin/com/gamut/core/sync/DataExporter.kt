@@ -28,6 +28,7 @@ data class ExportTrack(
     val artworkUrl: String? = null,
 )
 @Serializable data class ExportFavorite(val track: ExportTrack, val addedAt: Long)
+@Serializable data class ExportFollow(val id: String, val name: String, val artworkUrl: String? = null, val followedAt: Long)
 @Serializable data class ExportPlaylist(val name: String, val tags: List<String> = emptyList(), val tracks: List<ExportTrack> = emptyList())
 @Serializable
 data class ExportDocument(
@@ -35,15 +36,19 @@ data class ExportDocument(
     val exportedAt: Long,
     val favorites: List<ExportFavorite>,
     val playlists: List<ExportPlaylist>,
+    val follows: List<ExportFollow> = emptyList(),      // added in schema 2; v1 backups simply have none
     val settings: JsonObject = JsonObject(emptyMap()),   // reserved
-) { companion object { const val SCHEMA_VERSION = 1 } }
+) { companion object { const val SCHEMA_VERSION = 2 } }
 
 @Serializable private data class Envelope(val enc: Int, val salt: String, val iv: String, val data: String)
 
-data class ImportResult(val favorites: Int, val playlists: Int)
+data class ImportResult(val favorites: Int, val playlists: Int, val follows: Int = 0)
 
 /** JSON backup the user keeps anywhere (system file picker). Import is merge-safe, validated and size-capped. */
-class DataExporter @Inject constructor(private val library: LibraryRepository) {
+class DataExporter @Inject constructor(
+    private val library: LibraryRepository,
+    private val followRepository: FollowRepository,
+) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     suspend fun export(password: CharArray?): ByteArray {
@@ -54,6 +59,7 @@ class DataExporter @Inject constructor(private val library: LibraryRepository) {
             playlists = library.observePlaylists().first().map { p ->
                 ExportPlaylist(p.name, p.tags, library.observeTracks(p.id).first().map { it.toExport() })
             },
+            follows = followRepository.observeAll().first().map { ExportFollow(it.artistKey, it.name, it.imageUrl, it.followedAtEpochMs) },
         )
         val plain = json.encodeToString(ExportDocument.serializer(), doc).toByteArray()
         return if (password == null || password.isEmpty()) plain else encrypt(plain, password)
@@ -70,6 +76,7 @@ class DataExporter @Inject constructor(private val library: LibraryRepository) {
         require(doc.schemaVersion in 1..ExportDocument.SCHEMA_VERSION) { "Unsupported backup version ${doc.schemaVersion}" }
         require(doc.favorites.size <= 20_000 && doc.playlists.size <= 500) { "Too many items" }
         require(doc.playlists.all { it.tracks.size <= 5_000 }) { "A playlist has too many songs" }
+        require(doc.follows.size <= 5_000) { "Too many followed artists" }
 
         var favs = 0
         doc.favorites.forEach { f ->
@@ -83,7 +90,15 @@ class DataExporter @Inject constructor(private val library: LibraryRepository) {
             p.tracks.forEach { t -> t.toTrackOrNull()?.let { library.appendTrack(id, it) } }   // dedupes by id
             pls++
         }
-        return ImportResult(favs, pls)
+
+        var fol = 0
+        doc.follows.forEach { f ->
+            if (parseArtistKey(f.id) == null) return@forEach
+            val name = f.name.trim().take(200).ifBlank { return@forEach }
+            val art = f.artworkUrl?.takeIf { it.startsWith("https://") }?.take(500)
+            if (followRepository.importFollow(f.id, name, art, f.followedAt)) fol++
+        }
+        return ImportResult(favs, pls, fol)
     }
 
     /** Reads at most [MAX_BYTES] so a huge or malicious file cannot exhaust memory. */

@@ -110,6 +110,8 @@ fun LibraryScreen(
     /** Artists the user follows. Empty until a follow system exists; the Artists section then shows its empty card. */
     artists: List<LibraryArtist> = emptyList(),
     onOpenArtist: (String) -> Unit = {},
+    /** Artists whose round covers fill the empty Artists card (popular, recently played...). Placeholders show when empty. */
+    suggestedArtists: List<LibraryArtist> = emptyList(),
     /** Empty-state buttons that need the search tab (e.g. "Find artists"). */
     onOpenSearch: () -> Unit = {},
 ) {
@@ -147,17 +149,16 @@ fun LibraryScreen(
                     }
 
                     // Filter bubbles, above the canvas.
-                    Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         LibraryFilter.values().forEach { f ->
                             FilterPill(f.label, selected = filter == f) { filter = if (filter == f) null else f }
                         }
-                    }
-
-                    // A track is waiting to be added: say so, right under the filter pills.
-                    if (selectedTrack != null) ReadyToAddCard(selectedTrack, Modifier.padding(top = 12.dp))
-
-                    // Grid / list toggle, top right of the canvas.
-                    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
+                        Spacer(Modifier.weight(1f))
+                        // Grid / list toggle, at the end of the filter row.
                         Box(Modifier.size(36.dp).pressScale(onClick = { isGrid = !isGrid }), contentAlignment = Alignment.Center) {
                             Icon(
                                 if (isGrid) PhosphorIcons.Light.Rows else PhosphorIcons.Light.SquaresFour,
@@ -167,6 +168,9 @@ fun LibraryScreen(
                             )
                         }
                     }
+
+                    // A track is waiting to be added: say so, right under the filter pills.
+                    if (selectedTrack != null) ReadyToAddCard(selectedTrack, Modifier.padding(top = 12.dp))
 
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(if (isGrid) 3 else 1),
@@ -262,6 +266,8 @@ fun LibraryScreen(
                                         modifier = Modifier.padding(top = 8.dp),
                                         buttonLabel = "Find artists",
                                         onButton = onOpenSearch,
+                                        covers = suggestedArtists.mapNotNull { it.imageUrl?.takeIf { u -> u.isNotBlank() } }.take(5).ifEmpty { EmptyStateArtistCovers.urls },
+                                        circleCovers = true,
                                     )
                                 }
                             }

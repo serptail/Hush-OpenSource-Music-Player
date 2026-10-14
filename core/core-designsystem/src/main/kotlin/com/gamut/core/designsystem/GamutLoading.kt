@@ -47,6 +47,15 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/**
+ * Lives as long as the app process does (unlike Compose state, which dies whenever the screen leaves composition or the
+ * activity is recreated). Once the loading screen has finished, coming back to the app (a new activity in the same
+ * process, a gate that briefly swaps the content, a notification tap) must not play it again.
+ */
+object GamutBoot {
+    @Volatile var finished: Boolean = false
+}
+
 @Composable
 fun GamutLogo(modifier: Modifier = Modifier, size: Dp = 28.dp) {
     Image(painterResource(R.drawable.gamut_logo), contentDescription = "Gamut", modifier = modifier.size(size))
@@ -84,6 +93,7 @@ fun GamutLoadingScreen(
         if (dataReady && minTimePassed) {
             progress.animateTo(1f, tween(250))
             delay(150)
+            GamutBoot.finished = true
             onFinished()
         }
     }

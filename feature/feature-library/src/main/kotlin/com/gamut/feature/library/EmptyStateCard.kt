@@ -50,6 +50,17 @@ object EmptyStateCovers {
     }
 }
 
+/** Same idea as [EmptyStateCovers], but for artist photos (shown in circles on the Artists card). */
+object EmptyStateArtistCovers {
+    var urls by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    fun offer(photoUrls: List<String?>) {
+        if (urls.size >= 5) return
+        urls = (urls + photoUrls.filterNotNull().filter { it.isNotBlank() }).distinct().take(5)
+    }
+}
+
 /**
  * A rounded card with a spread of covers, a bold title, a quiet line and one white pill button.
  * Used by an empty playlist ("Add songs to your playlist") and by the Library (no playlists / no artists).
@@ -61,6 +72,10 @@ fun EmptyStateCard(
     modifier: Modifier = Modifier,
     buttonLabel: String? = null,
     onButton: () -> Unit = {},
+    /** Cover URLs for the spread. Defaults to the shared song covers; pass artist images for the artists card. */
+    covers: List<String> = EmptyStateCovers.urls,
+    /** Round covers (artists) instead of rounded squares. */
+    circleCovers: Boolean = false,
 ) {
     val palette = LocalCoverPalette.current
     Column(
@@ -71,7 +86,7 @@ fun EmptyStateCard(
             .padding(horizontal = 24.dp, vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        CoverSpread(EmptyStateCovers.urls)
+        CoverSpread(covers, circleCovers)
         Spacer(Modifier.height(24.dp))
         Text(
             title,
@@ -99,7 +114,7 @@ fun EmptyStateCard(
 
 /** Five overlapping covers, the middle one biggest, the outer ones smaller and dimmer. */
 @Composable
-private fun CoverSpread(urls: List<String>) {
+private fun CoverSpread(urls: List<String>, circle: Boolean = false) {
     // (x offset from centre, size, alpha) for slots 0..4, left to right.
     val slots = listOf(
         Triple(-96, 62, 0.55f), Triple(-48, 78, 0.8f), Triple(0, 96, 1f), Triple(48, 78, 0.8f), Triple(96, 62, 0.55f),
@@ -114,7 +129,7 @@ private fun CoverSpread(urls: List<String>) {
                     .offset(x = dx.dp)
                     .size(size.dp)
                     .graphicsLayer { this.alpha = alpha }
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(if (circle) CircleShape else RoundedCornerShape(8.dp))
                     .background(ink(0.12f)),
                 contentAlignment = Alignment.Center,
             ) {
