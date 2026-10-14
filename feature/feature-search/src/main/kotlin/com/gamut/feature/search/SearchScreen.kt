@@ -109,6 +109,7 @@ import com.adamglin.phosphoricons.light.Play
 import com.adamglin.phosphoricons.light.PlusCircle
 import com.adamglin.phosphoricons.light.User
 import com.adamglin.phosphoricons.light.X
+import com.gamut.core.designsystem.adaptiveGutter
 import com.gamut.core.designsystem.AcrylicHost
 import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.CoverTheme
@@ -260,6 +261,7 @@ fun SearchScreen(
             }
         }
 
+        val gutter = adaptiveGutter()   // 0.dp on phones; centers the content column on wide windows
         val tabsHeight = GamutBottomBarTabsHeight + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         val stripHeight = maxOf(0.dp, barHeight - tabsHeight)
 
@@ -327,7 +329,7 @@ fun SearchScreen(
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize().offset { IntOffset(0, refresh.pull.coerceAtLeast(0f).roundToInt()) },
-                    contentPadding = PaddingValues(bottom = stripHeight + 32.dp),
+                    contentPadding = PaddingValues(start = gutter, end = gutter, bottom = stripHeight + 32.dp),
                 ) {
                     item(key = "header") { header(Modifier.padding(horizontal = 24.dp)) }
                     if (showingRecents) {

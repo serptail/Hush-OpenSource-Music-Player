@@ -65,6 +65,7 @@ import com.adamglin.phosphoricons.light.Plus
 import com.adamglin.phosphoricons.light.Rows
 import com.adamglin.phosphoricons.light.SquaresFour
 import com.adamglin.phosphoricons.light.VinylRecord
+import com.gamut.core.designsystem.adaptiveGutter
 import com.gamut.core.designsystem.AcrylicMaterials
 import com.gamut.core.designsystem.AcrylicTone
 import com.gamut.core.designsystem.BottomBarItem
@@ -138,11 +139,12 @@ fun LibraryScreen(
         val showArtists = filter != LibraryFilter.Playlists
         val fullSpan: LazyGridItemSpanScope.() -> GridItemSpan = { GridItemSpan(maxLineSpan) }
 
+        val gutter = adaptiveGutter()   // 0.dp on phones; centers the content column on wide windows
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = barHeight)) {
                 // No horizontal padding here: the grid spans the full width so the tiles' soft shadows are not clipped at its edge.
                 Column(Modifier.weight(1f).fillMaxWidth()) {
-                    Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 22.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().padding(start = 24.dp + gutter, end = 24.dp + gutter, top = 22.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             "Library",
                             style = MaterialTheme.typography.displayLarge,
@@ -156,7 +158,7 @@ fun LibraryScreen(
 
                     // Filter bubbles, above the canvas.
                     Row(
-                        Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 14.dp),
+                        Modifier.fillMaxWidth().padding(start = 24.dp + gutter, end = 24.dp + gutter, top = 14.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -176,12 +178,12 @@ fun LibraryScreen(
                     }
 
                     // A track is waiting to be added: say so, right under the filter pills.
-                    if (selectedTrack != null) ReadyToAddCard(selectedTrack, Modifier.padding(horizontal = 24.dp).padding(top = 12.dp))
+                    if (selectedTrack != null) ReadyToAddCard(selectedTrack, Modifier.padding(horizontal = 24.dp + gutter).padding(top = 12.dp))
 
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(if (isGrid) 3 else 1),
                         modifier = Modifier.weight(1f).fadeEdges(),
-                        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 6.dp, bottom = 24.dp),
+                        contentPadding = PaddingValues(start = 24.dp + gutter, end = 24.dp + gutter, top = 6.dp, bottom = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(if (isGrid) 18.dp else 2.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {

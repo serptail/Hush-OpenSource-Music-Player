@@ -33,8 +33,14 @@
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
         <service android:name="com.gamut.core.player.GamutMediaSessionService" android:foregroundServiceType="mediaPlayback" android:exported="true">
-            <intent-filter><action android:name="androidx.media3.session.MediaSessionService" /></intent-filter>
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaLibraryService" />
+                <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
         </service>
+        <!-- Android Auto: this app is a media app. -->
+        <meta-data android:name="com.google.android.gms.car.application" android:resource="@xml/automotive_app_desc" />
         <service android:name="com.gamut.feature.resolver.DownloadService" android:foregroundServiceType="dataSync" android:exported="false" />
         <receiver android:name="com.gamut.update.UpdateInstallReceiver" android:exported="false" />
         <!-- WorkManager is started on demand (GamutApplication is its Configuration.Provider): skip its startup initializer, so app launch does no work for it. -->

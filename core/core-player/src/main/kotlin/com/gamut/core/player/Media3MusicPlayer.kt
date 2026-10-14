@@ -219,6 +219,22 @@ class Media3MusicPlayer @Inject constructor(
     /** Set by the media service: called with a fresh wrapper when a crossfade hands over to the other ExoPlayer. */
     internal var onSessionPlayerChanged: ((Player) -> Unit)? = null
 
+    // Android Auto / Assistant start playback with media items that carry no stream URL. The service looks the tracks
+    // up and hands them over here (prepareExternalQueue); the session then calls setMediaItems on the forwarding
+    // player below, which starts the prepared queue through the normal queue + resolver path instead of ExoPlayer.
+    private var externalStartPending = false
+
+    internal fun prepareExternalQueue(tracks: List<Track>, startIndex: Int) {
+        setQueue(tracks, startIndex)
+        externalStartPending = true
+    }
+
+    private fun startPreparedQueue() {
+        if (!externalStartPending) return
+        externalStartPending = false
+        skipTo(queueFlow.value.currentIndex)
+    }
+
     private fun queueForwardingPlayer(exo: ExoPlayer): Player = object : ForwardingPlayer(exo) {
         private val queueCommands = intArrayOf(
             COMMAND_SEEK_TO_NEXT,
@@ -242,6 +258,17 @@ class Media3MusicPlayer @Inject constructor(
         override fun seekToNextMediaItem() = skipNext()
         override fun seekToPrevious() = skipPrevious()
         override fun seekToPreviousMediaItem() = skipPrevious()
+        // External controllers (Android Auto, Assistant) must not load URL-less items into ExoPlayer directly.
+        override fun setMediaItems(mediaItems: MutableList<MediaItem>) = startPreparedQueue()
+        override fun setMediaItems(mediaItems: MutableList<MediaItem>, resetPosition: Boolean) = startPreparedQueue()
+        override fun setMediaItems(mediaItems: MutableList<MediaItem>, startIndex: Int, startPositionMs: Long) = startPreparedQueue()
+        override fun setMediaItem(mediaItem: MediaItem) = startPreparedQueue()
+        override fun setMediaItem(mediaItem: MediaItem, startPositionMs: Long) = startPreparedQueue()
+        override fun setMediaItem(mediaItem: MediaItem, resetPosition: Boolean) = startPreparedQueue()
+        override fun addMediaItem(mediaItem: MediaItem) {}
+        override fun addMediaItem(index: Int, mediaItem: MediaItem) {}
+        override fun addMediaItems(mediaItems: MutableList<MediaItem>) {}
+        override fun addMediaItems(index: Int, mediaItems: MutableList<MediaItem>) {}
         override fun play() = resume()
         override fun pause() = this@Media3MusicPlayer.pause()
     }

@@ -2,20 +2,28 @@ package com.gamut.core.player
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.net.Uri
+import android.util.Log
 import android.os.Bundle
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.CommandButton
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.session.DefaultMediaNotificationProvider
+import androidx.media3.session.LibraryResult
+import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import com.gamut.core.model.RepeatMode
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.MoreExecutors
+import com.google.common.util.concurrent.SettableFuture
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -24,15 +32,16 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
- * Owns the MediaSession: the notification-shade player ("This phone"), the lock-screen controls and Bluetooth
- * buttons all come from it. Besides previous / play / next and the seek bar (which Media3 draws by itself) it adds
+ * Owns the MediaLibrarySession: the notification-shade player ("This phone"), the lock-screen controls, Bluetooth
+ * buttons and Android Auto (browse tree + playback) all come from it. Besides previous / play / next and the seek bar (which Media3 draws by itself) it adds
  * a shuffle and a repeat button, a Gamut small icon, and opens the app when the notification is tapped.
  */
 @OptIn(UnstableApi::class)
 @AndroidEntryPoint
-class GamutMediaSessionService : MediaSessionService() {
+class GamutMediaSessionService : MediaLibraryService() {
     @Inject lateinit var musicPlayer: MusicPlayer
-    private var session: MediaSession? = null
+    @Inject lateinit var browseTree: BrowseTreeProvider
+    private var session: MediaLibrarySession? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val repeatCommand = SessionCommand(ACTION_REPEAT, Bundle.EMPTY)
@@ -54,7 +63,7 @@ class GamutMediaSessionService : MediaSessionService() {
             setMediaNotificationProvider(DefaultMediaNotificationProvider.Builder(this).build().also { it.setSmallIcon(icon) })
         }
 
-        val builder = MediaSession.Builder(this, player.mediaSessionPlayer).setCallback(SessionCallback())
+        val builder = MediaLibrarySession.Builder(this, player.mediaSessionPlayer, LibraryCallback())
         packageManager.getLaunchIntentForPackage(packageName)?.let { launch ->
             builder.setSessionActivity(
                 PendingIntent.getActivity(this, 0, launch, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT),
@@ -70,7 +79,7 @@ class GamutMediaSessionService : MediaSessionService() {
         player.onSessionPlayerChanged = { session?.player = it }
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = session
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session
 
     @Suppress("DEPRECATION")   // setCustomLayout / CommandButton.Builder() exist in every Media3 1.x, only newer ones prefer other names
     private fun refreshButtons() {
@@ -101,9 +110,10 @@ class GamutMediaSessionService : MediaSessionService() {
         session?.setCustomLayout(ImmutableList.of(shuffleButton, repeatButton))
     }
 
-    private inner class SessionCallback : MediaSession.Callback {
+    private inner class LibraryCallback : MediaLibrarySession.Callback {
         override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
-            val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+            // Library commands (browse / search) are part of this set; the plain session set would reject Android Auto.
+            val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
                 .add(repeatCommand)
                 .add(shuffleCommand)
                 .build()
@@ -130,6 +140,156 @@ class GamutMediaSessionService : MediaSessionService() {
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
         }
+
+        // ---- Browse ----
+
+        override fun onGetLibraryRoot(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<MediaItem>> {
+            val root = folderItem(BrowseTreeProvider.ROOT, "Gamut", null, null)
+            return Futures.immediateFuture(LibraryResult.ofItem(root, params))
+        }
+
+        override fun onGetChildren(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = future {
+            val entries = browseTree.children(parentId)
+            Log.d(TAG, "children($parentId) page=$page size=$pageSize -> ${entries.size} entries")
+            val items = entries.pageOf(page, pageSize).map(::toItem)
+            LibraryResult.ofItemList(ImmutableList.copyOf(items), params)
+        }
+
+        override fun onGetItem(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            mediaId: String,
+        ): ListenableFuture<LibraryResult<MediaItem>> = future {
+            val entry = browseTree.item(mediaId)
+            if (entry == null) LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
+            else LibraryResult.ofItem(toItem(entry), null)
+        }
+
+        override fun onSearch(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<Void>> = future {
+            session.notifySearchResultChanged(browser, query, browseTree.search(query).size, params)
+            LibraryResult.ofVoid()
+        }
+
+        override fun onGetSearchResult(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = future {
+            val items = browseTree.search(query).pageOf(page, pageSize).map(::toItem)
+            LibraryResult.ofItemList(ImmutableList.copyOf(items), params)
+        }
+
+        // ---- Playback requests from the car / Assistant ----
+        // The items arrive with only a mediaId (or a voice-search query) and no stream URL. We look the tracks up and
+        // load them into OUR queue (setQueue); the session then calls setMediaItems on the forwarding player, which
+        // starts that queue through the resolver (see Media3MusicPlayer.prepareExternalQueue). ExoPlayer never sees them.
+
+        override fun onAddMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>,
+        ): ListenableFuture<MutableList<MediaItem>> = future {
+            val resolved = mediaItems.mapNotNull { item ->
+                val query = item.requestMetadata.searchQuery
+                if (item.mediaId.isEmpty() && query != null) browseTree.search(query).firstOrNull()?.let(::toItem) else item
+            }
+            val first = resolved.firstOrNull { it.mediaId.isNotEmpty() }
+            val queue = first?.let { browseTree.queueFor(it.mediaId) }
+            if (queue != null && queue.tracks.isNotEmpty()) {
+                (musicPlayer as Media3MusicPlayer).prepareExternalQueue(queue.tracks, queue.startIndex)
+            }
+            resolved.toMutableList()
+        }
+
+        // "Resume" from a Bluetooth / car button when the app process was just started and nothing is loaded.
+        override fun onPlaybackResumption(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = future {
+            val queue = browseTree.resumption()
+            if (queue == null || queue.tracks.isEmpty()) throw UnsupportedOperationException("nothing to resume")
+            (musicPlayer as Media3MusicPlayer).prepareExternalQueue(queue.tracks, queue.startIndex)
+            val track = queue.tracks[queue.startIndex.coerceIn(0, queue.tracks.lastIndex)]
+            MediaSession.MediaItemsWithStartPosition(listOf(songItem(track.isrc, track)), 0, 0L)
+        }
+    }
+
+    // ---- MediaItem mapping ----
+
+    private fun toItem(entry: BrowseEntry): MediaItem = when (entry) {
+        is BrowseEntry.Folder -> folderItem(entry.id, entry.title, entry.subtitle, entry.artUrl)
+        is BrowseEntry.Song -> songItem(entry.id, entry.track)
+    }
+
+    private fun folderItem(id: String, title: String, subtitle: String?, artUrl: String?): MediaItem = MediaItem.Builder()
+        .setMediaId(id)
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(title)
+                .setSubtitle(subtitle)
+                .setArtworkUri(artUrl?.let(Uri::parse))
+                .setIsBrowsable(true)
+                .setIsPlayable(false)
+                .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+                .build(),
+        )
+        .build()
+
+    private fun songItem(id: String, track: com.gamut.core.model.Track): MediaItem = MediaItem.Builder()
+        .setMediaId(id)
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(track.title)
+                .setArtist(track.artist)
+                .setAlbumTitle(track.album)
+                .setArtworkUri(track.albumArtUrl?.let(Uri::parse))
+                .setIsBrowsable(false)
+                .setIsPlayable(true)
+                .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                .build(),
+        )
+        .build()
+
+    private fun <T> List<T>.pageOf(page: Int, pageSize: Int): List<T> {
+        val from = (page.toLong() * pageSize).coerceAtMost(size.toLong()).toInt()
+        return drop(from).take(pageSize)
+    }
+
+    /** Runs [block] on the service scope and exposes it as the ListenableFuture Media3's callbacks want. */
+    private fun <T> future(block: suspend () -> T): ListenableFuture<T> {
+        val result = SettableFuture.create<T>()
+        val job = scope.launch {
+            try {
+                result.set(block())
+            } catch (e: CancellationException) {
+                result.cancel(false)
+                throw e
+            } catch (e: Throwable) {
+                Log.e(TAG, "Library callback failed", e)
+                result.setException(e)
+            }
+        }
+        result.addListener({ if (result.isCancelled) job.cancel() }, MoreExecutors.directExecutor())
+        return result
     }
 
     // While the next track is being resolved the player is briefly paused. Media3 would drop the foreground state
@@ -154,5 +314,6 @@ class GamutMediaSessionService : MediaSessionService() {
     private companion object {
         const val ACTION_REPEAT = "gamut.action.REPEAT"
         const val ACTION_SHUFFLE = "gamut.action.SHUFFLE"
+        const val TAG = "GamutAuto"
     }
 }

@@ -8,6 +8,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import com.gamut.core.designsystem.AdaptiveLayout
+import com.gamut.core.designsystem.adaptiveGutter
 import com.gamut.core.designsystem.GamutMotion
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -328,6 +330,8 @@ fun PlayerScreen(
 
     // The glass (sheets) takes its backing color from LocalCoverPalette; the player has its own dark backdrop, so
     // inside it the palette is pinned to the neutral one (the same color as the screen, and still).
+    // Wide windows (tablet / unfolded): keep the player column at a phone-like width, centered. 0.dp on phones.
+    val gutter = adaptiveGutter(AdaptiveLayout.PlayerMaxWidth)
     CompositionLocalProvider(LocalCoverPalette provides CoverPalette.Neutral) {
     AcrylicHost(
         Modifier
@@ -339,7 +343,7 @@ fun PlayerScreen(
         if (artUrl != null) PlayerBackdrop(artUrl, animateChanges = active)
 
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            PlayerTopBar(leave, onMore = { showMore = true }, modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 14.dp))
+            PlayerTopBar(leave, onMore = { showMore = true }, modifier = Modifier.fillMaxWidth().padding(start = 24.dp + gutter, end = 24.dp + gutter, top = 14.dp))
 
             // Everything below the top bar scrolls: controls first, then the lyrics card, then the artist.
             Column(
@@ -347,7 +351,7 @@ fun PlayerScreen(
                     .weight(1f)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp),
+                    .padding(horizontal = 24.dp + gutter),
             ) {
                 Spacer(Modifier.height(10.dp))
                 Box(Modifier.volumeHudHeaderAnchor(volumeHud)) {
