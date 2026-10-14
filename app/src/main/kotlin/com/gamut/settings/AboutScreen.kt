@@ -3,10 +3,12 @@ package com.gamut.settings
 import android.content.Context
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
@@ -19,6 +21,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
@@ -33,6 +39,7 @@ import com.adamglin.phosphoricons.light.Globe
 import com.adamglin.phosphoricons.light.PaintBrush
 import com.adamglin.phosphoricons.light.Scales
 import com.adamglin.phosphoricons.light.User
+import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.R as DesignR
@@ -82,17 +89,26 @@ fun AboutScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // The colour mark is drawn as-is: no tint, it keeps its own palette on every cover theme.
-            Image(
-                painter = painterResource(DesignR.drawable.ic_gamut_mark_color),
-                contentDescription = "Gamut logo",
-                modifier = Modifier.size(96.dp),
-            )
-            Spacer(Modifier.height(12.dp))
-            Text("Gamut", style = MaterialTheme.typography.headlineMedium, color = ink())
-            if (version.isNotEmpty()) {
-                Text(version, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f))
+            // The colour mark is drawn as-is (no tint); only its text switches: dark text on a light page, light text on a dark one.
+            val logo = if (LocalCoverPalette.current.isLight) DesignR.drawable.ic_gamut_stacked_color_darktext
+            else DesignR.drawable.ic_gamut_stacked_color_lighttext
+            // A tiny drop shadow that follows the mark's own shape: a blurred, black copy sits 1dp lower, under the logo.
+            // (The blur needs Android 12+; on older versions the copy is a faint, sharp 1dp edge instead.)
+            Box {
+                Image(
+                    painter = painterResource(logo),
+                    contentDescription = null,
+                    colorFilter = ColorFilter.tint(Color.Black.copy(alpha = 0.22f)),
+                    modifier = Modifier.size(96.dp).offset(y = 1.dp).blur(1.5.dp, BlurredEdgeTreatment.Unbounded),
+                )
+                Image(
+                    painter = painterResource(logo),
+                    contentDescription = "Gamut logo",
+                    modifier = Modifier.size(96.dp),
+                )
             }
+            Spacer(Modifier.height(3.dp))
+            
             Text(
                 "A free, open-source music player.",
                 style = MaterialTheme.typography.bodyMedium, color = ink(0.7f),

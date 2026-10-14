@@ -125,7 +125,8 @@ internal fun ManageTracksSheet(
         }
     }
 
-    val isrcs = remember(tracks) { tracks.map { it.isrc }.distinct() }
+    // Songs stored on the phone have nothing to download: the download row only counts the streamed ones.
+    val isrcs = remember(tracks) { tracks.filter { !it.isLocal }.map { it.isrc }.distinct() }
     val downloadUi = remember(isrcs, downloadStates) { playlistDownloadUi(isrcs, downloadStates) }
     val downloadedCount = remember(isrcs, downloadStates) { isrcs.count { downloadStates[it] == DownloadState.Done } }
 
@@ -224,7 +225,7 @@ internal fun ManageTracksSheet(
             )
 
             // Download everything: the whole row and the button on it do the same thing.
-            Row(
+            if (isrcs.isNotEmpty()) Row(
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp)
@@ -287,7 +288,7 @@ internal fun ManageTracksSheet(
                     ManageRow(
                         track = track,
                         removeDescription = removeDescription,
-                        offline = downloadStates[track.isrc] == DownloadState.Done,
+                        offline = track.isLocal || downloadStates[track.isrc] == DownloadState.Done,
                         dragging = dragging,
                         modifier = if (dragging) {
                             Modifier.zIndex(1f).graphicsLayer { translationY = dragOffset }
@@ -428,7 +429,9 @@ private fun ManageRow(
             .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CoverImage(track.albumArtUrl.orEmpty(), Modifier.size(46.dp).softCover(RoundedCornerShape(10.dp)))
+        BadgedCover(local = track.isLocal) {
+            CoverImage(track.albumArtUrl.orEmpty(), Modifier.size(46.dp).softCover(RoundedCornerShape(10.dp)))
+        }
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
             Text(track.title, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = ManageTextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)

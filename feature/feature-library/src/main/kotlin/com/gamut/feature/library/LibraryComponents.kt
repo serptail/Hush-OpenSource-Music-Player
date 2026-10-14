@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -24,6 +25,7 @@ import coil.request.ImageRequest
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.light.MusicNote
+import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
 
 /** Corner of every small cover in the library screens (same as Discover's song rows). */
@@ -31,7 +33,9 @@ internal val RowArtShape = RoundedCornerShape(14.dp)
 
 /**
  * A remote cover that fills its modifier. Uses plain AsyncImage (no subcomposition, which is costly in lists):
- * a flat tint shows while loading, and a music-note icon appears only if loading fails.
+ * a flat, OPAQUE tint shows while loading, and a music-note icon appears when there is no art or loading fails.
+ * The tint must be opaque: [softCover]'s drop shadow is drawn behind the cover, and a translucent fill would let
+ * it show through as a dark box with a lighter square inside.
  * Coil sizes the decode to the layout bounds, and the fade-in is off so fast scrolling doesn't animate.
  */
 @Composable
@@ -44,19 +48,27 @@ internal fun CoverImage(url: String, modifier: Modifier = Modifier) {
             .build()
     }
     var failed by remember(url) { mutableStateOf(false) }
-    Box(modifier.background(ink(0.08f)), contentAlignment = Alignment.Center) {
-        AsyncImage(
-            model = request,
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            onError = { failed = true },
-        )
-        if (failed) {
+    val noArt = url.isBlank()
+    val flat = flatCoverFill()
+    Box(modifier.background(flat), contentAlignment = Alignment.Center) {
+        if (!noArt) {
+            AsyncImage(
+                model = request,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+                onError = { failed = true },
+            )
+        }
+        if (noArt || failed) {
             Icon(PhosphorIcons.Light.MusicNote, null, tint = ink(0.45f), modifier = Modifier.size(22.dp))
         }
     }
 }
+
+/** ink(0.08f) flattened onto the cover background: the blank-cover look, but opaque so nothing shows through it. */
+@Composable
+internal fun flatCoverFill(): Color = ink(0.08f).compositeOver(LocalCoverPalette.current.base)
 
 /** A cover with the soft drop shadow used on all small covers. */
 internal fun Modifier.softCover(shape: androidx.compose.ui.graphics.Shape = RowArtShape): Modifier = this

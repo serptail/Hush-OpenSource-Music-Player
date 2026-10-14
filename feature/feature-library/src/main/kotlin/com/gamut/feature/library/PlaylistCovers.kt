@@ -29,7 +29,8 @@ private const val MAX_COVER_SIDE = 1000
  */
 internal fun resolveCoverUrl(url: String?, size: Int): String = when {
     url.isNullOrBlank() -> ""
-    url.startsWith("file:") -> url
+    // file: = a cover the user picked / an embedded cover; content: = art of a song stored on the phone.
+    url.startsWith("file:") || url.startsWith("content:") -> url
     else -> squareArtUrl(url, size).orEmpty()
 }
 

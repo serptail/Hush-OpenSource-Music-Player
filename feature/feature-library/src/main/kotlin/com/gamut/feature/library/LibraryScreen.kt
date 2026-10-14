@@ -55,6 +55,7 @@ import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.fill.CheckCircle
+import com.adamglin.phosphoricons.fill.DeviceMobileCamera
 import com.adamglin.phosphoricons.fill.Heart
 import com.adamglin.phosphoricons.light.CaretRight
 import com.adamglin.phosphoricons.light.MagnifyingGlass
@@ -107,13 +108,17 @@ fun LibraryScreen(
     onCreatePlaylist: () -> Unit,
     /** Height of the shared bottom bar + mini player strip (owned by HomeTabs in MainActivity). */
     barHeight: androidx.compose.ui.unit.Dp,
-    /** Artists the user follows. Empty until a follow system exists; the Artists section then shows its empty card. */
+    /** Artists the user follows (from FollowViewModel). When empty, the Artists section shows its empty card. */
     artists: List<LibraryArtist> = emptyList(),
+    /** True while the follows are still being read from the database, so the empty card doesn't flash for a moment. */
+    artistsLoading: Boolean = false,
     onOpenArtist: (String) -> Unit = {},
     /** Artists whose round covers fill the empty Artists card (popular, recently played...). Placeholders show when empty. */
     suggestedArtists: List<LibraryArtist> = emptyList(),
     /** Empty-state buttons that need the search tab (e.g. "Find artists"). */
     onOpenSearch: () -> Unit = {},
+    /** The "On this device" row: opens the screen with the songs stored on the phone. */
+    onOpenLocal: () -> Unit = {},
 ) {
     val userPlaylists by viewModel.playlists.collectAsStateWithLifecycle()
     val playlistInfo by viewModel.playlistInfo.collectAsStateWithLifecycle()
@@ -135,8 +140,9 @@ fun LibraryScreen(
 
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = barHeight)) {
-                Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 24.dp)) {
-                    Row(Modifier.fillMaxWidth().padding(top = 22.dp), verticalAlignment = Alignment.CenterVertically) {
+                // No horizontal padding here: the grid spans the full width so the tiles' soft shadows are not clipped at its edge.
+                Column(Modifier.weight(1f).fillMaxWidth()) {
+                    Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 22.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             "Library",
                             style = MaterialTheme.typography.displayLarge,
@@ -150,7 +156,7 @@ fun LibraryScreen(
 
                     // Filter bubbles, above the canvas.
                     Row(
-                        Modifier.fillMaxWidth().padding(top = 14.dp),
+                        Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 14.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -170,12 +176,12 @@ fun LibraryScreen(
                     }
 
                     // A track is waiting to be added: say so, right under the filter pills.
-                    if (selectedTrack != null) ReadyToAddCard(selectedTrack, Modifier.padding(top = 12.dp))
+                    if (selectedTrack != null) ReadyToAddCard(selectedTrack, Modifier.padding(horizontal = 24.dp).padding(top = 12.dp))
 
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(if (isGrid) 3 else 1),
                         modifier = Modifier.weight(1f).fadeEdges(),
-                        contentPadding = PaddingValues(top = 6.dp, bottom = 24.dp),
+                        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 6.dp, bottom = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(if (isGrid) 18.dp else 2.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
@@ -189,6 +195,19 @@ fun LibraryScreen(
                                         onClick = { onOpenPlaylist("liked") },
                                         cover = { RowCover(null, PhosphorIcons.Fill.Heart) },
                                         offline = likedOffline,
+                                    )
+                                }
+                            }
+
+                            item(key = "on-device") {
+                                if (isGrid) {
+                                    GridCell("On this device", onOpenLocal) { TileCover(null, PhosphorIcons.Fill.DeviceMobileCamera) }
+                                } else {
+                                    LibraryRow(
+                                        title = "On this device",
+                                        meta = { Text("Music stored on your phone", style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                        onClick = onOpenLocal,
+                                        cover = { RowCover(null, PhosphorIcons.Fill.DeviceMobileCamera) },
                                     )
                                 }
                             }
@@ -258,7 +277,7 @@ fun LibraryScreen(
 
                         if (showArtists) {
                             if (filter == null) item(key = "artists-header", span = fullSpan) { SectionTitle("Artists you follow") }
-                            if (artists.isEmpty()) {
+                            if (artists.isEmpty() && !artistsLoading) {
                                 item(key = "artists-empty", span = fullSpan) {
                                     EmptyStateCard(
                                         title = "You haven\u2019t followed any artists yet",
@@ -338,8 +357,12 @@ private fun TileCover(coverUrl: String?, icon: ImageVector, circle: Boolean = fa
                 Modifier.fillMaxWidth().aspectRatio(1f).then(if (circle) Modifier.clip(shape) else Modifier.softCover()),
             )
         } else {
-            Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(shape).background(ink(0.07f)), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = ink(0.8f), modifier = Modifier.size(32.dp))
+            // Same blank, opaque fill (and shadow) as a cover without art on the Favorites screen.
+            Box(
+                Modifier.fillMaxWidth().aspectRatio(1f).then(if (circle) Modifier.clip(shape) else Modifier.softCover()).background(flatCoverFill()),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, null, tint = ink(), modifier = Modifier.size(32.dp))
             }
         }
     }
@@ -386,9 +409,9 @@ private fun ChevronIcon() {
 }
 
 /**
- * The cover slot of a Library row: the cover of the last song added when there is one, otherwise JUST the icon with
- * nothing behind it. (The old tinted tile sat on top of softCover's drop shadow, which showed through the
- * translucent fill as a dark inner box.)
+ * The cover slot of a Library row: the cover of the last song added when there is one, otherwise the icon on a flat,
+ * OPAQUE square (flatCoverFill). It must be opaque: softCover's drop shadow would show through a translucent fill as a
+ * dark inner box.
  */
 @Composable
 private fun RowCover(coverUrl: String?, icon: ImageVector, circle: Boolean = false) {
@@ -398,8 +421,12 @@ private fun RowCover(coverUrl: String?, icon: ImageVector, circle: Boolean = fal
             Modifier.size(58.dp).then(if (circle) Modifier.clip(CircleShape) else Modifier.softCover()),
         )
     } else {
-        Box(Modifier.size(58.dp), contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = ink(0.8f), modifier = Modifier.size(28.dp))
+        // A flat square (round for artists) instead of a bare icon, like a cover without art on Favorites.
+        Box(
+            Modifier.size(58.dp).then(if (circle) Modifier.clip(CircleShape) else Modifier.softCover()).background(flatCoverFill()),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, null, tint = ink(), modifier = Modifier.size(28.dp))
         }
     }
 }

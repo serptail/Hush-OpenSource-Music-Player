@@ -50,6 +50,10 @@ class FollowViewModel @Inject constructor(private val repository: FollowReposito
     val followedKeys: StateFlow<Set<String>> =
         repository.followedKeys.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
+    /** Every followed artist, for the Library. null until the database has answered (so the screen can wait, not flash "no artists"). */
+    val artists: StateFlow<List<FollowEntity>?> =
+        repository.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     fun toggle(artistKey: String, name: String, imageUrl: String?) {
         viewModelScope.launch { repository.toggle(artistKey, name, imageUrl) }
     }

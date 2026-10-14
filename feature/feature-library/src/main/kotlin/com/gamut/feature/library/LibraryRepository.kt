@@ -54,8 +54,11 @@ class LibraryRepositoryImpl @Inject constructor(
 ) : LibraryRepository {
 
     /** Local-first: the local write has already happened; this only records that the server needs to hear about it. */
-    private suspend fun mark(type: String, key: String, payload: String? = null) =
+    private suspend fun mark(type: String, key: String, payload: String? = null) {
+        // A song that only exists on this phone ("local:<id>") means nothing to the server: never queue it for sync.
+        if (key.contains(LOCAL_ISRC_PREFIX)) return
         pending.put(PendingSyncEntity(type = type, itemKey = key, payload = payload, createdAtEpochMs = System.currentTimeMillis()))
+    }
 
     override fun observePlaylists() = playlists.observeAll().map { list -> list.map { Playlist(it.id, it.name, it.createdAtEpochMs, it.coverUri, it.tags.toTagList()) } }.flowOn(Dispatchers.Default)
     override fun observeTracks(playlistId: Long) = tracks.observeTracks(playlistId).map { list -> list.map { it.toDomain() } }.flowOn(Dispatchers.Default)

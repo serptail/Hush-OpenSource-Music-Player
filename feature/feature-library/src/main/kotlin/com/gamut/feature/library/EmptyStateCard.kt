@@ -119,11 +119,13 @@ private fun CoverSpread(urls: List<String>, circle: Boolean = false) {
     val slots = listOf(
         Triple(-96, 62, 0.55f), Triple(-48, 78, 0.8f), Triple(0, 96, 1f), Triple(48, 78, 0.8f), Triple(96, 62, 0.55f),
     )
+    // Photos fill the middle slot first, then outwards, so a card with only one to three photos still looks balanced.
+    val fillOrder = listOf(2, 1, 3, 0, 4)
     Box(Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
         // Draw the outer ones first so the centre cover ends up on top.
         listOf(0, 4, 1, 3, 2).forEach { i ->
             val (dx, size, alpha) = slots[i]
-            val url = urls.getOrNull(i)
+            val url = urls.getOrNull(fillOrder.indexOf(i))
             Box(
                 Modifier
                     .offset(x = dx.dp)

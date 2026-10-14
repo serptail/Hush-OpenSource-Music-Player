@@ -482,7 +482,9 @@ private fun WheelRow(
             Modifier.fillMaxWidth().padding(horizontal = SideInset + PillInset),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CoverImage(song.albumArtUrl.orEmpty(), Modifier.size(coverSize).softCover(WheelCoverShape))
+            BadgedCover(local = song.isLocal, tagSize = 24.dp) {
+                CoverImage(song.albumArtUrl.orEmpty(), Modifier.size(coverSize).softCover(WheelCoverShape))
+            }
             Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
                 Text(
                     song.title,
@@ -585,7 +587,9 @@ private fun TrackActionsSheet(
                 Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                CoverImage(track.albumArtUrl.orEmpty(), Modifier.size(52.dp).softCover(RoundedCornerShape(12.dp)))
+                BadgedCover(local = track.isLocal) {
+                    CoverImage(track.albumArtUrl.orEmpty(), Modifier.size(52.dp).softCover(RoundedCornerShape(12.dp)))
+                }
                 Column(Modifier.weight(1f).padding(start = 14.dp)) {
                     Text(
                         track.title,

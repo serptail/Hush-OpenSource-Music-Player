@@ -79,7 +79,7 @@ class LibraryViewModel @Inject constructor(
                 PlaylistInfo(
                     coverUrl = tracks.lastOrNull()?.albumArtUrl?.takeIf { it.isNotBlank() },
                     songCount = tracks.size,
-                    offline = tracks.isNotEmpty() && tracks.all { it.isrc in saved },
+                    offline = tracks.isNotEmpty() && tracks.all { it.isLocal || it.isrc in saved },
                 )
             }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
@@ -153,7 +153,7 @@ class LibraryViewModel @Inject constructor(
 
     /** Every liked song is downloaded (the "Liked songs" row shows the offline mark). */
     val likedOffline: StateFlow<Boolean> =
-        combine(favorites, downloadIndex.downloads) { liked, saved -> liked.isNotEmpty() && liked.all { it.isrc in saved } }
+        combine(favorites, downloadIndex.downloads) { liked, saved -> liked.isNotEmpty() && liked.all { it.isLocal || it.isrc in saved } }
             .distinctUntilChanged()
             .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 

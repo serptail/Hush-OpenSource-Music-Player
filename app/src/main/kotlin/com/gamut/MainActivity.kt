@@ -123,10 +123,16 @@ import com.gamut.core.model.PlaybackState
 import com.gamut.core.model.Track
 import com.gamut.core.player.MusicPlayer
 import com.gamut.feature.library.FavoritesScreen
+import com.gamut.feature.library.EmptyStateArtistCovers
 import com.gamut.feature.library.EmptyStateCovers
 import com.gamut.feature.library.LibraryScreen
 import com.gamut.core.database.DownloadIndex
 import com.gamut.feature.library.LibraryViewModel
+import com.gamut.feature.library.LocalMusicScreen
+import com.gamut.feature.library.LocalAvailabilityViewModel
+import com.gamut.feature.library.LocalMusicViewModel
+import com.gamut.feature.library.withoutMissingLocal
+import com.gamut.feature.library.localUri
 import com.gamut.feature.resolver.TrackDownloadManager
 import com.gamut.feature.library.PlaylistDownloadsViewModel
 import com.gamut.feature.library.PlaylistScreen
@@ -231,6 +237,10 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
     // Cover art for the empty-state cards (Library, empty playlist): five covers from the Discover charts we already fetched.
     LaunchedEffect(discover.albums, discover.artists) {
         EmptyStateCovers.offer(discover.albums.map { it.imageUrl } + discover.artists.map { it.imageUrl })
+    }
+    // Artist photos for the round covers on the Library "no artists yet" card (it reads EmptyStateArtistCovers).
+    LaunchedEffect(discover.artists) {
+        EmptyStateArtistCovers.offer(discover.artists.map { it.imageUrl })
     }
     // Bumped by the empty-state "Find ..." buttons: HomeTabs reacts by sliding to the Discover (search) tab.
     var openSearchTick by remember { mutableIntStateOf(0) }
@@ -375,11 +385,26 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
     // the whole app (NavHost included) twice a second while music plays.
     val loadedTrack by remember { derivedStateOf { (playback as? PlaybackState.Playing)?.track ?: (playback as? PlaybackState.Paused)?.track } }
     val isPlayingNow by remember { derivedStateOf { playback is PlaybackState.Playing } }
+    // The song the Library "Ready to add" banner and the New playlist screen offer. It must follow whatever the player
+    // loads, from ANY source (search, favorites, artist, album, queue skips, auto-advance, local files), not only taps
+    // that go through playTrackWithQueue. Keeps the last song while the next one is loading, so the banner never flickers.
+    LaunchedEffect(loadedTrack?.isrc) { loadedTrack?.let { selectedTrack = it } }
 
     // --- "What's this song?": listens to the microphone, then offers to save / play what it found ---
     val shazamVm = hiltViewModel<ShazamViewModel>()
     val shazamState by shazamVm.state.collectAsState()
     val appLibraryVm = hiltViewModel<LibraryViewModel>()
+    // A local song deleted from the phone is dropped from Favorites right away. (Collected inside the effect, so the
+    // root does not recompose.) Playlists clean themselves the same way in PlaylistScreen.
+    val localAvailabilityVm = hiltViewModel<LocalAvailabilityViewModel>()
+    LaunchedEffect(appLibraryVm, localAvailabilityVm) {
+        kotlinx.coroutines.flow.combine(appLibraryVm.favorites, localAvailabilityVm.existing) { favs, existing -> favs to existing }
+            .collect { (favs, existing) ->
+                if (existing == null) return@collect
+                val kept = favs.withoutMissingLocal(existing)
+                if (kept.size != favs.size) appLibraryVm.setFavoriteOrder(kept)
+            }
+    }
     // One toast for every "add to playlist" entry point (search, artist, album, player, Shazam): the song was already there.
     LaunchedEffect(appLibraryVm) { appLibraryVm.duplicateAdds.collect { name -> notifier.info("Already in \u201C$name\u201D") } }
     // Recently played: whatever the player loads (tap, skip, auto-advance) is recorded once it starts.
@@ -427,7 +452,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
     }
     // One palette and ONE flowing background for the whole app: it lives behind the NavHost, so Search and
     // Library are drawn on the same canvas (same colors, same animation state) and navigating never restarts it.
-    val artUrl = remember(loadedTrack?.albumArtUrl) { squareArtUrl(loadedTrack?.albumArtUrl, 200) }
+    val artUrl = remember(loadedTrack?.albumArtUrl) { artFor(loadedTrack?.albumArtUrl, 200) }
     // Adaptive: the cover's palette, forced into the chosen Light/Dark (Auto = cover decides). Otherwise a fixed preset.
     val palette = rememberAppPalette(artUrl, appearance)
     val neutralPalette = appNeutralPalette(appearance)
@@ -498,6 +523,17 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                             // (older) tap finishes last and starts playing the WRONG song.
                             resolveJob?.cancel()
                             resolveJob = scope.launch {
+                                // A song stored on the phone (MediaStore content:// URI): play it directly, no network, no resolving.
+                                val deviceUri = track.localUri()
+                                if (deviceUri != null) {
+                                    val startIndex = queue.indexOfFirst { it.isrc == track.isrc }
+                                    if (startIndex >= 0) player.setQueue(queue, startIndex)
+                                    com.gamut.feature.playerui.components.WaveformSource.register(track, deviceUri.toString())
+                                    player.play(track, deviceUri.toString())
+                                    resolvingIsrc = null
+                                    openPlayer()
+                                    return@launch
+                                }
                                 // Downloaded: play the file. First, so it also works with no network at all.
                                 val localFile = downloadIndex.pathFor(track.isrc)?.let(::File)?.takeIf { it.exists() }
                                 if (localFile != null) {
@@ -558,6 +594,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                             onTrackArtist = { t -> openArtist(t.artist) },
                             onOpenPlaylist = { id -> nav.navigate(if (id == "liked") "favorites" else "playlist/$id") },
                             onCreatePlaylist = { openCreate() },
+                            onOpenLocal = { nav.navigate("local") },
                             openSearchTick = openSearchTick,
                             openLibraryTick = openLibraryTick,
                             onProfile = { nav.navigate("settings") { launchSingleTop = true } },
@@ -629,6 +666,19 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                 }
                                 }
                             }
+                            composable("local") {
+                                val localVm = hiltViewModel<LocalMusicViewModel>()
+                                Settled {
+                                    LocalMusicScreen(
+                                        libraryVm = appLibraryVm,
+                                        onBack = { nav.popBackStack() },
+                                        onTrackSelected = playTrackWithQueue,
+                                        nowPlayingIsrc = loadedTrack?.isrc,
+                                        viewModel = localVm,
+                                        nowPlaying = nowPlayingDocked,
+                                    )
+                                }
+                            }
                             composable("favorites") {
                                 val favorites by appLibraryVm.favorites.collectAsState()
                                 val downloadsVm = hiltViewModel<PlaylistDownloadsViewModel>()
@@ -654,7 +704,9 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                 // ViewModels are created at once (their loading starts now); only the UI is deferred.
                                 val playlistVm = hiltViewModel<com.gamut.feature.library.PlaylistViewModel>()
                                 val downloadsVm = hiltViewModel<PlaylistDownloadsViewModel>()
-                                val playlistTracks by playlistVm.tracks.collectAsState()
+                                val storedPlaylistTracks by playlistVm.tracks.collectAsState()
+                                val existingLocal by localAvailabilityVm.existing.collectAsState()
+                                val playlistTracks = remember(storedPlaylistTracks, existingLocal) { storedPlaylistTracks.withoutMissingLocal(existingLocal) }
                                 val allPlaylists by appLibraryVm.playlists.collectAsState()
                                 val favoriteIsrcs by appLibraryVm.favoriteIsrcs.collectAsState()
                                 val id = entry.arguments?.getString("id").orEmpty()
@@ -675,6 +727,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                         onAddSongs = { openSearchTick++; nav.popBackStack("home", false) },
                                         nowPlayingIsrc = loadedTrack?.isrc,
                                         favoriteIsrcs = favoriteIsrcs,
+                                        existingLocalIsrcs = existingLocal,
                                         onToggleFavorite = appLibraryVm::toggleFavorite,
                                         onTrackArtist = { t -> openArtist(t.artist) },
                                         viewModel = playlistVm,
@@ -862,7 +915,7 @@ private fun NowPlayingStrip(player: MusicPlayer, docked: Boolean, onOpen: () -> 
             MiniPlayerStrip(
                 title = shown.title,
                 artist = shown.artist,
-                artUrl = remember(shown.albumArtUrl) { squareArtUrl(shown.albumArtUrl, 200) },
+                artUrl = remember(shown.albumArtUrl) { artFor(shown.albumArtUrl, 200) },
                 isPlaying = isPlaying,
                 isLoading = isLoading,
                 loadProgress = loadProgress,
@@ -878,6 +931,10 @@ private fun NowPlayingStrip(player: MusicPlayer, docked: Boolean, onOpen: () -> 
         }
     }
 }
+/** Art of a song stored on the phone (content: / file: URI) is used as is; only remote art is resized. */
+private fun artFor(url: String?, size: Int) =
+    if (url != null && (url.startsWith("file:") || url.startsWith("content:"))) url else squareArtUrl(url, size)
+
 private fun albumRoute(item: DiscoverItem) =
     "album/${Uri.encode(item.id)}?title=${Uri.encode(item.title)}&subtitle=${Uri.encode(item.subtitle)}&art=${Uri.encode(item.imageUrl)}"
 
@@ -940,6 +997,7 @@ private fun HomeTabs(
     onTrackArtist: (Track) -> Unit,
     onOpenPlaylist: (String) -> Unit,
     onCreatePlaylist: () -> Unit,
+    onOpenLocal: () -> Unit,
     openSearchTick: Int,
     openLibraryTick: Int,
     onProfile: () -> Unit,
@@ -947,6 +1005,12 @@ private fun HomeTabs(
     nowPlaying: @Composable () -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    // Followed artists for the Library tab (null until the database has answered).
+    val followVm = hiltViewModel<com.gamut.core.sync.FollowViewModel>()
+    val followedEntities by followVm.artists.collectAsState()
+    val followedArtists = remember(followedEntities) {
+        followedEntities.orEmpty().map { com.gamut.feature.library.LibraryArtist(it.artistKey, it.name, it.imageUrl) }
+    }
     // Feeds the generated profile circle in the Discover header.
     val accountVm = hiltViewModel<AccountViewModel>()
     val profileName by accountVm.displayName.collectAsState()
@@ -1044,10 +1108,17 @@ private fun HomeTabs(
             }
             TabLayer(page = 1, position = { position.value }, active = shownTab == 1) {
                 LibraryScreen(
+                    artists = followedArtists,
+                    artistsLoading = followedEntities == null,
+                    onOpenArtist = { key ->
+                        // Follow keys look like "deezer:123"; the artist screen route takes the numeric id.
+                        key.removePrefix("deezer:").toLongOrNull()?.let(onArtistSelected)
+                    },
                     viewModel = libraryVm,
                     selectedTrack = selectedTrack,
                     onOpenPlaylist = onOpenPlaylist,
                     onCreatePlaylist = onCreatePlaylist,
+                    onOpenLocal = onOpenLocal,
                     onOpenSearch = { goTo(0); focusSearchTick++ },
                     barHeight = barHeight,
                 )

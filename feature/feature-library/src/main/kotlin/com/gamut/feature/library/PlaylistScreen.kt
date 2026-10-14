@@ -42,6 +42,7 @@ import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -155,6 +156,11 @@ fun PlaylistScreen(
     nowPlayingIsrc: String? = null,
     /** ISRCs of the user's favorites, for the per-song panel. */
     favoriteIsrcs: Set<String> = emptySet(),
+    /**
+     * `local:` ISRCs that still exist on the phone (null = unknown, e.g. no permission: nothing is removed).
+     * Local songs missing from it were deleted from the device and are dropped from the playlist.
+     */
+    existingLocalIsrcs: Set<String>? = null,
     onToggleFavorite: (Track) -> Unit = {},
     /** Opens the artist page of a track (by name), from the per-song panel. */
     onTrackArtist: (Track) -> Unit = {},
@@ -162,7 +168,12 @@ fun PlaylistScreen(
     downloads: PlaylistDownloadsViewModel = viewModel(),
     nowPlaying: @Composable () -> Unit = {},
 ) {
-    val songs by viewModel.tracks.collectAsStateWithLifecycle()
+    val storedSongs by viewModel.tracks.collectAsStateWithLifecycle()
+    // A local song whose file was deleted from the phone disappears here and is dropped from the saved playlist.
+    val songs = remember(storedSongs, existingLocalIsrcs) { storedSongs.withoutMissingLocal(existingLocalIsrcs) }
+    LaunchedEffect(storedSongs, existingLocalIsrcs) {
+        if (songs.size != storedSongs.size) viewModel.setTracks(songs)
+    }
     val playlist by viewModel.playlist.collectAsStateWithLifecycle()
     val downloadStates by downloads.states.collectAsStateWithLifecycle()
     val palette = LocalCoverPalette.current
@@ -188,9 +199,17 @@ fun PlaylistScreen(
     val searching = query.isNotBlank()
 
     // Downloads: one entry per distinct song.
+    // Songs stored on the phone count as downloaded, but no download / cancel / remove call ever touches them
+    // (so "Remove downloads" can never delete a user's own files).
+    val streamed = remember(songs) { songs.filter { !it.isLocal } }
+    val streamedIsrcs = remember(streamed) { streamed.map { it.isrc }.distinct() }
+    val states = remember(downloadStates, songs) {
+        downloadStates + songs.filter { it.isLocal }.associate { it.isrc to DownloadState.Done }
+    }
     val isrcs = remember(songs) { songs.map { it.isrc }.distinct() }
-    val downloadUi = remember(isrcs, downloadStates) { playlistDownloadUi(isrcs, downloadStates) }
-    val downloadedCount = remember(isrcs, downloadStates) { isrcs.count { downloadStates[it] == DownloadState.Done } }
+    val downloadUi = remember(isrcs, states) { playlistDownloadUi(isrcs, states) }
+    val downloadedCount = remember(isrcs, states) { isrcs.count { states[it] == DownloadState.Done } }
+    val streamedDownloaded = remember(streamedIsrcs, downloadStates) { streamedIsrcs.count { downloadStates[it] == DownloadState.Done } }
 
     val visible: List<Listed> = remember(songs, query) {
         val q = query.trim().lowercase()
@@ -225,9 +244,9 @@ fun PlaylistScreen(
 
     val onDownloadClick: () -> Unit = {
         when (downloadUi.status) {
-            PlaylistDownloadStatus.Idle -> downloads.download(songs, label = name)
-            PlaylistDownloadStatus.Active -> downloads.cancel(isrcs)
-            PlaylistDownloadStatus.Done -> confirmRemoveDownloads = true
+            PlaylistDownloadStatus.Idle -> downloads.download(streamed, label = name)
+            PlaylistDownloadStatus.Active -> downloads.cancel(streamedIsrcs)
+            PlaylistDownloadStatus.Done -> if (streamedIsrcs.isNotEmpty()) confirmRemoveDownloads = true
         }
     }
 
@@ -301,7 +320,7 @@ fun PlaylistScreen(
                         track = song,
                         isPlaying = song.isrc == nowPlayingIsrc,
                         accent = accent,
-                        downloadState = downloadStates[song.isrc],
+                        downloadState = states[song.isrc],
                         onDownload = { downloads.download(listOf(song)) },
                         onCancelDownload = { downloads.cancel(listOf(song.isrc)) },
                         onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
@@ -322,7 +341,8 @@ fun PlaylistScreen(
             TrackOptionsPanel(
                 track = menuTrack,
                 isFavorite = menuTrack.isrc in favoriteIsrcs,
-                downloadState = downloadStates[menuTrack.isrc],
+                downloadState = states[menuTrack.isrc],
+                local = menuTrack.isLocal,
                 onDownload = { downloads.download(listOf(menuTrack)) },
                 onRemoveDownload = { downloads.remove(listOf(menuTrack.isrc)) },
                 canMoveUp = !searching && i > 0,
@@ -376,7 +396,7 @@ fun PlaylistScreen(
                     SheetAction(PhosphorIcons.Light.PencilSimple, "Edit playlist") { closeSheet(state) { startEdit() } }
                     if (songs.isNotEmpty()) SheetAction(PhosphorIcons.Light.RowsPlusTop, "Manage playlist") { closeSheet(state) { showManage = true } }
                     SheetAction(PhosphorIcons.Light.ImageSquare, "Change cover art") { pickQuickCover(); closeSheet(state) }
-                    if (downloadedCount > 0) SheetAction(PhosphorIcons.Light.X, "Remove downloads") { closeSheet(state) { confirmRemoveDownloads = true } }
+                    if (streamedDownloaded > 0) SheetAction(PhosphorIcons.Light.X, "Remove downloads") { closeSheet(state) { confirmRemoveDownloads = true } }
                     SheetAction(PhosphorIcons.Light.Trash, "Delete playlist", danger = true) { closeSheet(state) { confirmDelete = true } }
                 }
             }
@@ -469,21 +489,21 @@ fun PlaylistScreen(
                 onDismiss = { showManage = false },
                 onReorder = { viewModel.setTracks(it) },
                 onRemove = { viewModel.removeTrack(it.isrc) },
-                onDownloadAll = { downloads.download(songs, label = name) },
-                onCancelDownloads = { downloads.cancel(isrcs) },
-                onRemoveDownloads = { downloads.remove(isrcs) },
+                onDownloadAll = { downloads.download(streamed, label = name) },
+                onCancelDownloads = { downloads.cancel(streamedIsrcs) },
+                onRemoveDownloads = { downloads.remove(streamedIsrcs) },
             )
         }
 
         if (confirmDelete) {
             ConfirmDialog(
                 title = "Delete playlist?",
-                message = "\u201C$name\u201D will be deleted." + if (downloadedCount > 0) " Its downloaded songs will be removed from this device too." else "",
+                message = "\u201C$name\u201D will be deleted." + if (streamedDownloaded > 0) " Its downloaded songs will be removed from this device too." else "",
                 confirmLabel = "Delete",
                 danger = true,
                 onConfirm = {
                     confirmDelete = false
-                    if (downloadedCount > 0 || downloadUi.status == PlaylistDownloadStatus.Active) downloads.remove(isrcs)
+                    if (streamedDownloaded > 0 || downloadUi.status == PlaylistDownloadStatus.Active) downloads.remove(streamedIsrcs)
                     viewModel.delete(onDone = onBack)
                 },
                 onDismiss = { confirmDelete = false },
@@ -496,7 +516,7 @@ fun PlaylistScreen(
                 message = "The songs stay in the playlist, but won't play offline until you download them again.",
                 confirmLabel = "Remove",
                 danger = true,
-                onConfirm = { confirmRemoveDownloads = false; downloads.remove(isrcs) },
+                onConfirm = { confirmRemoveDownloads = false; downloads.remove(streamedIsrcs) },
                 onDismiss = { confirmRemoveDownloads = false },
             )
         }
@@ -675,7 +695,9 @@ private fun PlaylistTrackRow(
             .padding(start = 24.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CoverImage(remember(track.albumArtUrl) { resolveCoverUrl(track.albumArtUrl, 160) }, Modifier.size(54.dp).softCover())
+        BadgedCover(local = track.isLocal) {
+            CoverImage(remember(track.albumArtUrl) { resolveCoverUrl(track.albumArtUrl, 160) }, Modifier.size(54.dp).softCover())
+        }
         Column(Modifier.weight(1f).padding(start = 16.dp, end = 8.dp)) {
             // The playing track: accent title + animated bars, exactly like the Search / Artist rows.
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -708,6 +730,7 @@ private fun TrackOptionsPanel(
     track: Track,
     isFavorite: Boolean,
     downloadState: DownloadState?,
+    local: Boolean,
     onDownload: () -> Unit,
     onRemoveDownload: () -> Unit,
     canMoveUp: Boolean,
@@ -740,7 +763,7 @@ private fun TrackOptionsPanel(
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(ink(0.10f)))
             PanelAction(PhosphorIcons.Fill.Play, "Play", true) { onPlay(); onDismiss() }
-            when (downloadState) {
+            if (!local) when (downloadState) {
                 DownloadState.Done -> PanelAction(PhosphorIcons.Fill.CheckCircle, "Remove download", true) { onRemoveDownload(); onDismiss() }
                 null, is DownloadState.Failed -> PanelAction(PhosphorIcons.Light.ArrowCircleDown, "Download", true) { onDownload(); onDismiss() }
                 else -> Unit   // queued / downloading: the song's own button cancels it
