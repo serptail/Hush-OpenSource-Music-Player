@@ -49,6 +49,10 @@ internal fun List<Track>.withoutDuplicates(): List<Track> {
     return out
 }
 
+/** Ids (as strings, like the pickers use) of the playlists in [byPlaylist] that already hold [track]. */
+fun playlistIdsContaining(byPlaylist: Map<Long, List<Track>>, track: Track): Set<String> =
+    byPlaylist.filterValues { list -> list.any { sameSong(it, track) } }.keys.mapTo(HashSet()) { it.toString() }
+
 /** What a Library row shows for a playlist: the cover of the song added last, and how many songs it holds. */
 data class PlaylistInfo(val coverUrl: String?, val songCount: Int, /** Every song is downloaded: shows the "available offline" mark. */ val offline: Boolean = false)
 
@@ -63,9 +67,9 @@ class LibraryViewModel @Inject constructor(
     val playlists: StateFlow<List<Playlist>> =
         repository.observePlaylists().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    /** Per playlist (by id): cover = art of the LAST song added, plus the song count. Small tables, so eager like the rest. */
+    /** Every playlist's songs, by playlist id. Small tables, so eager like the rest. */
     @OptIn(ExperimentalCoroutinesApi::class)
-    val playlistInfo: StateFlow<Map<Long, PlaylistInfo>> =
+    val tracksByPlaylist: StateFlow<Map<Long, List<Track>>> =
         playlists.flatMapLatest { list ->
             if (list.isEmpty()) {
                 flowOf<Map<Long, List<Track>>>(emptyMap())
@@ -74,7 +78,11 @@ class LibraryViewModel @Inject constructor(
                     list.map { p -> repository.observeTracks(p.id).map { tracks -> p.id to tracks } },
                 ) { pairs -> pairs.toMap() }
             }
-        }.combine(downloadIndex.downloads) { byPlaylist, saved ->
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    /** Per playlist (by id): cover = art of the LAST song added, plus the song count. */
+    val playlistInfo: StateFlow<Map<Long, PlaylistInfo>> =
+        tracksByPlaylist.combine(downloadIndex.downloads) { byPlaylist, saved ->
             byPlaylist.mapValues { (_, tracks) ->
                 PlaylistInfo(
                     coverUrl = tracks.lastOrNull()?.albumArtUrl?.takeIf { it.isNotBlank() },
@@ -117,6 +125,17 @@ class LibraryViewModel @Inject constructor(
                     return@withLock
                 }
                 repository.appendTrack(playlistId, track)
+            }
+        }
+    }
+
+    /** Undo of [addTrack]: takes the song (and any copy [sameSong] treats as the same) out of the playlist. */
+    fun removeTrack(playlistId: Long, track: Track) {
+        viewModelScope.launch {
+            addMutex.withLock {
+                repository.observeTracks(playlistId).first()
+                    .filter { sameSong(it, track) }
+                    .forEach { repository.removeTrack(playlistId, it.isrc) }
             }
         }
     }

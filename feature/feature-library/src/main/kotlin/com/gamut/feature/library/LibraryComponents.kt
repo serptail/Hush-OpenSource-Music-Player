@@ -23,8 +23,8 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.MusicNote
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.MusicNote
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
 
@@ -61,7 +61,7 @@ internal fun CoverImage(url: String, modifier: Modifier = Modifier) {
             )
         }
         if (noArt || failed) {
-            Icon(PhosphorIcons.Light.MusicNote, null, tint = ink(0.45f), modifier = Modifier.size(22.dp))
+            Icon(PhosphorIcons.Bold.MusicNote, null, tint = ink(0.45f), modifier = Modifier.size(22.dp))
         }
     }
 }

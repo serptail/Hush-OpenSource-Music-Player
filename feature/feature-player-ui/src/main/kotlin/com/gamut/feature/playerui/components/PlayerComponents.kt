@@ -80,8 +80,8 @@ import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.MusicNote
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.MusicNote
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
 import kotlin.math.pow
@@ -107,7 +107,7 @@ internal fun ArtworkPlaceholder() {
         Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.12f)),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(PhosphorIcons.Light.MusicNote, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(48.dp))
+        Icon(PhosphorIcons.Bold.MusicNote, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(48.dp))
     }
 }
 

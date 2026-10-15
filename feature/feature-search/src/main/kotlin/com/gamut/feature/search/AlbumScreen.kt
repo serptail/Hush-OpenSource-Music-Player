@@ -57,10 +57,10 @@ import androidx.lifecycle.viewModelScope
 import coil.compose.SubcomposeAsyncImage
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.fill.Play
-import com.adamglin.phosphoricons.light.ArrowLeft
-import com.adamglin.phosphoricons.light.DotsThreeVertical
+import com.adamglin.phosphoricons.bold.ArrowLeft
+import com.adamglin.phosphoricons.bold.DotsThreeVertical
 import com.gamut.core.designsystem.AcrylicCircleButton
 import com.gamut.core.designsystem.AcrylicHost
 import com.gamut.core.designsystem.CoverTheme
@@ -471,7 +471,7 @@ private fun AlbumMoreButton(onClick: () -> Unit) {
             .clip(CircleShape)
             .clickable(role = Role.Button, onClickLabel = "More options", onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Icon(PhosphorIcons.Light.DotsThreeVertical, "More options", tint = ink(0.5f), modifier = Modifier.size(22.dp)) }
+    ) { Icon(PhosphorIcons.Bold.DotsThreeVertical, "More options", tint = ink(0.5f), modifier = Modifier.size(22.dp)) }
 }
 
 @Composable
@@ -482,7 +482,7 @@ private fun BackButton(onBack: () -> Unit) {
         size = 44.dp,
     ) {
         // Ink instead of hardcoded white: the button now floats over the background, not over a cover.
-        Icon(PhosphorIcons.Light.ArrowLeft, "Back", tint = ink(), modifier = Modifier.size(22.dp))
+        Icon(PhosphorIcons.Bold.ArrowLeft, "Back", tint = ink(), modifier = Modifier.size(22.dp))
     }
 }
 

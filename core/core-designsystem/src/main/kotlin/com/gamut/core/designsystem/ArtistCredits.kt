@@ -39,8 +39,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.CaretRight
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.CaretRight
 import kotlinx.coroutines.launch
 
 // One song, several artist accounts ("A, B", "A & B", "A feat. B x C"). Everywhere an artist is shown or tapped:
@@ -228,7 +228,7 @@ fun ArtistPickerSheet(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
                         )
-                        Icon(PhosphorIcons.Light.CaretRight, null, tint = ink(0.4f), modifier = Modifier.size(18.dp))
+                        Icon(PhosphorIcons.Bold.CaretRight, null, tint = ink(0.4f), modifier = Modifier.size(18.dp))
                     }
                 }
             }

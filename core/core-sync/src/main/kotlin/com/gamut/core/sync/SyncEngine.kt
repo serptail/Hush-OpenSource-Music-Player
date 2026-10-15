@@ -1,5 +1,6 @@
 package com.gamut.core.sync
 
+import android.content.Context
 import com.gamut.core.database.FavoriteDao
 import com.gamut.core.database.FavoriteEntity
 import com.gamut.core.database.FollowDao
@@ -15,24 +16,51 @@ import com.gamut.core.database.SyncStateEntity
 import com.gamut.core.database.SyncTypes
 import com.gamut.core.database.TrackDao
 import com.gamut.core.database.toEntity
+import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.functions.functions
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
 import io.ktor.client.call.body
+import java.io.File
+import java.io.IOException
+import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.OffsetDateTime
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/** Key of the account that owns the local library. Blank = nobody (guest data). */
+internal const val SYNC_OWNER_KEY = "owner"
+
+/** The server no longer knows this session (signed out on another device, or the account was deleted). */
+class SessionEndedException : Exception("This account was signed out elsewhere or deleted")
+
+/** Several independent sync steps failed. The first failure is the cause; the others are suppressed. */
+class SyncFailure(errors: List<Throwable>) : Exception(
+    errors.first().let { (it.message ?: it::class.java.simpleName) + if (errors.size > 1) " (+${errors.size - 1} more)" else "" },
+    errors.first(),
+) {
+    init { errors.drop(1).forEach { addSuppressed(it) } }
+}
 
 /**
  * Sync order: push the pending queue, then pull everything changed since the per-table cursor.
- * Cursors are SERVER updated_at values (never the device clock). Conflict rules: last-write-wins for favorites and
- * playlist meta (a locally pending change is never overwritten by a pull); playlist songs merge row by row.
+ * Every step is isolated: one failing step (a poison row, a rate limit) never blocks the others, and a queue entry is
+ * removed only after the server accepted it. Cursors are SERVER updated_at values (never the device clock) and are
+ * re-read with a small overlap, so a transaction that committed late is never missed. Conflict rules: last-write-wins
+ * for favorites and playlist meta (a locally pending change is never overwritten by a pull); playlist songs merge row
+ * by row.
  */
 @Singleton
 class SyncEngine @Inject constructor(
@@ -44,28 +72,103 @@ class SyncEngine @Inject constructor(
     private val playlists: PlaylistDao,
     private val playlistTracks: PlaylistTrackDao,
     private val follows: FollowDao,
+    private val exporter: DataExporter,
+    @ApplicationContext private val context: Context,
 ) {
     /** isrc -> server song uuid, so a song is resolved at most once per process. */
     private val songIds = ConcurrentHashMap<String, String>()
 
     suspend fun sync() {
         val uid = supabase.auth.currentUserOrNull()?.id ?: return
-        claimOwner(uid)
-        push(uid)
+        ensureSessionValid()
+        val errors = ArrayList<Throwable>()
+        claimOwner(uid)                       // a failure here aborts: nothing else is safe before the account is claimed
+        push(uid, errors)
         val now = System.currentTimeMillis()
         val last = state.get(LAST_SYNC)?.toLongOrNull()
         // Offline longer than the tombstone window: deletions may have been purged, so do a full resync.
         if (last != null && now - last > TOMBSTONE_WINDOW_MS) resetCursors()
-        pull()
-        state.put(SyncStateEntity(LAST_SYNC, now.toString()))
+        pull(errors)
+        if (errors.isNotEmpty()) throw SyncFailure(errors)
+        state.put(SyncStateEntity(LAST_SYNC, now.toString()))   // only a fully successful run counts as "synced"
+    }
+
+    /**
+     * Upserts in batches. If the server permanently rejects a batch (a constraint, a quota), it is split in halves until
+     * the single bad row is found and dropped, so one poison row can never make every later sync fail. Temporary
+     * trouble (offline, 401, 429, 5xx) is rethrown unchanged and retried next time.
+     */
+    private suspend inline fun <reified T : Any> upsertResilient(table: String, rows: List<T>, conflict: String, chunk: Int) {
+        rows.chunked(chunk).forEach { part ->
+            sendResilient(part) { piece -> supabase.from(table).upsert(piece) { onConflict = conflict } }
+        }
+    }
+
+    private suspend fun <T> sendResilient(rows: List<T>, send: suspend (List<T>) -> Unit) {
+        if (rows.isEmpty()) return
+        try {
+            send(rows)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: RestException) {
+            if (!e.isPermanent()) throw e
+            if (rows.size == 1) { android.util.Log.w("SyncEngine", "Dropping a row the server rejects: ${e.message}"); return }
+            val mid = rows.size / 2
+            sendResilient(rows.subList(0, mid), send)
+            sendResilient(rows.subList(mid, rows.size), send)
+        }
+    }
+
+    private fun RestException.isPermanent() =
+        (statusCode in 400..499 && statusCode != 401 && statusCode != 408 && statusCode != 429) ||
+            message.orEmpty().contains("quota exceeded", ignoreCase = true)
+
+    /**
+     * Data requests only check the access token's signature, so a session revoked by "sign out of all devices" or an
+     * account deleted on another device keeps working until that token expires (up to an hour), and a pull of an empty
+     * server even looks like a successful sync. Asking the server about the user catches both right away.
+     */
+    private suspend fun ensureSessionValid() {
+        try {
+            supabase.auth.retrieveUserForCurrentSession(updateSession = false)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: RestException) {
+            if (e.statusCode == 401 || e.statusCode == 403 || e.statusCode == 404) {
+                runCatching { supabase.auth.clearSession() }      // local only; local library data is kept
+                throw SessionEndedException()
+            }
+            throw e
+        }
+    }
+
+    private suspend fun guarded(errors: MutableList<Throwable>, block: suspend () -> Unit): Boolean = try {
+        block(); true
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        errors += e; false
     }
 
     // ---------------------------------------------------------------- first sign-in / account switch
 
-    /** First time this account signs in on this device (guest data -> account): queue the whole local library. */
+    /**
+     * First time this account signs in on this device: queue the whole local library. Before that, local playlists
+     * that have no server id yet adopt a same-named playlist the account already has (case-insensitive, one-to-one),
+     * so signing in on a second device or after a restore merges instead of duplicating every playlist.
+     */
     private suspend fun claimOwner(uid: String) {
-        if (state.get(OWNER) == uid) return
+        val owner = state.get(OWNER)?.takeIf { it.isNotBlank() }
+        if (owner == uid) return
         resetCursors()
+        if (owner != null) {
+            // The library on this phone belongs to a DIFFERENT account. It must never be uploaded into this one, so:
+            // keep a copy on the device (shows up under Restore), then start this account from an empty library.
+            // If the copy cannot be written, abort and retry later rather than lose or mix anything.
+            saveSafetyBackup()
+            wipeLocalLibrary()
+        }
+        adoptRemotePlaylists()
         val now = System.currentTimeMillis()
         suspend fun mark(type: String, key: String, payload: String? = null) =
             pending.put(PendingSyncEntity(type = type, itemKey = key, payload = payload, createdAtEpochMs = now))
@@ -75,202 +178,313 @@ class SyncEngine @Inject constructor(
         }
         favorites.all().forEach { mark(SyncTypes.FAV, it.isrc) }
         follows.all().forEach { mark(SyncTypes.FOLLOW, it.artistKey) }
-        state.put(SyncStateEntity(OWNER, uid))
+        state.put(SyncStateEntity(OWNER, uid))      // last: if anything above threw, the whole claim is retried
+    }
+
+    private suspend fun adoptRemotePlaylists() {
+        val local = playlists.getAll()
+        val unlinked = local.filter { it.remoteId == null }
+        if (unlinked.isEmpty()) return
+        val used = local.mapNotNull { it.remoteId }.toHashSet()
+        val remote = ArrayList<RemotePlaylistRef>()
+        var from = 0L
+        while (true) {
+            val rows = supabase.from("playlists").select(Columns.list("id", "name", "deleted_at")) {
+                order("id", Order.ASCENDING)
+                range(from, from + PAGE - 1)
+            }.decodeList<RemotePlaylistRef>()
+            remote += rows
+            if (rows.size < PAGE) break
+            from += PAGE
+        }
+        val byName = remote.filter { it.deletedAt == null && it.id !in used }
+            .groupBy { it.name.trim().lowercase() }
+            .mapValues { ArrayDeque(it.value) }
+        for (p in unlinked) {
+            val match = byName[p.name.trim().lowercase()]?.removeFirstOrNull() ?: continue
+            playlists.setRemoteId(p.id, match.id)
+        }
+    }
+
+    private suspend fun saveSafetyBackup() {
+        val bytes = exporter.exportOrNull(null) ?: return          // empty library: nothing to lose
+        withContext(Dispatchers.IO) {
+            val dir = File(context.filesDir, "backups").apply { mkdirs() }
+            val stamp = SimpleDateFormat("yyyy-MM-dd-HHmmss", Locale.US).format(Date())
+            val file = File(dir, "gamut-backup-$stamp-previous-account.json")
+            val tmp = File(dir, "gamut-backup-$stamp-previous-account.tmp")
+            try {
+                tmp.writeBytes(bytes)
+                if (!tmp.renameTo(file)) throw IOException("Could not save the previous account's backup")
+            } finally { tmp.delete() }
+        }
+    }
+
+    /** Straight through the DAOs (not the repository), so the removals are NOT queued as deletions for the new account. */
+    private suspend fun wipeLocalLibrary() {
+        playlists.getAll().forEach { playlistTracks.clear(it.id); playlists.delete(it.id) }
+        favorites.all().forEach { favorites.remove(it.isrc) }
+        follows.all().forEach { follows.remove(it.artistKey) }
+        pending.all().map { it.id }.chunked(500).forEach { pending.deleteIds(it) }
     }
 
     private suspend fun resetCursors() = CURSORS.forEach { state.put(SyncStateEntity(it, EPOCH)) }
 
     // ---------------------------------------------------------------- push
 
-    private suspend fun push(uid: String) {
+    private suspend fun push(uid: String, errors: MutableList<Throwable>) {
         val entries = pending.all()
         if (entries.isEmpty()) return
         val byType = entries.groupBy { it.type }
-        val done = ArrayList<Long>()
         val now = Instant.now().toString()
+        val nowMs = System.currentTimeMillis()
+
+        suspend fun finish(ids: List<Long>) { ids.chunked(500).forEach { pending.deleteIds(it) } }
+        /** A song we could not resolve right now (offline provider, rate limit) is retried for a week, then dropped. */
+        fun retryable(e: PendingSyncEntity, isrc: String) = parseIsrc(isrc) != null && nowMs - e.createdAtEpochMs < RETRY_WINDOW_MS
 
         // 1. playlist deletes (soft delete = tombstone)
-        byType[SyncTypes.PL_DEL].orEmpty().chunked(100).forEach { chunk ->
-            val ids = chunk.map { it.itemKey }
-            supabase.from("playlists").update({ set("deleted_at", now) }) { filter { isIn("id", ids) } }
-            done += chunk.map { it.id }
+        val delEntries = byType[SyncTypes.PL_DEL].orEmpty()
+        guarded(errors) {
+            for (chunk in delEntries.chunked(100)) {
+                val ids = chunk.map { it.itemKey }
+                supabase.from("playlists").update({ set("deleted_at", now) }) { filter { isIn("id", ids) } }
+                finish(chunk.map { it.id })
+            }
         }
 
         // 2. playlist meta (assigns remoteId on first push; the upsert is idempotent, so a retry is safe)
-        val playlistRows = ArrayList<PlaylistRow>()
-        for (e in byType[SyncTypes.PL].orEmpty()) {
-            done += e.id
-            val local = playlists.get(e.itemKey.toLongOrNull() ?: continue) ?: continue
-            val remote = local.remoteId ?: UUID.randomUUID().toString().also { playlists.setRemoteId(local.id, it) }
-            playlistRows += PlaylistRow(
-                remote, uid, local.name.trim().take(100).ifBlank { "Untitled" }, local.tags.take(500),
-                Instant.ofEpochMilli(local.createdAtEpochMs).toString(),
-            )
+        val plOk = guarded(errors) {
+            val rows = ArrayList<PlaylistRow>()
+            val doneIds = ArrayList<Long>()
+            val dropIds = ArrayList<Long>()
+            for (e in byType[SyncTypes.PL].orEmpty()) {
+                val local = e.itemKey.toLongOrNull()?.let { playlists.get(it) }
+                if (local == null) { dropIds += e.id; continue }                 // deleted meanwhile
+                val remote = local.remoteId ?: UUID.randomUUID().toString().also { playlists.setRemoteId(local.id, it) }
+                rows += PlaylistRow(
+                    remote, uid, local.name.trim().take(100).ifBlank { "Untitled" }, local.tags.take(500),
+                    Instant.ofEpochMilli(local.createdAtEpochMs).toString(),
+                )
+                doneIds += e.id
+            }
+            finish(dropIds)
+            upsertResilient("playlists", rows, "id", 100)
+            finish(doneIds)
         }
-        playlistRows.chunked(100).forEach { supabase.from("playlists").upsert(it) { onConflict = "id" } }
 
         // 3. songs must exist server-side before favorites / playlist_songs can reference them
         val favEntries = byType[SyncTypes.FAV].orEmpty()
         val plsEntries = byType[SyncTypes.PLS].orEmpty()
-        val ids = ensureSongIds((favEntries.map { it.itemKey } + plsEntries.map { it.itemKey.substringAfter('|') }).toSet())
+        val ids = ensureSongIds((favEntries.map { it.itemKey } + plsEntries.map { it.itemKey.substringAfter('|') }).toSet(), errors)
 
-        val favUpserts = ArrayList<FavoriteRow>()
-        val favRemovals = ArrayList<String>()
-        for (e in favEntries) {
-            done += e.id
-            val songId = ids[e.itemKey] ?: continue          // unsyncable id: stays local-only
-            val local = favorites.get(e.itemKey)
-            if (local != null) favUpserts += FavoriteRow(uid, songId, Instant.ofEpochMilli(local.addedAtEpochMs).toString())
-            else favRemovals += songId
-        }
-        favUpserts.chunked(200).forEach { supabase.from("favorites").upsert(it) { onConflict = "user_id,song_id" } }
-        favRemovals.chunked(100).forEach { chunk ->
-            supabase.from("favorites").update({ set("deleted_at", now) }) { filter { isIn("song_id", chunk) } }
+        // 4. favorites
+        guarded(errors) {
+            val upserts = ArrayList<FavoriteRow>()
+            val removals = ArrayList<String>()
+            val doneIds = ArrayList<Long>()
+            for (e in favEntries) {
+                val local = favorites.get(e.itemKey)
+                val songId = ids[e.itemKey]
+                if (songId == null) {
+                    if (local != null && retryable(e, e.itemKey)) continue      // transient: keep it queued
+                    doneIds += e.id; continue                                     // unsyncable id / nothing to remove remotely
+                }
+                doneIds += e.id
+                if (local != null) upserts += FavoriteRow(uid, songId, Instant.ofEpochMilli(local.addedAtEpochMs).toString())
+                else removals += songId
+            }
+            upsertResilient("favorites", upserts, "user_id,song_id", 200)
+            removals.chunked(100).forEach { chunk ->
+                supabase.from("favorites").update({ set("deleted_at", now) }) { filter { eq("user_id", uid); isIn("song_id", chunk) } }
+            }
+            finish(doneIds)
         }
 
-        // artist follows: row still present locally = follow (upsert revives a tombstone), absent = unfollow
-        val followUpserts = ArrayList<FollowRow>()
-        val followRemovals = HashMap<String, MutableList<String>>()
-        for (e in byType[SyncTypes.FOLLOW].orEmpty()) {
-            done += e.id
-            val (provider, pid) = parseArtistKey(e.itemKey) ?: continue
-            val local = follows.get(e.itemKey)
-            if (local != null) followUpserts += FollowRow(
-                uid, provider, pid, local.name.trim().take(200).ifBlank { "Unknown artist" },
-                local.imageUrl?.takeIf { it.startsWith("https://") }?.take(500),
-                Instant.ofEpochMilli(local.followedAtEpochMs).toString(),
-            )
-            else followRemovals.getOrPut(provider) { ArrayList() } += pid
-        }
-        followUpserts.chunked(200).forEach {
-            supabase.from("artist_follows").upsert(it) { onConflict = "user_id,provider,provider_artist_id" }
-        }
-        followRemovals.forEach { (provider, pids) ->
-            pids.chunked(100).forEach { chunk ->
-                supabase.from("artist_follows").update({ set("deleted_at", now) }) {
-                    filter { eq("provider", provider); isIn("provider_artist_id", chunk) }
+        // 5. artist follows: row still present locally = follow (upsert revives a tombstone), absent = unfollow
+        val followEntries = byType[SyncTypes.FOLLOW].orEmpty()
+        guarded(errors) {
+            val upserts = ArrayList<FollowRow>()
+            val removals = HashMap<String, MutableList<String>>()
+            val doneIds = ArrayList<Long>()
+            for (e in followEntries) {
+                doneIds += e.id
+                val (provider, pid) = parseArtistKey(e.itemKey) ?: continue
+                val local = follows.get(e.itemKey)
+                if (local != null) upserts += FollowRow(
+                    uid, provider, pid, local.name.trim().take(200).ifBlank { "Unknown artist" },
+                    local.imageUrl?.takeIf { it.startsWith("https://") }?.take(500),
+                    Instant.ofEpochMilli(local.followedAtEpochMs).toString(),
+                )
+                else removals.getOrPut(provider) { ArrayList() } += pid
+            }
+            upsertResilient("artist_follows", upserts, "user_id,provider,provider_artist_id", 200)
+            removals.forEach { (provider, pids) ->
+                pids.chunked(100).forEach { chunk ->
+                    supabase.from("artist_follows").update({ set("deleted_at", now) }) {
+                        filter { eq("user_id", uid); eq("provider", provider); isIn("provider_artist_id", chunk) }
+                    }
                 }
             }
+            finish(doneIds)
         }
 
-        val songUpserts = ArrayList<PlaylistSongRow>()
-        val songRemovals = HashMap<String, MutableList<String>>()
-        for (e in plsEntries) {
-            val local = playlists.get(e.itemKey.substringBefore('|').toLongOrNull() ?: -1)
-            if (local == null) { done += e.id; continue }                 // playlist deleted meanwhile
-            val remote = local.remoteId ?: continue                       // not pushed yet: retry next time
-            done += e.id
-            val songId = ids[e.itemKey.substringAfter('|')] ?: continue
-            val position = e.payload?.toIntOrNull()
-            if (position != null) songUpserts += PlaylistSongRow(remote, songId, position)
-            else songRemovals.getOrPut(remote) { ArrayList() } += songId
-        }
-        songUpserts.chunked(200).forEach { supabase.from("playlist_songs").upsert(it) { onConflict = "playlist_id,song_id" } }
-        songRemovals.forEach { (remote, songs) ->
-            songs.chunked(100).forEach { chunk ->
-                supabase.from("playlist_songs").update({ set("deleted_at", now) }) {
-                    filter { eq("playlist_id", remote); isIn("song_id", chunk) }
+        // 6. playlist songs (need their playlist row on the server, so skipped when step 2 failed)
+        if (plOk) guarded(errors) {
+            val upserts = ArrayList<PlaylistSongRow>()
+            val removals = HashMap<String, MutableList<String>>()
+            val doneIds = ArrayList<Long>()
+            for (e in plsEntries) {
+                val local = playlists.get(e.itemKey.substringBefore('|').toLongOrNull() ?: -1)
+                if (local == null) { doneIds += e.id; continue }                 // playlist deleted meanwhile
+                val remote = local.remoteId ?: continue                           // not pushed yet: retry next time
+                val isrc = e.itemKey.substringAfter('|')
+                val position = e.payload?.toIntOrNull()
+                val songId = ids[isrc]
+                if (songId == null) {
+                    if (position != null && retryable(e, isrc)) continue
+                    doneIds += e.id; continue
+                }
+                doneIds += e.id
+                if (position != null) upserts += PlaylistSongRow(remote, songId, position.coerceAtLeast(0))
+                else removals.getOrPut(remote) { ArrayList() } += songId
+            }
+            upsertResilient("playlist_songs", upserts, "playlist_id,song_id", 200)
+            removals.forEach { (remote, songs) ->
+                songs.chunked(100).forEach { chunk ->
+                    supabase.from("playlist_songs").update({ set("deleted_at", now) }) {
+                        filter { eq("playlist_id", remote); isIn("song_id", chunk) }
+                    }
                 }
             }
+            finish(doneIds)
         }
-
-        done.chunked(500).forEach { pending.deleteIds(it) }
     }
 
-    /** isrc -> server song id. Cache -> songs table -> resolve-metadata Edge Function, in batches of 50. */
-    private suspend fun ensureSongIds(isrcs: Set<String>): Map<String, String> {
+    /**
+     * isrc -> server song id. Cache -> songs table -> resolve-metadata Edge Function, in batches of 50.
+     * Never throws: on a failure (offline, rate limit) it records the error and returns what it has, so everything
+     * already resolved still syncs and the rest stays queued.
+     */
+    private suspend fun ensureSongIds(isrcs: Set<String>, errors: MutableList<Throwable>): Map<String, String> {
         val parsed = isrcs.mapNotNull { isrc -> parseIsrc(isrc)?.let { isrc to it } }
         val need = parsed.filter { songIds[it.first] == null }
-        need.groupBy({ it.second.first }, { it.second.second }).forEach { (provider, all) ->
-            all.chunked(100).forEach { chunk ->
-                supabase.from("songs").select(Columns.list("id", "provider", "provider_song_id")) {
-                    filter { eq("provider", provider); isIn("provider_song_id", chunk) }
-                }.decodeList<SongRef>().forEach { songIds["${it.provider}:${it.providerSongId}"] = it.id }
+        lookup@ for ((provider, all) in need.groupBy({ it.second.first }, { it.second.second })) {
+            for (chunk in all.chunked(100)) {
+                val ok = guarded(errors) {
+                    supabase.from("songs").select(Columns.list("id", "provider", "provider_song_id")) {
+                        filter { eq("provider", provider); isIn("provider_song_id", chunk) }
+                    }.decodeList<SongRef>().forEach { songIds["${it.provider}:${it.providerSongId}"] = it.id }
+                }
+                if (!ok) break@lookup
             }
         }
-        need.filter { songIds[it.first] == null }.chunked(50).forEach { chunk ->
-            val response = supabase.functions.invoke(
-                "resolve-metadata", ResolveRequest(chunk.map { ResolveItem(it.second.first, it.second.second) }),
-            )
-            response.body<ResolveResponse>().songs.forEach { songIds["${it.provider}:${it.providerSongId}"] = it.id }
+        for (chunk in need.filter { songIds[it.first] == null }.chunked(50)) {
+            val ok = guarded(errors) {
+                val response = supabase.functions.invoke(
+                    "resolve-metadata", ResolveRequest(chunk.map { ResolveItem(it.second.first, it.second.second) }),
+                )
+                response.body<ResolveResponse>().songs.forEach { songIds["${it.provider}:${it.providerSongId}"] = it.id }
+            }
+            if (!ok) break      // most likely the 30/min rate limit or no network: stop hammering, retry next sync
         }
         return parsed.mapNotNull { (isrc, _) -> songIds[isrc]?.let { isrc to it } }.toMap()
     }
 
     // ---------------------------------------------------------------- pull
 
-    private suspend fun pull() {
+    private suspend fun pull(errors: MutableList<Throwable>) {
         // playlists first, so playlist_songs can find their local playlist
-        pageThrough<PlaylistPull>("playlists", "id,name,tags,created_at,updated_at,deleted_at", CUR_PLAYLISTS, { it.updatedAt }) { rows ->
-            for (r in rows) {
-                val local = playlists.getByRemoteId(r.id)
-                when {
-                    r.deletedAt != null -> if (local != null) {
-                        playlistTracks.clear(local.id)
-                        playlists.delete(local.id)
-                        pending.delete(SyncTypes.PL, local.id.toString())
-                        pending.deleteByPrefix(SyncTypes.PLS, "${local.id}|%")
+        val playlistsOk = guarded(errors) {
+            pageThrough<PlaylistPull>(
+                "playlists", "id,name,tags,created_at,updated_at,deleted_at", CUR_PLAYLISTS, listOf("id"), { it.updatedAt },
+            ) { rows ->
+                for (r in rows) {
+                    val local = playlists.getByRemoteId(r.id)
+                    when {
+                        r.deletedAt != null -> if (local != null) {
+                            playlistTracks.clear(local.id)
+                            playlists.delete(local.id)
+                            pending.delete(SyncTypes.PL, local.id.toString())
+                            pending.deleteByPrefix(SyncTypes.PLS, "${local.id}|%")
+                        }
+                        local == null -> playlists.insert(
+                            PlaylistEntity(name = r.name, createdAtEpochMs = ms(r.createdAt), tags = r.tags, remoteId = r.id),
+                        )
+                        !pending.has(SyncTypes.PL, local.id.toString()) -> playlists.updateMeta(local.id, r.name, r.tags)
                     }
-                    local == null -> playlists.insert(
-                        PlaylistEntity(name = r.name, createdAtEpochMs = ms(r.createdAt), tags = r.tags, remoteId = r.id),
-                    )
-                    !pending.has(SyncTypes.PL, local.id.toString()) -> playlists.updateMeta(local.id, r.name, r.tags)
                 }
             }
         }
 
-        pageThrough<PlaylistSongPull>(
-            "playlist_songs", "playlist_id,position,updated_at,deleted_at,$SONG_EMBED", CUR_PLAYLIST_SONGS, { it.updatedAt },
-        ) { rows ->
-            trackDao.insertIgnore(rows.filter { it.deletedAt == null }.mapNotNull { it.songs?.toTrack()?.toEntity() })
-            for (r in rows) {
-                val song = r.songs ?: continue
-                val local = playlists.getByRemoteId(r.playlistId) ?: continue
-                val isrc = song.isrc()
-                if (pending.has(SyncTypes.PLS, "${local.id}|$isrc")) continue   // local change not pushed yet wins
-                if (r.deletedAt != null) playlistTracks.remove(local.id, isrc)
-                else playlistTracks.upsert(PlaylistTrackCrossRef(local.id, isrc, r.position))
+        // If playlists failed, playlist_songs rows could not find their playlist, and the cursor would skip them forever.
+        if (playlistsOk) guarded(errors) {
+            pageThrough<PlaylistSongPull>(
+                "playlist_songs", "playlist_id,position,updated_at,deleted_at,$SONG_EMBED", CUR_PLAYLIST_SONGS,
+                listOf("playlist_id", "song_id"), { it.updatedAt },
+            ) { rows ->
+                trackDao.insertIgnore(rows.filter { it.deletedAt == null }.mapNotNull { it.songs?.toTrack()?.toEntity() })
+                for (r in rows) {
+                    val song = r.songs ?: continue
+                    val local = playlists.getByRemoteId(r.playlistId) ?: continue
+                    val isrc = song.isrc()
+                    if (pending.has(SyncTypes.PLS, "${local.id}|$isrc")) continue   // local change not pushed yet wins
+                    if (r.deletedAt != null) playlistTracks.remove(local.id, isrc)
+                    else playlistTracks.upsert(PlaylistTrackCrossRef(local.id, isrc, r.position))
+                }
             }
         }
 
-        pageThrough<FavoritePull>(
-            "favorites", "created_at,updated_at,deleted_at,$SONG_EMBED", CUR_FAVORITES, { it.updatedAt },
-        ) { rows ->
-            trackDao.insertIgnore(rows.filter { it.deletedAt == null }.mapNotNull { it.songs?.toTrack()?.toEntity() })
-            for (r in rows) {
-                val isrc = r.songs?.isrc() ?: continue
-                if (pending.has(SyncTypes.FAV, isrc)) continue
-                if (r.deletedAt != null) favorites.remove(isrc) else favorites.add(FavoriteEntity(isrc, ms(r.createdAt)))
+        guarded(errors) {
+            pageThrough<FavoritePull>(
+                "favorites", "created_at,updated_at,deleted_at,$SONG_EMBED", CUR_FAVORITES, listOf("song_id"), { it.updatedAt },
+            ) { rows ->
+                trackDao.insertIgnore(rows.filter { it.deletedAt == null }.mapNotNull { it.songs?.toTrack()?.toEntity() })
+                for (r in rows) {
+                    val isrc = r.songs?.isrc() ?: continue
+                    if (pending.has(SyncTypes.FAV, isrc)) continue
+                    if (r.deletedAt != null) favorites.remove(isrc) else favorites.add(FavoriteEntity(isrc, ms(r.createdAt)))
+                }
             }
         }
 
-        pageThrough<FollowPull>(
-            "artist_follows", "provider,provider_artist_id,name,artwork_url,created_at,updated_at,deleted_at",
-            CUR_FOLLOWS, { it.updatedAt },
-        ) { rows ->
-            for (r in rows) {
-                val key = "${r.provider}:${r.providerArtistId}"
-                if (pending.has(SyncTypes.FOLLOW, key)) continue          // local change not pushed yet wins
-                if (r.deletedAt != null) follows.remove(key) else follows.add(FollowEntity(key, r.name, r.artworkUrl, ms(r.createdAt)))
+        guarded(errors) {
+            pageThrough<FollowPull>(
+                "artist_follows", "provider,provider_artist_id,name,artwork_url,created_at,updated_at,deleted_at",
+                CUR_FOLLOWS, listOf("provider", "provider_artist_id"), { it.updatedAt },
+            ) { rows ->
+                for (r in rows) {
+                    val key = "${r.provider}:${r.providerArtistId}"
+                    if (pending.has(SyncTypes.FOLLOW, key)) continue          // local change not pushed yet wins
+                    if (r.deletedAt != null) follows.remove(key) else follows.add(FollowEntity(key, r.name, r.artworkUrl, ms(r.createdAt)))
+                }
             }
         }
     }
 
-    /** Reads every row with updated_at >= cursor (idempotent re-apply of the boundary row), then advances the cursor. */
+    /**
+     * Reads every row with updated_at >= (cursor - overlap), then advances the cursor. Re-applying a few rows is
+     * harmless (every apply is idempotent and respects pending local changes); the overlap covers transactions that
+     * committed after a newer one. Paging is ordered by updated_at + primary key, so rows sharing a timestamp are never
+     * skipped or repeated between pages.
+     */
     private suspend inline fun <reified T : Any> pageThrough(
         table: String,
         columns: String,
         cursorName: String,
+        tieBreak: List<String>,
         updatedAt: (T) -> String,
         apply: suspend (List<T>) -> Unit,
     ) {
-        val start = state.get(cursorName) ?: EPOCH
-        var max = start
+        val cursor = state.get(cursorName) ?: EPOCH
+        val start = overlapStart(cursor)
+        var max = cursor
         var from = 0L
         while (true) {
             val rows = supabase.from(table).select(Columns.raw(columns)) {
                 filter { gte("updated_at", start) }
                 order("updated_at", Order.ASCENDING)
+                tieBreak.forEach { order(it, Order.ASCENDING) }
                 range(from, from + PAGE - 1)
             }.decodeList<T>()
             if (rows.isEmpty()) break
@@ -282,12 +496,17 @@ class SyncEngine @Inject constructor(
         state.put(SyncStateEntity(cursorName, max))
     }
 
+    private fun overlapStart(cursor: String): String =
+        if (cursor == EPOCH) EPOCH
+        else runCatching { OffsetDateTime.parse(cursor).toInstant().minusSeconds(OVERLAP_SECONDS).toString() }.getOrDefault(EPOCH)
+
     private fun ms(timestamp: String): Long = OffsetDateTime.parse(timestamp).toInstant().toEpochMilli()
 
     private companion object {
         const val EPOCH = "1970-01-01T00:00:00+00:00"
         const val PAGE = 500L
-        const val OWNER = "owner"
+        const val OVERLAP_SECONDS = 120L
+        const val OWNER = SYNC_OWNER_KEY
         const val LAST_SYNC = "last_synced_ms"
         const val CUR_PLAYLISTS = "cur_playlists"
         const val CUR_PLAYLIST_SONGS = "cur_playlist_songs"
@@ -295,5 +514,6 @@ class SyncEngine @Inject constructor(
         const val CUR_FOLLOWS = "cur_follows"
         val CURSORS = listOf(CUR_PLAYLISTS, CUR_PLAYLIST_SONGS, CUR_FAVORITES, CUR_FOLLOWS)
         const val TOMBSTONE_WINDOW_MS = 90L * 24 * 60 * 60 * 1000
+        const val RETRY_WINDOW_MS = 7L * 24 * 60 * 60 * 1000
     }
 }

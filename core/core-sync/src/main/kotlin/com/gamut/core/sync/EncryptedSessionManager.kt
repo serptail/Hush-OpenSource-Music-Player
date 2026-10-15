@@ -1,6 +1,7 @@
 package com.gamut.core.sync
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import io.github.jan.supabase.auth.SessionManager
@@ -13,24 +14,41 @@ import kotlinx.serialization.json.Json
 /** Access + refresh tokens live in Android-Keystore-backed encrypted preferences, not plain SharedPreferences. */
 class EncryptedSessionManager(private val context: Context) : SessionManager {
     private val json = Json { ignoreUnknownKeys = true }
-    private val prefs by lazy {
-        EncryptedSharedPreferences.create(
-            context, "gamut_session",
-            MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        )
+
+    private fun open(): SharedPreferences = EncryptedSharedPreferences.create(
+        context, FILE,
+        MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+    )
+
+    /**
+     * A restored phone / changed lock screen can leave the file unreadable (the Keystore key is gone), which would make
+     * every sign-in fail. The tokens are worthless then anyway, so start a fresh file: the user just signs in again.
+     */
+    private val prefs: SharedPreferences by lazy {
+        try { open() } catch (e: Exception) {
+            context.deleteSharedPreferences(FILE)
+            open()
+        }
     }
 
     override suspend fun saveSession(session: UserSession) = withContext(Dispatchers.IO) {
-        prefs.edit().putString(KEY, json.encodeToString(session)).apply()
+        prefs.edit().putString(KEY, json.encodeToString(session)).commit()
+        Unit
     }
 
     override suspend fun loadSession(): UserSession? = withContext(Dispatchers.IO) {
         runCatching { prefs.getString(KEY, null)?.let { json.decodeFromString<UserSession>(it) } }.getOrNull()
     }
 
-    override suspend fun deleteSession() = withContext(Dispatchers.IO) { prefs.edit().remove(KEY).apply() }
+    override suspend fun deleteSession() = withContext(Dispatchers.IO) {
+        prefs.edit().remove(KEY).commit()
+        Unit
+    }
 
-    private companion object { const val KEY = "session" }
+    private companion object {
+        const val FILE = "gamut_session"
+        const val KEY = "session"
+    }
 }

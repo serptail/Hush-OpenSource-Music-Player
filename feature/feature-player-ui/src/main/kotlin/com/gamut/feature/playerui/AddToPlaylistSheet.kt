@@ -1,15 +1,11 @@
 package com.gamut.feature.playerui
 
 import com.gamut.core.designsystem.GamutSheet
-import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
-import com.gamut.core.designsystem.GamutMotion
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,29 +24,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.Check
-import com.adamglin.phosphoricons.light.MusicNote
-import com.gamut.core.designsystem.CoverPalette
-import kotlinx.coroutines.delay
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.Check
+import com.adamglin.phosphoricons.bold.MusicNote
 
 /** What the picker needs to know about a playlist. [coverUrl] is its picked cover, or the art of its last song. */
 data class PlaylistPickerItem(
@@ -61,42 +47,26 @@ data class PlaylistPickerItem(
 )
 
 /**
- * "Add to playlist" sheet. Shows the user's playlists with their covers; tapping one calls [onPick], swaps the
- * title for "Added to playlist", and closes the sheet a moment later.
+ * "Add to playlist" sheet. Shows the user's playlists with their covers. Tapping one calls [onPick] and puts a check
+ * on it; the sheet stays open so the song can go into several playlists. Playlists in [alreadyIn] (the ones that
+ * already hold this song) show the check from the start, and tapping a checked one calls [onRemove] to undo it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AddToPlaylistSheet(
     playlists: List<PlaylistPickerItem>,
-    accent: Color,
+    alreadyIn: Set<String>,
     onPick: (PlaylistPickerItem) -> Unit,
+    onRemove: (PlaylistPickerItem) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var addedId by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(addedId) {
-        if (addedId != null) {
-            delay(900)
-            onDismiss()
-        }
-    }
-
     GamutSheet(onDismiss = onDismiss) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Crossfade(targetState = addedId != null, animationSpec = tween(GamutMotion.CONTENT_MS), label = "add-title") { added ->
-                if (added) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(PhosphorIcons.Light.Check, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
-                        Spacer(Modifier.width(10.dp))
-                        Text("Added to playlist", style = MaterialTheme.typography.titleLarge, color = accent)
-                    }
-                } else {
-                    Text("Add to playlist", style = MaterialTheme.typography.titleLarge, color = ink())
-                }
-            }
-        }
+        Text(
+            "Add to playlist",
+            style = MaterialTheme.typography.titleLarge,
+            color = ink(),
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+        )
 
         if (playlists.isEmpty()) {
             Text(
@@ -108,33 +78,29 @@ internal fun AddToPlaylistSheet(
             return@GamutSheet
         }
 
-        LazyColumn(contentPadding = PaddingValues(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+        LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
             items(playlists, key = { it.id }) { playlist ->
-                val picked = playlist.id == addedId
-                val nameColor by animateColorAsState(if (picked) accent else ink(), tween(GamutMotion.CONTENT_MS), label = "picked-name")
+                val added = playlist.id in alreadyIn
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .clickable(enabled = addedId == null) {
-                            addedId = playlist.id
-                            onPick(playlist)
-                        }
+                        .clickable { if (added) onRemove(playlist) else onPick(playlist) }
                         .padding(horizontal = 24.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    // The note icon sits underneath: it is what you see while the cover loads or when there is none.
                     Box(
                         Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(ink(0.07f)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (playlist.coverUrl != null) {
+                        Icon(PhosphorIcons.Bold.MusicNote, contentDescription = null, tint = ink(0.4f), modifier = Modifier.size(20.dp))
+                        if (!playlist.coverUrl.isNullOrBlank()) {
                             AsyncImage(
                                 model = playlist.coverUrl,
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.size(48.dp),
                             )
-                        } else {
-                            Icon(PhosphorIcons.Light.MusicNote, contentDescription = null, tint = ink(0.5f), modifier = Modifier.size(22.dp))
                         }
                     }
                     Spacer(Modifier.width(14.dp))
@@ -142,7 +108,7 @@ internal fun AddToPlaylistSheet(
                         Text(
                             playlist.name,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = nameColor,
+                            color = ink(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -154,8 +120,8 @@ internal fun AddToPlaylistSheet(
                             )
                         }
                     }
-                    AnimatedVisibility(picked, enter = fadeIn(tween(160)) + scaleIn(tween(220), initialScale = 0.5f)) {
-                        Icon(PhosphorIcons.Light.Check, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
+                    AnimatedVisibility(added, enter = fadeIn(tween(160)) + scaleIn(tween(220), initialScale = 0.5f)) {
+                        Icon(PhosphorIcons.Bold.Check, contentDescription = "In this playlist (tap to remove)", tint = ink(0.85f), modifier = Modifier.size(22.dp))
                     }
                 }
             }

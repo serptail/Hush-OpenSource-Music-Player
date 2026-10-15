@@ -81,21 +81,21 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.fill.CheckCircle
 import com.adamglin.phosphoricons.fill.Heart
 import com.adamglin.phosphoricons.fill.Play
-import com.adamglin.phosphoricons.light.ArrowCircleDown
-import com.adamglin.phosphoricons.light.ArrowLeft
-import com.adamglin.phosphoricons.light.BoxArrowDown
-import com.adamglin.phosphoricons.light.DotsSixVertical
-import com.adamglin.phosphoricons.light.DotsThreeVertical
-import com.adamglin.phosphoricons.light.Plus
-import com.adamglin.phosphoricons.light.ShareNetwork
-import com.adamglin.phosphoricons.light.User
-import com.adamglin.phosphoricons.light.Shuffle
-import com.adamglin.phosphoricons.light.Trash
-import com.adamglin.phosphoricons.light.TrashSimple
+import com.adamglin.phosphoricons.bold.ArrowCircleDown
+import com.adamglin.phosphoricons.bold.ArrowLeft
+import com.adamglin.phosphoricons.bold.BoxArrowDown
+import com.adamglin.phosphoricons.bold.DotsSixVertical
+import com.adamglin.phosphoricons.bold.DotsThreeVertical
+import com.adamglin.phosphoricons.bold.Plus
+import com.adamglin.phosphoricons.bold.ShareNetwork
+import com.adamglin.phosphoricons.bold.User
+import com.adamglin.phosphoricons.bold.Shuffle
+import com.adamglin.phosphoricons.bold.Trash
+import com.adamglin.phosphoricons.bold.TrashSimple
 import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.ShareSheet
 import com.gamut.core.designsystem.ArtistLine
@@ -186,7 +186,7 @@ fun FavoritesScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.size(44.dp).pressScale(onClick = onBack), contentAlignment = Alignment.Center) {
-                    Icon(PhosphorIcons.Light.ArrowLeft, "Back", tint = ink(0.85f), modifier = Modifier.size(22.dp))
+                    Icon(PhosphorIcons.Bold.ArrowLeft, "Back", tint = ink(0.85f), modifier = Modifier.size(22.dp))
                 }
                 Column(Modifier.weight(1f).padding(start = 8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -214,7 +214,7 @@ fun FavoritesScreen(
                     Modifier.pressScale(onClick = { if (songs.isNotEmpty()) onShuffle(songs) }).glass(ShufflePill).padding(horizontal = 16.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(PhosphorIcons.Light.Shuffle, null, tint = ink(), modifier = Modifier.size(16.dp))
+                    Icon(PhosphorIcons.Bold.Shuffle, null, tint = ink(), modifier = Modifier.size(16.dp))
                     Text(
                         "Shuffle",
                         style = MaterialTheme.typography.labelLarge,
@@ -225,7 +225,7 @@ fun FavoritesScreen(
                 if (songs.isNotEmpty()) {
                     Spacer(Modifier.width(4.dp))
                     Box(Modifier.size(40.dp).pressScale(onClick = { showManage = true }), contentAlignment = Alignment.Center) {
-                        Icon(PhosphorIcons.Light.DotsThreeVertical, "Manage favorites", tint = ink(0.85f), modifier = Modifier.size(24.dp))
+                        Icon(PhosphorIcons.Bold.DotsThreeVertical, "Manage favorites", tint = ink(0.85f), modifier = Modifier.size(24.dp))
                     }
                 } else {
                     Spacer(Modifier.width(12.dp))
@@ -611,18 +611,18 @@ private fun TrackActionsSheet(
             SheetAction("Play", PhosphorIcons.Fill.Play) { close(onPlay) }
             when (downloadState) {
                 DownloadState.Done -> SheetAction("Remove download", PhosphorIcons.Fill.CheckCircle) { close(onRemoveDownload) }
-                null, is DownloadState.Failed -> SheetAction("Download", PhosphorIcons.Light.ArrowCircleDown) { close(onDownload) }
+                null, is DownloadState.Failed -> SheetAction("Download", PhosphorIcons.Bold.ArrowCircleDown) { close(onDownload) }
                 else -> Unit   // queued / downloading
             }
             SheetAction(
                 if (splitArtists(track.artist).size > 1) "Go to artist\u2026" else "Go to artist",
-                PhosphorIcons.Light.User,
+                PhosphorIcons.Bold.User,
             ) { close(onGoToArtist) }
-            SheetAction("Share", PhosphorIcons.Light.ShareNetwork) { close(onShare) }
+            SheetAction("Share", PhosphorIcons.Bold.ShareNetwork) { close(onShare) }
             if (onAddToPlaylist != null) {
-                SheetAction("Add to playlist", PhosphorIcons.Light.Plus) { close(onAddToPlaylist) }
+                SheetAction("Add to playlist", PhosphorIcons.Bold.Plus) { close(onAddToPlaylist) }
             }
-            SheetAction("Remove from favorites", PhosphorIcons.Light.Trash, SheetDestructive) {
+            SheetAction("Remove from favorites", PhosphorIcons.Bold.Trash, SheetDestructive) {
                 close {
                     onRemove()
                     notifier.success("Removed from favorites")

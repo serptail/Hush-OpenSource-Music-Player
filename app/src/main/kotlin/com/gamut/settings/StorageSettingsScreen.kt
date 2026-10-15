@@ -1,6 +1,5 @@
 package com.gamut.settings
 
-import android.text.format.DateUtils
 import android.text.format.Formatter
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -17,6 +16,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -45,22 +46,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.CaretRight
-import com.adamglin.phosphoricons.light.Check
-import com.adamglin.phosphoricons.light.Clock
-import com.adamglin.phosphoricons.light.DownloadSimple
-import com.adamglin.phosphoricons.light.MusicNote
-import com.adamglin.phosphoricons.light.MusicNotes
-import com.adamglin.phosphoricons.light.Ruler
-import com.adamglin.phosphoricons.light.Trash
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.CaretRight
+import com.adamglin.phosphoricons.bold.Check
+import com.adamglin.phosphoricons.bold.DownloadSimple
+import com.adamglin.phosphoricons.bold.MusicNote
+import com.adamglin.phosphoricons.bold.Trash
 import com.gamut.core.designsystem.GamutMotion
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNotifier
@@ -89,7 +86,7 @@ private sealed interface Confirm {
 
 private val SortChoices = SongSort.entries.map { Choice(it, it.label) }
 private val CacheLimitChoices = listOf(
-    Choice(0, "No limit", "The cache grows until you clear it"),
+    Choice(0, "No limit"),
     Choice(250, "250 MB"),
     Choice(500, "500 MB"),
     Choice(1_000, "1 GB"),
@@ -154,18 +151,8 @@ fun StorageSettingsScreen(
 
     GamutPage(title = "Storage & Downloads", onBack = onBack, nowPlaying = nowPlaying) {
 
-        SoftHeader("Overview")
+        SoftHeader("Used by Gamut")
         UsageHero(snap, fmt)
-        Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatTile(PhosphorIcons.Light.MusicNotes, "Songs offline", stats.count.toString(), Modifier.weight(1f))
-            StatTile(PhosphorIcons.Light.DownloadSimple, "Used by downloads", fmt(stats.bytes), Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatTile(PhosphorIcons.Light.Clock, "Offline playtime", if (stats.count == 0) "\u2013" else "\u2248 " + playtime(stats.playtimeMs), Modifier.weight(1f))
-            StatTile(PhosphorIcons.Light.Ruler, "Average song", if (stats.count == 0) "\u2013" else fmt(stats.averageBytes), Modifier.weight(1f))
-        }
 
         QueueCard(
             manager = vm.downloads,
@@ -178,7 +165,7 @@ fun StorageSettingsScreen(
         SoftHeader("Your downloads")
         SoftCard {
             Column(Modifier.softResize()) {
-                Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+                if (songs.isNotEmpty()) Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             if (songs.size == 1) "1 song" else "${songs.size} songs",
@@ -242,79 +229,58 @@ fun StorageSettingsScreen(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), centered = true,
                         ) { visible += PAGE }
                     }
+                    SoftDivider()
+                    TextAction(
+                        "Delete all downloads", modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        centered = true, color = GamutDestructive,
+                    ) { confirm = Confirm.DeleteAll }
                 }
-            }
-        }
-        AnimatedVisibility(songs.isNotEmpty(), enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
-            Column {
-                Spacer(Modifier.height(12.dp))
-                DestructiveButton("Delete all downloads \u00B7 ${fmt(stats.bytes)}", { confirm = Confirm.DeleteAll }, Modifier.fillMaxWidth())
             }
         }
 
         // ---------------- Cache ----------------
         SoftHeader("Cache")
         SoftCard {
-            StorageValueRow(
-                "Images & temporary files",
-                value = fmt(snap?.imageCacheBytes ?: 0L),
-                subtitle = "Artwork and other files that are fetched again when needed.",
-                onClick = { if ((snap?.imageCacheBytes ?: 0L) > 0) confirm = Confirm.ClearImages else notifier.info("Already empty") },
-            )
-            SoftDivider()
-            StorageValueRow(
-                "Discover & search",
-                value = fmt(snap?.discoverCacheBytes ?: 0L),
-                subtitle = "Charts, search results and stream links. Rebuilt on the next load.",
-                onClick = { confirm = Confirm.ClearDiscover },
-            )
-            SoftDivider()
-            StorageValueRow(
-                "Cache limit",
-                value = limitLabel(cfg.cacheLimitMb),
-                subtitle = "When the image cache passes this, the oldest files go first.",
-                onClick = { dialog = StorageDialog.CACHE_LIMIT },
-            )
+            Column(Modifier.softResize()) {
+                CacheRow(
+                    "Images & temporary files",
+                    fmt(snap?.imageCacheBytes ?: 0L), (snap?.imageCacheBytes ?: 0L) > 0,
+                ) { confirm = Confirm.ClearImages }
+                SoftDivider()
+                CacheRow(
+                    "Discover & search",
+                    fmt(snap?.discoverCacheBytes ?: 0L), (snap?.discoverCacheBytes ?: 0L) > 0,
+                ) { confirm = Confirm.ClearDiscover }
+                SoftDivider()
+                TextAction(
+                    "Clear all cache", modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    centered = true, color = GamutDestructive,
+                ) { confirm = Confirm.ClearAllCache }
+            }
         }
-        Spacer(Modifier.height(12.dp))
-        DestructiveButton("Clear all cache \u00B7 ${fmt(snap?.cacheBytes ?: 0L)}", { confirm = Confirm.ClearAllCache }, Modifier.fillMaxWidth())
 
         // ---------------- Settings ----------------
-        SoftHeader("Download settings")
+        SoftHeader("Settings")
         SoftCard {
             SoftSwitchRow(
                 "Download on Wi-Fi only",
                 checked = cfg.wifiOnly,
                 onChange = { v -> vm.settings.update { it.copy(wifiOnly = v) } },
-                subtitle = "On mobile data, queued songs wait until you are back on Wi-Fi.",
             )
             SoftDivider()
             StorageValueRow(
                 "Download quality",
                 value = cfg.downloadQuality.label,
-                subtitle = cfg.downloadQuality.hint,
                 onClick = { dialog = StorageDialog.QUALITY },
+            )
+            SoftDivider()
+            StorageValueRow(
+                "Cache limit",
+                value = limitLabel(cfg.cacheLimitMb),
+                onClick = { dialog = StorageDialog.CACHE_LIMIT },
             )
         }
 
-        // ---------------- Details ----------------
-        SoftHeader("Details")
-        SoftCard {
-            Column(Modifier.softResize()) {
-                InfoRow("Free on this device", snap?.let { fmt(it.deviceFreeBytes) + " of " + fmt(it.deviceTotalBytes) } ?: "\u2026")
-                SoftDivider()
-                InfoRow("Formats", if (stats.count == 0) "\u2013" else "Opus ${stats.opus} \u00B7 AAC ${stats.aac}")
-                SoftDivider()
-                InfoRow("Largest song", stats.largest?.let { it.title + " \u00B7 " + fmt(it.bytes) } ?: "\u2013")
-                SoftDivider()
-                InfoRow(
-                    "Last download",
-                    if (stats.newestMs > 0) DateUtils.getRelativeTimeSpanString(stats.newestMs, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString() else "\u2013",
-                )
-                SoftDivider()
-                InfoRow("App data", fmt(snap?.appDataBytes ?: 0L), "Library, playlists and the song engine. Not removable here.")
-            }
-        }
         AnimatedVisibility((snap?.leftoverCount ?: 0) > 0, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
             Column {
                 SoftHeader("Tidy up")
@@ -322,7 +288,6 @@ fun StorageSettingsScreen(
                     StorageValueRow(
                         "Leftover files",
                         value = fmt(snap?.leftoverBytes ?: 0L),
-                        subtitle = "${snap?.leftoverCount ?: 0} files that no song uses. Safe to delete.",
                         onClick = { confirm = Confirm.CleanLeftovers },
                     )
                 }
@@ -334,14 +299,14 @@ fun StorageSettingsScreen(
     when (val c = confirm) {
         is Confirm.DeleteSong -> GamutDialog(
             title = "Delete this song?",
-            body = "\u201C${c.song.title}\u201D is removed from this device (${fmt(c.song.bytes)}). It stays in your playlists and favorites, and you can download it again any time.",
+            body = "\u201C${c.song.title}\u201D will be removed from this device.",
             confirmLabel = "Delete", destructive = true,
             onDismiss = { confirm = null },
             onConfirm = { deleteSongs(listOf(c.song.isrc), "Deleted \u201C${c.song.title}\u201D"); confirm = null },
         )
         is Confirm.DeleteSelected -> GamutDialog(
             title = if (c.ids.size == 1) "Delete 1 song?" else "Delete ${c.ids.size} songs?",
-            body = "They are removed from this device everywhere in the app. Playlists and favorites are not touched.",
+            body = "They will be removed from this device.",
             confirmLabel = "Delete", destructive = true,
             onDismiss = { confirm = null },
             onConfirm = {
@@ -351,21 +316,21 @@ fun StorageSettingsScreen(
         )
         Confirm.DeleteAll -> GamutDialog(
             title = "Delete all downloads?",
-            body = "${songs.size} songs (${fmt(stats.bytes)}) are removed from this device and anything still downloading is cancelled. Playlists and favorites are not touched.",
+            body = "${songs.size} songs will be removed from this device.",
             confirmLabel = "Delete all", destructive = true,
             onDismiss = { confirm = null },
             onConfirm = { vm.deleteAll(); selecting = false; selected = emptySet(); confirm = null; notifier.success("All downloads deleted") },
         )
-        Confirm.ClearImages -> ClearDialog("Clear images & temporary files?", "Artwork is downloaded again the next time it is shown.", { confirm = null }) {
+        Confirm.ClearImages -> ClearDialog("Clear images & temporary files?", "${fmt(snap?.imageCacheBytes ?: 0L)} will be freed.", { confirm = null }) {
             vm.clear(CacheTarget.IMAGES) { notifier.success(if (it > 0) "Freed ${fmt(it)}" else "Nothing to clear") }; confirm = null
         }
-        Confirm.ClearDiscover -> ClearDialog("Clear Discover & search cache?", "Charts and search results load fresh the next time you open them.", { confirm = null }) {
+        Confirm.ClearDiscover -> ClearDialog("Clear Discover & search cache?", "${fmt(snap?.discoverCacheBytes ?: 0L)} will be freed.", { confirm = null }) {
             vm.clear(CacheTarget.DISCOVER) { notifier.success(if (it > 0) "Freed ${fmt(it)}" else "Cache cleared") }; confirm = null
         }
-        Confirm.ClearAllCache -> ClearDialog("Clear all cache?", "Downloads, playlists and favorites are not affected. Some screens may take a moment longer to load once.", { confirm = null }) {
+        Confirm.ClearAllCache -> ClearDialog("Clear all cache?", "${fmt(snap?.cacheBytes ?: 0L)} will be freed.", { confirm = null }) {
             vm.clear(CacheTarget.ALL) { notifier.success(if (it > 0) "Freed ${fmt(it)}" else "Cache was already empty") }; confirm = null
         }
-        Confirm.CleanLeftovers -> ClearDialog("Delete leftover files?", "These files are not linked to any song, so nothing in the app changes.", { confirm = null }) {
+        Confirm.CleanLeftovers -> ClearDialog("Delete leftover files?", "${fmt(snap?.leftoverBytes ?: 0L)} will be freed.", { confirm = null }) {
             vm.cleanLeftovers { notifier.success(if (it > 0) "Freed ${fmt(it)}" else "Nothing to clean") }; confirm = null
         }
         null -> Unit
@@ -393,11 +358,6 @@ fun StorageSettingsScreen(
 
 private fun limitLabel(mb: Int) = CacheLimitChoices.firstOrNull { it.value == mb }?.label ?: "$mb MB"
 
-private fun playtime(ms: Long): String {
-    val minutes = ms / 60_000L
-    return if (minutes >= 60) "${minutes / 60} h ${minutes % 60} min" else "$minutes min"
-}
-
 // ======================================================================================================
 // Pieces
 // ======================================================================================================
@@ -407,6 +367,7 @@ private fun ClearDialog(title: String, body: String, onDismiss: () -> Unit, onCo
     GamutDialog(title = title, body = body, confirmLabel = "Clear", destructive = true, onDismiss = onDismiss, onConfirm = onConfirm)
 
 /** Big number + a bar that shows what the app's storage is made of, and how much of the device it takes. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun UsageHero(snap: StorageSnapshot?, fmt: (Long) -> String) {
     val spec = tween<Float>(700, easing = GamutMotion.Standard)
@@ -415,23 +376,21 @@ private fun UsageHero(snap: StorageSnapshot?, fmt: (Long) -> String) {
     val cache by animateFloatAsState((snap?.cacheBytes ?: 0L).toFloat(), spec, label = "seg-cache")
     val other by animateFloatAsState(((snap?.appDataBytes ?: 0L) + (snap?.leftoverBytes ?: 0L)).toFloat(), spec, label = "seg-other")
     val shownTotal by animateFloatAsState(total.toFloat(), spec, label = "hero-total")
-    val deviceShare by animateFloatAsState(
-        if (snap == null || snap.deviceTotalBytes <= 0) 0f else (total.toFloat() / snap.deviceTotalBytes).coerceIn(0f, 1f),
-        spec, label = "device-share",
-    )
     val accent = MaterialTheme.colorScheme.primary
     val cacheTone = ink(0.55f)
     val otherTone = ink(0.22f)
 
     SoftCard {
-        Column(Modifier.softResize().padding(20.dp)) {
-            Text("Used by Gamut", style = MaterialTheme.typography.labelMedium, color = ink(0.55f))
+        Column(Modifier.softResize().padding(horizontal = 20.dp, vertical = 18.dp)) {
             Text(
                 if (snap == null) "\u2026" else fmt(shownTotal.toLong()),
-                style = MaterialTheme.typography.headlineLarge, color = ink(), modifier = Modifier.padding(top = 2.dp),
+                style = MaterialTheme.typography.headlineLarge, color = ink(),
             )
-            Spacer(Modifier.height(18.dp))
-            Row(Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp)).background(ink(0.08f))) {
+            Spacer(Modifier.height(16.dp))
+            Row(
+                Modifier.fillMaxWidth().height(8.dp).clip(CircleShape).background(ink(0.08f)),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
                 val sum = downloads + cache + other
                 if (sum > 0f) {
                     if (downloads > 0f) Box(Modifier.weight(downloads / sum).fillMaxHeight().background(accent))
@@ -440,45 +399,23 @@ private fun UsageHero(snap: StorageSnapshot?, fmt: (Long) -> String) {
                 }
             }
             Spacer(Modifier.height(14.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                LegendItem(accent, "Downloads", fmt(snap?.downloadsBytes ?: 0L), Modifier.weight(1f))
-                LegendItem(cacheTone, "Cache", fmt(snap?.cacheBytes ?: 0L), Modifier.weight(1f))
-                LegendItem(otherTone, "App data", fmt((snap?.appDataBytes ?: 0L) + (snap?.leftoverBytes ?: 0L)), Modifier.weight(1f))
-            }
-            if (snap != null && snap.deviceTotalBytes > 0) {
-                Spacer(Modifier.height(20.dp))
-                Box(Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(ink(0.08f))) {
-                    Box(Modifier.fillMaxWidth(deviceShare.coerceAtLeast(0.01f)).fillMaxHeight().background(accent, CircleShape))
-                }
-                Text(
-                    "${fmt(snap.deviceFreeBytes)} free of ${fmt(snap.deviceTotalBytes)} on this device",
-                    style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 8.dp),
-                )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                LegendItem(accent, "Downloads", fmt(snap?.downloadsBytes ?: 0L))
+                LegendItem(cacheTone, "Cache", fmt(snap?.cacheBytes ?: 0L))
+                LegendItem(otherTone, "App data", fmt((snap?.appDataBytes ?: 0L) + (snap?.leftoverBytes ?: 0L)))
             }
         }
     }
 }
 
 @Composable
-private fun LegendItem(color: Color, label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(8.dp).background(color, CircleShape))
-            Text(label, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), maxLines = 1, modifier = Modifier.padding(start = 6.dp))
-        }
-        Text(value, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, modifier = Modifier.padding(top = 2.dp))
-    }
-}
-
-@Composable
-private fun StatTile(icon: ImageVector, label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier.clip(RoundedCornerShape(22.dp)).background(ink(0.07f)).padding(16.dp)) {
-        Icon(icon, null, tint = ink(0.85f), modifier = Modifier.size(22.dp))
-        Spacer(Modifier.height(16.dp))
-        Crossfade(value, animationSpec = tween(GamutMotion.CONTENT_MS), label = "tile-value") {
-            Text(it, style = MaterialTheme.typography.titleLarge, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+private fun LegendItem(color: Color, label: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(8.dp).background(color, CircleShape))
+        Text(
+            "$label ($value)", style = MaterialTheme.typography.bodyMedium, color = ink(0.7f),
+            maxLines = 1, modifier = Modifier.padding(start = 6.dp),
+        )
     }
 }
 
@@ -560,7 +497,7 @@ private fun SongRow(
                 if (pick) SelectDot(checked) else Box(
                     Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(ink(0.08f)),
                     contentAlignment = Alignment.Center,
-                ) { Icon(PhosphorIcons.Light.MusicNote, null, tint = ink(0.7f), modifier = Modifier.size(22.dp)) }
+                ) { Icon(PhosphorIcons.Bold.MusicNote, null, tint = ink(0.7f), modifier = Modifier.size(22.dp)) }
             }
         }
         Spacer(Modifier.width(14.dp))
@@ -573,7 +510,7 @@ private fun SongRow(
         }
         AnimatedVisibility(!selecting, enter = fadeIn(tween(160)), exit = fadeOut(tween(100))) {
             Box(Modifier.size(40.dp).pressScale(onClick = onDelete), contentAlignment = Alignment.Center) {
-                Icon(PhosphorIcons.Light.Trash, "Delete", tint = ink(0.6f), modifier = Modifier.size(20.dp))
+                Icon(PhosphorIcons.Bold.Trash, "Delete", tint = ink(0.6f), modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -589,7 +526,7 @@ private fun SelectDot(checked: Boolean) {
         contentAlignment = Alignment.Center,
     ) {
         AnimatedVisibility(checked, enter = fadeIn(tween(120)) + scaleIn(tween(160), initialScale = 0.6f), exit = fadeOut(tween(100))) {
-            Icon(PhosphorIcons.Light.Check, null, tint = onInk, modifier = Modifier.size(15.dp))
+            Icon(PhosphorIcons.Bold.Check, null, tint = onInk, modifier = Modifier.size(15.dp))
         }
     }
 }
@@ -597,13 +534,9 @@ private fun SelectDot(checked: Boolean) {
 @Composable
 private fun EmptyDownloads() {
     Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(PhosphorIcons.Light.DownloadSimple, null, tint = ink(0.4f), modifier = Modifier.size(34.dp))
+        Icon(PhosphorIcons.Bold.DownloadSimple, null, tint = ink(0.4f), modifier = Modifier.size(34.dp))
         Spacer(Modifier.height(12.dp))
-        Text("Nothing downloaded yet", style = MaterialTheme.typography.titleMedium, color = ink())
-        Text(
-            "Download a song or a whole playlist and it plays without a connection. It will show up here.",
-            style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp),
-        )
+        Text("No downloads yet", style = MaterialTheme.typography.titleMedium, color = ink(0.6f))
     }
 }
 
@@ -623,7 +556,7 @@ private fun StorageValueRow(title: String, value: String, subtitle: String? = nu
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = ink(), modifier = Modifier.weight(1f).padding(end = 12.dp))
             Text(value, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1)
-            Icon(PhosphorIcons.Light.CaretRight, null, tint = ink(0.4f), modifier = Modifier.padding(start = 6.dp).size(14.dp))
+            Icon(PhosphorIcons.Bold.CaretRight, null, tint = ink(0.4f), modifier = Modifier.padding(start = 6.dp).size(14.dp))
         }
         if (subtitle != null) {
             Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 4.dp))
@@ -631,21 +564,33 @@ private fun StorageValueRow(title: String, value: String, subtitle: String? = nu
     }
 }
 
+/** Cache line: what it is, how big it is, and a small Clear pill (greyed out when there is nothing to clear). */
 @Composable
-private fun InfoRow(title: String, value: String, subtitle: String? = null) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = ink(), modifier = Modifier.weight(1f).padding(end = 12.dp))
-            Text(value, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1.4f), textAlign = TextAlign.End)
+private fun CacheRow(title: String, size: String, hasData: Boolean, onClear: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 14.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = ink())
+            Text(
+                size,
+                style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 2.dp),
+            )
         }
-        if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 2.dp))
+        Text(
+            "Clear", style = MaterialTheme.typography.labelLarge, color = ink(if (hasData) 0.85f else 0.35f),
+            modifier = Modifier
+                .alpha(if (hasData) 1f else 0.6f)
+                .pressScale(onClick = { if (hasData) onClear() })
+                .clip(CircleShape).background(ink(0.08f)).padding(horizontal = 14.dp, vertical = 7.dp),
+        )
     }
 }
 
 @Composable
-private fun TextAction(label: String, modifier: Modifier = Modifier, centered: Boolean = false, onClick: () -> Unit) {
+private fun TextAction(
+    label: String, modifier: Modifier = Modifier, centered: Boolean = false, color: Color = ink(0.85f), onClick: () -> Unit,
+) {
     Text(
-        label, style = MaterialTheme.typography.titleMedium, color = ink(0.85f),
+        label, style = MaterialTheme.typography.titleMedium, color = color,
         textAlign = if (centered) TextAlign.Center else TextAlign.Start,
         modifier = modifier.pressScale(onClick = onClick).padding(horizontal = 8.dp, vertical = 10.dp),
     )

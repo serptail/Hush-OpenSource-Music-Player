@@ -41,6 +41,8 @@ interface PlaylistDao {
     suspend fun updateMeta(id: Long, name: String, tags: String)
     @Query("UPDATE playlists SET remoteId = :remoteId WHERE id = :id")
     suspend fun setRemoteId(id: Long, remoteId: String)
+    /** Account switch: server ids belong to the previous account and must not be pushed to the new one. */
+    @Query("UPDATE playlists SET remoteId = NULL") suspend fun clearRemoteIds()
 }
 
 // An abstract class (not an interface) so it can hold the @Transaction method below.

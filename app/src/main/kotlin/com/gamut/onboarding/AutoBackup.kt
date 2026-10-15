@@ -13,17 +13,26 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import java.io.File
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-/** Daily JSON backup of favorites + playlists, kept on the device (no cloud). The Profile screen can switch it off. */
+/** Daily JSON backup of favorites + playlists + followed artists, kept on the device (no cloud). */
 object AutoBackup {
     private const val WORK = "gamut-auto-backup"
+    private const val PREFIX = "gamut-backup-"
+    private const val EXT = ".json"
     private const val KEEP = 10
+    private val writeLock = Mutex()
+
+    data class BackupFile(val file: File, val name: String, val lastModified: Long, val sizeBytes: Long)
 
     fun schedule(context: Context) {
         val request = PeriodicWorkRequestBuilder<AutoBackupWorker>(1, TimeUnit.DAYS)
@@ -37,20 +46,48 @@ object AutoBackup {
         WorkManager.getInstance(context).cancelUniqueWork(WORK)
     }
 
-    /** Call this (with ProfileStore.autoBackup.value) wherever schedule() is called at launch, so "off" stays off. */
     fun apply(context: Context, enabled: Boolean) = if (enabled) schedule(context) else cancel(context)
 
     fun backupDir(context: Context) = File(context.filesDir, "backups")
 
-    /** Writes today's backup (same-day reruns overwrite) and prunes to the newest [KEEP]. Used by the worker and "Back up now". */
-    suspend fun write(context: Context, exporter: DataExporter): File {
-        val bytes = exporter.export(password = null)
-        return withContext(Dispatchers.IO) {
+    /** "Clear local data" must also remove these: they hold the whole library of whoever was signed in. */
+    suspend fun deleteAll(context: Context) = writeLock.withLock {
+        withContext(Dispatchers.IO) { backupDir(context).listFiles()?.forEach { it.delete() } }
+    }
+
+    /** Newest first. Only files this class wrote (foreign files in the folder are never listed or deleted). */
+    fun list(context: Context): List<BackupFile> =
+        backupDir(context).listFiles { f -> f.isFile && f.name.startsWith(PREFIX) && f.name.endsWith(EXT) }
+            ?.sortedByDescending { it.name }
+            ?.map { BackupFile(it, it.name, it.lastModified(), it.length()) }
+            .orEmpty()
+
+    /**
+     * Writes today's backup (same-day reruns replace it) and prunes to the newest [KEEP].
+     * Returns null when the library is empty: an empty backup is never written, otherwise ten days after a wipe the
+     * rotation would have deleted every good backup.
+     * The file appears atomically (temp file + rename), so a crash can never leave a half-written or lost backup.
+     */
+    suspend fun write(context: Context, exporter: DataExporter): File? = writeLock.withLock {
+        val bytes = exporter.exportOrNull(password = null) ?: return@withLock null
+        withContext(Dispatchers.IO) {
             val dir = backupDir(context).apply { mkdirs() }
             val day = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-            val file = File(dir, "gamut-backup-$day.json").apply { writeBytes(bytes) }
-            dir.listFiles()?.sortedByDescending { it.name }?.drop(KEEP)?.forEach { it.delete() }
-            file
+            val target = File(dir, "$PREFIX$day$EXT")
+            val tmp = File(dir, "$PREFIX$day.tmp")
+            try {
+                tmp.outputStream().use { it.write(bytes); it.flush(); it.fd.sync() }
+                if (tmp.length() != bytes.size.toLong()) throw IOException("Backup was not written completely")
+                if (!tmp.renameTo(target)) {
+                    target.delete()
+                    if (!tmp.renameTo(target)) throw IOException("Could not save the backup file")
+                }
+            } finally {
+                tmp.delete()
+            }
+            dir.listFiles { f -> f.name.endsWith(".tmp") }?.forEach { it.delete() }
+            list(context).drop(KEEP).forEach { it.file.delete() }
+            target
         }
     }
 }
@@ -61,9 +98,14 @@ class AutoBackupWorker(context: Context, params: WorkerParameters) : CoroutineWo
     @InstallIn(SingletonComponent::class)
     interface Deps { fun exporter(): DataExporter }
 
-    override suspend fun doWork(): Result = runCatching {
+    override suspend fun doWork(): Result = try {
         val exporter = EntryPointAccessors.fromApplication(applicationContext, Deps::class.java).exporter()
-        AutoBackup.write(applicationContext, exporter)
+        AutoBackup.write(applicationContext, exporter)   // null (empty library) is fine: nothing to do
         Result.success()
-    }.getOrElse { Result.retry() }
+    } catch (e: CancellationException) {
+        throw e                                         // never swallow cancellation
+    } catch (e: Exception) {
+        // a few retries for transient trouble, then give up until tomorrow's run instead of retrying forever
+        if (runAttemptCount < 3) Result.retry() else Result.failure()
+    }
 }

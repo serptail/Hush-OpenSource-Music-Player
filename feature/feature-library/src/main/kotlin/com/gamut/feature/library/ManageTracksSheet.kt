@@ -57,13 +57,13 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.fill.Archive
 import com.adamglin.phosphoricons.fill.CheckCircle
-import com.adamglin.phosphoricons.light.BoxArrowDown
-import com.adamglin.phosphoricons.light.DotsSixVertical
-import com.adamglin.phosphoricons.light.Trash
-import com.adamglin.phosphoricons.light.TrashSimple
+import com.adamglin.phosphoricons.bold.BoxArrowDown
+import com.adamglin.phosphoricons.bold.DotsSixVertical
+import com.adamglin.phosphoricons.bold.Trash
+import com.adamglin.phosphoricons.bold.TrashSimple
 import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.model.Track
@@ -263,7 +263,7 @@ internal fun ManageTracksSheet(
                     glyphSize = 22.dp,
                     tint = ink(0.85f),
                     accent = ink(),
-                    idleIcon = PhosphorIcons.Light.BoxArrowDown,   // all of them: box-arrow-down -> (ring) -> archive
+                    idleIcon = PhosphorIcons.Bold.BoxArrowDown,   // all of them: box-arrow-down -> (ring) -> archive
                     doneIcon = PhosphorIcons.Fill.Archive,
                 )
             }
@@ -275,7 +275,7 @@ internal fun ManageTracksSheet(
                         .padding(horizontal = 24.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(PhosphorIcons.Light.Trash, null, tint = ManageDestructive, modifier = Modifier.size(18.dp))
+                    Icon(PhosphorIcons.Bold.Trash, null, tint = ManageDestructive, modifier = Modifier.size(18.dp))
                     Text("Remove downloads", style = MaterialTheme.typography.titleMedium, color = ManageDestructive, modifier = Modifier.padding(start = 18.dp))
                 }
             }
@@ -440,10 +440,10 @@ private fun ManageRow(
             Icon(PhosphorIcons.Fill.CheckCircle, "Available offline", tint = ManageTextSecondary, modifier = Modifier.padding(end = 6.dp).size(15.dp))
         }
         Box(Modifier.size(44.dp).pressScale(onClick = onRemove), contentAlignment = Alignment.Center) {
-            Icon(PhosphorIcons.Light.TrashSimple, removeDescription, tint = ManageDestructive, modifier = Modifier.size(18.dp))
+            Icon(PhosphorIcons.Bold.TrashSimple, removeDescription, tint = ManageDestructive, modifier = Modifier.size(18.dp))
         }
         Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
-            Icon(PhosphorIcons.Light.DotsSixVertical, "Drag to reorder", tint = ink(0.5f), modifier = Modifier.size(18.dp))
+            Icon(PhosphorIcons.Bold.DotsSixVertical, "Drag to reorder", tint = ink(0.5f), modifier = Modifier.size(18.dp))
         }
     }
 }

@@ -40,9 +40,9 @@ import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.Pause
-import com.adamglin.phosphoricons.light.Play
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.Pause
+import com.adamglin.phosphoricons.bold.Play
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -72,7 +72,7 @@ internal fun PlayPauseButton(
             PlayerSpinner(Modifier.size(size * 0.36f), Color.Black, 2.5.dp)
         } else {
             Icon(
-                if (isPlaying) PhosphorIcons.Light.Pause else PhosphorIcons.Light.Play,
+                if (isPlaying) PhosphorIcons.Bold.Pause else PhosphorIcons.Bold.Play,
                 contentDescription = if (isPlaying) "Pause" else "Play",
                 tint = Color.Black,
                 modifier = Modifier.size(size * 0.46f),

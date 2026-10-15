@@ -72,29 +72,29 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.fill.Archive
 import com.adamglin.phosphoricons.fill.CheckCircle
 import com.adamglin.phosphoricons.fill.Heart
 import com.adamglin.phosphoricons.fill.Play
-import com.adamglin.phosphoricons.light.ArrowCircleDown
-import com.adamglin.phosphoricons.light.ArrowDown
-import com.adamglin.phosphoricons.light.ArrowLeft
-import com.adamglin.phosphoricons.light.ArrowUp
-import com.adamglin.phosphoricons.light.BoxArrowDown
-import com.adamglin.phosphoricons.light.DotsThreeVertical
-import com.adamglin.phosphoricons.light.Heart
-import com.adamglin.phosphoricons.light.ImageSquare
-import com.adamglin.phosphoricons.light.MagnifyingGlass
-import com.adamglin.phosphoricons.light.PencilSimple
-import com.adamglin.phosphoricons.light.Plus
-import com.adamglin.phosphoricons.light.RowsPlusTop
-import com.adamglin.phosphoricons.light.ShareNetwork
-import com.adamglin.phosphoricons.light.Shuffle
-import com.adamglin.phosphoricons.light.Trash
-import com.adamglin.phosphoricons.light.User
-import com.adamglin.phosphoricons.light.VinylRecord
-import com.adamglin.phosphoricons.light.X
+import com.adamglin.phosphoricons.bold.ArrowCircleDown
+import com.adamglin.phosphoricons.bold.ArrowDown
+import com.adamglin.phosphoricons.bold.ArrowLeft
+import com.adamglin.phosphoricons.bold.ArrowUp
+import com.adamglin.phosphoricons.bold.BoxArrowDown
+import com.adamglin.phosphoricons.bold.DotsThreeVertical
+import com.adamglin.phosphoricons.bold.Heart
+import com.adamglin.phosphoricons.bold.ImageSquare
+import com.adamglin.phosphoricons.bold.MagnifyingGlass
+import com.adamglin.phosphoricons.bold.PencilSimple
+import com.adamglin.phosphoricons.bold.Plus
+import com.adamglin.phosphoricons.bold.RowsPlusTop
+import com.adamglin.phosphoricons.bold.ShareNetwork
+import com.adamglin.phosphoricons.bold.Shuffle
+import com.adamglin.phosphoricons.bold.Trash
+import com.adamglin.phosphoricons.bold.User
+import com.adamglin.phosphoricons.bold.VinylRecord
+import com.adamglin.phosphoricons.bold.X
 import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
@@ -256,7 +256,7 @@ fun PlaylistScreen(
         val accent = MaterialTheme.colorScheme.primary
         Column(Modifier.fillMaxSize().statusBarsPadding().then(if (searchFocused) Modifier.imePadding() else Modifier)) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                TopIcon(PhosphorIcons.Light.ArrowLeft, "Back", onClick = onBack)
+                TopIcon(PhosphorIcons.Bold.ArrowLeft, "Back", onClick = onBack)
             }
             if (settled && songs.isNotEmpty()) {
                 SearchField(
@@ -382,7 +382,7 @@ fun PlaylistScreen(
                     Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (coverUrl.isNullOrBlank()) {
                             Box(Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)).background(sheetInk(0.08f)), contentAlignment = Alignment.Center) {
-                                Icon(PhosphorIcons.Light.VinylRecord, null, tint = sheetInk(0.6f), modifier = Modifier.size(24.dp))
+                                Icon(PhosphorIcons.Bold.VinylRecord, null, tint = sheetInk(0.6f), modifier = Modifier.size(24.dp))
                             }
                         } else {
                             CoverImage(remember(coverUrl) { resolveCoverUrl(coverUrl, 160) }, Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)))
@@ -393,11 +393,11 @@ fun PlaylistScreen(
                         }
                     }
                     Box(Modifier.fillMaxWidth().padding(vertical = 6.dp).height(1.dp).background(sheetInk(0.10f)))
-                    SheetAction(PhosphorIcons.Light.PencilSimple, "Edit playlist") { closeSheet(state) { startEdit() } }
-                    if (songs.isNotEmpty()) SheetAction(PhosphorIcons.Light.RowsPlusTop, "Manage playlist") { closeSheet(state) { showManage = true } }
-                    SheetAction(PhosphorIcons.Light.ImageSquare, "Change cover art") { pickQuickCover(); closeSheet(state) }
-                    if (streamedDownloaded > 0) SheetAction(PhosphorIcons.Light.X, "Remove downloads") { closeSheet(state) { confirmRemoveDownloads = true } }
-                    SheetAction(PhosphorIcons.Light.Trash, "Delete playlist", danger = true) { closeSheet(state) { confirmDelete = true } }
+                    SheetAction(PhosphorIcons.Bold.PencilSimple, "Edit playlist") { closeSheet(state) { startEdit() } }
+                    if (songs.isNotEmpty()) SheetAction(PhosphorIcons.Bold.RowsPlusTop, "Manage playlist") { closeSheet(state) { showManage = true } }
+                    SheetAction(PhosphorIcons.Bold.ImageSquare, "Change cover art") { pickQuickCover(); closeSheet(state) }
+                    if (streamedDownloaded > 0) SheetAction(PhosphorIcons.Bold.X, "Remove downloads") { closeSheet(state) { confirmRemoveDownloads = true } }
+                    SheetAction(PhosphorIcons.Bold.Trash, "Delete playlist", danger = true) { closeSheet(state) { confirmDelete = true } }
                 }
             }
         }
@@ -424,7 +424,7 @@ fun PlaylistScreen(
                     Box(Modifier.size(150.dp).pressScale(onClick = pickDraftCover)) {
                         if (shownCover.isNullOrBlank()) {
                             Box(Modifier.fillMaxSize().clip(HeaderCoverShape).background(sheetInk(0.07f)), contentAlignment = Alignment.Center) {
-                                Icon(PhosphorIcons.Light.Plus, "Add cover", tint = sheetInk(0.6f), modifier = Modifier.size(44.dp))
+                                Icon(PhosphorIcons.Bold.Plus, "Add cover", tint = sheetInk(0.6f), modifier = Modifier.size(44.dp))
                             }
                         } else {
                             CoverImage(remember(shownCover) { resolveCoverUrl(shownCover, 400) }, Modifier.fillMaxSize().clip(HeaderCoverShape))
@@ -433,7 +433,7 @@ fun PlaylistScreen(
                             Modifier.align(Alignment.BottomEnd).padding(8.dp).size(34.dp).background(Color.Black.copy(alpha = 0.55f), CircleShape),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(PhosphorIcons.Light.PencilSimple, "Change cover", tint = Color.White, modifier = Modifier.size(18.dp))
+                            Icon(PhosphorIcons.Bold.PencilSimple, "Change cover", tint = Color.White, modifier = Modifier.size(18.dp))
                         }
                     }
                     if (draftCover != null) {
@@ -541,7 +541,7 @@ private fun SearchField(query: String, onChange: (String) -> Unit, onFocus: (Boo
         modifier.fillMaxWidth().height(42.dp).clip(PillShape).background(ink(0.08f)).padding(start = 14.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(PhosphorIcons.Light.MagnifyingGlass, null, tint = ink(0.6f), modifier = Modifier.size(18.dp))
+        Icon(PhosphorIcons.Bold.MagnifyingGlass, null, tint = ink(0.6f), modifier = Modifier.size(18.dp))
         Box(Modifier.weight(1f).padding(horizontal = 10.dp), contentAlignment = Alignment.CenterStart) {
             if (query.isEmpty()) Text("Search in playlist", style = textStyle, color = ink(0.4f), maxLines = 1)
             BasicTextField(
@@ -557,7 +557,7 @@ private fun SearchField(query: String, onChange: (String) -> Unit, onFocus: (Boo
         }
         if (query.isNotEmpty()) {
             Box(Modifier.size(30.dp).pressScale(onClick = { onChange("") }), contentAlignment = Alignment.Center) {
-                Icon(PhosphorIcons.Light.X, "Clear search", tint = ink(0.7f), modifier = Modifier.size(16.dp))
+                Icon(PhosphorIcons.Bold.X, "Clear search", tint = ink(0.7f), modifier = Modifier.size(16.dp))
             }
         }
     }
@@ -584,7 +584,7 @@ private fun PlaylistHeader(
             if (coverUrl.isNullOrBlank()) {
                 // No song yet: a flat placeholder. No shadow here, a translucent fill over a shadow shows as a dark box.
                 Box(Modifier.fillMaxSize().clip(HeaderCoverShape).background(ink(0.07f)), contentAlignment = Alignment.Center) {
-                    Icon(PhosphorIcons.Light.VinylRecord, null, tint = ink(0.6f), modifier = Modifier.size(56.dp))
+                    Icon(PhosphorIcons.Bold.VinylRecord, null, tint = ink(0.6f), modifier = Modifier.size(56.dp))
                 }
             } else {
                 CoverImage(
@@ -623,7 +623,7 @@ private fun PlaylistHeader(
                 if (songCount > 0) {
                     ActionPill("Play", PhosphorIcons.Fill.Play, filled = true, onClick = onPlay)
                     Spacer(Modifier.width(10.dp))
-                    ActionPill("Shuffle", PhosphorIcons.Light.Shuffle, filled = false, onClick = onShuffle)
+                    ActionPill("Shuffle", PhosphorIcons.Bold.Shuffle, filled = false, onClick = onShuffle)
                 }
                 Spacer(Modifier.weight(1f))
                 if (songCount > 0) {
@@ -632,13 +632,13 @@ private fun PlaylistHeader(
                         onDownload,
                         size = 40.dp,
                         glyphSize = 22.dp,
-                        idleIcon = PhosphorIcons.Light.BoxArrowDown,   // all songs: box-arrow-down -> (ring) -> archive
+                        idleIcon = PhosphorIcons.Bold.BoxArrowDown,   // all songs: box-arrow-down -> (ring) -> archive
                         doneIcon = PhosphorIcons.Fill.Archive,
                     )
                 }
                 if (onMore != null) {
                     Box(Modifier.size(40.dp).pressScale(onClick = onMore), contentAlignment = Alignment.Center) {
-                        Icon(PhosphorIcons.Light.DotsThreeVertical, "Playlist options", tint = ink(0.85f), modifier = Modifier.size(20.dp))
+                        Icon(PhosphorIcons.Bold.DotsThreeVertical, "Playlist options", tint = ink(0.85f), modifier = Modifier.size(20.dp))
                     }
                 }
             }
@@ -719,7 +719,7 @@ private fun PlaylistTrackRow(
         }
         TrackDownloadButton(downloadState, onDownload = onDownload, onCancel = onCancelDownload, onDone = onMore, glyph = 20.dp)
         Box(Modifier.size(40.dp).pressScale(onClick = onMore), contentAlignment = Alignment.Center) {
-            Icon(PhosphorIcons.Light.DotsThreeVertical, "More options", tint = ink(0.7f), modifier = Modifier.size(20.dp))
+            Icon(PhosphorIcons.Bold.DotsThreeVertical, "More options", tint = ink(0.7f), modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -765,19 +765,19 @@ private fun TrackOptionsPanel(
             PanelAction(PhosphorIcons.Fill.Play, "Play", true) { onPlay(); onDismiss() }
             if (!local) when (downloadState) {
                 DownloadState.Done -> PanelAction(PhosphorIcons.Fill.CheckCircle, "Remove download", true) { onRemoveDownload(); onDismiss() }
-                null, is DownloadState.Failed -> PanelAction(PhosphorIcons.Light.ArrowCircleDown, "Download", true) { onDownload(); onDismiss() }
+                null, is DownloadState.Failed -> PanelAction(PhosphorIcons.Bold.ArrowCircleDown, "Download", true) { onDownload(); onDismiss() }
                 else -> Unit   // queued / downloading: the song's own button cancels it
             }
             PanelAction(
-                if (isFavorite) PhosphorIcons.Fill.Heart else PhosphorIcons.Light.Heart,
+                if (isFavorite) PhosphorIcons.Fill.Heart else PhosphorIcons.Bold.Heart,
                 if (isFavorite) "Remove from Favorites" else "Add to Favorites",
                 true,
             ) { onToggleFavorite(); onDismiss() }
-            PanelAction(PhosphorIcons.Light.User, if (splitArtists(track.artist).size > 1) "Go to artist\u2026" else "Go to artist", true) { onGoToArtist(); onDismiss() }
-            PanelAction(PhosphorIcons.Light.ShareNetwork, "Share", true) { onShare(); onDismiss() }
-            PanelAction(PhosphorIcons.Light.ArrowUp, "Move up", canMoveUp) { onMoveUp(); onDismiss() }
-            PanelAction(PhosphorIcons.Light.ArrowDown, "Move down", canMoveDown) { onMoveDown(); onDismiss() }
-            PanelAction(PhosphorIcons.Light.Trash, "Remove from playlist", true) { onRemove(); onDismiss() }
+            PanelAction(PhosphorIcons.Bold.User, if (splitArtists(track.artist).size > 1) "Go to artist\u2026" else "Go to artist", true) { onGoToArtist(); onDismiss() }
+            PanelAction(PhosphorIcons.Bold.ShareNetwork, "Share", true) { onShare(); onDismiss() }
+            PanelAction(PhosphorIcons.Bold.ArrowUp, "Move up", canMoveUp) { onMoveUp(); onDismiss() }
+            PanelAction(PhosphorIcons.Bold.ArrowDown, "Move down", canMoveDown) { onMoveDown(); onDismiss() }
+            PanelAction(PhosphorIcons.Bold.Trash, "Remove from playlist", true) { onRemove(); onDismiss() }
         }
     }
 }

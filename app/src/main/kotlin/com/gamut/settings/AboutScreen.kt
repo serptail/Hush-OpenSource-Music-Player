@@ -31,14 +31,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.ArrowUpRight
-import com.adamglin.phosphoricons.light.Code
-import com.adamglin.phosphoricons.light.GithubLogo
-import com.adamglin.phosphoricons.light.Globe
-import com.adamglin.phosphoricons.light.PaintBrush
-import com.adamglin.phosphoricons.light.Scales
-import com.adamglin.phosphoricons.light.User
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.ArrowUpRight
+import com.adamglin.phosphoricons.bold.Code
+import com.adamglin.phosphoricons.bold.GithubLogo
+import com.adamglin.phosphoricons.bold.Globe
+import com.adamglin.phosphoricons.bold.PaintBrush
+import com.adamglin.phosphoricons.bold.Scales
+import com.adamglin.phosphoricons.bold.User
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.ink
@@ -80,7 +80,7 @@ fun AboutScreen(
         runCatching { uriHandler.openUri(url) }.onFailure { notifier.info("No app can open this link") }
     }
     val external: @Composable () -> Unit = {
-        Icon(PhosphorIcons.Light.ArrowUpRight, null, tint = ink(0.45f), modifier = Modifier.size(18.dp))
+        Icon(PhosphorIcons.Bold.ArrowUpRight, null, tint = ink(0.45f), modifier = Modifier.size(18.dp))
     }
 
     GamutPage(title = "About", onBack = onBack, nowPlaying = nowPlaying) {
@@ -118,34 +118,36 @@ fun AboutScreen(
 
         GroupLabel("Project")
         Cell(
-            "Website", icon = PhosphorIcons.Light.Globe, subtitle = REPO_LABEL,
+            "Website", icon = PhosphorIcons.Bold.Globe, subtitle = REPO_LABEL,
             onClick = { open(REPO_URL) }, trailing = external,
         )
         Cell(
-            "Source code", icon = PhosphorIcons.Light.GithubLogo, subtitle = "Browse, fork and contribute on GitHub",
+            "Source code", icon = PhosphorIcons.Bold.GithubLogo, subtitle = "Browse, fork and contribute on GitHub",
             onClick = { open(REPO_URL) }, trailing = external,
         )
 
         GroupLabel("Credits")
         Cell(
-            "Developer", icon = PhosphorIcons.Light.User, subtitle = AUTHOR_NAME,
+            "Developer", icon = PhosphorIcons.Bold.User, subtitle = AUTHOR_NAME,
             onClick = { open(AUTHOR_URL) }, trailing = external,
         )
         Cell(
-            "Logo", icon = PhosphorIcons.Light.PaintBrush, subtitle = "Designed by $LOGO_AUTHOR_NAME",
+            "Logo", icon = PhosphorIcons.Bold.PaintBrush, subtitle = "Designed by $LOGO_AUTHOR_NAME",
             onClick = { open(LOGO_AUTHOR_URL) }, trailing = external,
         )
 
         GroupLabel("Legal")
         // Put the SPDX name in the subtitle once it is settled (e.g. "GPL-3.0").
         Cell(
-            "Open source license", icon = PhosphorIcons.Light.Scales, subtitle = "Read the license on GitHub",
+            "Open source license", icon = PhosphorIcons.Bold.Scales, subtitle = "Read the license on GitHub",
             onClick = { open(LICENSE_URL) }, trailing = external,
         )
         Cell(
-            "Open source libraries", icon = PhosphorIcons.Light.Code, subtitle = "What Gamut is built on",
+            "Open source libraries", icon = PhosphorIcons.Bold.Code, subtitle = "What Gamut is built on",
             onClick = { showLibraries = true },
         )
+
+        SupportRow()
     }
 
     if (showLibraries) {

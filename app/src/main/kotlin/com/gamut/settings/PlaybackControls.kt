@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -50,8 +51,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.CaretRight
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.CaretRight
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
@@ -142,13 +143,15 @@ fun SoftValueRow(title: String, value: String? = null, subtitle: String? = null,
         RowText(title, subtitle, Modifier.weight(1f))
         if (value != null) {
             Spacer(Modifier.width(12.dp))
+            // Not weighted: two weighted children split the row 50/50, which pushed the value into the middle.
+            // The title column takes all the space left over; a long value is capped and ellipsized instead.
             Text(
                 value, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f),
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 180.dp),
             )
         }
         Spacer(Modifier.width(6.dp))
-        Icon(PhosphorIcons.Light.CaretRight, null, tint = ink(0.4f), modifier = Modifier.size(16.dp))
+        Icon(PhosphorIcons.Bold.CaretRight, null, tint = ink(0.4f), modifier = Modifier.size(16.dp))
     }
 }
 

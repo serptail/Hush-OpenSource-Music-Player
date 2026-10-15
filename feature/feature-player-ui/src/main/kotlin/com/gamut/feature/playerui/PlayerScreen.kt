@@ -63,20 +63,20 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.fill.Heart as HeartFilled
-import com.adamglin.phosphoricons.light.CaretDown
-import com.adamglin.phosphoricons.light.DotsThreeVertical
-import com.adamglin.phosphoricons.light.Heart
-import com.adamglin.phosphoricons.light.ListPlus
-import com.adamglin.phosphoricons.light.Queue
-import com.adamglin.phosphoricons.light.Repeat
-import com.adamglin.phosphoricons.light.RepeatOnce
-import com.adamglin.phosphoricons.light.ShareNetwork
-import com.adamglin.phosphoricons.light.Shuffle
-import com.adamglin.phosphoricons.light.SkipBack
-import com.adamglin.phosphoricons.light.SkipForward
-import com.adamglin.phosphoricons.light.Sparkle
+import com.adamglin.phosphoricons.bold.CaretDown
+import com.adamglin.phosphoricons.bold.DotsThreeVertical
+import com.adamglin.phosphoricons.bold.Heart
+import com.adamglin.phosphoricons.bold.ListPlus
+import com.adamglin.phosphoricons.bold.Queue
+import com.adamglin.phosphoricons.bold.Repeat
+import com.adamglin.phosphoricons.bold.RepeatOnce
+import com.adamglin.phosphoricons.bold.ShareNetwork
+import com.adamglin.phosphoricons.bold.Shuffle
+import com.adamglin.phosphoricons.bold.SkipBack
+import com.adamglin.phosphoricons.bold.SkipForward
+import com.adamglin.phosphoricons.bold.Sparkle
 import com.gamut.core.designsystem.AcrylicHost
 import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.designsystem.LocalCoverPalette
@@ -129,6 +129,10 @@ fun PlayerScreen(
     playlists: List<PlaylistPickerItem> = emptyList(),
     /** Called when the user taps a playlist in the list-plus sheet: add [Track] to the playlist with this id. */
     onAddToPlaylist: (Track, String) -> Unit = { _, _ -> },
+    /** Ids of the playlists that already contain the current track (shown with a check in the list-plus sheet). */
+    playlistIdsWithTrack: Set<String> = emptySet(),
+    /** Called when the user un-checks a playlist in the list-plus sheet: remove [Track] from the playlist with this id. */
+    onRemoveFromPlaylist: (Track, String) -> Unit = { _, _ -> },
     /** "Go to artist" (options sheet, and a tap on the artist photo / name). The CALLER must close the player layer. */
     onGoToArtist: (Track) -> Unit = {},
     /**
@@ -186,6 +190,9 @@ fun PlayerScreen(
     var showMore by remember { mutableStateOf(false) }
     var showShare by remember { mutableStateOf(false) }
     var showAddToPlaylist by remember { mutableStateOf(false) }
+    // What the user changed per song this session (playlist id -> now inside?), so reopening the sheet shows the right
+    // checks even before the caller's own list catches up.
+    val playlistChanges = remember { androidx.compose.runtime.mutableStateMapOf<String, Map<String, Boolean>>() }
     val modState by ModController.state.collectAsState()
     var showMod by remember { mutableStateOf(false) }
     val sleepEndsAt by SleepTimer.endsAt.collectAsState()
@@ -380,7 +387,7 @@ fun PlayerScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     DepthIcon(
-                        PhosphorIcons.Light.SkipBack, "Previous",
+                        PhosphorIcons.Bold.SkipBack, "Previous",
                         Modifier.bounceTap(onClick = player::skipPrevious).padding(SideButtonPadding),
                         size = SideButtonSize,
                     )
@@ -399,7 +406,7 @@ fun PlayerScreen(
                         )
                     }
                     DepthIcon(
-                        PhosphorIcons.Light.SkipForward, "Next",
+                        PhosphorIcons.Bold.SkipForward, "Next",
                         Modifier.bounceTap(onClick = player::skipNext).padding(SideButtonPadding),
                         size = SideButtonSize,
                     )
@@ -496,7 +503,6 @@ fun PlayerScreen(
     // Sheets sit OUTSIDE the Neutral pin: a sheet is its own window and follows the app's light / dark look.
     if (showMore) {
         PlayerOptionsSheet(
-            accent = accent,
             isFavorite = track?.isrc?.let { it in favoriteIsrcs } == true,
             lyricsOn = lyricsOn,
             eqActive = eqState.enabled,
@@ -524,8 +530,22 @@ fun PlayerScreen(
     if (showAddToPlaylist) {
         AddToPlaylistSheet(
             playlists = playlists,
-            accent = accent,
-            onPick = { picked -> track?.let { onAddToPlaylist(it, picked.id) } },
+            alreadyIn = run {
+                val delta = track?.isrc?.let { playlistChanges[it] }.orEmpty()
+                playlistIdsWithTrack.filter { delta[it] != false }.toSet() + delta.filterValues { it }.keys
+            },
+            onPick = { picked ->
+                track?.let {
+                    onAddToPlaylist(it, picked.id)
+                    playlistChanges[it.isrc] = (playlistChanges[it.isrc] ?: emptyMap()) + (picked.id to true)
+                }
+            },
+            onRemove = { picked ->
+                track?.let {
+                    onRemoveFromPlaylist(it, picked.id)
+                    playlistChanges[it.isrc] = (playlistChanges[it.isrc] ?: emptyMap()) + (picked.id to false)
+                }
+            },
             onDismiss = { showAddToPlaylist = false },
         )
     }
@@ -552,9 +572,9 @@ fun PlayerScreen(
 @Composable
 private fun PlayerTopBar(onBack: () -> Unit, onMore: () -> Unit, modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        DepthIcon(PhosphorIcons.Light.CaretDown, "Collapse", Modifier.tapTarget(onClick = onBack).padding(8.dp))
+        DepthIcon(PhosphorIcons.Bold.CaretDown, "Collapse", Modifier.tapTarget(onClick = onBack).padding(8.dp))
         Spacer(Modifier.weight(1f))
-        DepthIcon(PhosphorIcons.Light.DotsThreeVertical, "More", Modifier.tapTarget(onClick = onMore).padding(8.dp))
+        DepthIcon(PhosphorIcons.Bold.DotsThreeVertical, "More", Modifier.tapTarget(onClick = onMore).padding(8.dp))
     }
 }
 
@@ -587,7 +607,7 @@ private fun TrackHeader(
             }
         }
         DepthIcon(
-            if (isFavorite) PhosphorIcons.Fill.HeartFilled else PhosphorIcons.Light.Heart,
+            if (isFavorite) PhosphorIcons.Fill.HeartFilled else PhosphorIcons.Bold.Heart,
             if (isFavorite) "Remove from favorites" else "Add to favorites",
             Modifier.bounceTap(onClick = onToggleFavorite).padding(4.dp),
             tint = if (isFavorite) FavoriteColor else Color.White,
@@ -620,18 +640,18 @@ private fun ControlsGrid(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             GridCell {
                 DepthIcon(
-                    PhosphorIcons.Light.Shuffle,
+                    PhosphorIcons.Bold.Shuffle,
                     if (shuffleOn) "Shuffle on" else "Shuffle off",
                     Modifier.bounceTap(onClick = onShuffle).padding(8.dp),
                     tint = if (shuffleOn) accent else idle,
                     size = iconSize,
                 )
             }
-            GridCell { DepthIcon(PhosphorIcons.Light.Queue, "Queue", Modifier.bounceTap(onClick = onQueue).padding(8.dp), tint = idle, size = iconSize) }
-            GridCell { DepthIcon(PhosphorIcons.Light.ListPlus, "Add to playlist", Modifier.bounceTap(onClick = onAddToPlaylist).padding(8.dp), tint = idle, size = iconSize) }
+            GridCell { DepthIcon(PhosphorIcons.Bold.Queue, "Queue", Modifier.bounceTap(onClick = onQueue).padding(8.dp), tint = idle, size = iconSize) }
+            GridCell { DepthIcon(PhosphorIcons.Bold.ListPlus, "Add to playlist", Modifier.bounceTap(onClick = onAddToPlaylist).padding(8.dp), tint = idle, size = iconSize) }
             GridCell {
                 DepthIcon(
-                    if (repeatMode == PlaybackRepeatMode.ONE) PhosphorIcons.Light.RepeatOnce else PhosphorIcons.Light.Repeat,
+                    if (repeatMode == PlaybackRepeatMode.ONE) PhosphorIcons.Bold.RepeatOnce else PhosphorIcons.Bold.Repeat,
                     when (repeatMode) {
                         PlaybackRepeatMode.OFF -> "Repeat off"
                         PlaybackRepeatMode.ALL -> "Repeat all"
@@ -646,10 +666,10 @@ private fun ControlsGrid(
         Spacer(Modifier.height(6.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             GridCell {}
-            GridCell { DepthIcon(PhosphorIcons.Light.ShareNetwork, "Share", Modifier.bounceTap(onClick = onShare).padding(8.dp), tint = idle, size = iconSize) }
+            GridCell { DepthIcon(PhosphorIcons.Bold.ShareNetwork, "Share", Modifier.bounceTap(onClick = onShare).padding(8.dp), tint = idle, size = iconSize) }
             GridCell {
                 DepthIcon(
-                    PhosphorIcons.Light.Sparkle,
+                    PhosphorIcons.Bold.Sparkle,
                     if (modActive) "Mod on" else "Mod",
                     Modifier.bounceTap(onClick = onMod).padding(8.dp),
                     tint = if (modActive) accent else idle,

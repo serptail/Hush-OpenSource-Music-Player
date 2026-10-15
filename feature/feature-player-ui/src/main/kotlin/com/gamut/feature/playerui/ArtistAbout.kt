@@ -29,8 +29,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.MusicNote
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.MusicNote
 import com.gamut.core.model.Track
 import com.gamut.feature.playerui.components.PlayerSpinner
 import com.gamut.feature.playerui.components.tapTarget
@@ -285,7 +285,7 @@ internal fun ArtistAboutSection(
                 if (photo != null) {
                     AsyncImage(model = photo, contentDescription = artistName, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 } else {
-                    Icon(PhosphorIcons.Light.MusicNote, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(44.dp))
+                    Icon(PhosphorIcons.Bold.MusicNote, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(44.dp))
                 }
             }
             Spacer(Modifier.height(16.dp))

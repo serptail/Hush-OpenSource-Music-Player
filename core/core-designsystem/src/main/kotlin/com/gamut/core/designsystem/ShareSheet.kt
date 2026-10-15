@@ -86,13 +86,13 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.core.graphics.drawable.toBitmap
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.DotsThree
-import com.adamglin.phosphoricons.light.DownloadSimple
-import com.adamglin.phosphoricons.light.Image as ImageIcon
-import com.adamglin.phosphoricons.light.Link
-import com.adamglin.phosphoricons.light.LinkSimpleHorizontal
-import com.adamglin.phosphoricons.light.MusicNote
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.DotsThree
+import com.adamglin.phosphoricons.bold.DownloadSimple
+import com.adamglin.phosphoricons.bold.Image as ImageIcon
+import com.adamglin.phosphoricons.bold.Link
+import com.adamglin.phosphoricons.bold.LinkSimpleHorizontal
+import com.adamglin.phosphoricons.bold.MusicNote
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -283,13 +283,13 @@ private fun ShareSheetContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 ModeChip(includeImage, onClick = { includeImage = true }) {
-                    ChipIcon(PhosphorIcons.Light.ImageIcon)
+                    ChipIcon(PhosphorIcons.Bold.ImageIcon)
                     ChipLabel("Image and")
-                    ChipIcon(PhosphorIcons.Light.LinkSimpleHorizontal)
+                    ChipIcon(PhosphorIcons.Bold.LinkSimpleHorizontal)
                     ChipLabel("URL")
                 }
                 ModeChip(!includeImage, onClick = { includeImage = false }) {
-                    ChipIcon(PhosphorIcons.Light.LinkSimpleHorizontal)
+                    ChipIcon(PhosphorIcons.Bold.LinkSimpleHorizontal)
                     ChipLabel("URL Only")
                 }
             }
@@ -335,7 +335,7 @@ private fun ShareSheetContent(
                     ShareTarget("Copy link", onClick = {
                         context.copyText(track.title, shareUrl)
                         onDismiss()
-                    }) { Icon(PhosphorIcons.Light.Link, null, tint = ink(), modifier = Modifier.size(28.dp)) }
+                    }) { Icon(PhosphorIcons.Bold.Link, null, tint = ink(), modifier = Modifier.size(28.dp)) }
                 }
                 if (includeImage && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     item {
@@ -345,7 +345,7 @@ private fun ShareSheetContent(
                                 context.toast(if (ok) "Saved to Pictures/Gamut" else "Couldn't save the image")
                                 onDismiss()
                             }
-                        }) { Icon(PhosphorIcons.Light.DownloadSimple, null, tint = ink(), modifier = Modifier.size(28.dp)) }
+                        }) { Icon(PhosphorIcons.Bold.DownloadSimple, null, tint = ink(), modifier = Modifier.size(28.dp)) }
                     }
                 }
                 if (includeImage && instagramAppId != null && instagramInstalled) {
@@ -373,7 +373,7 @@ private fun ShareSheetContent(
                 }
                 item {
                     ShareTarget("More", onClick = { sendTo(null) }) {
-                        Icon(PhosphorIcons.Light.DotsThree, null, tint = ink(), modifier = Modifier.size(28.dp))
+                        Icon(PhosphorIcons.Bold.DotsThree, null, tint = ink(), modifier = Modifier.size(28.dp))
                     }
                 }
             }
@@ -417,7 +417,7 @@ private fun LinkPreview(track: ShareItem, url: String) {
         ArtImage(
             url = remember(track.artUrl) { squareArtUrl(track.artUrl, 256) },
             modifier = Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)),
-            fallback = { Icon(PhosphorIcons.Light.MusicNote, null, tint = ink(0.5f)) },
+            fallback = { Icon(PhosphorIcons.Bold.MusicNote, null, tint = ink(0.5f)) },
         )
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
             Text(track.title, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -447,7 +447,7 @@ private fun ShareCard(track: ShareItem, style: ShareCardStyle, layer: GraphicsLa
         ArtImage(
             url = remember(track.artUrl) { squareArtUrl(track.artUrl, 600) },
             modifier = Modifier.fillMaxWidth().height(CardW - 44.dp).clip(RoundedCornerShape(10.dp)),
-            fallback = { Icon(PhosphorIcons.Light.MusicNote, null, tint = style.text.copy(alpha = 0.5f), modifier = Modifier.size(48.dp)) },
+            fallback = { Icon(PhosphorIcons.Bold.MusicNote, null, tint = style.text.copy(alpha = 0.5f), modifier = Modifier.size(48.dp)) },
         )
         Spacer(Modifier.height(18.dp))
         Text(
@@ -485,7 +485,7 @@ private fun ShareTarget(label: String, onClick: () -> Unit, icon: @Composable ()
 @Composable
 private fun AppIcon(icon: ImageBitmap?) {
     if (icon != null) Image(icon, null, Modifier.size(56.dp).clip(CircleShape))
-    else Icon(PhosphorIcons.Light.DotsThree, null, tint = ink(), modifier = Modifier.size(28.dp))
+    else Icon(PhosphorIcons.Bold.DotsThree, null, tint = ink(), modifier = Modifier.size(28.dp))
 }
 
 // ------------------------------------------------------------------ rendering + files

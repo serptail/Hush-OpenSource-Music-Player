@@ -58,9 +58,9 @@ import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import androidx.compose.foundation.lazy.itemsIndexed
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.ArrowLeft
-import com.adamglin.phosphoricons.light.DotsThreeVertical
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.ArrowLeft
+import com.adamglin.phosphoricons.bold.DotsThreeVertical
 import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.ShareSheet
 import com.gamut.core.designsystem.ArtistLine
@@ -183,7 +183,7 @@ fun ArtistScreen(
                     }
                 }
                 Box(Modifier.padding(start = 10.dp, top = 14.dp).size(44.dp).pressScale(onClick = onBack), contentAlignment = Alignment.Center) {
-                    Icon(PhosphorIcons.Light.ArrowLeft, "Back", tint = ink(), modifier = Modifier.size(22.dp))
+                    Icon(PhosphorIcons.Bold.ArrowLeft, "Back", tint = ink(), modifier = Modifier.size(22.dp))
                 }
                 if (failed) {
                     Text("Couldn't load this artist.", color = ink(0.6f), modifier = Modifier.align(Alignment.Center).padding(24.dp))
@@ -215,7 +215,7 @@ fun ArtistScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.size(44.dp).pressScale(onClick = onBack), contentAlignment = Alignment.Center) {
-                    Icon(PhosphorIcons.Light.ArrowLeft, "Back", tint = ink(), modifier = Modifier.size(22.dp))
+                    Icon(PhosphorIcons.Bold.ArrowLeft, "Back", tint = ink(), modifier = Modifier.size(22.dp))
                 }
                 Text(
                     value.name,
@@ -439,7 +439,7 @@ private fun TrackMoreButton(onClick: () -> Unit) {
             .clip(CircleShape)
             .clickable(role = Role.Button, onClickLabel = "More options", onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Icon(PhosphorIcons.Light.DotsThreeVertical, "More options", tint = ink(0.6f), modifier = Modifier.size(24.dp)) }
+    ) { Icon(PhosphorIcons.Bold.DotsThreeVertical, "More options", tint = ink(0.6f), modifier = Modifier.size(24.dp)) }
 }
 
 @Composable

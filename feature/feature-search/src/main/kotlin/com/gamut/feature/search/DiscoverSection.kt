@@ -37,10 +37,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.CaretRight
-import com.adamglin.phosphoricons.light.DotsThreeVertical
-import com.adamglin.phosphoricons.light.Play
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.Fill
+import com.adamglin.phosphoricons.bold.CaretRight
+import com.adamglin.phosphoricons.bold.DotsThreeVertical
+import com.adamglin.phosphoricons.fill.Play
 import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.TrackRowSkeleton
@@ -259,7 +260,7 @@ private fun HeroCard(item: DiscoverItem, isPlaying: Boolean, onClick: () -> Unit
         // Just the glyph on the scrim: no circle behind it.
         Box(Modifier.align(Alignment.BottomEnd).padding(18.dp).size(44.dp), contentAlignment = Alignment.Center) {
             if (isPlaying) NowPlayingBars(color = Color.White)
-            else Icon(PhosphorIcons.Light.Play, "Play", tint = Color.White.copy(alpha = 0.95f), modifier = Modifier.size(34.dp))
+            else Icon(PhosphorIcons.Fill.Play, "Play", tint = Color.White.copy(alpha = 0.95f), modifier = Modifier.size(34.dp))
         }
     }
 }
@@ -374,8 +375,8 @@ private fun ChartRow(rank: Int?, item: DiscoverItem, isPlaying: Boolean, onClick
                 Text(it, style = MaterialTheme.typography.labelMedium, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        if (onMore != null) RowIconButton(PhosphorIcons.Light.DotsThreeVertical, "More options", ink(0.6f), onMore)
-        else Icon(PhosphorIcons.Light.CaretRight, null, tint = ink(0.4f), modifier = Modifier.padding(end = 8.dp).size(18.dp))
+        if (onMore != null) RowIconButton(PhosphorIcons.Bold.DotsThreeVertical, "More options", ink(0.6f), onMore)
+        else Icon(PhosphorIcons.Bold.CaretRight, null, tint = ink(0.4f), modifier = Modifier.padding(end = 8.dp).size(18.dp))
     }
 }
 

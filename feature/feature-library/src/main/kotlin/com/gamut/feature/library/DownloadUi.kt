@@ -48,9 +48,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.fill.CheckCircle
-import com.adamglin.phosphoricons.light.ArrowCircleDown
+import com.adamglin.phosphoricons.bold.ArrowCircleDown
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.feature.resolver.DownloadState
@@ -110,7 +110,7 @@ fun DownloadButton(
     /** Not downloaded yet. */
     /** Size of the icon / ring inside the button. */
     glyphSize: Dp = GlyphSize,
-    idleIcon: ImageVector = PhosphorIcons.Light.ArrowCircleDown,
+    idleIcon: ImageVector = PhosphorIcons.Bold.ArrowCircleDown,
     /** Everything downloaded. */
     doneIcon: ImageVector = PhosphorIcons.Fill.CheckCircle,
 ) {
@@ -197,8 +197,8 @@ fun TrackDownloadButton(
     ) {
         Crossfade(kind, modifier = Modifier.size(glyph), animationSpec = tween(180), label = "trackDownload") { shown ->
             when (shown) {
-                Kind.Idle -> Icon(PhosphorIcons.Light.ArrowCircleDown, "Download", tint = tint, modifier = Modifier.size(glyph))
-                Kind.Failed -> Icon(PhosphorIcons.Light.ArrowCircleDown, "Download failed, tap to retry", tint = FailureColor, modifier = Modifier.size(glyph))
+                Kind.Idle -> Icon(PhosphorIcons.Bold.ArrowCircleDown, "Download", tint = tint, modifier = Modifier.size(glyph))
+                Kind.Failed -> Icon(PhosphorIcons.Bold.ArrowCircleDown, "Download failed, tap to retry", tint = FailureColor, modifier = Modifier.size(glyph))
                 Kind.Queued -> SpinnerArc(tint, Modifier.size(glyph), 2.dp)
                 Kind.Active -> ActiveRing(((state as? DownloadState.Active)?.progress ?: 0f).coerceAtLeast(0.05f), tint.copy(alpha = 0.25f), accent, glyph)
                 Kind.Done -> CheckCirclePop(animate = watched, color = accent, size = glyph)

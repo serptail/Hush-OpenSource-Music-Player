@@ -89,7 +89,7 @@ fun GamutLoadingScreen(
         // Both layers share the same box, so the filled mark sits exactly inside its outline.
         Box(
             Modifier
-                .width(140.dp)
+                .width(100.dp)
                 .aspectRatio(475.8f / 227.06f)
                 .graphicsLayer {
                     scaleX = logoScale.value

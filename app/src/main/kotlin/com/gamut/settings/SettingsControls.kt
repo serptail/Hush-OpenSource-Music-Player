@@ -20,8 +20,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.Check
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.Check
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 
@@ -139,7 +139,7 @@ fun <T> GamutChoiceDialog(
                         }
                     }
                     if (choice.value == selected) {
-                        Icon(PhosphorIcons.Light.Check, null, tint = ink(), modifier = Modifier.size(20.dp))
+                        Icon(PhosphorIcons.Bold.Check, null, tint = ink(), modifier = Modifier.size(20.dp))
                     }
                 }
             }

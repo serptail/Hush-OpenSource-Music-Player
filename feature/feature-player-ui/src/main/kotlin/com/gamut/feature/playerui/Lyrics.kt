@@ -55,9 +55,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.res.ResourcesCompat
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.CaretDown
-import com.adamglin.phosphoricons.light.MusicNote
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.CaretDown
+import com.adamglin.phosphoricons.bold.MusicNote
 import com.gamut.core.designsystem.AcrylicMaterials
 import com.gamut.core.designsystem.AcrylicSurface
 import com.gamut.core.model.Track
@@ -467,7 +467,7 @@ fun LyricsSection(
                 Text("Lyrics", color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.weight(1f))
                 Icon(
-                    PhosphorIcons.Light.CaretDown,
+                    PhosphorIcons.Bold.CaretDown,
                     contentDescription = if (expanded) "Hide lyrics" else "Show lyrics",
                     tint = Color.White.copy(alpha = 0.8f),
                     modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = chevron },
@@ -613,7 +613,7 @@ internal fun LyricsEmptyState(message: String, onClick: (() -> Unit)? = null) {
             verticalArrangement = Arrangement.Center,
         ) {
             Icon(
-                PhosphorIcons.Light.MusicNote,
+                PhosphorIcons.Bold.MusicNote,
                 contentDescription = null,
                 tint = Color.White.copy(alpha = 0.4f),
                 modifier = Modifier.size(40.dp),

@@ -24,9 +24,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.CaretLeft
-import com.adamglin.phosphoricons.light.CaretRight
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.CaretLeft
+import com.adamglin.phosphoricons.bold.CaretRight
 import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.TransparentStatusBar
@@ -48,7 +48,7 @@ fun SettingsScaffold(
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(44.dp).pressScale(onClick = onBack), contentAlignment = Alignment.Center) {
-                    Icon(PhosphorIcons.Light.CaretLeft, "Back", tint = ink(0.85f), modifier = Modifier.size(24.dp))
+                    Icon(PhosphorIcons.Bold.CaretLeft, "Back", tint = ink(0.85f), modifier = Modifier.size(24.dp))
                 }
                 if (title.isNotEmpty()) {
                     Text(title, style = MaterialTheme.typography.headlineMedium, color = ink(), modifier = Modifier.padding(start = 4.dp))
@@ -100,7 +100,7 @@ fun SettingsRow(
             }
         }
         trailing?.invoke()
-        if (showChevron) Icon(PhosphorIcons.Light.CaretRight, null, tint = ink(0.5f), modifier = Modifier.size(18.dp))
+        if (showChevron) Icon(PhosphorIcons.Bold.CaretRight, null, tint = ink(0.5f), modifier = Modifier.size(18.dp))
     }
 }
 

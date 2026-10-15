@@ -50,10 +50,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.SpeakerHigh
-import com.adamglin.phosphoricons.light.SpeakerLow
-import com.adamglin.phosphoricons.light.SpeakerX
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.SpeakerHigh
+import com.adamglin.phosphoricons.bold.SpeakerLow
+import com.adamglin.phosphoricons.bold.SpeakerX
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -206,9 +206,9 @@ private val PillLift = 9.dp
 private fun VolumePill(fraction: Float, modifier: Modifier = Modifier) {
     val f by animateFloatAsState(fraction.coerceIn(0f, 1f), tween(60), label = "volume-fill")
     val icon = when {
-        f <= 0f -> PhosphorIcons.Light.SpeakerX
-        f < 0.5f -> PhosphorIcons.Light.SpeakerLow
-        else -> PhosphorIcons.Light.SpeakerHigh
+        f <= 0f -> PhosphorIcons.Bold.SpeakerX
+        f < 0.5f -> PhosphorIcons.Bold.SpeakerLow
+        else -> PhosphorIcons.Bold.SpeakerHigh
     }
     val shape = RoundedCornerShape(PillHeight / 2)
     // Icon at the start, number at the end: each turns dark while the white fill is behind it, white otherwise.

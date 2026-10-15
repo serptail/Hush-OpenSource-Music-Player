@@ -52,11 +52,11 @@ import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.Bluetooth
-import com.adamglin.phosphoricons.light.BluetoothConnected
-import com.adamglin.phosphoricons.light.BluetoothSlash
-import com.adamglin.phosphoricons.light.Devices
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.Bluetooth
+import com.adamglin.phosphoricons.bold.BluetoothConnected
+import com.adamglin.phosphoricons.bold.BluetoothSlash
+import com.adamglin.phosphoricons.bold.Devices
 
 /** One audio output the phone currently knows about. */
 data class OutputDevice(
@@ -104,9 +104,9 @@ fun ConnectSheet(
             val tint = if (connectedBt != null) accent else ink(if (btOn) 0.9f else 0.5f)
             Icon(
                 when {
-                    !btOn -> PhosphorIcons.Light.BluetoothSlash
-                    connectedBt != null -> PhosphorIcons.Light.BluetoothConnected
-                    else -> PhosphorIcons.Light.Bluetooth
+                    !btOn -> PhosphorIcons.Bold.BluetoothSlash
+                    connectedBt != null -> PhosphorIcons.Bold.BluetoothConnected
+                    else -> PhosphorIcons.Bold.Bluetooth
                 },
                 null, tint = tint, modifier = Modifier.size(28.dp),
             )
@@ -145,7 +145,7 @@ fun ConnectSheet(
                 ) {
                     val tint = if (d.isActive) accent else ink(0.75f)
                     Icon(
-                        if (d.isBluetooth) PhosphorIcons.Light.BluetoothConnected else PhosphorIcons.Light.Devices,
+                        if (d.isBluetooth) PhosphorIcons.Bold.BluetoothConnected else PhosphorIcons.Bold.Devices,
                         null, tint = tint, modifier = Modifier.size(24.dp),
                     )
                     Spacer(Modifier.width(16.dp))
@@ -183,7 +183,7 @@ fun ConnectSheet(
             contentAlignment = Alignment.Center,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(PhosphorIcons.Light.Bluetooth, null, tint = LocalCoverPalette.current.base, modifier = Modifier.size(20.dp))
+                Icon(PhosphorIcons.Bold.Bluetooth, null, tint = LocalCoverPalette.current.base, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(10.dp))
                 Text(
                     "Find Bluetooth devices",

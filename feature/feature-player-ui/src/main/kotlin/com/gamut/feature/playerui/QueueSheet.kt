@@ -32,8 +32,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.X
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.X
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
@@ -110,7 +110,7 @@ internal fun QueueSheet(
                             Modifier.size(40.dp).clickable { onRemove(index) },
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(PhosphorIcons.Light.X, "Remove from queue", tint = ink(0.6f), modifier = Modifier.size(20.dp))
+                            Icon(PhosphorIcons.Bold.X, "Remove from queue", tint = ink(0.6f), modifier = Modifier.size(20.dp))
                         }
                     }
                 }

@@ -94,28 +94,28 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.fill.CheckCircle
 import com.adamglin.phosphoricons.fill.DeviceMobileCamera
 import com.adamglin.phosphoricons.fill.Heart
 import com.adamglin.phosphoricons.fill.Play
-import com.adamglin.phosphoricons.light.ArrowLeft
-import com.adamglin.phosphoricons.light.ArrowsDownUp
-import com.adamglin.phosphoricons.light.Check
-import com.adamglin.phosphoricons.light.Circle
-import com.adamglin.phosphoricons.light.Globe
-import com.adamglin.phosphoricons.light.Image
-import com.adamglin.phosphoricons.light.Link
-import com.adamglin.phosphoricons.light.PencilSimple
-import com.adamglin.phosphoricons.light.ReadCvLogo
-import com.adamglin.phosphoricons.light.DeviceMobileCamera
-import com.adamglin.phosphoricons.light.FolderOpen
-import com.adamglin.phosphoricons.light.Scan
-import com.adamglin.phosphoricons.light.DotsThreeVertical
-import com.adamglin.phosphoricons.light.Heart
-import com.adamglin.phosphoricons.light.MagnifyingGlass
-import com.adamglin.phosphoricons.light.PlusCircle
-import com.adamglin.phosphoricons.light.X
+import com.adamglin.phosphoricons.bold.ArrowLeft
+import com.adamglin.phosphoricons.bold.ArrowsDownUp
+import com.adamglin.phosphoricons.bold.Check
+import com.adamglin.phosphoricons.bold.Circle
+import com.adamglin.phosphoricons.bold.Globe
+import com.adamglin.phosphoricons.bold.Image
+import com.adamglin.phosphoricons.bold.Link
+import com.adamglin.phosphoricons.bold.PencilSimple
+import com.adamglin.phosphoricons.bold.ReadCvLogo
+import com.adamglin.phosphoricons.bold.DeviceMobileCamera
+import com.adamglin.phosphoricons.bold.FolderOpen
+import com.adamglin.phosphoricons.bold.Scan
+import com.adamglin.phosphoricons.bold.DotsThreeVertical
+import com.adamglin.phosphoricons.bold.Heart
+import com.adamglin.phosphoricons.bold.MagnifyingGlass
+import com.adamglin.phosphoricons.bold.PlusCircle
+import com.adamglin.phosphoricons.bold.X
 import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
@@ -176,7 +176,7 @@ internal fun BoxScopeDeviceBadge(modifier: Modifier = Modifier) {
 @Composable
 internal fun OnDeviceMark(modifier: Modifier = Modifier) {
     Box(modifier.size(40.dp), contentAlignment = Alignment.Center) {
-        Icon(PhosphorIcons.Light.DeviceMobileCamera, "Stored on this device", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+        Icon(PhosphorIcons.Bold.DeviceMobileCamera, "Stored on this device", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -327,7 +327,7 @@ fun LocalMusicScreen(
         Column(Modifier.fillMaxSize().statusBarsPadding().then(if (searchFocused) Modifier.imePadding() else Modifier)) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(44.dp).pressScale(onClick = onBack), contentAlignment = Alignment.Center) {
-                    Icon(PhosphorIcons.Light.ArrowLeft, "Back", tint = ink(0.85f), modifier = Modifier.size(20.dp))
+                    Icon(PhosphorIcons.Bold.ArrowLeft, "Back", tint = ink(0.85f), modifier = Modifier.size(20.dp))
                 }
                 Spacer(Modifier.weight(1f))
                 if (hasPermission && songs.isNotEmpty()) {
@@ -339,7 +339,7 @@ fun LocalMusicScreen(
                             notifier.info("Sorted by ${next.label.lowercase()}")
                         }),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(PhosphorIcons.Light.ArrowsDownUp, "Sort: ${sort.label}", tint = ink(0.85f), modifier = Modifier.size(22.dp)) }
+                    ) { Icon(PhosphorIcons.Bold.ArrowsDownUp, "Sort: ${sort.label}", tint = ink(0.85f), modifier = Modifier.size(22.dp)) }
                 }
             }
 
@@ -479,12 +479,12 @@ fun LocalMusicScreen(
                         }
                     } else if (sheetMode == SongSheetMode.Actions) {
                         SongAction(PhosphorIcons.Fill.Play, "Play now") { onTrackSelected(song.track, visibleTracks); closeSheet() }
-                        SongAction(PhosphorIcons.Light.PlusCircle, "Add to playlist…") { sheetMode = SongSheetMode.Playlists }
+                        SongAction(PhosphorIcons.Bold.PlusCircle, "Add to playlist…") { sheetMode = SongSheetMode.Playlists }
                         SongAction(
-                            if (isFavorite) PhosphorIcons.Fill.Heart else PhosphorIcons.Light.Heart,
+                            if (isFavorite) PhosphorIcons.Fill.Heart else PhosphorIcons.Bold.Heart,
                             if (isFavorite) "Remove from Favorites" else "Add to Favorites",
                         ) { toggleFavorite(song, isFavorite) }
-                        SongAction(PhosphorIcons.Light.ReadCvLogo, "Edit metadata") { sheetMode = SongSheetMode.EditChoice }
+                        SongAction(PhosphorIcons.Bold.ReadCvLogo, "Edit metadata") { sheetMode = SongSheetMode.EditChoice }
                         if (song.needsInfo) {
                             Text(
                                 "Missing artist or album? It’s filled in when you save the song.",
@@ -498,13 +498,13 @@ fun LocalMusicScreen(
                             Modifier.fillMaxWidth().pressScale(onClick = { sheetMode = SongSheetMode.Actions }, scaleDown = 0.98f).padding(horizontal = 24.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(PhosphorIcons.Light.ArrowLeft, "Back", tint = ink(0.7f), modifier = Modifier.size(18.dp))
+                            Icon(PhosphorIcons.Bold.ArrowLeft, "Back", tint = ink(0.7f), modifier = Modifier.size(18.dp))
                             Text("Edit metadata", style = MaterialTheme.typography.labelLarge, color = ink(0.6f), modifier = Modifier.padding(start = 12.dp))
                         }
-                        SongAction(PhosphorIcons.Light.Globe, "Auto fetch", subtitle = "Find the cover, name and artist online") {
+                        SongAction(PhosphorIcons.Bold.Globe, "Auto fetch", subtitle = "Find the cover, name and artist online") {
                             editMode = EditMode.Auto; editSong = song; closeSheet()
                         }
-                        SongAction(PhosphorIcons.Light.PencilSimple, "Manual edit", subtitle = "Change the cover, name and artist yourself") {
+                        SongAction(PhosphorIcons.Bold.PencilSimple, "Manual edit", subtitle = "Change the cover, name and artist yourself") {
                             editMode = EditMode.Manual; editSong = song; closeSheet()
                         }
                     } else if (sheetMode == SongSheetMode.NotFound) {
@@ -517,14 +517,14 @@ fun LocalMusicScreen(
                             style = MaterialTheme.typography.bodyMedium, color = ink(0.6f),
                             modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
                         )
-                        SongAction(PhosphorIcons.Light.PencilSimple, "Edit manually") { val s = song; closeSheet(); editMode = EditMode.Manual; editSong = s }
-                        SongAction(PhosphorIcons.Light.Check, "Save anyway") { busy = true; scope.launch { pendingSave?.invoke() } }
+                        SongAction(PhosphorIcons.Bold.PencilSimple, "Edit manually") { val s = song; closeSheet(); editMode = EditMode.Manual; editSong = s }
+                        SongAction(PhosphorIcons.Bold.Check, "Save anyway") { busy = true; scope.launch { pendingSave?.invoke() } }
                     } else {
                         Text("Choose a playlist", style = MaterialTheme.typography.labelLarge, color = ink(0.6f), modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp))
                         if (playlists.isEmpty()) {
                             Text("You have no playlists yet. Create one from the Library tab.", style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp))
                         }
-                        playlists.forEach { p -> SongAction(PhosphorIcons.Light.PlusCircle, p.name) { addToPlaylist(song, p.id, p.name) } }
+                        playlists.forEach { p -> SongAction(PhosphorIcons.Bold.PlusCircle, p.name) { addToPlaylist(song, p.id, p.name) } }
                     }
                 }
             }
@@ -631,7 +631,7 @@ private fun ScanCard(scan: ScanUi, deepScanned: Boolean, onScan: () -> Unit, onB
                 horizontalArrangement = Arrangement.Center,
             ) {
                 Icon(
-                    PhosphorIcons.Light.Scan,
+                    PhosphorIcons.Bold.Scan,
                     null,
                     tint = onFill,
                     modifier = Modifier
@@ -659,7 +659,7 @@ private fun ScanCard(scan: ScanUi, deepScanned: Boolean, onScan: () -> Unit, onB
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
-                Icon(PhosphorIcons.Light.FolderOpen, null, tint = ink(), modifier = Modifier.size(22.dp))
+                Icon(PhosphorIcons.Bold.FolderOpen, null, tint = ink(), modifier = Modifier.size(22.dp))
                 Text(
                     "Browse",
                     style = MaterialTheme.typography.titleMedium.copy(fontFamily = CodeNextFont),
@@ -779,8 +779,8 @@ private fun ManualEditSheet(
                 BoxScopeDeviceBadge(Modifier.align(Alignment.BottomEnd).padding(6.dp))
             }
             Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                LocalPill("Choose photo", PhosphorIcons.Light.Image, filled = false) { picker.launch("image/*") }
-                LocalPill("Use link", PhosphorIcons.Light.Link, filled = false) { linkOpen = !linkOpen }
+                LocalPill("Choose photo", PhosphorIcons.Bold.Image, filled = false) { picker.launch("image/*") }
+                LocalPill("Use link", PhosphorIcons.Bold.Link, filled = false) { linkOpen = !linkOpen }
             }
             AnimatedVisibility(linkOpen, enter = fadeIn(tween(250)) + expandVertically(tween(250))) {
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.Bottom) {
@@ -791,7 +791,7 @@ private fun ManualEditSheet(
                     Box(
                         Modifier.padding(start = 10.dp).size(50.dp).pressScale(onClick = { applyLink() }).background(ink(0.95f), CircleShape),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(PhosphorIcons.Light.Check, "Use this link", tint = if (light) Color.White else Color.Black, modifier = Modifier.size(22.dp)) }
+                    ) { Icon(PhosphorIcons.Bold.Check, "Use this link", tint = if (light) Color.White else Color.Black, modifier = Modifier.size(22.dp)) }
                 }
             }
 
@@ -953,7 +953,7 @@ private fun FoundRow(c: MetaCandidate, selected: Boolean, onClick: () -> Unit) {
         ) {
             if (c.artUrl != null) CoverImage(c.artUrl, Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)))
             else Box(Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)).background(ink(0.10f)), contentAlignment = Alignment.Center) {
-                Icon(PhosphorIcons.Light.Image, null, tint = ink(0.4f), modifier = Modifier.size(22.dp))
+                Icon(PhosphorIcons.Bold.Image, null, tint = ink(0.4f), modifier = Modifier.size(22.dp))
             }
             Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
                 Text(c.title, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -969,7 +969,7 @@ private fun FoundRow(c: MetaCandidate, selected: Boolean, onClick: () -> Unit) {
             }
             Crossfade(selected, animationSpec = tween(200), label = "pick") { on ->
                 if (on) Icon(PhosphorIcons.Fill.CheckCircle, "Selected", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
-                else Icon(PhosphorIcons.Light.Circle, null, tint = ink(0.35f), modifier = Modifier.size(24.dp))
+                else Icon(PhosphorIcons.Bold.Circle, null, tint = ink(0.35f), modifier = Modifier.size(24.dp))
             }
         }
     }
@@ -1042,7 +1042,7 @@ private fun LocalSongRow(
         }
         Text(formatDuration(track.durationMs), style = MaterialTheme.typography.labelMedium, color = ink(0.45f), modifier = Modifier.padding(end = 2.dp))
         Box(Modifier.size(40.dp).pressScale(onClick = onMore), contentAlignment = Alignment.Center) {
-            Icon(PhosphorIcons.Light.DotsThreeVertical, "More options", tint = ink(0.7f), modifier = Modifier.size(20.dp))
+            Icon(PhosphorIcons.Bold.DotsThreeVertical, "More options", tint = ink(0.7f), modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -1070,7 +1070,7 @@ private fun LocalSearchField(query: String, onChange: (String) -> Unit, onFocus:
         modifier.fillMaxWidth().height(42.dp).clip(RoundedCornerShape(50)).background(ink(0.08f)).padding(start = 14.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(PhosphorIcons.Light.MagnifyingGlass, null, tint = ink(0.6f), modifier = Modifier.size(18.dp))
+        Icon(PhosphorIcons.Bold.MagnifyingGlass, null, tint = ink(0.6f), modifier = Modifier.size(18.dp))
         Box(Modifier.weight(1f).padding(horizontal = 10.dp), contentAlignment = Alignment.CenterStart) {
             if (query.isEmpty()) Text("Search this device", style = textStyle, color = ink(0.4f), maxLines = 1)
             BasicTextField(
@@ -1086,7 +1086,7 @@ private fun LocalSearchField(query: String, onChange: (String) -> Unit, onFocus:
         }
         if (query.isNotEmpty()) {
             Box(Modifier.size(30.dp).pressScale(onClick = { onChange("") }), contentAlignment = Alignment.Center) {
-                Icon(PhosphorIcons.Light.X, "Clear search", tint = ink(0.7f), modifier = Modifier.size(16.dp))
+                Icon(PhosphorIcons.Bold.X, "Clear search", tint = ink(0.7f), modifier = Modifier.size(16.dp))
             }
         }
     }

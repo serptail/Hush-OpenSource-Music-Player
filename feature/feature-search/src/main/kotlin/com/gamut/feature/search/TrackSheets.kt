@@ -38,6 +38,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
@@ -53,29 +54,39 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.fill.CheckCircle
 import com.adamglin.phosphoricons.fill.Heart as HeartFill
-import com.adamglin.phosphoricons.light.ListPlus
-import com.adamglin.phosphoricons.light.UserCircle
-import com.adamglin.phosphoricons.light.Heart
-import com.adamglin.phosphoricons.light.MusicNote
-import com.adamglin.phosphoricons.light.PlusCircle
-import com.adamglin.phosphoricons.light.ShareNetwork
+import com.adamglin.phosphoricons.bold.ListPlus
+import com.adamglin.phosphoricons.bold.UserCircle
+import com.adamglin.phosphoricons.bold.Heart
+import com.adamglin.phosphoricons.bold.MusicNote
+import com.adamglin.phosphoricons.bold.PlusCircle
+import com.adamglin.phosphoricons.bold.ShareNetwork
 import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
 
 internal val SheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
 
-/** A playlist as the "Saved in" sheet needs it. [contains] = the track is already in it. */
+/**
+ * A playlist as the "Saved in" sheet needs it. A song counts as already in it when [contains] is set or its ISRC is
+ * in [trackIsrcs] (every song in the playlist), which lets one list serve every song the sheet is opened for.
+ */
 data class TrackPlaylistOption(
     val id: String,
     val name: String,
     val coverUrl: String?,
     val trackCount: Int? = null,
     val contains: Boolean = false,
+    val trackIsrcs: Set<String> = emptySet(),
 )
+
+/**
+ * "Take this song out of the playlist with this id", used when a ticked row in [SavedInSheet] is tapped again.
+ * Provided once at the app root, so the many screens that open the sheet need no extra parameter.
+ */
+val LocalPlaylistRemove = staticCompositionLocalOf<(Track, String) -> Unit> { { _, _ -> } }
 
 /**
  * Same touch feel as the search result rows: a soft tint fades in on hover/press and a press squeezes the row to 97%
@@ -121,15 +132,15 @@ internal fun TrackActionsSheet(
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
             TrackHeader(track)
             HorizontalDivider(Modifier.padding(top = 14.dp, bottom = 6.dp), color = ink(0.1f))
-            ActionRow(PhosphorIcons.Light.ShareNetwork, "Share") { onShare() }
+            ActionRow(PhosphorIcons.Bold.ShareNetwork, "Share") { onShare() }
             // Stays open: the icon fills and the label changes in place.
             ActionRow(
-                if (isFavorite) PhosphorIcons.Fill.HeartFill else PhosphorIcons.Light.Heart,
+                if (isFavorite) PhosphorIcons.Fill.HeartFill else PhosphorIcons.Bold.Heart,
                 if (isFavorite) "Added to favorites" else "Add to favorites",
                 tint = if (isFavorite) MaterialTheme.colorScheme.primary else ink(),
             ) { onToggleFavorite() }
-            ActionRow(PhosphorIcons.Light.ListPlus, "Add to playlist") { onAddToPlaylist() }
-            if (onGoToArtist != null) ActionRow(PhosphorIcons.Light.UserCircle, "Go to artist") { onGoToArtist() }
+            ActionRow(PhosphorIcons.Bold.ListPlus, "Add to playlist") { onAddToPlaylist() }
+            if (onGoToArtist != null) ActionRow(PhosphorIcons.Bold.UserCircle, "Go to artist") { onGoToArtist() }
         }
     }
 }
@@ -140,7 +151,7 @@ private fun TrackHeader(track: Track) {
         ArtImage(
             url = remember(track.albumArtUrl) { squareArtUrl(track.albumArtUrl, 256) },
             modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)),
-            fallback = { Icon(PhosphorIcons.Light.MusicNote, null, tint = ink(0.5f)) },
+            fallback = { Icon(PhosphorIcons.Bold.MusicNote, null, tint = ink(0.5f)) },
         )
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
             Text(track.title, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -166,6 +177,7 @@ private fun ActionRow(icon: ImageVector, label: String, tint: Color = ink(), onC
 /**
  * "Saved in" sheet. With [showFavorites] (opened by the + button) the first row is Favorites, already checked, and the
  * playlists below can be ticked to add the song there too. Without it, it is the plain "Add to playlist" picker.
+ * Playlists that already hold the song start ticked; tapping a tick again takes the song back out.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -178,7 +190,10 @@ internal fun SavedInSheet(
     onDismiss: () -> Unit,
 ) {
     // Local ticks so the check responds instantly; the real state is the caller's.
-    val ticked = remember { mutableStateListOf<String>().apply { addAll(playlists.filter { it.contains }.map { it.id }) } }
+    val removeFromPlaylist = LocalPlaylistRemove.current
+    val ticked = remember {
+        mutableStateListOf<String>().apply { addAll(playlists.filter { it.contains || track.isrc in it.trackIsrcs }.map { it.id }) }
+    }
     GamutSheet(onDismiss = onDismiss, shape = SheetShape) {
         Row(Modifier.padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (showFavorites) {
@@ -211,8 +226,10 @@ internal fun SavedInSheet(
                     coverUrl = p.coverUrl,
                     checked = checked,
                     accent = accent,
-                    // Add-only: the library has no "remove from playlist" call here, so a ticked row stays ticked.
-                    onClick = { if (!checked) { ticked.add(p.id); onAddToPlaylist(p.id) } },
+                    onClick = {
+                        if (checked) { ticked.remove(p.id); removeFromPlaylist(track, p.id) }
+                        else { ticked.add(p.id); onAddToPlaylist(p.id) }
+                    },
                 )
             }
         }
@@ -226,7 +243,7 @@ private fun PlaylistRow(
     coverUrl: String?,
     checked: Boolean,
     accent: Color,
-    icon: ImageVector = PhosphorIcons.Light.MusicNote,
+    icon: ImageVector = PhosphorIcons.Bold.MusicNote,
     iconTint: Color = ink(0.5f),
     onClick: () -> Unit,
 ) {
@@ -248,7 +265,7 @@ private fun PlaylistRow(
         // Plus circle that turns into a filled check circle once added.
         Crossfade(targetState = checked, label = "added") { on ->
             if (on) Icon(PhosphorIcons.Fill.CheckCircle, "Added", tint = accent, modifier = Modifier.size(28.dp))
-            else Icon(PhosphorIcons.Light.PlusCircle, "Add", tint = ink(0.6f), modifier = Modifier.size(28.dp))
+            else Icon(PhosphorIcons.Bold.PlusCircle, "Add", tint = ink(0.6f), modifier = Modifier.size(28.dp))
         }
     }
 }

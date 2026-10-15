@@ -133,5 +133,8 @@ dependencies {
 
     implementation("com.github.hcaptcha:hcaptcha-android-sdk:5.0.1")
 
+    // Support sheet: opens Ko-fi in a Chrome Custom Tab (SupportEntryPoints.kt)
+    implementation("androidx.browser:browser:1.8.0")
+
     baselineProfile(project(":baselineprofile"))
 }

@@ -30,12 +30,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.Devices
-import com.adamglin.phosphoricons.light.Pause
-import com.adamglin.phosphoricons.light.Play
-import com.adamglin.phosphoricons.light.SkipBack
-import com.adamglin.phosphoricons.light.SkipForward
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.Devices
+import com.adamglin.phosphoricons.bold.Pause
+import com.adamglin.phosphoricons.bold.Play
+import com.adamglin.phosphoricons.bold.SkipBack
+import com.adamglin.phosphoricons.bold.SkipForward
 
 /**
  * The now-playing strip that docks onto [GamutBottomBar] (pass it as the bar's `nowPlaying` slot). It is part of
@@ -108,22 +108,22 @@ fun MiniPlayerStrip(
                 )
             }
             Box(Modifier.size(40.dp).pressScale(onClick = onDevicesClick, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
-                Icon(PhosphorIcons.Light.Devices, "Connect to a device", tint = if (devicesActive) accent else ink(0.75f), modifier = Modifier.size(22.dp))
+                Icon(PhosphorIcons.Bold.Devices, "Connect to a device", tint = if (devicesActive) accent else ink(0.9f), modifier = Modifier.size(22.dp))
             }
             Box(Modifier.size(40.dp).pressScale(onClick = onPrevious, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
-                Icon(PhosphorIcons.Light.SkipBack, "Previous", tint = ink(0.9f), modifier = Modifier.size(22.dp))
+                Icon(PhosphorIcons.Bold.SkipBack, "Previous", tint = ink(0.9f), modifier = Modifier.size(22.dp))
             }
             Box(Modifier.size(48.dp).pressScale(onClick = onTogglePlay, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
                 Crossfade(if (isLoading) 2 else if (isPlaying) 1 else 0, animationSpec = tween(160), label = "mini-play") { s ->
                     when (s) {
                         2 -> CircularProgressIndicator(color = ink(), strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                        1 -> Icon(PhosphorIcons.Light.Pause, "Pause", tint = ink(), modifier = Modifier.size(24.dp))
-                        else -> Icon(PhosphorIcons.Light.Play, "Play", tint = ink(), modifier = Modifier.size(24.dp))
+                        1 -> Icon(PhosphorIcons.Bold.Pause, "Pause", tint = ink(), modifier = Modifier.size(24.dp))
+                        else -> Icon(PhosphorIcons.Bold.Play, "Play", tint = ink(), modifier = Modifier.size(24.dp))
                     }
                 }
             }
             Box(Modifier.size(40.dp).pressScale(onClick = onNext, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
-                Icon(PhosphorIcons.Light.SkipForward, "Next", tint = ink(0.9f), modifier = Modifier.size(22.dp))
+                Icon(PhosphorIcons.Bold.SkipForward, "Next", tint = ink(0.9f), modifier = Modifier.size(22.dp))
             }
         }
     }

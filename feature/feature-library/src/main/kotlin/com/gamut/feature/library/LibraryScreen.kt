@@ -53,18 +53,18 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.fill.CheckCircle
 import com.adamglin.phosphoricons.fill.DeviceMobileCamera
 import com.adamglin.phosphoricons.fill.Heart
-import com.adamglin.phosphoricons.light.CaretRight
-import com.adamglin.phosphoricons.light.MagnifyingGlass
-import com.adamglin.phosphoricons.light.MusicNote
-import com.adamglin.phosphoricons.light.PlusCircle
-import com.adamglin.phosphoricons.light.Plus
-import com.adamglin.phosphoricons.light.Rows
-import com.adamglin.phosphoricons.light.SquaresFour
-import com.adamglin.phosphoricons.light.VinylRecord
+import com.adamglin.phosphoricons.bold.CaretRight
+import com.adamglin.phosphoricons.bold.MagnifyingGlass
+import com.adamglin.phosphoricons.bold.MusicNote
+import com.adamglin.phosphoricons.bold.PlusCircle
+import com.adamglin.phosphoricons.bold.Plus
+import com.adamglin.phosphoricons.bold.Rows
+import com.adamglin.phosphoricons.bold.SquaresFour
+import com.adamglin.phosphoricons.bold.VinylRecord
 import com.gamut.core.designsystem.adaptiveGutter
 import com.gamut.core.designsystem.AcrylicMaterials
 import com.gamut.core.designsystem.AcrylicTone
@@ -152,7 +152,7 @@ fun LibraryScreen(
                             modifier = Modifier.weight(1f),
                         )
                         Box(Modifier.size(44.dp).pressScale(onClick = onCreatePlaylist), contentAlignment = Alignment.Center) {
-                            Icon(PhosphorIcons.Light.Plus, "Create playlist", tint = ink(0.85f), modifier = Modifier.size(24.dp))
+                            Icon(PhosphorIcons.Bold.Plus, "Create playlist", tint = ink(0.85f), modifier = Modifier.size(24.dp))
                         }
                     }
 
@@ -169,7 +169,7 @@ fun LibraryScreen(
                         // Grid / list toggle, at the end of the filter row.
                         Box(Modifier.size(36.dp).pressScale(onClick = { isGrid = !isGrid }), contentAlignment = Alignment.Center) {
                             Icon(
-                                if (isGrid) PhosphorIcons.Light.Rows else PhosphorIcons.Light.SquaresFour,
+                                if (isGrid) PhosphorIcons.Bold.Rows else PhosphorIcons.Bold.SquaresFour,
                                 if (isGrid) "Switch to list" else "Switch to grid",
                                 tint = ink(0.85f),
                                 modifier = Modifier.size(22.dp),
@@ -245,14 +245,14 @@ fun LibraryScreen(
                                 }
                                 if (isGrid) {
                                     // No room for an "Add" button in a tile: while a track is waiting, a tap adds it.
-                                    GridCell(playlist.name, addOrOpen, offline = offline) { TileCover(cover, PhosphorIcons.Light.VinylRecord) }
+                                    GridCell(playlist.name, addOrOpen, offline = offline) { TileCover(cover, PhosphorIcons.Bold.VinylRecord) }
                                 } else {
                                     LibraryRow(
                                         title = playlist.name,
                                         // Tags replace the song count: the count only shows once you are inside the playlist.
                                         meta = if (playlist.tags.isEmpty()) null else ({ TagRow(playlist.tags) }),
                                         onClick = { onOpenPlaylist(playlist.id.toString()) },
-                                        cover = { RowCover(cover, PhosphorIcons.Light.VinylRecord) },
+                                        cover = { RowCover(cover, PhosphorIcons.Bold.VinylRecord) },
                                         offline = offline,
                                         trailing = {
                                             if (selectedTrack != null) {
@@ -262,7 +262,7 @@ fun LibraryScreen(
                                                     contentAlignment = Alignment.Center,
                                                 ) {
                                                     Icon(
-                                                        if (added) PhosphorIcons.Fill.CheckCircle else PhosphorIcons.Light.PlusCircle,
+                                                        if (added) PhosphorIcons.Fill.CheckCircle else PhosphorIcons.Bold.PlusCircle,
                                                         if (added) "Added" else "Add to playlist",
                                                         tint = if (added) TextPrimary else ink(0.85f),
                                                         modifier = Modifier.size(28.dp),
@@ -295,13 +295,13 @@ fun LibraryScreen(
                             items(artists, key = { "a-${it.id}" }, contentType = { "artist" }) { artist ->
                                 if (isGrid) {
                                     GridCell(artist.name, { onOpenArtist(artist.id) }, circle = true) {
-                                        TileCover(artist.imageUrl, PhosphorIcons.Light.MusicNote, circle = true)
+                                        TileCover(artist.imageUrl, PhosphorIcons.Bold.MusicNote, circle = true)
                                     }
                                 } else {
                                     LibraryRow(
                                         title = artist.name,
                                         onClick = { onOpenArtist(artist.id) },
-                                        cover = { RowCover(artist.imageUrl, PhosphorIcons.Light.MusicNote, circle = true) },
+                                        cover = { RowCover(artist.imageUrl, PhosphorIcons.Bold.MusicNote, circle = true) },
                                     )
                                 }
                             }
@@ -407,7 +407,7 @@ private fun SectionTitle(text: String) {
 
 @Composable
 private fun ChevronIcon() {
-    Icon(PhosphorIcons.Light.CaretRight, null, tint = ink(0.45f), modifier = Modifier.size(18.dp))
+    Icon(PhosphorIcons.Bold.CaretRight, null, tint = ink(0.45f), modifier = Modifier.size(18.dp))
 }
 
 /**

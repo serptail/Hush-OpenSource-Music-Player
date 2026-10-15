@@ -40,8 +40,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.ArrowClockwise
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.ArrowClockwise
 import com.gamut.core.designsystem.ink
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
@@ -173,7 +173,7 @@ fun BoxScope.SlingshotIndicator(state: SlingshotRefreshState) {
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            PhosphorIcons.Light.ArrowClockwise, "Refresh", tint = ink(),
+            PhosphorIcons.Bold.ArrowClockwise, "Refresh", tint = ink(),
             modifier = Modifier.size(22.dp).graphicsLayer { rotationZ = if (state.refreshing) spin else progress.coerceIn(0f, 1.2f) * 270f },
         )
     }

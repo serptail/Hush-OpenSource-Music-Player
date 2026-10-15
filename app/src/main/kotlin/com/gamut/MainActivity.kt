@@ -47,6 +47,11 @@ import com.gamut.settings.FeedbackScreen
 import com.gamut.settings.AboutScreen
 import com.gamut.settings.TelemetryCollector
 import com.gamut.settings.SettingsScreen
+import com.gamut.settings.LocalSupportNudge
+import com.gamut.settings.SupportConfig
+import com.gamut.settings.supportNudgeCorona
+import com.gamut.settings.SupportSheetHost
+import com.gamut.settings.SupportViewModel
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import com.gamut.core.designsystem.GamutMotion
@@ -90,10 +95,10 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.zIndex
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.MagnifyingGlass
-import com.adamglin.phosphoricons.light.VinylRecord
-import com.adamglin.phosphoricons.light.User
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.MagnifyingGlass
+import com.adamglin.phosphoricons.bold.VinylRecord
+import com.adamglin.phosphoricons.bold.User
 import com.gamut.core.designsystem.BottomBarItem
 import com.gamut.core.designsystem.GamutBottomBar
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -133,6 +138,7 @@ import com.gamut.feature.library.LocalAvailabilityViewModel
 import com.gamut.feature.library.LocalMusicViewModel
 import com.gamut.feature.library.withoutMissingLocal
 import com.gamut.feature.library.localUri
+import com.gamut.feature.library.playlistIdsContaining
 import com.gamut.feature.resolver.TrackDownloadManager
 import com.gamut.feature.library.PlaylistDownloadsViewModel
 import com.gamut.feature.library.PlaylistScreen
@@ -146,6 +152,7 @@ import com.gamut.feature.resolver.ResolveTrackSourceUseCase
 import com.gamut.feature.resolver.ResolveFailure
 import com.gamut.feature.resolver.AudioSourceRepository
 import com.gamut.feature.resolver.NewPipeYoutubeSource
+import com.gamut.feature.search.LocalPlaylistRemove
 import com.gamut.feature.search.SearchScreen
 import com.gamut.feature.search.TrackPlaylistOption
 import com.gamut.feature.search.SearchViewModel
@@ -220,8 +227,11 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
     // App-wide toast pill (top). Screens reach it with LocalNotifier.current.
     val notifier = rememberNotifier()
     // One toast when a run of downloads ends: the song (if one was queued) or the playlist (if all of it was).
+    val supportVm = hiltViewModel<SupportViewModel>()
+    val supportNudge by supportVm.store.nudge.collectAsState()
     LaunchedEffect(downloadManager) {
         downloadManager.summaries.collect { s ->
+            if (s.succeeded > 0) supportVm.store.recordDownloadSuccess()   // support: "first download" moment (once)
             when {
                 s.succeeded == 0 -> notifier.error(if (s.failed == 1) "Couldn\u2019t download this song" else "Downloads failed")
                 s.failed > 0 -> notifier.info("${s.succeeded} downloaded \u00B7 ${s.failed} failed")
@@ -293,8 +303,27 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
     // One page every 400 ms once the loading screen has gone, so the pre-composition never lands as one big hitch.
     LaunchedEffect(showLoading) {
         if (!showLoading) {
-            delay(1200)
+            delay(1500)
             for (page in SettingsPage.entries) { composedPages = composedPages + page; delay(400) }
+        }
+    }
+    // --- Settings itself is a persistent layer too: composed once while idle, then only translated. The NavHost "settings"
+    // route stays (back stack, back handlers) but renders nothing; this position follows the route.
+    // 1 = parked right, 0 = open, -1 = pushed left by a NavHost screen (favorites ...).
+    val settingsX = remember { Animatable(1f) }
+    var settingsComposed by remember { mutableStateOf(false) }
+    var prevRoute by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(showLoading) { if (!showLoading) { delay(300); settingsComposed = true } }
+    LaunchedEffect(currentRoute) {
+        val prev = prevRoute
+        val r = currentRoute
+        prevRoute = r
+        val spec = tween<Float>(GamutMotion.NAV_MS, easing = GamutMotion.Standard)
+        when {
+            r == "settings" -> settingsX.animateTo(0f, spec)
+            prev == "settings" && (r == null || r == "home") -> settingsX.animateTo(1f, spec)
+            prev == "settings" -> settingsX.animateTo(-1f, spec)
+            r == null || r == "home" -> settingsX.snapTo(1f)
         }
     }
     val openLayer: (SettingsPage) -> Unit = { page ->
@@ -394,6 +423,13 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
     val shazamVm = hiltViewModel<ShazamViewModel>()
     val shazamState by shazamVm.state.collectAsState()
     val appLibraryVm = hiltViewModel<LibraryViewModel>()
+    // Support: "a playlist reached ~10 songs" moment. Collected inside the effect so the root does not recompose.
+    LaunchedEffect(appLibraryVm) {
+        appLibraryVm.tracksByPlaylist.collect { map -> supportVm.store.recordPlaylistSize(map.values.maxOfOrNull { it.size } ?: 0) }
+    }
+    // Support: the sheet may only show at a quiet moment (see supportSafe below).
+    var coldStartQuiet by remember { mutableStateOf(false) }
+    LaunchedEffect(showLoading) { if (!showLoading) { delay(SupportConfig.COLD_START_QUIET_MS); coldStartQuiet = true } }
     // A local song deleted from the phone is dropped from Favorites right away. (Collected inside the effect, so the
     // root does not recompose.) Playlists clean themselves the same way in PlaylistScreen.
     val localAvailabilityVm = hiltViewModel<LocalAvailabilityViewModel>()
@@ -423,7 +459,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
             .collect { (track, positionMs) ->
                 val isNewSong = track.isrc != countedIsrc
                 val startedOver = !isNewSong && positionMs < 2_000L && lastPositionMs > 10_000L
-                if (isNewSong || startedOver) statsVm.record(track)
+                if (isNewSong || startedOver) { statsVm.record(track); supportVm.store.recordPlay() }
                 countedIsrc = track.isrc
                 lastPositionMs = positionMs
             }
@@ -498,7 +534,10 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                         visible = backgroundVisible,
                         modifier = Modifier.fillMaxSize().graphicsLayer { alpha = bgAlpha }.acrylicSource(zIndex = -1f),
                     )
-                    CompositionLocalProvider(LocalCoverPalette provides palette, LocalNotifier provides notifier, LocalArtistPhotoResolver provides photoResolver) {
+                    val removeFromPlaylist = remember(appLibraryVm) {
+                        { t: Track, id: String -> id.toLongOrNull()?.let { appLibraryVm.removeTrack(it, t) }; Unit }
+                    }
+                    CompositionLocalProvider(LocalCoverPalette provides palette, LocalSupportNudge provides supportNudge, LocalNotifier provides notifier, LocalArtistPhotoResolver provides photoResolver, LocalPlaylistRemove provides removeFromPlaylist) {
                         // The strip docks onto the bottom bar of Search and Library (their `nowPlaying` slot).
                         val openArtist: (String) -> Unit = { artist -> nav.navigate("artist-name/${Uri.encode(artist)}") }
                         val openConnect = { showConnect = true }
@@ -601,6 +640,27 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                             onShazam = onShazam,
                             nowPlaying = nowPlaying,
                         )
+                        // Settings: pre-composed layer above HomeTabs, below its sub-pages and the NavHost.
+                        SettingsLayer(
+                            composed = settingsComposed || currentRoute == "settings",
+                            active = currentRoute == "settings",
+                            x = settingsX,
+                            subPagePos = layerPos,
+                        ) {
+                            SettingsScreen(
+                                onBack = { nav.popBackStack() },
+                                onLikedSongs = { nav.navigate("favorites") },
+                                onPlaylists = { openLibraryTick++; nav.popBackStack("home", false) },
+                                onRecentlyPlayed = { openLayer(SettingsPage.Recent) },
+                                onProfile = { openLayer(SettingsPage.Profile) },
+                                onAppearance = { openLayer(SettingsPage.Appearance) },
+                                onPlaybackAudio = { openLayer(SettingsPage.Playback) },
+                                onStorage = { openLayer(SettingsPage.Storage) },
+                                onFeedback = { openLayer(SettingsPage.Feedback) },
+                                onAbout = { openLayer(SettingsPage.About) },
+                                nowPlaying = nowPlayingDocked,
+                            )
+                        }
                         // Settings sub-pages: BELOW the NavHost (so the player still slides over them), above HomeTabs.
                         SlideLayer(composed = SettingsPage.Recent in composedPages, selected = layerPage == SettingsPage.Recent, open = layerOpen, position = layerPos, onClose = closeLayer) {
                             val recent by recentVm.tracks.collectAsState()
@@ -646,26 +706,14 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                         ) {
                             // "home" is drawn by HomeTabs above and never leaves composition, so this destination is empty.
                             composable("home") {}
-                            composable("settings") {
-                                // Settings slides left in step with whichever sub-page layer opens (one strip, like the tabs).
-                                Box(Modifier.fillMaxSize().graphicsLayer { translationX = -layerPos.value * size.width }) {
-                                AfterEnter {
-                                    SettingsScreen(
-                                        onBack = { nav.popBackStack() },
-                                        onLikedSongs = { nav.navigate("favorites") },
-                                        onPlaylists = { openLibraryTick++; nav.popBackStack("home", false) },
-                                        onRecentlyPlayed = { openLayer(SettingsPage.Recent) },
-                                        onProfile = { openLayer(SettingsPage.Profile) },
-                                        onAppearance = { openLayer(SettingsPage.Appearance) },
-                                        onPlaybackAudio = { openLayer(SettingsPage.Playback) },
-                                        onStorage = { openLayer(SettingsPage.Storage) },
-                                        onFeedback = { openLayer(SettingsPage.Feedback) },
-                                        onAbout = { openLayer(SettingsPage.About) },
-                                        nowPlaying = nowPlayingDocked,
-                                    )
-                                }
-                                }
-                            }
+                            // Drawn by SettingsLayer (above); the route only owns the back stack entry, so no transitions here.
+                            composable(
+                                "settings",
+                                enterTransition = { EnterTransition.None },
+                                exitTransition = { ExitTransition.None },
+                                popEnterTransition = { EnterTransition.None },
+                                popExitTransition = { ExitTransition.None },
+                            ) {}
                             composable("local") {
                                 val localVm = hiltViewModel<LocalMusicViewModel>()
                                 Settled {
@@ -804,6 +852,8 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                             val libraryVm = appLibraryVm
                             val favoriteIsrcs by libraryVm.favoriteIsrcs.collectAsState()
                             val playlists by libraryVm.playlists.collectAsState()
+                            val tracksByPlaylist by libraryVm.tracksByPlaylist.collectAsState()
+                            val playlistInfo by libraryVm.playlistInfo.collectAsState()
                             PlayerScreen(
                                 player,
                                 onBack = closePlayer,
@@ -813,9 +863,13 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                     libraryVm.toggleFavorite(t)
                                     if (t.isrc in favoriteIsrcs) notifier.info("Removed from Favorites") else notifier.success("Added to Favorites")
                                 },
-                                playlists = playlists.map { PlaylistPickerItem(id = it.id.toString(), name = it.name, coverUrl = it.coverUri) },
+                                playlists = playlists.map { PlaylistPickerItem(id = it.id.toString(), name = it.name, coverUrl = it.coverUri ?: playlistInfo[it.id]?.coverUrl) },
+                                playlistIdsWithTrack = loadedTrack?.let { playlistIdsContaining(tracksByPlaylist, it) } ?: emptySet(),
                                 onAddToPlaylist = { t, playlistId ->
                                     playlists.firstOrNull { it.id.toString() == playlistId }?.let { libraryVm.addTrack(it.id, t) }
+                                },
+                                onRemoveFromPlaylist = { t, playlistId ->
+                                    playlists.firstOrNull { it.id.toString() == playlistId }?.let { libraryVm.removeTrack(it.id, t) }
                                 },
                                 // The artist page slides in (NavHost) while the player drops away: two independent translations.
                                 onGoToArtist = { t ->
@@ -834,8 +888,10 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                             val shazamLevel by shazamVm.level.collectAsState()
                             val favoriteIsrcs by appLibraryVm.favoriteIsrcs.collectAsState()
                             val libraryPlaylists by appLibraryVm.playlists.collectAsState()
-                            val playlists = remember(libraryPlaylists) {
-                                libraryPlaylists.map { TrackPlaylistOption(id = it.id.toString(), name = it.name, coverUrl = it.coverUri) }
+                            val playlistInfo by appLibraryVm.playlistInfo.collectAsState()
+                            val tracksByPlaylist by appLibraryVm.tracksByPlaylist.collectAsState()
+                            val playlists = remember(libraryPlaylists, playlistInfo, tracksByPlaylist) {
+                                libraryPlaylists.map { TrackPlaylistOption(id = it.id.toString(), name = it.name, coverUrl = it.coverUri ?: playlistInfo[it.id]?.coverUrl, trackIsrcs = tracksByPlaylist[it.id].orEmpty().mapTo(HashSet()) { t -> t.isrc }) }
                             }
                             // Sheets sit outside the screens' CoverTheme, so they get their own: light/dark applies here too.
                             CoverTheme(palette) {
@@ -859,6 +915,10 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                 )
                             }
                         }
+                        // Support sheet: after the sheets above, before the notices. Never while playing / player open / loading / cold start.
+                        val supportSafe = !showLoading && coldStartQuiet && !isPlayingNow && !playerOpen && !createOpen &&
+                            shazamState is ShazamState.Idle && !showConnect
+                        CoverTheme(palette) { SupportSheetHost(vm = supportVm, safeMoment = supportSafe) }
                         // Last child = drawn above every screen. Needs its own CoverTheme (it is outside the screens').
                         CoverTheme(if (playerOpen || createOpen) neutralPalette else palette) { NoticeHost() }
                         // Connect sheet (Bluetooth + output devices), opened from the mini player's devices icon.
@@ -956,24 +1016,6 @@ private fun AnimatedVisibilityScope.Settled(content: @Composable () -> Unit) {
 }
 
 /**
- * Composes [content] two frames AFTER the screen was entered, instead of in the very frame of the navigation.
- * The enter transition keeps the new screen invisible for its first 90 ms, so its heavy first composition (lists,
- * images, blur) lands in that invisible window instead of as a hitch on top of the old screen. The ViewModel is
- * created by the caller, so data loading still starts immediately.
- */
-@Composable
-private fun AfterEnter(content: @Composable () -> Unit) {
-    var ready by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        withFrameNanos { }
-        withFrameNanos { }
-        ready = true
-    }
-    // No fade of its own: the NavHost already fades the screen once (a second fade made it blink in).
-    if (ready) Box(Modifier.fillMaxSize()) { content() }
-}
-
-/**
  * The two top-level tabs, both always composed and living for the whole session (they are NOT a NavHost destination,
  * so opening an album and coming back never rebuilds them). Switching slides the tabs sideways, by tap on the bar or
  * by swiping (a swipe that starts on a horizontal carousel belongs to the carousel). The bottom bar and the mini
@@ -1018,8 +1060,10 @@ private fun HomeTabs(
     val avatar by accountVm.avatar.collectAsState()
     val favoriteIsrcs by libraryVm.favoriteIsrcs.collectAsState()
     val libraryPlaylists by libraryVm.playlists.collectAsState()
-    val playlistOptions = remember(libraryPlaylists) {
-        libraryPlaylists.map { TrackPlaylistOption(id = it.id.toString(), name = it.name, coverUrl = it.coverUri) }
+    val playlistInfo by libraryVm.playlistInfo.collectAsState()
+    val tracksByPlaylist by libraryVm.tracksByPlaylist.collectAsState()
+    val playlistOptions = remember(libraryPlaylists, playlistInfo, tracksByPlaylist) {
+        libraryPlaylists.map { TrackPlaylistOption(id = it.id.toString(), name = it.name, coverUrl = it.coverUri ?: playlistInfo[it.id]?.coverUrl, trackIsrcs = tracksByPlaylist[it.id].orEmpty().mapTo(HashSet()) { t -> t.isrc }) }
     }
     // Bumped to ask SearchScreen to focus its field and open the keyboard (after the slide to Discover).
     var focusSearchTick by remember { mutableIntStateOf(0) }
@@ -1094,6 +1138,7 @@ private fun HomeTabs(
                     profileName = profileName,
                     profileSeed = profileId,
                     profileImage = avatar,
+                    profileModifier = Modifier.supportNudgeCorona(),   // soft coral glow around the profile circle after the sheet was dismissed
                     nowPlayingIsrc = nowPlayingIsrc,
                     favoriteIsrcs = favoriteIsrcs,
                     onToggleFavorite = libraryVm::toggleFavorite,
@@ -1128,8 +1173,8 @@ private fun HomeTabs(
             CoverTheme(palette) {
                 GamutBottomBar(
                     items = listOf(
-                        BottomBarItem("Discover", PhosphorIcons.Light.MagnifyingGlass, selected = shownTab == 0, onClick = if (shownTab == 0) null else ({ goTo(0) })),
-                        BottomBarItem("Library", PhosphorIcons.Light.VinylRecord, selected = shownTab == 1, onClick = if (shownTab == 1) null else ({ goTo(1) })),
+                        BottomBarItem("Discover", PhosphorIcons.Bold.MagnifyingGlass, selected = shownTab == 0, onClick = if (shownTab == 0) null else ({ goTo(0) })),
+                        BottomBarItem("Library", PhosphorIcons.Bold.VinylRecord, selected = shownTab == 1, onClick = if (shownTab == 1) null else ({ goTo(1) })),
                     ),
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -1139,6 +1184,30 @@ private fun HomeTabs(
             }
         }
     }
+}
+
+/**
+ * The Settings screen as a persistent layer: composed once while idle, parked off-screen, and translated by [x]
+ * (1 = parked right, 0 = open, -1 = pushed left) minus [subPagePos], so it travels left when a sub-page opens.
+ */
+@Composable
+private fun SettingsLayer(
+    composed: Boolean,
+    active: Boolean,
+    x: Animatable<Float, AnimationVector1D>,
+    subPagePos: Animatable<Float, AnimationVector1D>,
+    content: @Composable () -> Unit,
+) {
+    if (!composed) return
+    Box(
+        Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                translationX = (x.value - subPagePos.value) * size.width
+                if (x.value >= 1f) alpha = 0f
+            }
+            .then(if (active) Modifier else Modifier.clearAndSetSemantics {}),
+    ) { CompositionLocalProvider(LocalPageActive provides active) { content() } }
 }
 
 /** The Settings sub-pages that live as persistent slide layers (see [SlideLayer]). Order = pre-composition order. */
@@ -1262,8 +1331,10 @@ private fun ArtistRoute(
 ) {
     val favoriteIsrcs by libraryVm.favoriteIsrcs.collectAsState()
     val libraryPlaylists by libraryVm.playlists.collectAsState()
-    val playlistOptions = remember(libraryPlaylists) {
-        libraryPlaylists.map { TrackPlaylistOption(id = it.id.toString(), name = it.name, coverUrl = it.coverUri) }
+    val playlistInfo by libraryVm.playlistInfo.collectAsState()
+    val tracksByPlaylist by libraryVm.tracksByPlaylist.collectAsState()
+    val playlistOptions = remember(libraryPlaylists, playlistInfo, tracksByPlaylist) {
+        libraryPlaylists.map { TrackPlaylistOption(id = it.id.toString(), name = it.name, coverUrl = it.coverUri ?: playlistInfo[it.id]?.coverUrl, trackIsrcs = tracksByPlaylist[it.id].orEmpty().mapTo(HashSet()) { t -> t.isrc }) }
     }
     val followVm = hiltViewModel<com.gamut.core.sync.FollowViewModel>()
     val followedKeys by followVm.followedKeys.collectAsState()
@@ -1300,8 +1371,10 @@ private fun AlbumRoute(
 ) {
     val favoriteIsrcs by libraryVm.favoriteIsrcs.collectAsState()
     val libraryPlaylists by libraryVm.playlists.collectAsState()
-    val playlistOptions = remember(libraryPlaylists) {
-        libraryPlaylists.map { TrackPlaylistOption(id = it.id.toString(), name = it.name, coverUrl = it.coverUri) }
+    val playlistInfo by libraryVm.playlistInfo.collectAsState()
+    val tracksByPlaylist by libraryVm.tracksByPlaylist.collectAsState()
+    val playlistOptions = remember(libraryPlaylists, playlistInfo, tracksByPlaylist) {
+        libraryPlaylists.map { TrackPlaylistOption(id = it.id.toString(), name = it.name, coverUrl = it.coverUri ?: playlistInfo[it.id]?.coverUrl, trackIsrcs = tracksByPlaylist[it.id].orEmpty().mapTo(HashSet()) { t -> t.isrc }) }
     }
     AlbumScreen(
         viewModel = viewModel,

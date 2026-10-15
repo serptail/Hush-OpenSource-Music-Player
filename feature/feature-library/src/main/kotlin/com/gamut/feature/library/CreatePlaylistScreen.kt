@@ -61,12 +61,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.fill.Heart
-import com.adamglin.phosphoricons.light.MusicNote
-import com.adamglin.phosphoricons.light.Plus
-import com.adamglin.phosphoricons.light.VinylRecord
-import com.adamglin.phosphoricons.light.X
+import com.adamglin.phosphoricons.bold.MusicNote
+import com.adamglin.phosphoricons.bold.Plus
+import com.adamglin.phosphoricons.bold.VinylRecord
+import com.adamglin.phosphoricons.bold.X
 import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.LocalCoverPalette
@@ -148,7 +148,7 @@ fun CreatePlaylistScreen(
         ) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 24.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(44.dp).pressScale(onClick = onBack), contentAlignment = Alignment.Center) {
-                    Icon(PhosphorIcons.Light.X, "Close", tint = ink(0.85f), modifier = Modifier.size(22.dp))
+                    Icon(PhosphorIcons.Bold.X, "Close", tint = ink(0.85f), modifier = Modifier.size(22.dp))
                 }
                 Text("New playlist", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(start = 8.dp))
             }
@@ -192,7 +192,7 @@ fun CreatePlaylistScreen(
                     Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (selectedTrack != null) {
                             OptionRow(
-                                icon = PhosphorIcons.Light.MusicNote,
+                                icon = PhosphorIcons.Bold.MusicNote,
                                 title = "Add this song",
                                 subtitle = "${selectedTrack.title} \u00B7 ${selectedTrack.artist}",
                                 checked = addPicked,
@@ -256,7 +256,7 @@ private fun CoverPreview(url: String?, onPick: () -> Unit, onClear: () -> Unit) 
                     Modifier.fillMaxSize().pressScale(onClick = onPick).clip(PreviewShape).background(ink(0.07f)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(PhosphorIcons.Light.Plus, "Add cover", tint = ink(0.6f), modifier = Modifier.size(44.dp))
+                    Icon(PhosphorIcons.Bold.Plus, "Add cover", tint = ink(0.6f), modifier = Modifier.size(44.dp))
                 }
             } else {
                 CoverImage(
@@ -279,7 +279,7 @@ private fun CoverPreview(url: String?, onPick: () -> Unit, onClear: () -> Unit) 
                     .background(Color.Black.copy(alpha = 0.55f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(PhosphorIcons.Light.X, "Remove cover", tint = Color.White, modifier = Modifier.size(16.dp))
+                Icon(PhosphorIcons.Bold.X, "Remove cover", tint = Color.White, modifier = Modifier.size(16.dp))
             }
         }
     }

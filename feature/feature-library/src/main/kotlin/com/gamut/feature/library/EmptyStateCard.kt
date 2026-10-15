@@ -29,8 +29,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.MusicNote
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.MusicNote
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
@@ -138,7 +138,7 @@ private fun CoverSpread(urls: List<String>, circle: Boolean = false) {
                 if (url != null) {
                     CoverImage(remember(url) { resolveCoverUrl(url, 200) }, Modifier.fillMaxSize())
                 } else {
-                    Icon(PhosphorIcons.Light.MusicNote, null, tint = ink(0.35f), modifier = Modifier.size(24.dp))
+                    Icon(PhosphorIcons.Bold.MusicNote, null, tint = ink(0.35f), modifier = Modifier.size(24.dp))
                 }
             }
         }

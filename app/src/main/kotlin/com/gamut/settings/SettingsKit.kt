@@ -63,10 +63,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.CaretLeft
-import com.adamglin.phosphoricons.light.CaretRight
-import com.adamglin.phosphoricons.light.Check
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.CaretLeft
+import com.adamglin.phosphoricons.bold.CaretRight
+import com.adamglin.phosphoricons.bold.Check
 import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.TransparentStatusBar
@@ -98,7 +98,7 @@ fun GamutPage(title: String, onBack: () -> Unit, nowPlaying: @Composable () -> U
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 24.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(44.dp).pressScale(onClick = onBack), contentAlignment = Alignment.Center) {
-                    Icon(PhosphorIcons.Light.CaretLeft, "Back", tint = ink(0.85f), modifier = Modifier.size(24.dp))
+                    Icon(PhosphorIcons.Bold.CaretLeft, "Back", tint = ink(0.85f), modifier = Modifier.size(24.dp))
                 }
                 if (title.isNotEmpty()) Text(title, style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(start = 4.dp))
             }
@@ -114,7 +114,7 @@ fun GamutPage(title: String, onBack: () -> Unit, nowPlaying: @Composable () -> U
 /** Section heading: big, bold, no box. */
 @Composable
 fun GroupLabel(text: String) {
-    Text(text, style = GamutHeading, color = ink(), modifier = Modifier.padding(top = 32.dp, bottom = 8.dp))
+    Text(text, style = GamutHeading, color = ink(), modifier = Modifier.padding(top = 16.dp, bottom = 4.dp))
 }
 
 /** Kept for source compatibility: a plain column, no surface. */
@@ -156,7 +156,7 @@ fun Cell(
             }
         }
         if (trailing != null) trailing()
-        else if (onClick != null && chevron && !destructive) Icon(PhosphorIcons.Light.CaretRight, null, tint = ink(0.45f), modifier = Modifier.size(18.dp))
+        else if (onClick != null && chevron && !destructive) Icon(PhosphorIcons.Bold.CaretRight, null, tint = ink(0.45f), modifier = Modifier.size(18.dp))
     }
 }
 
@@ -239,7 +239,7 @@ fun GamutCheck(checked: Boolean, label: String, onChange: (Boolean) -> Unit, war
         label = "check-visibility",
     ) {
         Icon(
-            imageVector = PhosphorIcons.Light.Check,
+            imageVector = PhosphorIcons.Bold.Check,
             contentDescription = null,
             tint = onInk,
             modifier = Modifier.size(14.dp),

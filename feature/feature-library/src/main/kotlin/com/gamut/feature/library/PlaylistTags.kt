@@ -27,8 +27,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.X
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.X
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 
@@ -93,7 +93,7 @@ internal fun TagChip(label: String, removable: Boolean, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, style = MaterialTheme.typography.labelLarge, color = ink())
-        if (removable) Icon(PhosphorIcons.Light.X, "Remove tag $label", tint = ink(0.7f), modifier = Modifier.padding(start = 6.dp).size(14.dp))
+        if (removable) Icon(PhosphorIcons.Bold.X, "Remove tag $label", tint = ink(0.7f), modifier = Modifier.padding(start = 6.dp).size(14.dp))
     }
 }
 

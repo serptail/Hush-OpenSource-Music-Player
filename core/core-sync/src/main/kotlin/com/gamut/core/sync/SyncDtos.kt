@@ -103,6 +103,14 @@ data class FollowPull(
     @SerialName("deleted_at") val deletedAt: String? = null,
 )
 
+/** Lightweight playlist listing used to adopt same-named server playlists on first sign-in. */
+@Serializable
+data class RemotePlaylistRef(
+    val id: String,
+    val name: String,
+    @SerialName("deleted_at") val deletedAt: String? = null,
+)
+
 internal const val SONG_EMBED =
     "songs(provider,provider_song_id,title,duration_ms,artwork_url,artist:artists(name),album:albums(title))"
 

@@ -80,8 +80,14 @@ class AuthRepository @Inject constructor(private val supabase: SupabaseClient) {
         }
     }
 
-    suspend fun signOut(allDevices: Boolean): Result<Unit> = runCatching {
-        supabase.auth.signOut(if (allDevices) SignOutScope.GLOBAL else SignOutScope.LOCAL)
+    /**
+     * This device is always signed out. "All devices" needs the server (it revokes every refresh token): offline it
+     * fails, the caller is told, and the other devices stay signed in. Other devices notice on their next sync check.
+     */
+    suspend fun signOut(allDevices: Boolean): Result<Unit> {
+        val remote = runCatching { supabase.auth.signOut(if (allDevices) SignOutScope.GLOBAL else SignOutScope.LOCAL) }
+        if (remote.isFailure) runCatching { supabase.auth.clearSession() }
+        return if (allDevices) remote else Result.success(Unit)
     }
 
     /** Server deletes the auth user; ON DELETE CASCADE removes all cloud data. Local data is the caller's choice. */

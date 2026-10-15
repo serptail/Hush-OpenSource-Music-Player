@@ -7,14 +7,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gamut.core.database.PendingSyncDao
 import com.gamut.core.sync.AuthRepository
+import com.gamut.core.sync.BackupPasswordException
 import com.gamut.core.sync.DataExporter
+import com.gamut.core.sync.ImportReport
 import com.gamut.core.sync.LocalDataCleaner
 import com.gamut.core.sync.SyncManager
 import com.gamut.onboarding.AutoBackup
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -31,8 +35,11 @@ import kotlinx.coroutines.withContext
 
 data class BackupFile(val path: String, val modifiedMs: Long)
 
-/** What the "Import complete" pop-up shows. */
-data class ImportSummary(val favorites: String, val playlists: String, val replaced: Boolean)
+/** What the "Import complete" pop-up shows: the full report of what was added, already there and skipped. */
+data class ImportSummary(val report: ImportReport, val replaced: Boolean)
+
+/** A restore waiting for the user's OK. [preview] is a dry run: nothing has been changed yet. */
+data class RestorePrompt(val file: BackupFile, val preview: ImportReport)
 
 /** One-shot result for the app's toast pill (screens forward it to LocalNotifier). Replaces the old message dialogs. */
 sealed interface Notice {
@@ -81,6 +88,13 @@ class AccountViewModel @Inject constructor(
     val importSummary: StateFlow<ImportSummary?> = _importSummary
     fun dismissImportSummary() { _importSummary.value = null }
 
+    private val _restorePrompt = MutableStateFlow<RestorePrompt?>(null)
+    val restorePrompt: StateFlow<RestorePrompt?> = _restorePrompt
+    fun cancelRestore() { _restorePrompt.value = null }
+
+    /** Only one import / restore at a time: a double tap can never start a second one. */
+    private val busy = AtomicBoolean(false)
+
     val autoBackup = store.autoBackup
     private val _backups = MutableStateFlow<List<BackupFile>>(emptyList())
     val backups: StateFlow<List<BackupFile>> = _backups
@@ -92,6 +106,9 @@ class AccountViewModel @Inject constructor(
     init {
         refreshBackups()
         viewModelScope.launch { userId.collect { avatars.refresh(it) } }
+        viewModelScope.launch {
+            sync.signedOutRemotely.collect { _events.tryEmit(Notice.Info("Signed out \u00B7 this account was signed out elsewhere or deleted")) }
+        }
     }
 
     fun signIn(activityContext: Context) = viewModelScope.launch {
@@ -120,14 +137,20 @@ class AccountViewModel @Inject constructor(
     fun removeAvatar() = viewModelScope.launch { avatars.remove(auth.currentUserId()) }
 
     fun signOut(allDevices: Boolean, clearLocal: Boolean) = viewModelScope.launch {
+        val uid = auth.currentUserId()
         auth.signOut(allDevices).onFailure { _events.tryEmit(Notice.Error("Couldn\u2019t sign out everywhere")) }
-        if (clearLocal) { cleaner.clear(); avatars.clearLocal(); refreshBackups() }
+        if (clearLocal) { cleaner.clear(); avatars.clearLocal(); AutoBackup.deleteAll(appContext); store.setName(uid, null); refreshBackups() }
         _events.tryEmit(Notice.Info("Google disconnected"))
     }
 
     fun deleteAccount(clearLocal: Boolean) = viewModelScope.launch {
+        val uid = auth.currentUserId()
         auth.deleteAccount()
-            .onSuccess { if (clearLocal) { cleaner.clear(); avatars.clearLocal() }; _events.tryEmit(Notice.Success("Account deleted")) }
+            .onSuccess {
+                if (clearLocal) { cleaner.clear(); avatars.clearLocal(); AutoBackup.deleteAll(appContext); store.setName(uid, null); refreshBackups() }
+                else sync.forgetOwner()      // the kept library no longer belongs to any account
+                _events.tryEmit(Notice.Success("Account deleted"))
+            }
             .onFailure { _events.tryEmit(Notice.Error("Couldn\u2019t delete account")) }
     }
 
@@ -145,21 +168,34 @@ class AccountViewModel @Inject constructor(
         }
     }
 
-    /** [replace] = wipe current favorites/playlists first; otherwise the file is merged in. */
-    fun import(resolver: ContentResolver, uri: Uri, password: String, replace: Boolean) = viewModelScope.launch {
-        val bytes = runCatching {
-            withContext(Dispatchers.IO) { resolver.openInputStream(uri)!!.use { exporter.readLimited(it) } }
-        }.getOrElse { _events.tryEmit(Notice.Error("Couldn\u2019t read that file")); return@launch }
-        // Replace: keep the current data in memory so a wrong password / bad file puts everything back.
-        val safety = if (replace) runCatching { exporter.export(null) }.getOrNull() else null
-        if (replace && safety == null) { _events.tryEmit(Notice.Error("Couldn\u2019t prepare the import")); return@launch }
-        if (replace) cleaner.clear()
-        runCatching { exporter.import(bytes, password.takeIf { it.isNotBlank() }?.toCharArray()) }
-            .onSuccess { r -> _importSummary.value = ImportSummary("${r.favorites}", "${r.playlists}", replace) }
-            .onFailure {
-                if (safety != null) runCatching { exporter.import(safety, null) }
-                _events.tryEmit(Notice.Error("Import failed \u00B7 wrong password or file?"))
+    /**
+     * [replace] = remove current favorites/playlists/artists first; otherwise the file is merged in. The exporter validates
+     * the file and password BEFORE touching anything, and puts everything back if the import fails halfway.
+     * Runs in [appScope] so leaving the screen cannot cancel it halfway.
+     */
+    fun import(resolver: ContentResolver, uri: Uri, password: String, replace: Boolean) {
+        if (!busy.compareAndSet(false, true)) return
+        appScope.launch {
+            val pw = password.takeIf { it.isNotBlank() }?.toCharArray()
+            try {
+                val bytes = runCatching { resolver.openInputStream(uri)!!.use { exporter.readLimited(it) } }
+                    .getOrElse { _events.tryEmit(Notice.Error("Couldn\u2019t read that file")); return@launch }
+                _importSummary.value = ImportSummary(exporter.import(bytes, pw, replace), replace)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _events.tryEmit(Notice.Error(importError(e)))
+            } finally {
+                pw?.fill('\u0000')
+                busy.set(false)
             }
+        }
+    }
+
+    private fun importError(e: Exception): String = when (e) {
+        is BackupPasswordException -> if (e.wrong) "Wrong password" else "This backup is encrypted \u00B7 enter its password"
+        is IllegalArgumentException -> e.message ?: "Import failed"
+        else -> "Import failed"
     }
 
     // ---- offline (on-device) backups ----
@@ -171,26 +207,55 @@ class AccountViewModel @Inject constructor(
 
     fun backupNow() = viewModelScope.launch {
         runCatching { AutoBackup.write(appContext, exporter) }
-            .onSuccess { refreshBackups(); _events.tryEmit(Notice.Success("Backup saved on this device")) }
+            .onSuccess { file ->
+                refreshBackups()
+                _events.tryEmit(if (file == null) Notice.Info("Nothing to back up yet") else Notice.Success("Backup saved on this device"))
+            }
             .onFailure { _events.tryEmit(Notice.Error("Backup failed")) }
     }
 
-    /** Import is a merge, so restoring never deletes anything you have now. */
-    fun restore(file: BackupFile) = viewModelScope.launch {
-        runCatching {
-            val bytes = withContext(Dispatchers.IO) { File(file.path).inputStream().use { exporter.readLimited(it) } }
-            exporter.import(bytes, null)
-        }.onSuccess { _events.tryEmit(Notice.Success("Restored ${it.favorites} favorites, ${it.playlists} playlists")) }
-            .onFailure { _events.tryEmit(Notice.Error("Restore failed")) }
+    /** Step 1 of a restore: read the backup and compute what it would add. Nothing is changed until [confirmRestore]. */
+    fun requestRestore(file: BackupFile) {
+        if (!busy.compareAndSet(false, true)) return
+        appScope.launch {
+            try {
+                val bytes = File(file.path).inputStream().use { exporter.readLimited(it) }
+                val preview = exporter.preview(bytes, null)
+                if (preview.totalAdded == 0) _events.tryEmit(Notice.Info("Already up to date \u00B7 nothing to restore"))
+                else _restorePrompt.value = RestorePrompt(file, preview)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _events.tryEmit(Notice.Error("Couldn\u2019t read that backup"))
+            } finally {
+                busy.set(false)
+            }
+        }
+    }
+
+    /** Step 2, after the user pressed Restore. Import is a merge, so restoring never deletes anything you have now. */
+    fun confirmRestore() {
+        val prompt = _restorePrompt.value ?: return
+        _restorePrompt.value = null                       // a second tap finds nothing left to confirm
+        if (!busy.compareAndSet(false, true)) return
+        appScope.launch {
+            try {
+                val bytes = File(prompt.file.path).inputStream().use { exporter.readLimited(it) }
+                _importSummary.value = ImportSummary(exporter.import(bytes, null), replaced = false)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _events.tryEmit(Notice.Error("Restore failed"))
+            } finally {
+                busy.set(false)
+            }
+        }
     }
 
     fun refreshBackups() {
         viewModelScope.launch {
             _backups.value = withContext(Dispatchers.IO) {
-                AutoBackup.backupDir(appContext).listFiles { f -> f.extension == "json" }
-                    ?.sortedByDescending { it.name }
-                    ?.map { BackupFile(it.absolutePath, it.lastModified()) }
-                    .orEmpty()
+                AutoBackup.list(appContext).map { BackupFile(it.file.absolutePath, it.lastModified) }
             }
         }
     }

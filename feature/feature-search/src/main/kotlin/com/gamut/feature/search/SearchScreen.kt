@@ -98,17 +98,17 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.fill.CheckCircle
-import com.adamglin.phosphoricons.light.ArrowRight
-import com.adamglin.phosphoricons.light.ClockCounterClockwise
-import com.adamglin.phosphoricons.light.DotsThreeVertical
-import com.adamglin.phosphoricons.light.MagnifyingGlass
-import com.adamglin.phosphoricons.light.MusicNote
-import com.adamglin.phosphoricons.light.Play
-import com.adamglin.phosphoricons.light.PlusCircle
-import com.adamglin.phosphoricons.light.User
-import com.adamglin.phosphoricons.light.X
+import com.adamglin.phosphoricons.bold.ArrowRight
+import com.adamglin.phosphoricons.bold.ClockCounterClockwise
+import com.adamglin.phosphoricons.bold.DotsThreeVertical
+import com.adamglin.phosphoricons.bold.MagnifyingGlass
+import com.adamglin.phosphoricons.bold.MusicNote
+import com.adamglin.phosphoricons.bold.Play
+import com.adamglin.phosphoricons.bold.PlusCircle
+import com.adamglin.phosphoricons.bold.User
+import com.adamglin.phosphoricons.bold.X
 import com.gamut.core.designsystem.adaptiveGutter
 import com.gamut.core.designsystem.AcrylicHost
 import com.gamut.core.designsystem.ArtImage
@@ -176,6 +176,8 @@ fun SearchScreen(
     profileSeed: String? = null,
     /** Current avatar image URL from the account ViewModel. */
     profileImage: Any? = null,
+    /** Extra modifier for the profile button (the app module passes the support heart badge, which lives outside this module). */
+    profileModifier: Modifier = Modifier,
     /** Three dots on a song row. Defaults to a no-op until the actions sheet is wired in MainActivity. */
     onTrackMore: (Track) -> Unit = {},
     /** ISRC of the playing track: its row gets the accent title + animated bars. */
@@ -285,12 +287,12 @@ fun SearchScreen(
                         )
                     }
                     Spacer(Modifier.width(8.dp))
-                    Box(Modifier.size(44.dp).pressScale(onClick = onProfile), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(44.dp).then(profileModifier).pressScale(onClick = onProfile), contentAlignment = Alignment.Center) {
                         ProfileAvatar(
                             name = profileName,
                             seed = profileSeed,
                             size = 34.dp,
-                            guestIcon = PhosphorIcons.Light.User,
+                            guestIcon = PhosphorIcons.Bold.User,
                             image = profileImage,
                         )
                     }
@@ -543,7 +545,7 @@ private fun SearchField(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                PhosphorIcons.Light.MagnifyingGlass,
+                PhosphorIcons.Bold.MagnifyingGlass,
                 null,
                 tint = ink(0.45f + 0.35f * focus),
                 modifier = Modifier.size(20.dp),
@@ -573,7 +575,7 @@ private fun SearchField(
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(Modifier.size(22.dp).background(ink(0.14f), CircleShape), contentAlignment = Alignment.Center) {
-                        Icon(PhosphorIcons.Light.X, "Clear", tint = ink(0.8f), modifier = Modifier.size(13.dp))
+                        Icon(PhosphorIcons.Bold.X, "Clear", tint = ink(0.8f), modifier = Modifier.size(13.dp))
                     }
                 }
             }
@@ -646,7 +648,7 @@ private fun RecentRow(query: String, onClick: () -> Unit, onRemove: () -> Unit) 
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
     ) { _ ->
         Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-            Icon(PhosphorIcons.Light.ClockCounterClockwise, null, tint = ink(0.45f), modifier = Modifier.size(20.dp))
+            Icon(PhosphorIcons.Bold.ClockCounterClockwise, null, tint = ink(0.45f), modifier = Modifier.size(20.dp))
         }
         Text(
             query,
@@ -656,7 +658,7 @@ private fun RecentRow(query: String, onClick: () -> Unit, onRemove: () -> Unit) 
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
         )
-        RowIconButton(PhosphorIcons.Light.X, "Remove from recent searches", ink(0.45f), onRemove)
+        RowIconButton(PhosphorIcons.Bold.X, "Remove from recent searches", ink(0.45f), onRemove)
     }
 }
 
@@ -667,7 +669,7 @@ private fun NoResults(query: String) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(PhosphorIcons.Light.MagnifyingGlass, null, tint = ink(0.3f), modifier = Modifier.size(40.dp))
+        Icon(PhosphorIcons.Bold.MagnifyingGlass, null, tint = ink(0.3f), modifier = Modifier.size(40.dp))
         Spacer(Modifier.height(4.dp))
         Text(
             "No results for \u201C${query.trim()}\u201D",
@@ -839,7 +841,7 @@ private fun ArtistHit(item: DiscoverItem, onClick: (Long) -> Unit) {
             label = "artist-arrow",
         )
         Icon(
-            PhosphorIcons.Light.ArrowRight,
+            PhosphorIcons.Bold.ArrowRight,
             "Open artist",
             tint = ink(if (active) 0.9f else 0.5f),
             modifier = Modifier.offset(x = slide).size(22.dp),
@@ -925,7 +927,7 @@ private fun TrackResultRow(
                     )
                 }
                 Icon(
-                    PhosphorIcons.Light.Play,
+                    PhosphorIcons.Bold.Play,
                     null,
                     tint = ink(),
                     modifier = Modifier.size(18.dp).graphicsLayer { alpha = playAlpha },
@@ -933,12 +935,12 @@ private fun TrackResultRow(
             }
         }
         RowIconButton(
-            icon = if (isFavorite) PhosphorIcons.Fill.CheckCircle else PhosphorIcons.Light.PlusCircle,
+            icon = if (isFavorite) PhosphorIcons.Fill.CheckCircle else PhosphorIcons.Bold.PlusCircle,
             description = if (isFavorite) "Saved" else "Add to favorites",
             tint = if (isFavorite) accent else ink(0.7f),
             onClick = onAdd,
         )
-        RowIconButton(PhosphorIcons.Light.DotsThreeVertical, "More options", ink(0.6f), onMore)
+        RowIconButton(PhosphorIcons.Bold.DotsThreeVertical, "More options", ink(0.6f), onMore)
     }
 }
 
@@ -955,5 +957,5 @@ internal fun RowIconButton(icon: ImageVector, description: String, tint: Color, 
 
 @Composable
 internal fun ArtworkFallbackIcon() {
-    Icon(PhosphorIcons.Light.MusicNote, null, tint = ink(0.45f), modifier = Modifier.size(22.dp))
+    Icon(PhosphorIcons.Bold.MusicNote, null, tint = ink(0.45f), modifier = Modifier.size(22.dp))
 }

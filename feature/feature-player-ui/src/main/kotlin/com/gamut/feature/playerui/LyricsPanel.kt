@@ -61,12 +61,12 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.CaretDown
-import com.adamglin.phosphoricons.light.DotsThreeVertical
-import com.adamglin.phosphoricons.light.ShareNetwork
-import com.adamglin.phosphoricons.light.SkipBack
-import com.adamglin.phosphoricons.light.SkipForward
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.CaretDown
+import com.adamglin.phosphoricons.bold.DotsThreeVertical
+import com.adamglin.phosphoricons.bold.ShareNetwork
+import com.adamglin.phosphoricons.bold.SkipBack
+import com.adamglin.phosphoricons.bold.SkipForward
 import com.gamut.feature.playerui.components.CoverTint
 import com.gamut.feature.playerui.components.DepthIcon
 import com.gamut.feature.playerui.components.PlayPauseButton
@@ -286,7 +286,7 @@ internal fun FullLyricsPanel(
             // Header: close on the left, title + artist centered.
             Box(Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 12.dp)) {
                 DepthIcon(
-                    PhosphorIcons.Light.CaretDown, "Close lyrics",
+                    PhosphorIcons.Bold.CaretDown, "Close lyrics",
                     Modifier.align(Alignment.CenterStart).tapTarget(onClose).padding(12.dp),
                 )
                 Column(Modifier.align(Alignment.Center).padding(horizontal = 56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -325,9 +325,9 @@ internal fun FullLyricsPanel(
 
             // Mini player.
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                DepthIcon(PhosphorIcons.Light.ShareNetwork, "Share", Modifier.bounceTap(onClick = onShare).padding(6.dp), size = 22.dp)
+                DepthIcon(PhosphorIcons.Bold.ShareNetwork, "Share", Modifier.bounceTap(onClick = onShare).padding(6.dp), size = 22.dp)
                 Spacer(Modifier.weight(1f))
-                DepthIcon(PhosphorIcons.Light.DotsThreeVertical, "More", Modifier.bounceTap(onClick = onMore).padding(6.dp), size = 22.dp)
+                DepthIcon(PhosphorIcons.Bold.DotsThreeVertical, "More", Modifier.bounceTap(onClick = onMore).padding(6.dp), size = 22.dp)
             }
             Column(Modifier.padding(horizontal = 24.dp)) {
                 SeekBar(progress = progress, onScrub = onScrub, onSeek = onSeekFraction)
@@ -338,9 +338,9 @@ internal fun FullLyricsPanel(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                DepthIcon(PhosphorIcons.Light.SkipBack, "Previous", Modifier.bounceTap(onClick = onPrevious).padding(8.dp), size = 30.dp)
+                DepthIcon(PhosphorIcons.Bold.SkipBack, "Previous", Modifier.bounceTap(onClick = onPrevious).padding(8.dp), size = 30.dp)
                 PlayPauseButton(isPlaying = isPlaying, isLoading = isLoading, onClick = onTogglePlay, size = 64.dp)
-                DepthIcon(PhosphorIcons.Light.SkipForward, "Next", Modifier.bounceTap(onClick = onNext).padding(8.dp), size = 30.dp)
+                DepthIcon(PhosphorIcons.Bold.SkipForward, "Next", Modifier.bounceTap(onClick = onNext).padding(8.dp), size = 30.dp)
             }
             Spacer(Modifier.height(8.dp))
         }

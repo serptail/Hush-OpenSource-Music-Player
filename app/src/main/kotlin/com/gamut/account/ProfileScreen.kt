@@ -5,6 +5,18 @@ import android.text.format.DateUtils
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +27,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -33,34 +46,45 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.light.ArrowsClockwise
-import com.adamglin.phosphoricons.light.Camera
-import com.adamglin.phosphoricons.light.CloudCheck
-import com.adamglin.phosphoricons.light.CloudSlash
-import com.adamglin.phosphoricons.light.ClockCounterClockwise
-import com.adamglin.phosphoricons.light.DownloadSimple
-import com.adamglin.phosphoricons.light.FloppyDisk
-import com.adamglin.phosphoricons.light.PencilSimple
-import com.adamglin.phosphoricons.light.SignOut
-import com.adamglin.phosphoricons.light.Trash
-import com.adamglin.phosphoricons.light.UploadSimple
-import com.adamglin.phosphoricons.light.User
+import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.ArrowSquareDown
+import com.adamglin.phosphoricons.bold.ArrowSquareUp
+import com.adamglin.phosphoricons.bold.ArrowsClockwise
+import com.adamglin.phosphoricons.bold.CalendarCheck
+import com.adamglin.phosphoricons.bold.Camera
+import com.adamglin.phosphoricons.bold.ClockClockwise
+import com.adamglin.phosphoricons.bold.CloudCheck
+import com.adamglin.phosphoricons.bold.CloudSlash
+import com.adamglin.phosphoricons.bold.FloppyDisk
+import com.adamglin.phosphoricons.bold.PencilSimple
+import com.adamglin.phosphoricons.bold.Plugs
+import com.adamglin.phosphoricons.bold.Trash
+import com.adamglin.phosphoricons.bold.User
 import com.gamut.R
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.ProfileAvatar
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
+import com.gamut.core.sync.ImportReport
 import com.gamut.core.sync.SyncConfig
 import com.gamut.core.sync.SyncStatus
 import com.gamut.settings.GamutCheck
@@ -72,6 +96,8 @@ import com.gamut.settings.GamutPage
 import com.gamut.settings.PillSwitch
 import com.gamut.settings.SoftCard
 import com.gamut.settings.SoftHeader
+import kotlin.math.ceil
+import kotlinx.coroutines.delay
 
 /** Centered hero (circular avatar, name, status), icon pills, and soft section cards with an icon on every row. */
 @Composable
@@ -89,6 +115,7 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
     val autoBackup by vm.autoBackup.collectAsState()
     val backups by vm.backups.collectAsState()
     val importSummary by vm.importSummary.collectAsState()
+    val restorePrompt by vm.restorePrompt.collectAsState()
 
     // Saveable: the system file picker can recreate the activity, and the user must come back to the same screen,
     // with the same dialog state, password and chosen file.
@@ -135,7 +162,7 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
         // ---- hero: avatar on the left, identity on the right, actions in one row underneath ----
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.pressScale(onClick = pickPhoto)) {
-                ProfileAvatar(name = name, seed = userId, size = 92.dp, guestIcon = PhosphorIcons.Light.User, image = avatar, shape = CircleShape)
+                ProfileAvatar(name = name, seed = userId, size = 92.dp, guestIcon = PhosphorIcons.Bold.User, image = avatar, shape = CircleShape)
             }
             Column(Modifier.weight(1f).padding(start = 18.dp)) {
                 Text(
@@ -151,7 +178,7 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
-                        if (userId != null) PhosphorIcons.Light.CloudCheck else PhosphorIcons.Light.CloudSlash,
+                        if (userId != null) PhosphorIcons.Bold.CloudCheck else PhosphorIcons.Bold.CloudSlash,
                         null, tint = ink(0.7f), modifier = Modifier.size(15.dp),
                     )
                     Text(
@@ -162,13 +189,13 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
             }
         }
         Row(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconPill(PhosphorIcons.Light.PencilSimple, "Edit name", openEditName, Modifier.weight(1f))
-            IconPill(PhosphorIcons.Light.Camera, if (avatar != null) "Change photo" else "Add photo", pickPhoto, Modifier.weight(1f))
+            IconPill(PhosphorIcons.Bold.PencilSimple, "Edit name", openEditName, Modifier.weight(1f))
+            IconPill(PhosphorIcons.Bold.Camera, if (avatar != null) "Change photo" else "Add photo", pickPhoto, Modifier.weight(1f))
             if (avatar != null) {
                 Box(
                     Modifier.size(44.dp).pressScale(onClick = { vm.removeAvatar() }).clip(CircleShape).background(ink(0.1f)),
                     contentAlignment = Alignment.Center,
-                ) { Icon(PhosphorIcons.Light.Trash, "Remove photo", tint = ink(0.85f), modifier = Modifier.size(20.dp)) }
+                ) { Icon(PhosphorIcons.Bold.Trash, "Remove photo", tint = ink(0.85f), modifier = Modifier.size(20.dp)) }
             }
         }
 
@@ -183,16 +210,7 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
                         onClick = { vm.signIn(context) },
                     )
                 } else {
-                    val failed = status is SyncStatus.Error
-                    val line = when (val s = status) {
-                        SyncStatus.Syncing -> "Syncing\u2026"
-                        is SyncStatus.Error -> "Sync error \u00B7 ${s.message}"
-                        SyncStatus.Idle -> lastSynced?.let { "Last synced ${DateUtils.getRelativeTimeSpanString(it)}" } ?: "Not synced yet"
-                    } + if (pending > 0) " \u00B7 $pending waiting" else ""
-                    IconRow(
-                        PhosphorIcons.Light.ArrowsClockwise, "Sync now",
-                        subtitle = line, subtitleColor = if (failed) GamutDestructive else null, onClick = vm::syncNow,
-                    )
+                    SyncRow(status = status, lastSynced = lastSynced, pending = pending, onClick = vm::syncNow)
                 }
             }
         }
@@ -201,19 +219,19 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
         SoftHeader("Backup")
         SoftCard {
             IconRow(
-                PhosphorIcons.Light.UploadSimple, "Export", subtitle = "Save to a file",
+                PhosphorIcons.Bold.ArrowSquareDown, "Export", subtitle = "Save to a file",
                 onClick = { exportPassword = ""; exportConfirm = ""; exportMismatch = false; exportDialog = true },
             )
             IconDivider()
             IconRow(
-                PhosphorIcons.Light.DownloadSimple, "Import", subtitle = "Merge or replace",
+                PhosphorIcons.Bold.ArrowSquareUp, "Import", subtitle = "Merge or replace",
                 onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
             )
             IconDivider()
-            IconRow(PhosphorIcons.Light.FloppyDisk, "Back up now", subtitle = "On this device", onClick = vm::backupNow)
+            IconRow(PhosphorIcons.Bold.FloppyDisk, "Back up now", subtitle = "On this device", onClick = vm::backupNow)
             IconDivider()
             IconRow(
-                PhosphorIcons.Light.ClockCounterClockwise, "Daily backup", subtitle = "Last 10 days, offline",
+                PhosphorIcons.Bold.CalendarCheck, "Daily backup", subtitle = "Last 10 days, offline",
                 onClick = { vm.setAutoBackup(!autoBackup) },
                 trailing = { PillSwitch(autoBackup) },
             )
@@ -225,9 +243,9 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
                 backups.forEachIndexed { i, b ->
                     if (i > 0) IconDivider()
                     IconRow(
-                        PhosphorIcons.Light.ClockCounterClockwise,
+                        PhosphorIcons.Bold.ClockClockwise,
                         DateUtils.formatDateTime(context, b.modifiedMs, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_ABBREV_MONTH),
-                        subtitle = "Tap to restore", onClick = { vm.restore(b) },
+                        subtitle = "Tap to restore", onClick = { vm.requestRestore(b) },
                     )
                 }
             }
@@ -237,12 +255,12 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
             SoftHeader("Account")
             SoftCard {
                 IconRow(
-                    PhosphorIcons.Light.SignOut, "Disconnect Google",
+                    PhosphorIcons.Bold.Plugs, "Disconnect Google",
                     onClick = { allDevices = false; clearLocal = false; disconnect = true },
                 )
                 IconDivider()
                 IconRow(
-                    PhosphorIcons.Light.Trash, "Delete account", destructive = true,
+                    PhosphorIcons.Bold.Trash, "Delete account", destructive = true,
                     onClick = { clearLocal = false; delete = true },
                 )
             }
@@ -302,18 +320,36 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
         }
     }
 
-    // ---- import summary ----
+    // ---- restore from an on-device backup: preview first, then an explicit OK (outside tap / Cancel = nothing happens) ----
+    restorePrompt?.let { p ->
+        GamutDialog(
+            title = "Restore this backup?",
+            body = "Backup from " + DateUtils.formatDateTime(
+                context, p.file.modifiedMs, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_ABBREV_MONTH,
+            ) + ". It only adds what is missing; nothing you have now is removed.",
+            confirmLabel = "Restore",
+            onDismiss = vm::cancelRestore,
+            onConfirm = vm::confirmRestore,
+        ) {
+            ReportRows(p.preview, done = false)
+        }
+    }
+
+    // ---- import / restore summary: everything that was added, already there, and skipped ----
     importSummary?.let { s ->
         GamutDialog(
-            title = "Import complete",
-            body = if (s.replaced) "Your previous data was replaced." else "The backup was merged into your library.",
+            title = if (s.report.totalAdded == 0) "Nothing new to add" else "Import complete",
+            body = when {
+                s.report.totalAdded == 0 -> "Everything in the backup was already in your library."
+                s.replaced -> "Your previous library was replaced."
+                else -> "The backup was merged into your library."
+            },
             confirmLabel = "Done",
             dismissLabel = null,
             onDismiss = vm::dismissImportSummary,
             onConfirm = vm::dismissImportSummary,
         ) {
-            SummaryRow("Favorites", s.favorites)
-            SummaryRow("Playlists", s.playlists)
+            ReportRows(s.report, done = true)
         }
     }
 
@@ -381,15 +417,11 @@ private fun IconRow(
         Modifier.fillMaxWidth().pressScale(onClick = onClick, scaleDown = 0.99f).padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(14.dp))
-                .background(if (destructive) GamutDestructive.copy(alpha = 0.14f) else ink(0.08f)),
-            contentAlignment = Alignment.Center,
-        ) {
+        Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
             when {
                 // Full-colour drawables (the Google logo) keep their own colours.
-                painter != null -> Icon(painter, null, tint = Color.Unspecified, modifier = Modifier.size(22.dp))
-                icon != null -> Icon(icon, null, tint = if (destructive) GamutDestructive else ink(0.85f), modifier = Modifier.size(22.dp))
+                painter != null -> Icon(painter, null, tint = Color.Unspecified, modifier = Modifier.size(24.dp))
+                icon != null -> Icon(icon, null, tint = if (destructive) GamutDestructive else ink(0.85f), modifier = Modifier.size(24.dp))
             }
         }
         Spacer(Modifier.width(16.dp))
@@ -450,5 +482,172 @@ private fun SummaryRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = ink(0.7f))
         Text(value, style = MaterialTheme.typography.titleMedium, color = ink())
+    }
+}
+
+/** The detailed what-and-what of an import. Rows with a zero are hidden, so it only shows what actually happened. */
+@Composable
+private fun ReportRows(r: ImportReport, done: Boolean) {
+    val added = if (done) "added" else "to add"
+    if (r.replaced) {
+        if (r.removedFavorites > 0) SummaryRow("Favorites removed first", "${r.removedFavorites}")
+        if (r.removedPlaylists > 0) SummaryRow("Playlists removed first", "${r.removedPlaylists}")
+        if (r.removedFollows > 0) SummaryRow("Artists removed first", "${r.removedFollows}")
+    }
+    if (r.favoritesAdded > 0) SummaryRow("Favorites $added", "${r.favoritesAdded}")
+    if (r.playlistsCreated > 0) SummaryRow(if (done) "Playlists created" else "New playlists", "${r.playlistsCreated}")
+    if (r.playlistsMerged > 0) SummaryRow("Merged into existing playlists", "${r.playlistsMerged}")
+    if (r.playlistSongsAdded > 0) SummaryRow("Playlist songs $added", "${r.playlistSongsAdded}")
+    if (r.followsAdded > 0) SummaryRow("Artists $added", "${r.followsAdded}")
+    val already = r.favoritesAlreadyThere + r.playlistSongsAlreadyThere + r.followsAlreadyThere
+    if (already > 0) SummaryRow("Already in your library", "$already")
+    if (r.totalSkipped > 0) SummaryRow("Skipped (can\u2019t be restored)", "${r.totalSkipped}")
+    if (r.duplicatesInFile > 0) SummaryRow("Duplicates in file ignored", "${r.duplicatesInFile}")
+    if (done) r.playlists.take(6).forEach { p ->
+        Text(
+            "${p.name} \u00B7 ${if (p.created) "new" else "merged"} \u00B7 +${p.songsAdded}",
+            style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
+    }
+    if (done && r.playlists.size > 6) Text("and ${r.playlists.size - 6} more playlists", style = MaterialTheme.typography.bodyMedium, color = ink(0.55f))
+    r.warnings.take(3).forEach {
+        Text(it, style = MaterialTheme.typography.bodyMedium, color = GamutDestructive, modifier = Modifier.padding(top = 4.dp))
+    }
+}
+
+/**
+ * The Sync row. Idle: a calm ring around a refresh icon, with a dot when changes are waiting. Syncing: the icon spins one
+ * way while a comet-tail ring spins the other, and a soft light sweeps across the row. Finished: the ring closes, the
+ * icon pops into a cloud-check for a moment. Failed: the badge shakes and turns red; tapping retries.
+ */
+@Composable
+private fun SyncRow(status: SyncStatus, lastSynced: Long?, pending: Int, onClick: () -> Unit) {
+    val syncing = status is SyncStatus.Syncing
+    val failed = status is SyncStatus.Error
+    val offline = status is SyncStatus.Offline
+
+    // "Just finished": Syncing -> Idle keeps the check on screen for a moment.
+    var justSynced by remember { mutableStateOf(false) }
+    var wasSyncing by remember { mutableStateOf(false) }
+    LaunchedEffect(status) {
+        val finished = wasSyncing && status is SyncStatus.Idle
+        wasSyncing = syncing
+        justSynced = finished
+        if (finished) { delay(1600); justSynced = false }
+    }
+
+    // Spin while syncing; on stop, glide to a full turn so the icon never rests tilted.
+    val spin = remember { Animatable(0f) }
+    LaunchedEffect(syncing) {
+        if (syncing) {
+            while (true) spin.animateTo(spin.value + 360f, tween(1000, easing = LinearEasing))
+        } else {
+            spin.animateTo(ceil(spin.value / 360f) * 360f, tween(450, easing = FastOutSlowInEasing))
+            spin.snapTo(0f)
+        }
+    }
+
+    // Shake on every new failure.
+    val shake = remember { Animatable(0f) }
+    LaunchedEffect(status) {
+        if (status is SyncStatus.Error) {
+            repeat(3) { shake.animateTo(9f, tween(55)); shake.animateTo(-9f, tween(55)) }
+            shake.animateTo(0f, tween(55))
+        }
+    }
+
+    val done by animateFloatAsState(if (justSynced) 1f else 0f, tween(450), label = "done")
+    val pop by animateFloatAsState(
+        if (justSynced) 1.2f else 1f, spring(dampingRatio = 0.35f, stiffness = Spring.StiffnessMedium), label = "pop",
+    )
+
+    val accent = if (failed) GamutDestructive else ink(0.9f)
+
+    val title = when {
+        failed -> "Sync failed \u00B7 tap to retry"
+        offline -> "Waiting for connection"
+        syncing -> "Syncing\u2026"
+        justSynced -> "All synced"
+        else -> "Sync now"
+    }
+    val subtitle = when (status) {
+        is SyncStatus.Error -> status.message
+        SyncStatus.Offline ->
+            if (pending > 0) "Offline \u00B7 $pending waiting, will sync when you\u2019re back" else "Offline \u00B7 will sync when you\u2019re back"
+        SyncStatus.Syncing -> if (pending > 0) "$pending waiting" else "Keeping your library up to date"
+        SyncStatus.Idle -> (lastSynced?.let { "Last synced ${DateUtils.getRelativeTimeSpanString(it)}" } ?: "Not synced yet") +
+            if (pending > 0) " \u00B7 $pending waiting" else ""
+    }
+
+    val haptic = LocalHapticFeedback.current
+    Box(
+        Modifier.fillMaxWidth()
+            .pressScale(onClick = { if (!syncing) { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onClick() } }, scaleDown = 0.99f),
+    ) {
+        if (syncing) SyncShimmer(Modifier.matchParentSize())
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(26.dp).graphicsLayer { translationX = shake.value }, contentAlignment = Alignment.Center) {
+                Canvas(Modifier.requiredSize(38.dp)) {
+                    val stroke = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+                    val inset = stroke.width / 2
+                    val box = Size(size.width - stroke.width, size.height - stroke.width)
+                    if (syncing) {
+                        rotate(-spin.value * 1.5f) {
+                            drawArc(
+                                Brush.sweepGradient(colorStops = arrayOf(0f to Color.Transparent, 0.75f to accent, 1f to accent)),
+                                0f, 270f, useCenter = false, topLeft = Offset(inset, inset), size = box, style = stroke,
+                            )
+                        }
+                    } else if (done > 0f) {
+                        drawArc(accent, -90f, 360f * done, useCenter = false, topLeft = Offset(inset, inset), size = box, style = stroke)
+                    }
+                }
+                Crossfade(targetState = justSynced, label = "icon") { checked ->
+                    Icon(
+                        when { checked -> PhosphorIcons.Bold.CloudCheck; offline -> PhosphorIcons.Bold.CloudSlash; else -> PhosphorIcons.Bold.ArrowsClockwise },
+                        null, tint = if (failed) GamutDestructive else ink(if (offline) 0.5f else 0.85f),
+                        modifier = Modifier.size(24.dp).graphicsLayer {
+                            rotationZ = if (checked) 0f else spin.value
+                            scaleX = if (checked) pop else 1f
+                            scaleY = if (checked) pop else 1f
+                        },
+                    )
+                }
+                if (pending > 0 && !syncing && !failed && !justSynced) {
+                    Box(Modifier.align(Alignment.TopEnd).padding(3.dp).size(9.dp).background(ink(0.9f), CircleShape))
+                }
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Crossfade(targetState = title, label = "title") {
+                    Text(
+                        it, style = MaterialTheme.typography.titleMedium, color = if (failed) GamutDestructive else ink(),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    subtitle, style = MaterialTheme.typography.bodyMedium, color = if (failed) GamutDestructive else ink(0.55f),
+                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+    }
+}
+
+/** A soft band of light sweeping across the row. Only exists while syncing, so it costs nothing otherwise. */
+@Composable
+private fun SyncShimmer(modifier: Modifier) {
+    val x by rememberInfiniteTransition(label = "shimmer").animateFloat(
+        initialValue = -0.3f, targetValue = 1.3f,
+        animationSpec = infiniteRepeatable(tween(1600, easing = LinearEasing)), label = "x",
+    )
+    val tint = ink(0.10f)
+    Canvas(modifier) {
+        drawRect(
+            Brush.horizontalGradient(
+                listOf(Color.Transparent, tint, Color.Transparent),
+                startX = size.width * (x - 0.3f), endX = size.width * (x + 0.3f),
+            ),
+        )
     }
 }

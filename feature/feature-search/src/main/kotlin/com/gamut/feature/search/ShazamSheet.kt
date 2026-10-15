@@ -50,10 +50,10 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.Light
+import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.fill.Heart
-import com.adamglin.phosphoricons.light.DotsThree
-import com.adamglin.phosphoricons.light.Heart
+import com.adamglin.phosphoricons.bold.DotsThree
+import com.adamglin.phosphoricons.bold.Heart
 import com.gamut.core.designsystem.AlertTick
 import com.gamut.core.designsystem.ArtistPickerSheet
 import com.gamut.core.designsystem.ShareSheet
@@ -286,7 +286,7 @@ private fun FoundContent(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    if (isFavorite) PhosphorIcons.Fill.Heart else PhosphorIcons.Light.Heart,
+                    if (isFavorite) PhosphorIcons.Fill.Heart else PhosphorIcons.Bold.Heart,
                     if (isFavorite) "Remove from favorites" else "Add to favorites",
                     tint = if (isFavorite) FavoriteRed else ink(),
                     modifier = Modifier.size(24.dp),
@@ -300,7 +300,7 @@ private fun FoundContent(
                     .clip(CircleShape)
                     .background(ink(0.12f)),
                 contentAlignment = Alignment.Center,
-            ) { Icon(PhosphorIcons.Light.DotsThree, "More", tint = ink(), modifier = Modifier.size(24.dp)) }
+            ) { Icon(PhosphorIcons.Bold.DotsThree, "More", tint = ink(), modifier = Modifier.size(24.dp)) }
         }
         note?.let { message ->
             Text(
