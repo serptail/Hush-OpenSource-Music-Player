@@ -2,7 +2,7 @@ name: db-backup
 
 on:
   schedule:
-    - cron: "0 4 * * 0" # Every Sunday at 04:00 UTC
+    - cron: "0 4 * * *" # Every day at 04:00 UTC
   workflow_dispatch:
 
 # This workflow does not need a GitHub API token.
@@ -13,18 +13,40 @@ concurrency:
   group: db-backup
   cancel-in-progress: false
 
+# ---------------------------------------------------------------------------
+# Required secrets
+#   SUPABASE_DB_URL              Use the SESSION POOLER string (port 5432).
+#                                GitHub runners have no IPv6, and the direct
+#                                db.<ref>.supabase.co host is IPv6-only.
+#                                Do NOT use the transaction pooler (6543).
+#   BACKUP_PASSPHRASE            Also store this in a password manager.
+#                                Without it every backup is unreadable.
+#
+# Supabase Storage as SOURCE (optional; skipped if endpoint is empty)
+#   SUPABASE_S3_ENDPOINT         https://<ref>.storage.supabase.co/storage/v1/s3
+#   SUPABASE_S3_ACCESS_KEY_ID
+#   SUPABASE_S3_SECRET_ACCESS_KEY
+#   SUPABASE_S3_REGION
+#
+# Off-platform DESTINATION (Cloudflare R2, Backblaze B2, AWS S3, ...)
+#   BACKUP_S3_ENDPOINT
+#   BACKUP_S3_ACCESS_KEY_ID
+#   BACKUP_S3_SECRET_ACCESS_KEY
+#   BACKUP_S3_REGION             "auto" for R2
+#   BACKUP_S3_BUCKET
+# ---------------------------------------------------------------------------
+
 jobs:
   dump:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
 
     env:
-      S3_BUCKET: db-backups
       S3_PREFIX: backups
       RETENTION_DAYS: "30"
 
     steps:
-      - name: Create and validate encrypted database dump
+      - name: Dump database and roles
         shell: bash
         env:
           DB_URL: ${{ secrets.SUPABASE_DB_URL }}
@@ -49,12 +71,13 @@ jobs:
           dir="${RUNNER_TEMP}/db-backup-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           mkdir -p "$dir"
 
-          printf 'BACKUP_DIR=%s\n' "$dir" >> "$GITHUB_ENV"
-
           timestamp="$(date -u +'%Y%m%dT%H%M%SZ')"
-          filename="db-${timestamp}-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}.dump.gpg"
+          suffix="${timestamp}-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
 
-          printf 'BACKUP_FILE=%s\n' "$filename" >> "$GITHUB_ENV"
+          {
+            printf 'BACKUP_DIR=%s\n' "$dir"
+            printf 'BACKUP_SUFFIX=%s\n' "$suffix"
+          } >> "$GITHUB_ENV"
 
           echo "Creating PostgreSQL custom-format dump..."
 
@@ -62,51 +85,34 @@ jobs:
             --env DB_URL \
             postgres:17 \
             sh -ceu 'pg_dump "$DB_URL" --format=custom --no-owner' \
-            > "$dir/backup.dump"
+            > "$dir/db.dump"
 
-          test -s "$dir/backup.dump"
+          test -s "$dir/db.dump"
 
           # Check the archive can be read by pg_restore.
           docker run --rm \
             --volume "$dir:/backup:ro" \
             postgres:17 \
-            pg_restore --list /backup/backup.dump \
+            pg_restore --list /backup/db.dump \
             > /dev/null
 
-          echo "Encrypting backup with GPG AES-256..."
+          echo "Dumping global roles (no passwords)..."
 
-          printf '%s' "$BACKUP_PASSPHRASE" |
-            gpg --batch --yes \
-              --pinentry-mode loopback \
-              --passphrase-fd 0 \
-              --symmetric \
-              --cipher-algo AES256 \
-              --output "$dir/$filename" \
-              "$dir/backup.dump"
+          # pg_dump does not include roles. Supabase does not allow reading
+          # role passwords, so they are excluded. Non-fatal: warn on failure.
+          if docker run --rm \
+              --env DB_URL \
+              postgres:17 \
+              sh -ceu 'pg_dumpall --dbname="$DB_URL" --roles-only --no-role-passwords' \
+              > "$dir/roles.sql" && [[ -s "$dir/roles.sql" ]]; then
+            echo "Roles dump created."
+          else
+            echo "::warning::Roles dump failed; continuing without it"
+            rm -f "$dir/roles.sql"
+          fi
 
-          test -s "$dir/$filename"
-
-          # Confirm the encrypted file can be decrypted and verified.
-          printf '%s' "$BACKUP_PASSPHRASE" |
-            gpg --batch --quiet \
-              --pinentry-mode loopback \
-              --passphrase-fd 0 \
-              --decrypt \
-              --output /dev/null \
-              "$dir/$filename"
-
-          # Do not keep the plaintext dump for the upload step.
-          rm -f "$dir/backup.dump"
-
-          sha256sum "$dir/$filename" |
-            awk '{ print "Encrypted backup SHA-256: " $1 }'
-
-          echo "Encrypted backup created successfully."
-
-      - name: Configure S3-compatible client
+      - name: Configure S3 client
         shell: bash
-        env:
-          AWS_DEFAULT_REGION: ${{ secrets.SUPABASE_S3_REGION }}
         run: |
           set -euo pipefail
 
@@ -115,16 +121,10 @@ jobs:
             exit 1
           }
 
-          [[ -n "${AWS_DEFAULT_REGION:-}" ]] || {
-            echo "::error::SUPABASE_S3_REGION is missing"
-            exit 1
-          }
-
           mkdir -p "$HOME/.aws"
 
           cat > "$HOME/.aws/config" <<EOF
           [default]
-          region = ${AWS_DEFAULT_REGION}
           s3 =
               addressing_style = path
           EOF
@@ -133,7 +133,7 @@ jobs:
 
           aws --version
 
-      - name: Upload encrypted backup and verify it
+      - name: Download Supabase Storage files
         shell: bash
         env:
           S3_ENDPOINT: ${{ secrets.SUPABASE_S3_ENDPOINT }}
@@ -146,56 +146,180 @@ jobs:
           AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
         run: |
           set -euo pipefail
+          umask 077
 
-          for name in S3_ENDPOINT AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+          if [[ -z "${S3_ENDPOINT:-}" ]]; then
+            echo "::notice::SUPABASE_S3_ENDPOINT not set; skipping Storage file backup"
+            exit 0
+          fi
+
+          S3_ENDPOINT="${S3_ENDPOINT%/}"
+          out="$BACKUP_DIR/storage"
+          mkdir -p "$out"
+
+          buckets="$(
+            aws --endpoint-url "$S3_ENDPOINT" \
+              s3api list-buckets \
+              --query 'Buckets[].Name' \
+              --output text
+          )"
+
+          count=0
+          for bucket in $buckets; do
+            echo "Syncing bucket: $bucket"
+            mkdir -p "$out/$bucket"
+            aws --endpoint-url "$S3_ENDPOINT" \
+              s3 sync "s3://$bucket" "$out/$bucket" \
+              --only-show-errors
+            count=$((count + 1))
+          done
+
+          echo "Downloaded $count bucket(s)."
+
+      - name: Encrypt and validate backups
+        shell: bash
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          umask 077
+
+          encrypt() {
+            local src="$1" dest="$2"
+
+            printf '%s' "$BACKUP_PASSPHRASE" |
+              gpg --batch --yes \
+                --pinentry-mode loopback \
+                --passphrase-fd 0 \
+                --symmetric \
+                --cipher-algo AES256 \
+                --output "$dest" \
+                "$src"
+
+            test -s "$dest"
+          }
+
+          verify() {
+            # Decrypt to stdout so callers can pipe into further checks.
+            printf '%s' "$BACKUP_PASSPHRASE" |
+              gpg --batch --quiet \
+                --pinentry-mode loopback \
+                --passphrase-fd 0 \
+                --decrypt \
+                "$1"
+          }
+
+          echo "Encrypting with GPG AES-256..."
+
+          # Database dump
+          encrypt "$BACKUP_DIR/db.dump" \
+            "$BACKUP_DIR/db-${BACKUP_SUFFIX}.dump.gpg"
+          verify "$BACKUP_DIR/db-${BACKUP_SUFFIX}.dump.gpg" > /dev/null
+          rm -f "$BACKUP_DIR/db.dump"
+
+          # Roles
+          if [[ -s "$BACKUP_DIR/roles.sql" ]]; then
+            encrypt "$BACKUP_DIR/roles.sql" \
+              "$BACKUP_DIR/roles-${BACKUP_SUFFIX}.sql.gpg"
+            verify "$BACKUP_DIR/roles-${BACKUP_SUFFIX}.sql.gpg" > /dev/null
+            rm -f "$BACKUP_DIR/roles.sql"
+          fi
+
+          # Storage files
+          if [[ -d "$BACKUP_DIR/storage" ]] &&
+             [[ -n "$(ls -A "$BACKUP_DIR/storage")" ]]; then
+            tar -C "$BACKUP_DIR/storage" -czf "$BACKUP_DIR/storage.tar.gz" .
+            encrypt "$BACKUP_DIR/storage.tar.gz" \
+              "$BACKUP_DIR/storage-${BACKUP_SUFFIX}.tar.gz.gpg"
+            verify "$BACKUP_DIR/storage-${BACKUP_SUFFIX}.tar.gz.gpg" |
+              tar -tz > /dev/null
+            rm -rf "$BACKUP_DIR/storage" "$BACKUP_DIR/storage.tar.gz"
+          fi
+
+          # Nothing unencrypted may remain.
+          if find "$BACKUP_DIR" -type f ! -name '*.gpg' | grep -q .; then
+            echo "::error::Unencrypted files remain in backup directory"
+            exit 1
+          fi
+
+          for f in "$BACKUP_DIR"/*.gpg; do
+            sha256sum "$f" | awk '{ print "SHA-256: " $1 "  " $2 }'
+          done
+
+          echo "Encrypted backups created successfully."
+
+      - name: Upload to off-platform storage and verify
+        shell: bash
+        env:
+          S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+          S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.BACKUP_S3_REGION }}
+          AWS_RETRY_MODE: standard
+          AWS_MAX_ATTEMPTS: "5"
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+        run: |
+          set -euo pipefail
+
+          for name in S3_ENDPOINT S3_BUCKET AWS_ACCESS_KEY_ID \
+                      AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION; do
             [[ -n "${!name:-}" ]] || {
-              echo "::error::Storage configuration is missing: $name"
+              echo "::error::Backup destination configuration is missing: $name"
               exit 1
             }
           done
 
           S3_ENDPOINT="${S3_ENDPOINT%/}"
 
-          local_file="$BACKUP_DIR/$BACKUP_FILE"
-          object_key="$S3_PREFIX/$BACKUP_FILE"
-          remote="s3://$S3_BUCKET/$object_key"
+          shopt -s nullglob
+          files=("$BACKUP_DIR"/*.gpg)
 
-          test -s "$local_file"
-
-          echo "Uploading encrypted backup to private storage..."
-
-          aws --endpoint-url "$S3_ENDPOINT" \
-            s3 cp "$local_file" "$remote" \
-            --only-show-errors
-
-          # Confirm that the uploaded object exists and its size matches.
-          remote_size="$(
-            aws --endpoint-url "$S3_ENDPOINT" \
-              s3api head-object \
-              --bucket "$S3_BUCKET" \
-              --key "$object_key" \
-              --query 'ContentLength' \
-              --output text
-          )"
-
-          local_size="$(stat -c '%s' "$local_file")"
-
-          if [[ ! "$remote_size" =~ ^[0-9]+$ ]] ||
-             [[ "$remote_size" -ne "$local_size" ]]; then
-            echo "::error::Uploaded backup size verification failed"
+          [[ ${#files[@]} -gt 0 ]] || {
+            echo "::error::No encrypted backup files found"
             exit 1
-          fi
+          }
 
-          echo "::notice::Private backup uploaded and verified: $object_key"
-          echo "Verified size: $remote_size bytes"
+          for local_file in "${files[@]}"; do
+            name="$(basename "$local_file")"
+            object_key="$S3_PREFIX/$name"
+            remote="s3://$S3_BUCKET/$object_key"
+
+            echo "Uploading $name ..."
+
+            aws --endpoint-url "$S3_ENDPOINT" \
+              s3 cp "$local_file" "$remote" \
+              --only-show-errors
+
+            remote_size="$(
+              aws --endpoint-url "$S3_ENDPOINT" \
+                s3api head-object \
+                --bucket "$S3_BUCKET" \
+                --key "$object_key" \
+                --query 'ContentLength' \
+                --output text
+            )"
+
+            local_size="$(stat -c '%s' "$local_file")"
+
+            if [[ ! "$remote_size" =~ ^[0-9]+$ ]] ||
+               [[ "$remote_size" -ne "$local_size" ]]; then
+              echo "::error::Size verification failed for $name"
+              exit 1
+            fi
+
+            echo "::notice::Uploaded and verified: $object_key ($remote_size bytes)"
+          done
 
       - name: Remove expired backups
         shell: bash
         env:
-          S3_ENDPOINT: ${{ secrets.SUPABASE_S3_ENDPOINT }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.SUPABASE_S3_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.SUPABASE_S3_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ secrets.SUPABASE_S3_REGION }}
+          S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+          S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.BACKUP_S3_REGION }}
           AWS_RETRY_MODE: standard
           AWS_MAX_ATTEMPTS: "5"
           AWS_REQUEST_CHECKSUM_CALCULATION: when_required
@@ -206,7 +330,7 @@ jobs:
           S3_ENDPOINT="${S3_ENDPOINT%/}"
           cutoff="$(date -u -d "${RETENTION_DAYS} days ago" +'%Y%m%dT%H%M%SZ')"
 
-          # List objects only after the new backup was uploaded successfully.
+          # Runs only after the new backup was uploaded and verified.
           listed="$(
             aws --endpoint-url "$S3_ENDPOINT" \
               s3api list-objects-v2 \
@@ -223,8 +347,8 @@ jobs:
             filename="${key##*/}"
 
             # Only delete files created by this workflow.
-            if [[ "$filename" =~ ^db-([0-9]{8}T[0-9]{6}Z)-run-[0-9]+-attempt-[0-9]+\.dump\.gpg$ ]]; then
-              backup_time="${BASH_REMATCH[1]}"
+            if [[ "$filename" =~ ^(db|roles|storage)-([0-9]{8}T[0-9]{6}Z)-run-[0-9]+-attempt-[0-9]+\.(dump|sql|tar\.gz)\.gpg$ ]]; then
+              backup_time="${BASH_REMATCH[2]}"
 
               if [[ "$backup_time" < "$cutoff" ]]; then
                 aws --endpoint-url "$S3_ENDPOINT" \
@@ -239,7 +363,7 @@ jobs:
             fi
           done < <(jq -r '.Contents[]?.Key // empty' <<< "$listed")
 
-          echo "Retention cleanup finished: removed $deleted expired backup(s)."
+          echo "Retention cleanup finished: removed $deleted expired file(s)."
 
       - name: Clean up local temporary files
         if: always()

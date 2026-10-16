@@ -1,11 +1,17 @@
 name: release
 # Builds a signed APK and publishes it as a GitHub release, plus latest.json, which is what the app checks on launch.
-# Started by hand (Actions > release > Run workflow) or by extractor-bump.yml after a successful library bump.
+# Started by hand (Actions > release > Run workflow) or by extractor-bump.yml.
+# By default the release is a DRAFT: nobody gets it until you test the APK and press "Publish release".
+# A GitHub issue (= email/notification to you) is opened when the draft is ready, or when the run fails.
 on:
   workflow_dispatch:
     inputs:
       force_min:
         description: "Force every user onto this build (the app refuses to run older ones)"
+        type: boolean
+        default: false
+      draft:
+        description: "Create a draft release that you publish by hand after testing"
         type: boolean
         default: true
       notes:
@@ -14,7 +20,7 @@ on:
         default: ""
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release
@@ -23,14 +29,22 @@ concurrency:
 env:
   # Optional: publish to a different (public) repo. Set the RELEASE_REPO variable and the RELEASES_TOKEN secret.
   RELEASE_REPO: ${{ vars.RELEASE_REPO || github.repository }}
-  GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
+
+defaults:
+  run:
+    shell: bash   # implies -eo pipefail, so "cmd | tee/head" can no longer hide a failure
 
 jobs:
-  release:
+  # Runs third-party code (Gradle plugins, libraries) -> read-only token, no credentials left in .git.
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    outputs:
+      code: ${{ steps.build.outputs.code }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-java@v4
         with:
@@ -51,34 +65,99 @@ jobs:
           echo "GAMUT_KEYSTORE_FILE=$RUNNER_TEMP/gamut.keystore" >> "$GITHUB_ENV"
 
       - name: Build
+        id: build
         env:
           GAMUT_KEYSTORE_PASSWORD: ${{ secrets.GAMUT_KEYSTORE_PASSWORD }}
           GAMUT_KEY_ALIAS: ${{ secrets.GAMUT_KEY_ALIAS }}
           GAMUT_KEY_PASSWORD: ${{ secrets.GAMUT_KEY_PASSWORD }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RELEASE_ABIS: ${{ vars.RELEASE_ABIS || 'arm64-v8a' }}
         run: |
           chmod +x gradlew
-          code=$(( ${{ github.run_number }} + 100 ))   # always above local builds (versionCode 1)
-          echo "CODE=$code" >> "$GITHUB_ENV"
+          code=$(( RUN_NUMBER + 100 ))   # always above local builds (versionCode 1)
+          echo "code=$code" >> "$GITHUB_OUTPUT"
           ./gradlew :app:assembleRelease --no-daemon \
-            -Pgamut.versionCode=$code -Pgamut.versionName=1.0.$code -Pgamut.repo="$RELEASE_REPO" \
-            -Pgamut.abis="${{ vars.RELEASE_ABIS || 'arm64-v8a,armeabi-v7a' }}"
+            -Pgamut.versionCode="$code" -Pgamut.versionName="1.0.$code" -Pgamut.repo="$RELEASE_REPO" \
+            -Pgamut.abis="$RELEASE_ABIS"
 
-      - name: Package
+      - name: Verify the APK is signed with our key
+        env:
+          CODE: ${{ steps.build.outputs.code }}
+          # Repo VARIABLE (Settings > Secrets and variables > Actions > Variables): SHA-256 of the release certificate.
+          # Get it from the first run's log, or: keytool -list -v -keystore gamut-release.jks -alias gamut
+          EXPECTED_SHA256: ${{ vars.GAMUT_CERT_SHA256 }}
+        run: |
+          mapfile -t apks < <(find app/build/outputs/apk/release -name '*.apk')
+          if [ "${#apks[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one release APK, found ${#apks[@]}: ${apks[*]:-none}. Use a single ABI in RELEASE_ABIS."
+            exit 1
+          fi
+          apk="${apks[0]}"
+          case "$apk" in *unsigned*) echo "::error::The APK is unsigned"; exit 1;; esac
+
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner"
+          certs="$("$apksigner" verify --print-certs "$apk")"   # non-zero exit (bad signature) fails the step
+          printf '%s\n' "$certs" | sed -n '1,5p'
+
+          actual="$(awk '/certificate SHA-256 digest/ {print tolower($NF); exit}' <<< "$certs")"
+          [ -n "$actual" ] || { echo "::error::Could not read the signing certificate fingerprint"; exit 1; }
+          echo "Signing certificate SHA-256: $actual"
+
+          expected="$(printf '%s' "$EXPECTED_SHA256" | tr -d ': ' | tr 'A-F' 'a-f')"
+          if [ -z "$expected" ]; then
+            echo "::warning::Variable GAMUT_CERT_SHA256 is not set, so the signing key is NOT being checked. Set it to: $actual"
+          elif [ "$actual" != "$expected" ]; then
+            echo "::error::APK is signed with $actual but GAMUT_CERT_SHA256 expects $expected. Not releasing."
+            exit 1
+          fi
+
+          cp "$apk" "Gamut-$CODE.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: Gamut-*.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  # Never runs project code: only needs the write token.
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      issues: write
+    env:
+      CODE: ${{ needs.build.outputs.code }}
+      GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-apk
+
+      - name: Write latest.json
         env:
           FORCE_MIN: ${{ inputs.force_min }}
           NOTES: ${{ inputs.notes }}
         run: |
-          apk=$(ls app/build/outputs/apk/release/*.apk | head -n 1)
-          case "$apk" in *unsigned*) echo "::error::The APK is unsigned"; exit 1;; esac
-          # Fail the release if it is not signed with the key we think it is.
-          "$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner" verify --print-certs "$apk" | head -n 3
-          cp "$apk" "Gamut-$CODE.apk"
-
           min=$CODE
           if [ "$FORCE_MIN" != "true" ]; then
-            # A soft release: keep whatever minimum is already in force.
-            prev=$(curl -fsSL "https://github.com/$RELEASE_REPO/releases/latest/download/latest.json" | jq -r '.minVersionCode' || true)
-            if [[ "$prev" =~ ^[0-9]+$ ]]; then min=$prev; fi
+            # A soft release keeps whatever minimum is already in force. If we cannot read it, STOP:
+            # falling back to the new build would silently turn a soft release into a forced one.
+            status=$(curl -sSL -o prev.json -w '%{http_code}' \
+              "https://github.com/$RELEASE_REPO/releases/latest/download/latest.json" || echo 000)
+            case "$status" in
+              200)
+                prev=$(jq -r '.minVersionCode' prev.json)
+                [[ "$prev" =~ ^[0-9]+$ ]] || { echo "::error::Current latest.json has no valid minVersionCode"; exit 1; }
+                min=$prev ;;
+              404)
+                echo "::notice::No previous release found; this first release is its own minimum." ;;
+              *)
+                echo "::error::Could not read the current latest.json (HTTP $status). Not guessing the minimum version."
+                exit 1 ;;
+            esac
           fi
 
           jq -n \
@@ -94,8 +173,44 @@ jobs:
           cat latest.json
 
       - name: Publish
+        id: publish
         env:
           NOTES: ${{ inputs.notes }}
+          DRAFT: ${{ inputs.draft }}
         run: |
-          gh release create "v1.0.$CODE" "Gamut-$CODE.apk" latest.json \
-            --repo "$RELEASE_REPO" --title "Gamut 1.0.$CODE" --notes "${NOTES:-Automatic build.}" --latest
+          flags=()
+          if [ "$DRAFT" = "true" ]; then flags+=(--draft); else flags+=(--latest); fi
+          # Tag the commit that was actually built (only possible when releasing to this same repo).
+          if [ "$RELEASE_REPO" = "$GITHUB_REPOSITORY" ]; then flags+=(--target "$GITHUB_SHA"); fi
+          url=$(gh release create "v1.0.$CODE" "Gamut-$CODE.apk" latest.json \
+            --repo "$RELEASE_REPO" --title "Gamut 1.0.$CODE" --notes "${NOTES:-Automatic build.}" "${flags[@]}")
+          echo "$url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Tell me a draft is ready
+        if: inputs.draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ steps.publish.outputs.url }}
+          NOTES: ${{ inputs.notes }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "Draft release Gamut 1.0.$CODE is ready to test" \
+            --body "$(printf 'A signed draft build is waiting for you. Nothing has been shipped to users.\n\n- Draft: %s\n- Built from branch: %s\n- Notes: %s\n\nTest it (install, sign-in, playback, update check). If it is good, open the draft and press **Publish release**; if the build came from an extractor bump, merge its pull request too. If it is bad, delete the draft (and close the PR).' "$URL" "$BRANCH" "${NOTES:-none}")"
+
+  notify-failure:
+    needs: [build, publish]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open an issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "Release workflow failed" \
+            --body "The release run failed. Nothing was published. Details: $RUN_URL"

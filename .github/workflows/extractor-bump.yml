@@ -1,44 +1,67 @@
 name: extractor-bump
-# Keeps NewPipe Extractor (and the yt-dlp wrapper) current without anyone watching:
+# Keeps NewPipe Extractor (and the yt-dlp wrapper) current without anyone watching, but never ships anything alone:
 #   1. finds a newer release upstream;  2. waits until it can be downloaded;
 #   3. resolves a few songs with the OLD and the NEW version (tools/extractor-smoke);
-#   4. only if the new one is no worse AND the app still builds: commits the bump and starts the release workflow,
-#      which the app then forces onto every user.
+#   4. only if the new one is no worse AND the app still builds: pushes the bump to the branch "extractor-bump",
+#      opens a pull request, and starts release.yml as a DRAFT release (not forced on users).
+#   5. you get an issue/notification; you test the draft APK, press "Publish release" and merge the PR.
+# While that pull request is open, no further bump is proposed.
 # Note: YouTube often blocks GitHub's servers ("Sign in to confirm you're not a bot"). Those failures say nothing about
 # the library, so they are NOT counted against the new version. Only real failures (parsing errors, crashes, etc.) are
-# compared. If blocking hides the result, the bump goes ahead on the strength of the build alone (the new version is a
-# published, upstream-tested release).
+# compared. If blocking hides the result, it still produces a draft: that is exactly why YOU test it before publishing.
 on:
   schedule:
     - cron: "23 */6 * * *"
   workflow_dispatch:
 
 permissions:
-  contents: write
-  actions: write
+  contents: read
 
 concurrency:
   group: extractor-bump
   cancel-in-progress: false
 
-env:
-  GH_TOKEN: ${{ secrets.BUMP_TOKEN || github.token }}
+defaults:
+  run:
+    shell: bash   # implies -eo pipefail
 
 jobs:
-  bump:
+  # Runs the unvetted new library: read-only token, credentials not stored in .git.
+  test:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      changed: ${{ steps.plan.outputs.changed }}
+      summary: ${{ steps.plan.outputs.summary }}
     steps:
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.BUMP_TOKEN || github.token }}
+          persist-credentials: false
 
       - name: Ignore file-mode changes
-        # chmod +x gradlew would otherwise show up as an unstaged change and break "git pull --rebase".
         run: git config core.fileMode false
+
+      - name: Skip while a bump is waiting for review
+        id: pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh pr list --repo "$GITHUB_REPOSITORY" --head extractor-bump --state open --json number --jq length)
+          if [ "$n" -gt 0 ]; then
+            echo "::notice::A bump pull request is still open; not proposing another one."
+            echo "waiting=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "waiting=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Look for newer versions
         id: plan
+        if: steps.pending.outputs.waiting != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}   # only for GitHub API rate limits
         run: python3 scripts/bump_extractors.py plan
 
       - uses: actions/setup-java@v4
@@ -67,7 +90,7 @@ jobs:
       - name: Smoke test, new versions
         if: steps.plan.outputs.changed == 'true'
         run: |
-          # No "|| true": if this does not even compile, the library changed its API and a person has to look.
+          # No "|| true": with pipefail, a compile failure now really stops here (library API changed, a person must look).
           ./gradlew :tools:extractor-smoke:run --console=plain -q 2>&1 | tee smoke-after.txt
 
           BLOCK='not a bot|SignInConfirmNotBot|LOGIN_REQUIRED'
@@ -88,27 +111,24 @@ jobs:
             echo "::error::The new version has more real failures ($ra) than the current one ($rb). Not releasing."
             exit 1
           fi
+          if [ "$pa" -eq 0 ]; then
+            echo "::warning::No song resolved successfully with the new version (YouTube probably blocked the runner). Test the draft APK carefully."
+          fi
           if [ "$ba" -gt 0 ] || [ "$bb" -gt 0 ]; then
-            echo "::warning::YouTube blocked this runner for some songs (before=$bb, after=$ba). Those are ignored; going on the build and the non-blocked checks."
+            echo "::warning::YouTube blocked this runner for some songs (before=$bb, after=$ba). Those are ignored."
           fi
 
       - name: The app still builds
         if: steps.plan.outputs.changed == 'true'
         run: ./gradlew :app:assembleDebug --no-daemon
 
-      - name: Commit and release
+      - uses: actions/upload-artifact@v4
         if: steps.plan.outputs.changed == 'true'
-        env:
-          SUMMARY: ${{ steps.plan.outputs.summary }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git status --short
-          git add gradle/libs.versions.toml
-          git commit -m "chore(deps): $SUMMARY"
-          git pull --rebase --autostash origin "${{ github.ref_name }}"
-          git push origin "HEAD:${{ github.ref_name }}"
-          gh workflow run release.yml --ref "${{ github.ref_name }}" -f force_min=true -f "notes=Updated: $SUMMARY"
+        with:
+          name: bump-toml
+          path: gradle/libs.versions.toml
+          if-no-files-found: error
+          retention-days: 3
 
       - uses: actions/upload-artifact@v4
         if: always() && steps.plan.outputs.changed == 'true'
@@ -117,3 +137,74 @@ jobs:
           path: smoke-*.txt
           if-no-files-found: ignore
           retention-days: 14
+
+  # Never runs project code: only this job holds a write token.
+  propose:
+    needs: test
+    if: needs.test.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ secrets.BUMP_TOKEN || github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.BUMP_TOKEN || github.token }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bump-toml
+          path: gradle
+
+      - name: Push the bump branch, open the PR, start the draft release
+        env:
+          SUMMARY: ${{ needs.test.outputs.summary }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C extractor-bump
+          git add gradle/libs.versions.toml
+          git status --short
+          git commit -m "chore(deps): $SUMMARY"
+          git push --force origin extractor-bump   # safe: no open PR uses this branch (checked above)
+
+          # Needs Settings > Actions > General > "Allow GitHub Actions to create and approve pull requests".
+          gh pr create --base "$GITHUB_REF_NAME" --head extractor-bump \
+            --title "chore(deps): $SUMMARY" \
+            --body "Automatic extractor bump. A DRAFT release is being built from this branch. Test the draft APK, press **Publish release**, then merge this PR. Close it (and delete the draft) to reject." \
+            || echo "::warning::Could not open the pull request (see the setting above); the branch extractor-bump exists."
+
+          # Retry: the branch is already pushed, so a failed dispatch must not be silently lost.
+          for attempt in 1 2 3; do
+            if gh workflow run release.yml --ref extractor-bump -f force_min=false -f draft=true -f "notes=Updated: $SUMMARY"; then
+              exit 0
+            fi
+            echo "dispatch attempt $attempt failed"; sleep $((attempt * 10))
+          done
+          echo "::error::Could not start release.yml. Run it by hand on the branch extractor-bump."
+          exit 1
+
+  notify-failure:
+    needs: [test, propose]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open (or update) an issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Extractor bump failed"
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          body="The scheduled extractor bump failed. Nothing was released. Details: $RUN_URL"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi
