@@ -63,17 +63,13 @@ import com.gamut.core.model.Track
 private val NUMBERED_TABS = setOf("Trending", "Billboard")
 private const val COLLAPSED_ROWS = 10
 
-internal fun LazyListScope.discoverItems(
+/** Hero, artists and albums. On wide windows this is the left-hand pane. Shows the skeleton / error card while there is no data. */
+internal fun LazyListScope.discoverFeaturedItems(
     state: DiscoverState,
-    selectedTab: Int,
-    onSelectTab: (Int) -> Unit,
     onTrackClick: (Track, List<Track>) -> Unit,
-    onMoreClick: (Track) -> Unit,
     nowPlayingIsrc: String?,
     onArtistClick: (Long) -> Unit,
     onAlbumClick: (DiscoverItem) -> Unit,
-    chartExpanded: Boolean = false,
-    onToggleChartExpanded: () -> Unit = {},
     onRetry: () -> Unit = {},
 ) {
     // Nothing yet: placeholders with the final shape, so the page does not jump when data lands.
@@ -155,7 +151,21 @@ internal fun LazyListScope.discoverItems(
             }
         }
     }
+}
 
+/** Charts: pill tabs + the ranked list. On wide windows this is the right-hand pane. */
+internal fun LazyListScope.discoverChartItems(
+    state: DiscoverState,
+    selectedTab: Int,
+    onSelectTab: (Int) -> Unit,
+    onTrackClick: (Track, List<Track>) -> Unit,
+    onMoreClick: (Track) -> Unit,
+    nowPlayingIsrc: String?,
+    onAlbumClick: (DiscoverItem) -> Unit,
+    chartExpanded: Boolean = false,
+    onToggleChartExpanded: () -> Unit = {},
+) {
+    if (state.tabs.isEmpty()) return
     // 4. Charts ----------------------------------------------------------------------------------------------------
     val tabIndex = selectedTab.coerceIn(0, state.tabs.lastIndex)
     val tab = state.tabs[tabIndex]
@@ -199,6 +209,24 @@ internal fun LazyListScope.discoverItems(
             }
         }
     }
+}
+
+/** Phone layout: everything in one list (featured blocks, then charts). */
+internal fun LazyListScope.discoverItems(
+    state: DiscoverState,
+    selectedTab: Int,
+    onSelectTab: (Int) -> Unit,
+    onTrackClick: (Track, List<Track>) -> Unit,
+    onMoreClick: (Track) -> Unit,
+    nowPlayingIsrc: String?,
+    onArtistClick: (Long) -> Unit,
+    onAlbumClick: (DiscoverItem) -> Unit,
+    chartExpanded: Boolean = false,
+    onToggleChartExpanded: () -> Unit = {},
+    onRetry: () -> Unit = {},
+) {
+    discoverFeaturedItems(state, onTrackClick, nowPlayingIsrc, onArtistClick, onAlbumClick, onRetry)
+    discoverChartItems(state, selectedTab, onSelectTab, onTrackClick, onMoreClick, nowPlayingIsrc, onAlbumClick, chartExpanded, onToggleChartExpanded)
 }
 
 @Composable

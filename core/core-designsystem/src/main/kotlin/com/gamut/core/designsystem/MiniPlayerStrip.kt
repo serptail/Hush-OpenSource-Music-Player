@@ -8,10 +8,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,16 +28,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.coerceAtMost
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.bold.Devices
-import com.adamglin.phosphoricons.bold.Pause
-import com.adamglin.phosphoricons.bold.Play
-import com.adamglin.phosphoricons.bold.SkipBack
-import com.adamglin.phosphoricons.bold.SkipForward
+import com.adamglin.phosphoricons.Regular
+import com.adamglin.phosphoricons.regular.Devices
+import com.adamglin.phosphoricons.regular.Pause
+import com.adamglin.phosphoricons.regular.Play
+import com.adamglin.phosphoricons.regular.SkipBack
+import com.adamglin.phosphoricons.regular.SkipForward
 
 /**
  * The now-playing strip that docks onto [GamutBottomBar] (pass it as the bar's `nowPlaying` slot). It is part of
@@ -66,13 +70,18 @@ fun MiniPlayerStrip(
     dockedToEdge: Boolean = false,
 ) {
     val accent = MaterialTheme.colorScheme.primary
+    // Wide windows (tablets, foldables, desktop mode): the nav-bar inset can be tall, and tinting all of it leaves a fat
+    // empty strip under the controls. Cap it; the gesture handle may overlap the tint, but never the buttons.
+    val isWide = LocalConfiguration.current.screenWidthDp >= 600
+    val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomInset = if (isWide) navInset.coerceAtMost(16.dp) else navInset
     val acrylicFillStrip = Modifier.acrylicFill(AcrylicMaterials.Thick, if (LocalCoverPalette.current.isLight) AcrylicTone.Light else AcrylicTone.Dark)
     Column(
         modifier
             .fillMaxWidth()
             // Inside GamutBottomBar the bar's own (acrylic) fill shows through; alone at the edge it needs its own tint.
             // Standalone at the edge: flat tint. Inside GamutBottomBar: the app's one acrylic surface, frosting the list behind it.
-            .then(if (dockedToEdge) Modifier.background(ink(0.05f)).navigationBarsPadding() else acrylicFillStrip)
+            .then(if (dockedToEdge) Modifier.background(ink(0.05f)).padding(bottom = bottomInset) else acrylicFillStrip)
             .pressScale(onClick = onOpen, scaleDown = 0.99f),
     ) {
         // Progress line on the top edge: faint track, accent fill.
@@ -108,22 +117,22 @@ fun MiniPlayerStrip(
                 )
             }
             Box(Modifier.size(40.dp).pressScale(onClick = onDevicesClick, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
-                Icon(PhosphorIcons.Bold.Devices, "Connect to a device", tint = if (devicesActive) accent else ink(0.9f), modifier = Modifier.size(22.dp))
+                Icon(PhosphorIcons.Regular.Devices, "Connect to a device", tint = if (devicesActive) accent else ink(0.9f), modifier = Modifier.size(22.dp))
             }
             Box(Modifier.size(40.dp).pressScale(onClick = onPrevious, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
-                Icon(PhosphorIcons.Bold.SkipBack, "Previous", tint = ink(0.9f), modifier = Modifier.size(22.dp))
+                Icon(PhosphorIcons.Regular.SkipBack, "Previous", tint = ink(0.9f), modifier = Modifier.size(22.dp))
             }
             Box(Modifier.size(48.dp).pressScale(onClick = onTogglePlay, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
                 Crossfade(if (isLoading) 2 else if (isPlaying) 1 else 0, animationSpec = tween(160), label = "mini-play") { s ->
                     when (s) {
                         2 -> CircularProgressIndicator(color = ink(), strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                        1 -> Icon(PhosphorIcons.Bold.Pause, "Pause", tint = ink(), modifier = Modifier.size(24.dp))
-                        else -> Icon(PhosphorIcons.Bold.Play, "Play", tint = ink(), modifier = Modifier.size(24.dp))
+                        1 -> Icon(PhosphorIcons.Regular.Pause, "Pause", tint = ink(), modifier = Modifier.size(24.dp))
+                        else -> Icon(PhosphorIcons.Regular.Play, "Play", tint = ink(), modifier = Modifier.size(24.dp))
                     }
                 }
             }
             Box(Modifier.size(40.dp).pressScale(onClick = onNext, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
-                Icon(PhosphorIcons.Bold.SkipForward, "Next", tint = ink(0.9f), modifier = Modifier.size(22.dp))
+                Icon(PhosphorIcons.Regular.SkipForward, "Next", tint = ink(0.9f), modifier = Modifier.size(22.dp))
             }
         }
     }

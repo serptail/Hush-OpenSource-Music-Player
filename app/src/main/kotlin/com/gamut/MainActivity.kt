@@ -97,7 +97,7 @@ import androidx.compose.ui.zIndex
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.bold.MagnifyingGlass
-import com.adamglin.phosphoricons.bold.VinylRecord
+import com.adamglin.phosphoricons.bold.BookmarkSimple
 import com.adamglin.phosphoricons.bold.User
 import com.gamut.core.designsystem.BottomBarItem
 import com.gamut.core.designsystem.GamutBottomBar
@@ -1174,7 +1174,7 @@ private fun HomeTabs(
                 GamutBottomBar(
                     items = listOf(
                         BottomBarItem("Discover", PhosphorIcons.Bold.MagnifyingGlass, selected = shownTab == 0, onClick = if (shownTab == 0) null else ({ goTo(0) })),
-                        BottomBarItem("Library", PhosphorIcons.Bold.VinylRecord, selected = shownTab == 1, onClick = if (shownTab == 1) null else ({ goTo(1) })),
+                        BottomBarItem("Library", PhosphorIcons.Bold.BookmarkSimple, selected = shownTab == 1, onClick = if (shownTab == 1) null else ({ goTo(1) })),
                     ),
                     modifier = Modifier
                         .align(Alignment.BottomCenter)

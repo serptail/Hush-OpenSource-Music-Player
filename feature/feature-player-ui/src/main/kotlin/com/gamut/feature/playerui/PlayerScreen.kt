@@ -10,6 +10,11 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import com.gamut.core.designsystem.AdaptiveLayout
 import com.gamut.core.designsystem.adaptiveGutter
+import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.BoxWithConstraints
+import com.gamut.core.designsystem.isWideLayout
 import com.gamut.core.designsystem.GamutMotion
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -64,19 +69,20 @@ import coil.request.ImageRequest
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.Regular
 import com.adamglin.phosphoricons.fill.Heart as HeartFilled
 import com.adamglin.phosphoricons.bold.CaretDown
 import com.adamglin.phosphoricons.bold.DotsThreeVertical
-import com.adamglin.phosphoricons.bold.Heart
-import com.adamglin.phosphoricons.bold.ListPlus
-import com.adamglin.phosphoricons.bold.Queue
-import com.adamglin.phosphoricons.bold.Repeat
-import com.adamglin.phosphoricons.bold.RepeatOnce
-import com.adamglin.phosphoricons.bold.ShareNetwork
-import com.adamglin.phosphoricons.bold.Shuffle
-import com.adamglin.phosphoricons.bold.SkipBack
-import com.adamglin.phosphoricons.bold.SkipForward
-import com.adamglin.phosphoricons.bold.Sparkle
+import com.adamglin.phosphoricons.regular.Heart
+import com.adamglin.phosphoricons.regular.ListPlus
+import com.adamglin.phosphoricons.regular.Queue
+import com.adamglin.phosphoricons.regular.Repeat
+import com.adamglin.phosphoricons.regular.RepeatOnce
+import com.adamglin.phosphoricons.regular.ShareNetwork
+import com.adamglin.phosphoricons.regular.Shuffle
+import com.adamglin.phosphoricons.regular.SkipBack
+import com.adamglin.phosphoricons.regular.SkipForward
+import com.adamglin.phosphoricons.regular.Sparkle
 import com.gamut.core.designsystem.AcrylicHost
 import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.designsystem.LocalCoverPalette
@@ -349,118 +355,163 @@ fun PlayerScreen(
     ) {
         if (artUrl != null) PlayerBackdrop(artUrl, animateChanges = active)
 
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            PlayerTopBar(leave, onMore = { showMore = true }, modifier = Modifier.fillMaxWidth().padding(start = 24.dp + gutter, end = 24.dp + gutter, top = 14.dp))
+        // Phone: one scrolling column (player first, then lyrics card, then the artist).
+        // Wide window (tablet / TV / unfolded): the player on the left, lyrics preview + about the artist on the right.
+        val wide = isWideLayout()
+        val edge = if (wide) 0.dp else gutter   // the phone-width centering only applies to the single column
 
-            // Everything below the top bar scrolls: controls first, then the lyrics card, then the artist.
-            Column(
-                Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp + gutter),
-            ) {
-                Spacer(Modifier.height(10.dp))
-                Box(Modifier.volumeHudHeaderAnchor(volumeHud)) {
-                    TrackHeader(
-                        title = track?.title.orEmpty(),
-                        artist = track?.artist.orEmpty(),
-                        albumTitle = track?.album,
-                        onArtist = { name -> track?.let { t -> onGoToArtist(t.copy(artist = name)) } },
-                        isFavorite = track?.isrc?.let { it in favoriteIsrcs } == true,
-                        onToggleFavorite = { track?.let(onToggleFavorite) },
-                    )
-                }
-                Spacer(Modifier.height(36.dp))   // the cover sits lower, closer to the middle of the screen
-
-                // [previous] cover [next]. The row may reach ArtworkExtraWidth past the screen padding on each side, and
-                // the cover takes whatever the two buttons leave. Play / pause is a tap on the cover itself.
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .layout { measurable, constraints ->
-                            val extra = ArtworkExtraWidth.roundToPx()
-                            val w = constraints.maxWidth + extra * 2
-                            val placeable = measurable.measure(Constraints(minWidth = w, maxWidth = w))
-                            layout(constraints.maxWidth, placeable.height) { placeable.place(-extra, 0) }
-                        },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    DepthIcon(
-                        PhosphorIcons.Bold.SkipBack, "Previous",
-                        Modifier.bounceTap(onClick = player::skipPrevious).padding(SideButtonPadding),
-                        size = SideButtonSize,
-                    )
-                    Box(Modifier.weight(1f).volumeHudAnchor(volumeHud), contentAlignment = Alignment.Center) {
-                        ArtworkWithRing(
-                            modifier = Modifier.fillMaxWidth(),
-                            url = rawArt,
-                            progress = progressProvider,
-                            onScrub = { scrubFraction = it },
-                            isPlaying = shownPlaying,
-                            enabled = true,
-                            loading = spinnerOn,
-                            waveform = waveform,
-                            onTogglePlay = togglePlay,
-                            onSeekFraction = seekToFraction,
-                        )
-                    }
-                    DepthIcon(
-                        PhosphorIcons.Bold.SkipForward, "Next",
-                        Modifier.bounceTap(onClick = player::skipNext).padding(SideButtonPadding),
-                        size = SideButtonSize,
-                    )
-                }
-
-                Spacer(Modifier.height(10.dp))
-                TimeRow(positionProvider, effectiveDurationMs)
-
-                // The line being sung: right under the cover and the time codes.
-                if (lyricsOn) CurrentLyricLine(shownLyrics, activeIndex, lyricsPosition, tint, highlight = lyricHighlight)
-
-                Spacer(Modifier.height(4.dp))
-                ControlsGrid(
-                    shuffleOn = shuffleOn,
-                    repeatMode = repeatMode,
-                    accent = accent,
-                    modActive = modState.preset != ModPreset.ORIGINAL,
-                    onShuffle = { player.setShuffle(!shuffleOn) },
-                    onQueue = { showQueue = true },
-                    onAddToPlaylist = { showAddToPlaylist = true },
-                    onRepeat = {
-                        player.setRepeatMode(
-                            when (repeatMode) {
-                                PlaybackRepeatMode.OFF -> PlaybackRepeatMode.ALL
-                                PlaybackRepeatMode.ALL -> PlaybackRepeatMode.ONE
-                                PlaybackRepeatMode.ONE -> PlaybackRepeatMode.OFF
-                            },
-                        )
-                    },
-                    onShare = { showShare = true },
-                    onMod = { showMod = true },
+        // Left side: header, cover with previous / next, time codes, the line being sung, and the controls.
+        // coverMax caps the cover so it still fits the screen height on a landscape tablet / TV.
+        val playerContent: @Composable (Dp) -> Unit = { coverMax ->
+            Spacer(Modifier.height(10.dp))
+            Box(Modifier.volumeHudHeaderAnchor(volumeHud)) {
+                TrackHeader(
+                    title = track?.title.orEmpty(),
+                    artist = track?.artist.orEmpty(),
+                    albumTitle = track?.album,
+                    onArtist = { name -> track?.let { t -> onGoToArtist(t.copy(artist = name)) } },
+                    isFavorite = track?.isrc?.let { it in favoriteIsrcs } == true,
+                    onToggleFavorite = { track?.let(onToggleFavorite) },
                 )
+            }
+            Spacer(Modifier.height(36.dp))   // the cover sits lower, closer to the middle of the screen
 
-                Spacer(Modifier.height(28.dp))
-                if (lyricsOn) {
-                    LyricsPreviewCard(
-                        lyricsState = lyricsState,
-                        activeIndex = activeIndex,
-                        tint = tint,
-                        onShowLyrics = { lyricsPanelOpen = true },
-                        onRetry = { lyricsRetry++ },
+            // [previous] cover [next]. The row may reach ArtworkExtraWidth past the screen padding on each side, and
+            // the cover takes whatever the two buttons leave. Play / pause is a tap on the cover itself.
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .layout { measurable, constraints ->
+                        val extra = ArtworkExtraWidth.roundToPx()
+                        val w = constraints.maxWidth + extra * 2
+                        val placeable = measurable.measure(Constraints(minWidth = w, maxWidth = w))
+                        layout(constraints.maxWidth, placeable.height) { placeable.place(-extra, 0) }
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                DepthIcon(
+                    PhosphorIcons.Regular.SkipBack, "Previous",
+                    Modifier.bounceTap(onClick = player::skipPrevious).padding(SideButtonPadding),
+                    size = SideButtonSize,
+                )
+                Box(Modifier.weight(1f).volumeHudAnchor(volumeHud), contentAlignment = Alignment.Center) {
+                    ArtworkWithRing(
+                        modifier = Modifier.fillMaxWidth().widthIn(max = coverMax),
+                        url = rawArt,
+                        progress = progressProvider,
+                        onScrub = { scrubFraction = it },
+                        isPlaying = shownPlaying,
+                        enabled = true,
+                        loading = spinnerOn,
+                        waveform = waveform,
+                        onTogglePlay = togglePlay,
+                        onSeekFraction = seekToFraction,
                     )
-                    Spacer(Modifier.height(24.dp))
                 }
-                if (track != null) {
-                    ArtistAboutSection(
-                        artistName = track.artist,
-                        info = artistInfo,
-                        loading = artistLoading,
-                        fallbackArtUrl = rawArt,
-                        onArtistClick = goToArtist,
+                DepthIcon(
+                    PhosphorIcons.Regular.SkipForward, "Next",
+                    Modifier.bounceTap(onClick = player::skipNext).padding(SideButtonPadding),
+                    size = SideButtonSize,
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+            TimeRow(positionProvider, effectiveDurationMs)
+
+            // The line being sung: right under the cover and the time codes.
+            if (lyricsOn) CurrentLyricLine(shownLyrics, activeIndex, lyricsPosition, tint, highlight = lyricHighlight)
+
+            Spacer(Modifier.height(4.dp))
+            ControlsGrid(
+                shuffleOn = shuffleOn,
+                repeatMode = repeatMode,
+                accent = accent,
+                modActive = modState.preset != ModPreset.ORIGINAL,
+                onShuffle = { player.setShuffle(!shuffleOn) },
+                onQueue = { showQueue = true },
+                onAddToPlaylist = { showAddToPlaylist = true },
+                onRepeat = {
+                    player.setRepeatMode(
+                        when (repeatMode) {
+                            PlaybackRepeatMode.OFF -> PlaybackRepeatMode.ALL
+                            PlaybackRepeatMode.ALL -> PlaybackRepeatMode.ONE
+                            PlaybackRepeatMode.ONE -> PlaybackRepeatMode.OFF
+                        },
                     )
+                },
+                onShare = { showShare = true },
+                onMod = { showMod = true },
+            )
+        }
+
+        // Right side on a wide window (below the player on a phone): the lyrics preview card, then the artist.
+        val extrasContent: @Composable () -> Unit = {
+            if (lyricsOn) {
+                LyricsPreviewCard(
+                    lyricsState = lyricsState,
+                    activeIndex = activeIndex,
+                    tint = tint,
+                    onShowLyrics = { lyricsPanelOpen = true },
+                    onRetry = { lyricsRetry++ },
+                )
+                Spacer(Modifier.height(24.dp))
+            }
+            if (track != null) {
+                ArtistAboutSection(
+                    artistName = track.artist,
+                    info = artistInfo,
+                    loading = artistLoading,
+                    fallbackArtUrl = rawArt,
+                    onArtistClick = goToArtist,
+                )
+            }
+        }
+
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+            PlayerTopBar(leave, onMore = { showMore = true }, modifier = Modifier.fillMaxWidth().padding(start = 24.dp + edge, end = 24.dp + edge, top = 14.dp))
+
+            if (wide) {
+                Row(Modifier.weight(1f).fillMaxWidth()) {
+                    BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+                        // Header, time codes, line and controls need about 360dp; the cover gets the rest of the height.
+                        val coverMax = (maxHeight - 360.dp).coerceIn(220.dp, 560.dp)
+                        Column(
+                            Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(start = 32.dp, end = 16.dp),
+                        ) {
+                            playerContent(coverMax)
+                            Spacer(Modifier.height(32.dp).navigationBarsPadding())
+                        }
+                    }
+                    // Own scroll: the lyrics card and the artist section never push the controls out of view.
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState())
+                            .padding(start = 16.dp, end = 32.dp),
+                    ) {
+                        Spacer(Modifier.height(10.dp))
+                        extrasContent()
+                        Spacer(Modifier.height(32.dp).navigationBarsPadding())
+                    }
                 }
-                Spacer(Modifier.height(32.dp).navigationBarsPadding())
+            } else {
+                // Everything below the top bar scrolls: controls first, then the lyrics card, then the artist.
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp + gutter),
+                ) {
+                    playerContent(Dp.Infinity)
+                    Spacer(Modifier.height(28.dp))
+                    extrasContent()
+                    Spacer(Modifier.height(32.dp).navigationBarsPadding())
+                }
             }
         }
 
@@ -607,7 +658,7 @@ private fun TrackHeader(
             }
         }
         DepthIcon(
-            if (isFavorite) PhosphorIcons.Fill.HeartFilled else PhosphorIcons.Bold.Heart,
+            if (isFavorite) PhosphorIcons.Fill.HeartFilled else PhosphorIcons.Regular.Heart,
             if (isFavorite) "Remove from favorites" else "Add to favorites",
             Modifier.bounceTap(onClick = onToggleFavorite).padding(4.dp),
             tint = if (isFavorite) FavoriteColor else Color.White,
@@ -640,18 +691,18 @@ private fun ControlsGrid(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             GridCell {
                 DepthIcon(
-                    PhosphorIcons.Bold.Shuffle,
+                    PhosphorIcons.Regular.Shuffle,
                     if (shuffleOn) "Shuffle on" else "Shuffle off",
                     Modifier.bounceTap(onClick = onShuffle).padding(8.dp),
                     tint = if (shuffleOn) accent else idle,
                     size = iconSize,
                 )
             }
-            GridCell { DepthIcon(PhosphorIcons.Bold.Queue, "Queue", Modifier.bounceTap(onClick = onQueue).padding(8.dp), tint = idle, size = iconSize) }
-            GridCell { DepthIcon(PhosphorIcons.Bold.ListPlus, "Add to playlist", Modifier.bounceTap(onClick = onAddToPlaylist).padding(8.dp), tint = idle, size = iconSize) }
+            GridCell { DepthIcon(PhosphorIcons.Regular.Queue, "Queue", Modifier.bounceTap(onClick = onQueue).padding(8.dp), tint = idle, size = iconSize) }
+            GridCell { DepthIcon(PhosphorIcons.Regular.ListPlus, "Add to playlist", Modifier.bounceTap(onClick = onAddToPlaylist).padding(8.dp), tint = idle, size = iconSize) }
             GridCell {
                 DepthIcon(
-                    if (repeatMode == PlaybackRepeatMode.ONE) PhosphorIcons.Bold.RepeatOnce else PhosphorIcons.Bold.Repeat,
+                    if (repeatMode == PlaybackRepeatMode.ONE) PhosphorIcons.Regular.RepeatOnce else PhosphorIcons.Regular.Repeat,
                     when (repeatMode) {
                         PlaybackRepeatMode.OFF -> "Repeat off"
                         PlaybackRepeatMode.ALL -> "Repeat all"
@@ -666,10 +717,10 @@ private fun ControlsGrid(
         Spacer(Modifier.height(6.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             GridCell {}
-            GridCell { DepthIcon(PhosphorIcons.Bold.ShareNetwork, "Share", Modifier.bounceTap(onClick = onShare).padding(8.dp), tint = idle, size = iconSize) }
+            GridCell { DepthIcon(PhosphorIcons.Regular.ShareNetwork, "Share", Modifier.bounceTap(onClick = onShare).padding(8.dp), tint = idle, size = iconSize) }
             GridCell {
                 DepthIcon(
-                    PhosphorIcons.Bold.Sparkle,
+                    PhosphorIcons.Regular.Sparkle,
                     if (modActive) "Mod on" else "Mod",
                     Modifier.bounceTap(onClick = onMod).padding(8.dp),
                     tint = if (modActive) accent else idle,

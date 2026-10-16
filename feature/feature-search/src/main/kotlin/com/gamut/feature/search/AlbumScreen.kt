@@ -1,5 +1,11 @@
 package com.gamut.feature.search
 
+import com.gamut.core.designsystem.focusRing
+import com.gamut.core.designsystem.isWideLayout
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -160,19 +166,16 @@ fun AlbumScreen(
                     when {
                         // Real content only after the slide has finished; until then (and while loading) the skeleton.
                         value != null && settled -> {
-                            LazyColumn(
-                                Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(bottom = 24.dp),
-                            ) {
-                                item(key = "hero") {
-                                    AlbumHero(
+                            val heroContent: @Composable () -> Unit = {
+                                AlbumHero(
                                         album = value,
                                         artistImageUrl = artistImage,
                                         onPlay = { value.tracks.firstOrNull()?.let { onTrackSelected(it, value.tracks) } },
                                         // The album header has no track of its own: borrow the first one as the carrier.
                                         onArtist = { name -> value.tracks.firstOrNull()?.let { onTrackArtist(it.copy(artist = name)) } },
                                     )
-                                }
+                            }
+                            val trackItems: LazyListScope.() -> Unit = {
                                 // Index in the key: duplicate ISRCs in one album would otherwise crash LazyColumn.
                                 itemsIndexed(value.tracks, key = { i, t -> "${t.isrc}-$i" }) { index, track ->
                                     AlbumTrackRow(
@@ -186,6 +189,23 @@ fun AlbumScreen(
                                     ) { picked -> onTrackSelected(picked, value.tracks) }
                                 }
                                 item(key = "nav-space") { Box(Modifier.navigationBarsPadding()) }
+                            }
+                            if (isWideLayout()) {
+                                // Wide window: cover + title on the left (own scroll), the numbered tracks on the right.
+                                Row(Modifier.fillMaxSize()) {
+                                    Column(Modifier.weight(0.4f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+                                        heroContent()
+                                    }
+                                    LazyColumn(
+                                        Modifier.weight(0.6f).fillMaxHeight().statusBarsPadding(),
+                                        contentPadding = PaddingValues(top = 16.dp, end = 12.dp, bottom = 24.dp),
+                                    ) { trackItems() }
+                                }
+                            } else {
+                                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+                                    item(key = "hero") { heroContent() }
+                                    trackItems()
+                                }
                             }
                             BackButton(onBack)
                         }
@@ -418,6 +438,7 @@ private fun AlbumTrackRow(
             .clip(RoundedCornerShape(12.dp))
             // Read in the draw phase: the press tint animates without recomposing the row.
             .drawBehind { drawRect(tint) }
+            .focusRing(RoundedCornerShape(12.dp))
             .hoverable(interaction)
             .clickable(interactionSource = interaction, indication = null) { onClick(track) }
             .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
@@ -469,6 +490,7 @@ private fun AlbumMoreButton(onClick: () -> Unit) {
         Modifier
             .size(40.dp)
             .clip(CircleShape)
+            .focusRing(CircleShape)
             .clickable(role = Role.Button, onClickLabel = "More options", onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Icon(PhosphorIcons.Bold.DotsThreeVertical, "More options", tint = ink(0.5f), modifier = Modifier.size(22.dp)) }

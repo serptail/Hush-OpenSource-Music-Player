@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -61,7 +62,8 @@ fun GamutBottomBar(
                 .fillMaxWidth()
                 .navigationBarsPadding(),
         ) {
-            Row(
+            // The hairline spans the whole window; the tabs themselves stay grouped in the middle on wide windows.
+            Box(
                 Modifier
                     .fillMaxWidth()
                     .height(GamutBottomBarTabsHeight)
@@ -69,8 +71,11 @@ fun GamutBottomBar(
                         val y = 0.5.dp.toPx()
                         drawLine(hairline, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
                     },
+                contentAlignment = Alignment.Center,
             ) {
-                items.forEach { item -> BottomBarTab(item, Modifier.weight(1f)) }
+                Row(Modifier.widthIn(max = AdaptiveLayout.BottomBarTabsMaxWidth).fillMaxWidth().fillMaxHeight()) {
+                    items.forEach { item -> BottomBarTab(item, Modifier.weight(1f)) }
+                }
             }
         }
     }

@@ -1,5 +1,7 @@
 package com.gamut.feature.library
 
+import com.gamut.core.designsystem.isWideLayout
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.offset
@@ -324,6 +326,7 @@ fun LocalMusicScreen(
 
     CoverTheme(palette) {
         val accent = MaterialTheme.colorScheme.primary
+        val wide = isWideLayout()
         Column(Modifier.fillMaxSize().statusBarsPadding().then(if (searchFocused) Modifier.imePadding() else Modifier)) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(44.dp).pressScale(onClick = onBack), contentAlignment = Alignment.Center) {
@@ -343,7 +346,7 @@ fun LocalMusicScreen(
                 }
             }
 
-            if (settled && hasPermission && songs.isNotEmpty()) {
+            if (settled && hasPermission && songs.isNotEmpty() && !wide) {
                 LocalSearchField(
                     query = query,
                     onChange = { query = it },
@@ -353,10 +356,8 @@ fun LocalMusicScreen(
                 )
             }
 
-            if (settled) LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 24.dp)) {
-                if (!searching) {
-                    item(key = "header") {
-                        Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 14.dp)) {
+            val headerSlot: @Composable () -> Unit = {
+                Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 14.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 DeviceTile(88.dp, RoundedCornerShape(22.dp), background = false)
                                 Column(Modifier.weight(1f).padding(start = 18.dp)) {
@@ -383,7 +384,10 @@ fun LocalMusicScreen(
                                 )
                             }
                         }
-                    }
+            }
+            val listBody: LazyListScope.(Boolean) -> Unit = { showHeader ->
+                if (showHeader && !searching) {
+                    item(key = "header") { headerSlot() }
                 }
 
                 if (hasPermission && formats.size > 1) {
@@ -402,7 +406,7 @@ fun LocalMusicScreen(
                 if (!hasPermission) {
                     item(key = "permission") {
                         EmptyStateCard(
-                            title = if (denied) "Music access is off" else "Play the music on your phone",
+                            title = if (denied) "Music access is off" else "Play any music on your device",
                             subtitle = if (denied) "Turn on “Music and audio” for this app in system settings."
                             else "Allow access to your audio files. They stay on your device and are never uploaded.",
                             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
@@ -449,6 +453,26 @@ fun LocalMusicScreen(
                     )
                 }
                 item(key = "nav-space") { Box(Modifier.navigationBarsPadding()) }
+            }
+            if (settled && wide) {
+                // Wide window: header on the left (own scroll), search + list on the right.
+                Row(Modifier.weight(1f).fillMaxWidth()) {
+                    Column(Modifier.weight(0.4f).fillMaxHeight().verticalScroll(rememberScrollState())) { headerSlot() }
+                    Column(Modifier.weight(0.6f).fillMaxHeight()) {
+                        if (hasPermission && songs.isNotEmpty()) {
+                            LocalSearchField(
+                                query = query,
+                                onChange = { query = it },
+                                onFocus = { searchFocused = it },
+                                onDone = { focus.clearFocus() },
+                                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 4.dp),
+                            )
+                        }
+                        LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 24.dp)) { listBody(false) }
+                    }
+                }
+            } else if (settled) {
+                LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 24.dp)) { listBody(true) }
             } else Spacer(Modifier.weight(1f))
             nowPlaying()
         }

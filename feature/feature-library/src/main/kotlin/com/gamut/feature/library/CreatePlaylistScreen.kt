@@ -1,5 +1,9 @@
 package com.gamut.feature.library
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import com.gamut.core.designsystem.isWideLayout
+import com.gamut.core.designsystem.focusRing
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -153,7 +157,10 @@ fun CreatePlaylistScreen(
                 Text("New playlist", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(start = 8.dp))
             }
 
-            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+            // Phone: one centered column (max 560dp). Wide window (tablet / TV): the cover and name on the left,
+            // tags and what to start with on the right, each side scrolling on its own.
+            val wide = isWideLayout()
+            val leftContent: @Composable () -> Unit = {
                 Spacer(Modifier.height(20.dp))
                 CoverPreview(coverUri, onPick = pickCover, onClear = { coverUri = null })
                 // Only shown once something is added; the slot grows smoothly instead of the name field jumping.
@@ -174,6 +181,8 @@ fun CreatePlaylistScreen(
                     onDone = { focus.clearFocus() },
                 )
 
+            }
+            val rightContent: @Composable () -> Unit = {
                 Text(
                     "Tags",
                     style = MaterialTheme.typography.titleLarge,
@@ -219,12 +228,38 @@ fun CreatePlaylistScreen(
                 )
             }
 
+            if (wide) {
+                Row(Modifier.weight(1f).fillMaxWidth()) {
+                    Column(
+                        Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Column(Modifier.widthIn(max = 560.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) { leftContent() }
+                    }
+                    Column(
+                        Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Spacer(Modifier.height(20.dp))
+                        Column(Modifier.widthIn(max = 560.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) { rightContent() }
+                    }
+                }
+            } else {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                    Column(Modifier.widthIn(max = 560.dp).fillMaxWidth().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+                        leftContent()
+                        rightContent()
+                    }
+                }
+            }
+
             // The button warms up when a name is typed instead of snapping from grey to solid.
             val buttonBg by animateColorAsState(if (canCreate) ink() else ink(0.12f), tween(180), label = "create-bg")
             val buttonText by animateColorAsState(if (canCreate) palette.base else ink(0.3f), tween(180), label = "create-text")
-            Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
+            Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp), contentAlignment = Alignment.Center) {
                 Box(
                     Modifier
+                        .widthIn(max = 560.dp)
                         .fillMaxWidth()
                         .height(54.dp)
                         .then(if (canCreate) Modifier.pressScale(onClick = create) else Modifier)
@@ -323,6 +358,7 @@ private fun OptionRow(icon: ImageVector, title: String, subtitle: String, checke
             .fillMaxWidth()
             .clip(PanelShape)
             .background(ink(0.06f))
+            .focusRing(PanelShape)
             .toggleable(
                 value = checked,
                 interactionSource = remember { MutableInteractionSource() },

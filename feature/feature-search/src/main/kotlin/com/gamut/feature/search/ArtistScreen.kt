@@ -1,5 +1,14 @@
 package com.gamut.feature.search
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyListScope
+import com.gamut.core.designsystem.focusRing
+import com.gamut.core.designsystem.isWideLayout
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
@@ -48,6 +57,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -169,17 +179,28 @@ fun ArtistScreen(
     val palette = LocalCoverPalette.current
     TransparentStatusBar(darkIcons = palette.isLight)
     val settled = LocalNavSettled.current
+    val wide = isWideLayout()
     CoverTheme(palette) {
         // Skeleton while loading AND while the slide runs; the real page composes once the slide has finished.
         if (artist == null || !settled) {
             Box(Modifier.fillMaxSize().statusBarsPadding()) {
                 if (!failed) {
                     // Placeholder in the final layout (round portrait + song rows) instead of a lone spinner.
-                    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Spacer(Modifier.height(78.dp))
-                        Box(Modifier.fillMaxWidth(0.7f).aspectRatio(1f).clip(CircleShape).shimmer())
-                        Spacer(Modifier.height(28.dp))
-                        repeat(4) { TrackRowSkeleton() }
+                    if (wide) {
+                        // Wide window: same split as the real page (portrait centred on the left, song rows on the right).
+                        Row(Modifier.fillMaxSize().padding(top = 78.dp, start = 56.dp, end = 24.dp, bottom = 24.dp)) {
+                            Box(Modifier.weight(0.38f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                                Box(Modifier.widthIn(max = 300.dp).fillMaxWidth(0.92f).aspectRatio(1f).clip(CircleShape).shimmer())
+                            }
+                            Column(Modifier.weight(0.62f).padding(start = 12.dp)) { repeat(4) { TrackRowSkeleton() } }
+                        }
+                    } else {
+                        Column(Modifier.fillMaxSize().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Spacer(Modifier.height(78.dp))
+                            Box(Modifier.fillMaxWidth(0.7f).aspectRatio(1f).clip(CircleShape).shimmer())
+                            Spacer(Modifier.height(28.dp))
+                            repeat(4) { TrackRowSkeleton() }
+                        }
                     }
                 }
                 Box(Modifier.padding(start = 10.dp, top = 14.dp).size(44.dp).pressScale(onClick = onBack), contentAlignment = Alignment.Center) {
@@ -223,7 +244,8 @@ fun ArtistScreen(
                     color = ink(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.End,
+                    // Wide window: the name sits next to the back arrow instead of floating over the right-hand pane.
+                    textAlign = if (wide) TextAlign.Start else TextAlign.End,
                     modifier = Modifier.weight(1f).padding(start = 12.dp),
                 )
             }
@@ -238,6 +260,7 @@ fun ArtistScreen(
                     when (tab) {
                         0 -> ArtistOverview(
                             artist = value,
+                            wide = wide,
                             onTrack = { picked -> onTrackSelected(picked, value.popular) },
                             nowPlayingIsrc = nowPlayingIsrc,
                             accent = accent,
@@ -248,9 +271,9 @@ fun ArtistScreen(
                             following = following,
                             onFollowClick = onFollowClick,
                         )
-                        1 -> TrackList(value.songs, loading = !value.songsLoaded, nowPlayingIsrc = nowPlayingIsrc, accent = accent, onMore = { actionsTrack = it }) { picked -> onTrackSelected(picked, value.songs) }
-                        2 -> AlbumGrid(value.albums, onAlbumSelected)
-                        else -> TrackList(value.latestSongs, loading = !value.songsLoaded, nowPlayingIsrc = nowPlayingIsrc, accent = accent, onMore = { actionsTrack = it }) { picked -> onTrackSelected(picked, value.latestSongs) }
+                        1 -> TrackList(value.songs, loading = !value.songsLoaded, wide = wide, nowPlayingIsrc = nowPlayingIsrc, accent = accent, onMore = { actionsTrack = it }) { picked -> onTrackSelected(picked, value.songs) }
+                        2 -> AlbumGrid(value.albums, onAlbumSelected, wide)
+                        else -> TrackList(value.latestSongs, loading = !value.songsLoaded, wide = wide, nowPlayingIsrc = nowPlayingIsrc, accent = accent, onMore = { actionsTrack = it }) { picked -> onTrackSelected(picked, value.latestSongs) }
                     }
                 }
             }
@@ -299,6 +322,7 @@ private const val OVERVIEW_ALBUM_FRACTION = 0.8f
 @Composable
 private fun ArtistOverview(
     artist: ArtistDetails,
+    wide: Boolean = false,
     onTrack: (Track) -> Unit,
     nowPlayingIsrc: String?,
     accent: Color,
@@ -309,41 +333,105 @@ private fun ArtistOverview(
     following: Boolean,
     onFollowClick: () -> Unit,
 ) {
-    LazyColumn(Modifier.fillMaxSize().fadeEdges(), contentPadding = PaddingValues(start = 12.dp, end = 24.dp, bottom = 24.dp)) {
-        item {
-            Column(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                SubcomposeAsyncImage(
-                    model = artist.imageUrl,
-                    contentDescription = artist.name,
-                    modifier = Modifier.fillMaxWidth(0.92f).aspectRatio(1f).clip(CircleShape),
-                    contentScale = ContentScale.Crop,
-                    loading = { ArtistPlaceholder() },
-                    error = { ArtistPlaceholder() },
-                )
-                FollowButton(following, onFollowClick, Modifier.padding(top = 14.dp))
-            }
-            Row(Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Popular songs", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.weight(1f))
-                Text("View all", color = ink(0.6f), modifier = Modifier.pressScale(onClick = onViewAll).padding(vertical = 6.dp))
-            }
+    // The round portrait with the Follow button under it (shared by both layouts).
+    val portrait: @Composable () -> Unit = {
+        Column(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            SubcomposeAsyncImage(
+                model = artist.imageUrl,
+                contentDescription = artist.name,
+                modifier = Modifier.then(if (wide) Modifier.widthIn(max = 300.dp) else Modifier).fillMaxWidth(0.92f).aspectRatio(1f).clip(CircleShape),
+                contentScale = ContentScale.Crop,
+                loading = { ArtistPlaceholder() },
+                error = { ArtistPlaceholder() },
+            )
+            FollowButton(following, onFollowClick, Modifier.padding(top = 14.dp))
         }
-        itemsIndexed(artist.popular.take(4), key = { i, t -> "${t.isrc}-$i" }) { _, t -> TrackLine(t, isPlaying = t.isrc == nowPlayingIsrc, accent = accent, onClick = onTrack, onMore = onMore) }
-        item {
-            Text("Albums", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(top = 24.dp, bottom = 12.dp))
-            BoxWithConstraints(Modifier.fillMaxWidth()) {
-                // ~80% of the available width: one big cover with the next one peeking in.
-                val cardWidth = maxWidth * OVERVIEW_ALBUM_FRACTION
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    items(artist.albums.take(6), key = { it.id }) { AlbumCard(it, onAlbum, Modifier.width(cardWidth)) }
+    }
+    if (wide) {
+        // Wide window (tablet / TV): the portrait + Follow on the left, popular songs, albums and similar artists on the right.
+        Row(Modifier.fillMaxSize()) {
+            // Portrait + Follow centred in the pane (scrolls if the window is too short to fit them).
+            BoxWithConstraints(Modifier.weight(0.38f).fillMaxHeight()) {
+                val paneHeight = maxHeight
+                Column(
+                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = paneHeight).padding(start = 12.dp, end = 12.dp, bottom = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) { portrait() }
+            }
+            // No end padding on the list itself: the carousels keep it as their own content padding, so they scroll
+            // to the window edge instead of being chopped 24dp short of it.
+            LazyColumn(
+                Modifier.weight(0.62f).fillMaxHeight().fadeEdges(),
+                contentPadding = PaddingValues(start = 12.dp, bottom = 24.dp),
+            ) { overviewBody(artist, true, onTrack, nowPlayingIsrc, accent, onMore, onAlbum, onArtist, onViewAll, endPad = 24.dp) }
+        }
+    } else {
+        LazyColumn(
+            Modifier.fillMaxSize().fadeEdges(),
+            contentPadding = PaddingValues(start = 12.dp, end = 24.dp, bottom = 24.dp),
+        ) {
+            item { portrait() }
+            overviewBody(artist, false, onTrack, nowPlayingIsrc, accent, onMore, onAlbum, onArtist, onViewAll)
+        }
+    }
+}
+
+/** Popular songs, Albums and Similar artists: below the portrait on a phone, the right pane on a wide window. */
+private fun LazyListScope.overviewBody(
+    artist: ArtistDetails,
+    wide: Boolean,
+    onTrack: (Track) -> Unit,
+    nowPlayingIsrc: String?,
+    accent: Color,
+    onMore: (Track) -> Unit,
+    onAlbum: (DiscoverItem) -> Unit,
+    onArtist: (String) -> Unit,
+    onViewAll: () -> Unit,
+    /** Right margin applied per item, for lists whose own end padding is 0 so the carousels can bleed to the edge. */
+    endPad: Dp = 0.dp,
+) {
+    item {
+        Row(Modifier.fillMaxWidth().padding(top = if (wide) 12.dp else 24.dp, bottom = 6.dp, end = endPad), verticalAlignment = Alignment.CenterVertically) {
+            Text("Popular songs", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.weight(1f))
+            Text("View all", color = ink(0.6f), modifier = Modifier.pressScale(onClick = onViewAll).padding(vertical = 6.dp))
+        }
+    }
+    if (wide) {
+        // Wide window: song columns like the Songs tab (min 380dp each, at most two), so the page is not one endless row per song.
+        item(key = "popular") {
+            BoxWithConstraints(Modifier.fillMaxWidth().padding(end = endPad)) {
+                val columns = ((maxWidth + 20.dp) / (380.dp + 20.dp)).toInt().coerceIn(1, 2)
+                Column {
+                    artist.popular.take(4).chunked(columns).forEach { rowTracks ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                            rowTracks.forEach { t ->
+                                TrackLine(t, isPlaying = t.isrc == nowPlayingIsrc, accent = accent, onClick = onTrack, onMore = onMore, modifier = Modifier.weight(1f))
+                            }
+                            repeat(columns - rowTracks.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
                 }
             }
         }
-        // Last on the page: artists related to this one (collaborators, rivals, same scene).
-        if (artist.similar.isNotEmpty()) item(key = "similar") {
-            Text("Similar artists", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(top = 24.dp, bottom = 12.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                items(artist.similar, key = { it.id }) { SimilarArtistCard(it, onArtist) }
+    } else {
+        itemsIndexed(artist.popular.take(4), key = { i, t -> "${t.isrc}-$i" }) { _, t -> TrackLine(t, isPlaying = t.isrc == nowPlayingIsrc, accent = accent, onClick = onTrack, onMore = onMore) }
+    }
+    item {
+        Text("Albums", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(top = 24.dp, bottom = 12.dp))
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            // ~80% of the available width: one big cover with the next one peeking in.
+            val cardWidth = (maxWidth * OVERVIEW_ALBUM_FRACTION).let { if (wide) it.coerceAtMost(220.dp) else it }
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(end = endPad)) {
+                items(artist.albums.take(6), key = { it.id }) { AlbumCard(it, onAlbum, Modifier.width(cardWidth)) }
             }
+        }
+    }
+    // Last on the page: artists related to this one (collaborators, rivals, same scene).
+    if (artist.similar.isNotEmpty()) item(key = "similar") {
+        Text("Similar artists", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(top = 24.dp, bottom = 12.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(end = endPad)) {
+            items(artist.similar, key = { it.id }) { SimilarArtistCard(it, onArtist) }
         }
     }
 }
@@ -352,6 +440,7 @@ private fun ArtistOverview(
 private fun TrackList(
     tracks: List<Track>,
     loading: Boolean = false,
+    wide: Boolean = false,
     nowPlayingIsrc: String?,
     accent: Color,
     onMore: (Track) -> Unit,
@@ -359,6 +448,23 @@ private fun TrackList(
 ) {
     if (tracks.isEmpty() && !loading) {
         Text("Nothing here yet.", color = ink(0.6f), modifier = Modifier.padding(16.dp))
+        return
+    }
+    if (wide) {
+        // Wide window: as many song columns as fit (min 380dp each), like Search.
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(380.dp),
+            modifier = Modifier.fillMaxSize().fadeEdges(),
+            contentPadding = PaddingValues(start = 12.dp, end = 24.dp, bottom = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            itemsIndexed(tracks, key = { i, t -> "${t.isrc}-$i" }) { _, t -> TrackLine(t, isPlaying = t.isrc == nowPlayingIsrc, accent = accent, onClick = onTrack, onMore = onMore) }
+            if (loading) item(key = "loading", span = { GridItemSpan(maxLineSpan) }) {
+                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = ink(), strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
+                }
+            }
+        }
         return
     }
     LazyColumn(Modifier.fillMaxSize().fadeEdges(), contentPadding = PaddingValues(start = 12.dp, end = 24.dp, bottom = 24.dp)) {
@@ -373,9 +479,9 @@ private fun TrackList(
 }
 
 @Composable
-private fun AlbumGrid(albums: List<DiscoverItem>, onAlbum: (DiscoverItem) -> Unit) {
+private fun AlbumGrid(albums: List<DiscoverItem>, onAlbum: (DiscoverItem) -> Unit, wide: Boolean = false) {
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+        columns = if (wide) GridCells.Adaptive(170.dp) else GridCells.Fixed(2),
         modifier = Modifier.fillMaxSize().fadeEdges(),
         contentPadding = PaddingValues(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -400,9 +506,9 @@ private fun AlbumCard(album: DiscoverItem, onClick: (DiscoverItem) -> Unit, modi
 }
 
 @Composable
-private fun TrackLine(track: Track, isPlaying: Boolean, accent: Color, onClick: (Track) -> Unit, onMore: (Track) -> Unit) {
+private fun TrackLine(track: Track, isPlaying: Boolean, accent: Color, onClick: (Track) -> Unit, onMore: (Track) -> Unit, modifier: Modifier = Modifier) {
     Row(
-        Modifier.fillMaxWidth().pressScale(onClick = { onClick(track) }, scaleDown = 0.98f).padding(vertical = 8.dp),
+        modifier.fillMaxWidth().pressScale(onClick = { onClick(track) }, scaleDown = 0.98f).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AsyncImage(
@@ -437,6 +543,7 @@ private fun TrackMoreButton(onClick: () -> Unit) {
         Modifier
             .size(40.dp)
             .clip(CircleShape)
+            .focusRing(CircleShape)
             .clickable(role = Role.Button, onClickLabel = "More options", onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Icon(PhosphorIcons.Bold.DotsThreeVertical, "More options", tint = ink(0.6f), modifier = Modifier.size(24.dp)) }

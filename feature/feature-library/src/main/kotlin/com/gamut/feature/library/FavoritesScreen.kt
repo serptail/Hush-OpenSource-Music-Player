@@ -1,5 +1,7 @@
 package com.gamut.feature.library
 
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -124,14 +126,16 @@ import kotlinx.coroutines.launch
 private const val VisibleSlots = 5
 
 private val WheelCoverShape = RoundedCornerShape(18.dp)
-private val WheelPillShape = RoundedCornerShape(30.dp)
+private val WheelPillShape = WheelCoverShape   // same corner radius as the cover art
 private val PlayButtonSize = 48.dp
 private val ShufflePill = RoundedCornerShape(20.dp)
 
 // Quick-actions sheet: background and text follow the app palette (GamutSheet + ink()).
 private val SheetDestructive = Color(0xFFFF6B6B)
 
-private val SideInset = 24.dp   // screen edge to pill
+private val SideInset = 24.dp   // wheel edge to pill
+/** On wide windows the wheel is a centered column this wide instead of stretching across the whole screen. */
+private val WheelMaxWidth = 640.dp
 private val PillInset = 8.dp    // pill edge to cover
 
 /**
@@ -173,6 +177,16 @@ fun FavoritesScreen(
 ) {
     val songs = tracks
     val downloadStates by downloads.states.collectAsStateWithLifecycle()
+    // Songs stored on the phone count as downloaded (no download call ever touches them), like in a playlist.
+    // Local songs never go through the downloader: [remote] is everything a download call may touch.
+    val remote = remember(songs) { songs.filter { !it.isLocal } }
+    val localIsrcs = remember(songs) { songs.filter { it.isLocal }.map { it.isrc }.toSet() }
+    // Rows / sheet: local songs have no download state at all (no ring, no line, no "Available offline" badge).
+    val rowStates = remember(downloadStates, localIsrcs) { downloadStates - localIsrcs }
+    // Header / manage sheet: local songs count as done.
+    val allStates = remember(rowStates, localIsrcs) { rowStates + localIsrcs.associateWith { DownloadState.Done } }
+    val downloadUi = remember(songs, allStates) { playlistDownloadUi(songs.map { it.isrc }.distinct(), allStates) }
+    val downloading = downloadUi.status == PlaylistDownloadStatus.Active
     var showManage by remember { mutableStateOf(false) }
 
     val palette = LocalCoverPalette.current
@@ -206,8 +220,11 @@ fun FavoritesScreen(
                     }
                     val totalMs = songs.sumOf { it.durationMs }
                     Text(
-                        (if (songs.size == 1) "1 song" else "${songs.size} songs") + if (totalMs > 0) " \u00B7 ${formatTotal(totalMs)}" else "",
+                        if (downloading) "Downloading ${minOf(downloadUi.done + 1, downloadUi.total)} of ${downloadUi.total}"
+                        else (if (songs.size == 1) "1 song" else "${songs.size} songs") + if (totalMs > 0) " \u00B7 ${formatTotal(totalMs)}" else "",
                         style = MaterialTheme.typography.bodyMedium, color = ink(0.6f),
+                        maxLines = if (downloading) 1 else Int.MAX_VALUE,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 Row(
@@ -220,6 +237,22 @@ fun FavoritesScreen(
                         style = MaterialTheme.typography.labelLarge,
                         color = ink(),
                         modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+                if (remote.isNotEmpty()) {
+                    Spacer(Modifier.width(4.dp))
+                    DownloadButton(
+                        ui = downloadUi,
+                        size = 40.dp,
+                        glyphSize = 24.dp,
+                        onClick = {
+                            when (downloadUi.status) {
+                                PlaylistDownloadStatus.Idle ->
+                                    downloads.download(remote.filter { downloadStates[it.isrc] != DownloadState.Done }, label = "Favorites")
+                                PlaylistDownloadStatus.Active -> downloads.cancel(remote.map { it.isrc })
+                                PlaylistDownloadStatus.Done -> showManage = true
+                            }
+                        },
                     )
                 }
                 if (songs.isNotEmpty()) {
@@ -252,18 +285,23 @@ fun FavoritesScreen(
             } else if (!settled) {
                 Spacer(Modifier.weight(1f))
             } else {
+                // The wheel is its own centered column: on a tablet / TV the songs sit in the middle of the screen
+                // (the wheel's rotation pivot and pill are measured against this column, not the window).
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 SongWheel(
                     songs = songs,
-                    downloadStates = downloadStates,
+                    downloadStates = rowStates,
                     onTrackSelected = onTrackSelected,
                     onRemove = onRemove,
                     onAddToPlaylist = onAddToPlaylist,
-                    onDownload = { downloads.download(listOf(it)) },
-                    onRemoveDownload = { downloads.remove(listOf(it.isrc)) },
+                    onDownload = { if (!it.isLocal) downloads.download(listOf(it)) },
+                    onRemoveDownload = { if (!it.isLocal) downloads.remove(listOf(it.isrc)) },
+                    onCancelDownload = { if (!it.isLocal) downloads.cancel(listOf(it.isrc)) },
                     onTrackArtist = onTrackArtist,
                     nowPlayingIsrc = nowPlayingIsrc,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    modifier = Modifier.widthIn(max = WheelMaxWidth).fillMaxSize(),
                 )
+                }
             }
 
             nowPlaying()
@@ -274,13 +312,13 @@ fun FavoritesScreen(
                 title = "Manage favorites",
                 removeDescription = "Remove from favorites",
                 tracks = songs,
-                downloadStates = downloadStates,
+                downloadStates = allStates,
                 onDismiss = { showManage = false },
                 onReorder = onReorder,
                 onRemove = onRemove,
-                onDownloadAll = { downloads.download(songs, label = "Favorites") },
-                onCancelDownloads = { downloads.cancel(songs.map { it.isrc }) },
-                onRemoveDownloads = { downloads.remove(songs.map { it.isrc }) },
+                onDownloadAll = { downloads.download(remote.filter { downloadStates[it.isrc] != DownloadState.Done }, label = "Favorites") },
+                onCancelDownloads = { downloads.cancel(remote.map { it.isrc }) },
+                onRemoveDownloads = { downloads.remove(remote.map { it.isrc }) },
             )
         }
     }
@@ -310,6 +348,7 @@ private fun SongWheel(
     onAddToPlaylist: ((Track) -> Unit)?,
     onDownload: (Track) -> Unit,
     onRemoveDownload: (Track) -> Unit,
+    onCancelDownload: (Track) -> Unit,
     onTrackArtist: (Track) -> Unit,
     nowPlayingIsrc: String?,
     modifier: Modifier = Modifier,
@@ -358,6 +397,8 @@ private fun SongWheel(
                     itemHeight = itemHeight,
                     state = state,
                     offline = downloadStates[song.isrc] == DownloadState.Done,
+                    downloadState = downloadStates[song.isrc],
+                    onCancelDownload = { onCancelDownload(song) },
                     playing = index == playingIndex,
                     accent = accent,
                     onClick = {
@@ -370,6 +411,8 @@ private fun SongWheel(
                         menuTrack = song
                     },
                     onPlay = { if (state.focusOf(index) > 0.5f) onTrackSelected(song, songs) },
+                    // D-pad up/down moves focus row to row; the focused song rolls to the middle.
+                    onFocused = { scope.launch { state.animateScrollToItem(index) } },
                     onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
                 )
             }
@@ -436,15 +479,20 @@ private fun WheelRow(
     itemHeight: Dp,
     state: LazyListState,
     offline: Boolean,
+    downloadState: DownloadState?,
+    onCancelDownload: () -> Unit,
     playing: Boolean,
     accent: Color,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onPlay: () -> Unit,
+    onFocused: () -> Unit,
     onArtist: (String) -> Unit,
 ) {
     val pillHeight = itemHeight - 28.dp
     val coverSize = pillHeight - PillInset * 2
+    // Queued or in progress (not done, not failed).
+    val downloading = downloadState != null && downloadState != DownloadState.Done && downloadState !is DownloadState.Failed
 
     // Tap + long press on the whole row, with the same subtle press scale as pressScale().
     val interaction = remember { MutableInteractionSource() }
@@ -459,6 +507,7 @@ private fun WheelRow(
             // pill all tilt together as one piece.
             .wheelTransform(state, index, itemHeight, pivotX = SideInset + PillInset + coverSize / 2)
             .graphicsLayer { scaleX = pressScale; scaleY = pressScale }
+            .onFocusChanged { if (it.isFocused) onFocused() }
             .combinedClickable(
                 interactionSource = interaction,
                 indication = null,
@@ -473,8 +522,8 @@ private fun WheelRow(
                 .fillMaxWidth()
                 .height(pillHeight)
                 .padding(horizontal = SideInset)
-                // The playing song keeps a faint pill even when it is off-center, so it is easy to spot.
-                .graphicsLayer { alpha = maxOf(state.focusOf(index), if (playing) 0.55f else 0f) }
+                // Only the centered song has a pill. An off-center pill (even a faint one) swings into the centered one.
+                .graphicsLayer { alpha = state.focusOf(index) }
                 .background(ink(0.07f), WheelPillShape)
                 .border(1.dp, ink(0.08f), WheelPillShape),
         )
@@ -525,13 +574,31 @@ private fun WheelRow(
                         )
                     }
                 }
+                // Same thin line as the playlist rows. It takes the place of the "Available offline" badge until the
+                // song is done (the playing song shows the ring below instead, so its label keeps its room).
+                if (downloading && !playing && itemHeight >= 96.dp) {
+                    Box(Modifier.padding(top = 5.dp).height(2.dp)) { DownloadProgressLine(downloadState) }
+                }
             }
-            // Tinted with the text color, so it is always visible whatever the cover palette is.
+            // Progress ring while the song downloads (tap cancels), like the playlist rows. Never shown for idle / done songs.
+            // Rows tilt around the cover, so the right-hand end of a neighbouring row swings into the centered pill.
+            // Everything on that end therefore fades with focus (like the play button) and only the centered row's is live.
+            // Neighbours show their progress with the thin line under the title instead.
+            if (downloading) {
+                TrackDownloadButton(
+                    downloadState,
+                    onDownload = {},
+                    onCancel = { if (state.focusOf(index) > 0.5f) onCancelDownload() },
+                    onDone = {},
+                    glyph = 20.dp,
+                    modifier = Modifier.graphicsLayer { alpha = state.focusOf(index) },
+                )
+            }
+            // Just the icon, no circle behind it. Tinted with the text color, so it is always visible whatever the cover palette is.
             Box(
                 Modifier
                     .size(PlayButtonSize)
-                    .graphicsLayer { alpha = maxOf(state.focusOf(index), if (playing) 1f else 0f) }
-                    .background(ink(0.14f), CircleShape)
+                    .graphicsLayer { alpha = state.focusOf(index) }
                     .pressScale(onClick = onPlay),
                 contentAlignment = Alignment.Center,
             ) {
@@ -609,7 +676,7 @@ private fun TrackActionsSheet(
             }
 
             SheetAction("Play", PhosphorIcons.Fill.Play) { close(onPlay) }
-            when (downloadState) {
+            if (!track.isLocal) when (downloadState) {
                 DownloadState.Done -> SheetAction("Remove download", PhosphorIcons.Fill.CheckCircle) { close(onRemoveDownload) }
                 null, is DownloadState.Failed -> SheetAction("Download", PhosphorIcons.Bold.ArrowCircleDown) { close(onDownload) }
                 else -> Unit   // queued / downloading

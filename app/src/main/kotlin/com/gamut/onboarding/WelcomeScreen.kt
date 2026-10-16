@@ -112,7 +112,7 @@ private fun AppearanceRoot(content: @Composable () -> Unit) {
 }
 
 /** Width at which the screen switches from the phone layout to logo-left / copy-and-buttons-right. */
-private val WideBreakpoint = 720.dp
+private val WideBreakpoint = AdaptiveLayout.WideBreakpoint
 
 /** Width of the text + button column on wide windows, so it stays tidy on tablets and unfolded foldables. */
 private val ActionsWidth = 420.dp

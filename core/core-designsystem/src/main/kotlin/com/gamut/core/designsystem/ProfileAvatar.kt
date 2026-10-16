@@ -12,7 +12,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -24,6 +31,7 @@ import coil.compose.AsyncImage   // Coil 2: import coil.compose.AsyncImage
  * Profile picture. [image] (a File or URL from AvatarRepository) wins when present; otherwise the generated avatar:
  * first letter on a color derived from [seed], or [guestIcon] on a neutral shape when [seed] is null.
  * [shape] lets Profile use a rounded square while Discover / Settings keep the circle.
+ * [invertedGuest]: the guest look flips to a light disc with the icon cut out of it (like the Shazam button).
  */
 @Composable
 fun ProfileAvatar(
@@ -34,12 +42,32 @@ fun ProfileAvatar(
     modifier: Modifier = Modifier,
     image: Any? = null,
     shape: Shape = CircleShape,
+    invertedGuest: Boolean = false,
 ) {
     if (image != null) {
         AsyncImage(
             model = image, contentDescription = null, contentScale = ContentScale.Crop,
             modifier = modifier.size(size).clip(shape).background(ink(0.1f)),
         )
+        return
+    }
+    if (seed == null && invertedGuest) {
+        val disc = ink(0.9f)
+        Box(
+            modifier.size(size).graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.clip(shape).background(disc),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                guestIcon, null, tint = Color.Black,
+                modifier = Modifier.size(size * 0.55f).drawWithContent {
+                    drawIntoCanvas { canvas ->
+                        canvas.saveLayer(Rect(0f, 0f, this.size.width, this.size.height), Paint().apply { blendMode = BlendMode.DstOut })
+                        drawContent()
+                        canvas.restore()
+                    }
+                },
+            )
+        }
         return
     }
     if (seed == null) {

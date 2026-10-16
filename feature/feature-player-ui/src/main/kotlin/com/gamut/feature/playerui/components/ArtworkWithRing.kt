@@ -57,9 +57,9 @@ import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import com.adamglin.PhosphorIcons
 import com.gamut.core.designsystem.ArtPlaceholder
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.bold.Pause
-import com.adamglin.phosphoricons.bold.Play
+import com.adamglin.phosphoricons.Regular
+import com.adamglin.phosphoricons.regular.Pause
+import com.adamglin.phosphoricons.regular.Play
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.roundToInt
@@ -241,7 +241,7 @@ internal fun ArtworkWithRing(
                             PlayerSpinner(Modifier.size(40.dp), Color.White, 3.dp)
                         } else {
                             DepthIcon(
-                                if (isPlaying) PhosphorIcons.Bold.Pause else PhosphorIcons.Bold.Play,
+                                if (isPlaying) PhosphorIcons.Regular.Pause else PhosphorIcons.Regular.Play,
                                 contentDescription = if (isPlaying) "Pause" else "Play",
                                 size = 44.dp,
                             )

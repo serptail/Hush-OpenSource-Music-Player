@@ -64,8 +64,9 @@ import com.adamglin.phosphoricons.bold.PlusCircle
 import com.adamglin.phosphoricons.bold.Plus
 import com.adamglin.phosphoricons.bold.Rows
 import com.adamglin.phosphoricons.bold.SquaresFour
-import com.adamglin.phosphoricons.bold.VinylRecord
+import com.adamglin.phosphoricons.bold.MusicNoteSimple
 import com.gamut.core.designsystem.adaptiveGutter
+import com.gamut.core.designsystem.isWideLayout
 import com.gamut.core.designsystem.AcrylicMaterials
 import com.gamut.core.designsystem.AcrylicTone
 import com.gamut.core.designsystem.BottomBarItem
@@ -139,7 +140,10 @@ fun LibraryScreen(
         val showArtists = filter != LibraryFilter.Playlists
         val fullSpan: LazyGridItemSpanScope.() -> GridItemSpan = { GridItemSpan(maxLineSpan) }
 
-        val gutter = adaptiveGutter()   // 0.dp on phones; centers the content column on wide windows
+        // Phones: one column (list) or 3 columns (grid), as before. Wide windows: the grid fills the width, with as many
+        // columns as fit, instead of a narrow centered column.
+        val wide = isWideLayout()
+        val gutter = if (wide) 16.dp else adaptiveGutter()
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = barHeight)) {
                 // No horizontal padding here: the grid spans the full width so the tiles' soft shadows are not clipped at its edge.
@@ -181,7 +185,10 @@ fun LibraryScreen(
                     if (selectedTrack != null) ReadyToAddCard(selectedTrack, Modifier.padding(horizontal = 24.dp + gutter).padding(top = 12.dp))
 
                     LazyVerticalGrid(
-                        columns = GridCells.Fixed(if (isGrid) 3 else 1),
+                        columns = when {
+                            wide -> GridCells.Adaptive(if (isGrid) 170.dp else 380.dp)
+                            else -> GridCells.Fixed(if (isGrid) 3 else 1)
+                        },
                         modifier = Modifier.weight(1f).fadeEdges(),
                         contentPadding = PaddingValues(start = 24.dp + gutter, end = 24.dp + gutter, top = 6.dp, bottom = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(if (isGrid) 18.dp else 2.dp),
@@ -245,14 +252,14 @@ fun LibraryScreen(
                                 }
                                 if (isGrid) {
                                     // No room for an "Add" button in a tile: while a track is waiting, a tap adds it.
-                                    GridCell(playlist.name, addOrOpen, offline = offline) { TileCover(cover, PhosphorIcons.Bold.VinylRecord) }
+                                    GridCell(playlist.name, addOrOpen, offline = offline) { TileCover(cover, PhosphorIcons.Bold.MusicNoteSimple) }
                                 } else {
                                     LibraryRow(
                                         title = playlist.name,
                                         // Tags replace the song count: the count only shows once you are inside the playlist.
                                         meta = if (playlist.tags.isEmpty()) null else ({ TagRow(playlist.tags) }),
                                         onClick = { onOpenPlaylist(playlist.id.toString()) },
-                                        cover = { RowCover(cover, PhosphorIcons.Bold.VinylRecord) },
+                                        cover = { RowCover(cover, PhosphorIcons.Bold.MusicNoteSimple) },
                                         offline = offline,
                                         trailing = {
                                             if (selectedTrack != null) {

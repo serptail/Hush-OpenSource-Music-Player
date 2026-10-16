@@ -10,6 +10,12 @@ object AdaptiveLayout {
     val ContentMaxWidth: Dp = 720.dp
     val PlayerMaxWidth: Dp = 560.dp
 
+    /** Window width at which screens switch from the phone layout to the wide (two-pane / multi-column) layout. Same as the welcome screen. */
+    val WideBreakpoint: Dp = 720.dp
+
+    /** The bottom bar's tabs stay grouped in the middle on wide windows instead of spreading across a TV. */
+    val BottomBarTabsMaxWidth: Dp = 480.dp
+
     /** Width of the content inside a bottom sheet. The sheet itself spans the window. Raise this (e.g. 2000.dp) to stretch sheet content too. */
     val SheetContentMaxWidth: Dp = 720.dp
 }
@@ -23,3 +29,8 @@ fun adaptiveGutter(maxWidth: Dp = AdaptiveLayout.ContentMaxWidth): Dp {
     val width = LocalConfiguration.current.screenWidthDp.dp
     return ((width - maxWidth) / 2).coerceAtLeast(0.dp)
 }
+
+/** True on tablets, unfolded foldables, TVs and landscape windows wide enough for the multi-pane layouts. */
+@Composable
+fun isWideLayout(): Boolean =
+    LocalConfiguration.current.screenWidthDp.dp >= AdaptiveLayout.WideBreakpoint

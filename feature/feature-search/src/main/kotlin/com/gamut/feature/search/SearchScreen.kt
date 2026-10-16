@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -112,6 +113,7 @@ import com.adamglin.phosphoricons.bold.PlusCircle
 import com.adamglin.phosphoricons.bold.User
 import com.adamglin.phosphoricons.bold.X
 import com.gamut.core.designsystem.adaptiveGutter
+import com.gamut.core.designsystem.isWideLayout
 import com.gamut.core.designsystem.AcrylicHost
 import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.CoverTheme
@@ -210,6 +212,7 @@ fun SearchScreen(
         val accent = MaterialTheme.colorScheme.primary
         val showingDiscover = state.tracks.isEmpty() && state.query.isBlank()
         val listState = rememberLazyListState()
+        val chartsListState = rememberLazyListState()   // right-hand pane on wide windows
         var discoverTab by rememberSaveable { mutableIntStateOf(0) }
         var chartExpanded by rememberSaveable { mutableStateOf(false) }
         var filter by rememberSaveable { mutableIntStateOf(FILTER_ALL) }
@@ -265,7 +268,9 @@ fun SearchScreen(
             }
         }
 
-        val gutter = adaptiveGutter()   // 0.dp on phones; centers the content column on wide windows
+        // Wide windows (tablet, TV, unfolded fold, landscape) get a fixed header on top and two panes below.
+        val wide = isWideLayout()
+        val gutter = if (wide) 16.dp else adaptiveGutter()   // phones: 0.dp
         val tabsHeight = GamutBottomBarTabsHeight + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         val stripHeight = maxOf(0.dp, barHeight - tabsHeight)
 
@@ -296,6 +301,7 @@ fun SearchScreen(
                             size = 34.dp,
                             guestIcon = PhosphorIcons.Bold.User,
                             image = profileImage,
+                            invertedGuest = true,
                         )
                     }
                 }
@@ -330,136 +336,184 @@ fun SearchScreen(
         AcrylicHost(Modifier.fillMaxSize(), state = LocalAcrylicState.current ?: remember { HazeState() }) {
             Box(Modifier.fillMaxSize().padding(bottom = tabsHeight).acrylicSource().nestedScroll(refresh.connection)) {
                 val resultsAlpha by animateFloatAsState(if (state.isLoading) 0.55f else 1f, tween(150), label = "results-alpha")
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize().offset { IntOffset(0, refresh.pull.coerceAtLeast(0f).roundToInt()) },
-                    contentPadding = PaddingValues(start = gutter, end = gutter, bottom = stripHeight + 32.dp),
-                ) {
-                    item(key = "header") { header(Modifier.padding(horizontal = 24.dp)) }
-                    if (showingRecents) {
-                        item(key = "recents-head") {
-                            Row(
-                                Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    "Recent",
-                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                                    color = TextPrimary,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                Text(
-                                    "Clear",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = TextSecondary,
-                                    modifier = Modifier.pressScale(onClick = { recents.clear(); recentList = emptyList() }, scaleDown = 0.92f).padding(4.dp),
-                                )
-                            }
-                        }
-                        items(recentList, key = { "recent-$it" }) { q ->
-                            Box(Modifier.padding(horizontal = 16.dp)) {
-                                RecentRow(q, onClick = { viewModel.updateQuery(q) }, onRemove = { recents.remove(q); recentList = recents.all() })
-                            }
-                        }
-                    } else if (showingDiscover) {
-                        discoverItems(
-                            state = discover,
-                            selectedTab = discoverTab,
-                            onSelectTab = { discoverTab = it; chartExpanded = false },
-                            onTrackClick = onTrackSelected,
-                            onMoreClick = { actionsTrack = it },
-                            nowPlayingIsrc = nowPlayingIsrc,
-                            onArtistClick = onArtistSelected,
-                            onAlbumClick = onAlbumSelected,
-                            chartExpanded = chartExpanded,
-                            onToggleChartExpanded = { chartExpanded = !chartExpanded },
-                            onRetry = { viewModel.refreshDiscover() },
+                val resultCell: @Composable (Track) -> Unit = { track ->
+                    // While a refined search is loading, the old results dim instead of vanishing.
+                    Box(Modifier.padding(horizontal = 16.dp).graphicsLayer { alpha = resultsAlpha }) {
+                        val isFav = track.isrc in favoriteIsrcs
+                        TrackResultRow(
+                            track = track,
+                            query = state.query,
+                            isResolving = resolvingIsrc == track.isrc,
+                            isPlaying = track.isrc == nowPlayingIsrc,
+                            isFavorite = isFav,
+                            accent = accent,
+                            onMore = { actionsTrack = track },
+                            onLongPress = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                actionsTrack = track
+                            },
+                            onAdd = {
+                                // The + saves straight to favorites, then offers the playlists too.
+                                // Tapping it again (check showing) undoes the save.
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onToggleFavorite(track)
+                                if (!isFav) savedTrack = track
+                            },
+                            onTrackSelected = { picked -> saveRecent(state.query); onTrackSelected(picked, visibleTracks) },
                         )
-                    } else {
-                        val loadingEmpty = state.tracks.isEmpty() && (state.isLoading || !settled)
-                        val noResults = state.tracks.isEmpty() && !loadingEmpty
+                }
+                }
+                Column(Modifier.fillMaxSize()) {
+                    // Wide: the header stays put above the panes (same position for every state, so the search field keeps focus).
+                    if (wide) header(Modifier.padding(horizontal = gutter + 24.dp))
 
-                        artistHit?.let { hit ->
-                            item(key = "artist-hit") {
-                                // Eases in: the card arrives after the songs (it waits for its verification), so it must not jolt the list.
-                                val visible = remember { MutableTransitionState(false).apply { targetState = true } }
-                                AnimatedVisibility(
-                                    visibleState = visible,
-                                    enter = fadeIn(tween(240)) + expandVertically(tween(240)),
-                                ) {
-                                    Column(Modifier.padding(horizontal = 16.dp)) {
-                                        SectionLabel("Top result", Modifier.padding(horizontal = 8.dp))
-                                        ArtistHit(hit) { id -> saveRecent(state.query); onArtistSelected(id) }
+                    if (wide && showingDiscover && !showingRecents) {
+                        Row(
+                            Modifier.weight(1f).fillMaxWidth().padding(horizontal = gutter)
+                                .offset { IntOffset(0, refresh.pull.coerceAtLeast(0f).roundToInt()) },
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            LazyColumn(Modifier.weight(1.1f).fillMaxHeight(), state = listState, contentPadding = PaddingValues(bottom = stripHeight + 32.dp)) {
+                                discoverFeaturedItems(
+                                    state = discover,
+                                    onTrackClick = onTrackSelected,
+                                    nowPlayingIsrc = nowPlayingIsrc,
+                                    onArtistClick = onArtistSelected,
+                                    onAlbumClick = onAlbumSelected,
+                                    onRetry = { viewModel.refreshDiscover() },
+                                )
+                            }
+                            LazyColumn(Modifier.weight(1f).fillMaxHeight(), state = chartsListState, contentPadding = PaddingValues(bottom = stripHeight + 32.dp)) {
+                                discoverChartItems(
+                                    state = discover,
+                                    selectedTab = discoverTab,
+                                    onSelectTab = { discoverTab = it; chartExpanded = false },
+                                    onTrackClick = onTrackSelected,
+                                    onMoreClick = { actionsTrack = it },
+                                    nowPlayingIsrc = nowPlayingIsrc,
+                                    onAlbumClick = onAlbumSelected,
+                                    chartExpanded = chartExpanded,
+                                    onToggleChartExpanded = { chartExpanded = !chartExpanded },
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.weight(1f).fillMaxWidth().offset { IntOffset(0, refresh.pull.coerceAtLeast(0f).roundToInt()) },
+                            contentPadding = PaddingValues(start = gutter, end = gutter, bottom = stripHeight + 32.dp),
+                        ) {
+                            if (!wide) item(key = "header") { header(Modifier.padding(horizontal = 24.dp)) }
+                            if (showingRecents) {
+                                item(key = "recents-head") {
+                                    Row(
+                                        Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            "Recent",
+                                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                                            color = TextPrimary,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        Text(
+                                            "Clear",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = TextSecondary,
+                                            modifier = Modifier.pressScale(onClick = { recents.clear(); recentList = emptyList() }, scaleDown = 0.92f).padding(4.dp),
+                                        )
                                     }
                                 }
-                            }
-                        }
-
-                        if (hasYoutube) {
-                            item(key = "filters") {
-                                Row(
-                                    Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    Pill("All", activeFilter == FILTER_ALL) { filter = FILTER_ALL }
-                                    Pill("Catalog", activeFilter == FILTER_CATALOG) { filter = FILTER_CATALOG }
-                                    Pill("YouTube", activeFilter == FILTER_YOUTUBE) { filter = FILTER_YOUTUBE }
+                                items(recentList, key = { "recent-$it" }) { q ->
+                                    Box(Modifier.padding(horizontal = 16.dp)) {
+                                        RecentRow(q, onClick = { viewModel.updateQuery(q) }, onRemove = { recents.remove(q); recentList = recents.all() })
+                                    }
                                 }
-                            }
-                        }
+                            } else if (showingDiscover) {
+                                discoverItems(
+                                    state = discover,
+                                    selectedTab = discoverTab,
+                                    onSelectTab = { discoverTab = it; chartExpanded = false },
+                                    onTrackClick = onTrackSelected,
+                                    onMoreClick = { actionsTrack = it },
+                                    nowPlayingIsrc = nowPlayingIsrc,
+                                    onArtistClick = onArtistSelected,
+                                    onAlbumClick = onAlbumSelected,
+                                    chartExpanded = chartExpanded,
+                                    onToggleChartExpanded = { chartExpanded = !chartExpanded },
+                                    onRetry = { viewModel.refreshDiscover() },
+                                )
+                            } else {
+                                val loadingEmpty = state.tracks.isEmpty() && (state.isLoading || !settled)
+                                val noResults = state.tracks.isEmpty() && !loadingEmpty
 
-                        if (state.tracks.isNotEmpty()) {
-                            item(key = "results-title") {
-                                Row(
-                                    Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 6.dp),
-                                    verticalAlignment = Alignment.Bottom,
-                                ) {
-                                    Text(
-                                        "Songs",
-                                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                                        color = TextPrimary,
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        visibleTracks.size.toString(),
-                                        style = MaterialTheme.typography.labelLarge,
-                                        color = TextTertiary,
-                                        modifier = Modifier.padding(bottom = 2.dp),
-                                    )
+                                artistHit?.let { hit ->
+                                    item(key = "artist-hit") {
+                                        // Eases in: the card arrives after the songs (it waits for its verification), so it must not jolt the list.
+                                        val visible = remember { MutableTransitionState(false).apply { targetState = true } }
+                                        AnimatedVisibility(
+                                            visibleState = visible,
+                                            enter = fadeIn(tween(240)) + expandVertically(tween(240)),
+                                        ) {
+                                            Column(Modifier.padding(horizontal = 16.dp)) {
+                                                SectionLabel("Top result", Modifier.padding(horizontal = 8.dp))
+                                                ArtistHit(hit) { id -> saveRecent(state.query); onArtistSelected(id) }
+                                            }
+                                        }
+                                    }
                                 }
-                            }
-                        }
 
-                        when {
-                            loadingEmpty -> items(8, key = { "skeleton-$it" }) {
-                                TrackRowSkeleton(Modifier.padding(horizontal = 24.dp))
-                            }
-                            noResults -> item(key = "empty") { NoResults(state.query) }
-                            else -> itemsIndexed(visibleTracks, key = { i, t -> "${t.isrc}#$i" }) { _, track ->
-                                // While a refined search is loading, the old results dim instead of vanishing.
-                                Box(Modifier.padding(horizontal = 16.dp).graphicsLayer { alpha = resultsAlpha }) {
-                                    val isFav = track.isrc in favoriteIsrcs
-                                    TrackResultRow(
-                                        track = track,
-                                        query = state.query,
-                                        isResolving = resolvingIsrc == track.isrc,
-                                        isPlaying = track.isrc == nowPlayingIsrc,
-                                        isFavorite = isFav,
-                                        accent = accent,
-                                        onMore = { actionsTrack = track },
-                                        onLongPress = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            actionsTrack = track
-                                        },
-                                        onAdd = {
-                                            // The + saves straight to favorites, then offers the playlists too.
-                                            // Tapping it again (check showing) undoes the save.
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            onToggleFavorite(track)
-                                            if (!isFav) savedTrack = track
-                                        },
-                                        onTrackSelected = { picked -> saveRecent(state.query); onTrackSelected(picked, visibleTracks) },
-                                    )
+                                if (hasYoutube) {
+                                    item(key = "filters") {
+                                        Row(
+                                            Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            Pill("All", activeFilter == FILTER_ALL) { filter = FILTER_ALL }
+                                            Pill("Catalog", activeFilter == FILTER_CATALOG) { filter = FILTER_CATALOG }
+                                            Pill("YouTube", activeFilter == FILTER_YOUTUBE) { filter = FILTER_YOUTUBE }
+                                        }
+                                    }
+                                }
+
+                                if (state.tracks.isNotEmpty()) {
+                                    item(key = "results-title") {
+                                        Row(
+                                            Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 6.dp),
+                                            verticalAlignment = Alignment.Bottom,
+                                        ) {
+                                            Text(
+                                                "Songs",
+                                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                                                color = TextPrimary,
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(
+                                                visibleTracks.size.toString(),
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = TextTertiary,
+                                                modifier = Modifier.padding(bottom = 2.dp),
+                                            )
+                                        }
+                                    }
+                                }
+
+                                when {
+                                    loadingEmpty -> items(8, key = { "skeleton-$it" }) {
+                                        TrackRowSkeleton(Modifier.padding(horizontal = 24.dp))
+                                    }
+                                    noResults -> item(key = "empty") { NoResults(state.query) }
+                                    else -> if (wide) {
+                                        // Two songs per row on wide windows.
+                                        itemsIndexed(visibleTracks.chunked(2), key = { i, pair -> "${pair.first().isrc}#$i" }) { _, pair ->
+                                            Row(Modifier.fillMaxWidth()) {
+                                                pair.forEach { track -> Box(Modifier.weight(1f)) { resultCell(track) } }
+                                                if (pair.size == 1) Spacer(Modifier.weight(1f))
+                                            }
+                                        }
+                                    } else {
+                                        itemsIndexed(visibleTracks, key = { i, t -> "${t.isrc}#$i" }) { _, track -> resultCell(track) }
+                                    }
                                 }
                             }
                         }

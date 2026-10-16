@@ -1,5 +1,9 @@
 package com.gamut.feature.library
 
+import com.gamut.core.designsystem.focusRing
+import com.gamut.core.designsystem.isWideLayout
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -254,11 +258,12 @@ fun PlaylistScreen(
 
     CoverTheme(palette) {
         val accent = MaterialTheme.colorScheme.primary
+        val wide = isWideLayout()
         Column(Modifier.fillMaxSize().statusBarsPadding().then(if (searchFocused) Modifier.imePadding() else Modifier)) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 TopIcon(PhosphorIcons.Bold.ArrowLeft, "Back", onClick = onBack)
             }
-            if (settled && songs.isNotEmpty()) {
+            if (settled && songs.isNotEmpty() && !wide) {
                 SearchField(
                     query = query,
                     onChange = { query = it },
@@ -268,11 +273,8 @@ fun PlaylistScreen(
                 )
             }
             // The list composes only after the strip slide has finished (see LocalNavSettled); the slide draws just the bar.
-            if (settled) LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 24.dp)) {
-                // While searching, the results start right under the field instead of below the big header.
-                if (!searching) {
-                    item(key = "header") {
-                        PlaylistHeader(
+            val headerSlot: @Composable () -> Unit = {
+                PlaylistHeader(
                             title = name,
                             coverUrl = coverUrl,
                             tags = playlist?.tags.orEmpty(),
@@ -290,7 +292,11 @@ fun PlaylistScreen(
                             onPlay = { onPlay(songs) },
                             onShuffle = { onShuffle(songs) },
                         )
-                    }
+            }
+            val listBody: LazyListScope.(Boolean) -> Unit = { showHeader ->
+                // While searching, the results start right under the field instead of below the big header.
+                if (showHeader && !searching) {
+                    item(key = "header") { headerSlot() }
                 }
                 if (songs.isEmpty()) {
                     item(key = "empty") {
@@ -330,6 +336,26 @@ fun PlaylistScreen(
                     )
                 }
                 item(key = "nav-space") { Box(Modifier.navigationBarsPadding()) }
+            }
+            if (settled && wide) {
+                // Wide window: header on the left (own scroll), search + list on the right.
+                Row(Modifier.weight(1f).fillMaxWidth()) {
+                    Column(Modifier.weight(0.4f).fillMaxHeight().verticalScroll(rememberScrollState())) { headerSlot() }
+                    Column(Modifier.weight(0.6f).fillMaxHeight()) {
+                        if (songs.isNotEmpty()) {
+                            SearchField(
+                                query = query,
+                                onChange = { query = it },
+                                onFocus = { searchFocused = it },
+                                onDone = { focus.clearFocus() },
+                                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 4.dp),
+                            )
+                        }
+                        LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 24.dp)) { listBody(false) }
+                    }
+                }
+            } else if (settled) {
+                LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 24.dp)) { listBody(true) }
             } else Spacer(Modifier.weight(1f))
             nowPlaying()
         }
@@ -670,6 +696,7 @@ private fun Modifier.rowPress(onClick: () -> Unit, onLongClick: () -> Unit): Mod
     val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.98f else 1f, tween(90), label = "row-press")
     graphicsLayer { scaleX = scale; scaleY = scale }
+        .focusRing(RoundedCornerShape(12.dp))
         .combinedClickable(interactionSource = source, indication = null, onClick = onClick, onLongClick = onLongClick)
 }
 
