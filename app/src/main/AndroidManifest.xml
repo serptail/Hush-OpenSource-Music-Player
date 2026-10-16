@@ -64,5 +64,7 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/share_file_paths" />
         </provider>
+
+        <profileable android:shell="true" />
     </application>
 </manifest>

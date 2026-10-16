@@ -10,9 +10,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Records the code paths of a normal launch (loading screen, Discover, scrolling) so release builds ship them
- * pre-compiled instead of JIT-compiling them on first use. That covers the first-composition stall and the
- * first-open cost of big composables. Needs network, because Discover loads from Apple.
+ * Records the code paths of a normal launch (loading screen, Discover, scrolling, Settings and its sub-pages) so release
+ * builds ship them pre-compiled instead of JIT-compiling them on first use. Needs network, because Discover loads from Apple.
  */
 @RunWith(AndroidJUnit4::class)
 class BaselineProfileGenerator {
@@ -31,6 +30,25 @@ class BaselineProfileGenerator {
             list.fling(Direction.DOWN)
             device.waitForIdle()
             list.fling(Direction.UP)
+            device.waitForIdle()
+        }
+
+        // Let the idle pre-composition of the Settings pages and the player finish (it runs until ~5 s after loading).
+        Thread.sleep(6_000)
+
+        // Settings -> Playback & Audio -> back -> back.
+        if (device.wait(Until.hasObject(By.desc("Profile")), 5_000)) {
+            device.findObject(By.desc("Profile")).click()
+            device.wait(Until.hasObject(By.text("Playback & Audio")), 5_000)
+            device.waitForIdle()
+            device.findObject(By.text("Playback & Audio"))?.click()
+            device.wait(Until.hasObject(By.text("Equalizer")), 5_000)
+            device.waitForIdle()
+            device.findObject(By.scrollable(true))?.fling(Direction.DOWN)
+            device.waitForIdle()
+            device.pressBack()
+            device.waitForIdle()
+            device.pressBack()
             device.waitForIdle()
         }
     }

@@ -81,6 +81,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -287,7 +289,7 @@ fun SearchScreen(
                         )
                     }
                     Spacer(Modifier.width(8.dp))
-                    Box(Modifier.size(44.dp).then(profileModifier).pressScale(onClick = onProfile), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(44.dp).then(profileModifier).pressScale(onClick = onProfile).semantics { contentDescription = "Profile" }, contentAlignment = Alignment.Center) {
                         ProfileAvatar(
                             name = profileName,
                             seed = profileSeed,
@@ -738,8 +740,8 @@ private val YouTubeGlyph: ImageVector by lazy {
     ).addPath(
         pathData = PathParser().parsePathString(
             "M24.325 8.309s-2.655-.334-8.357-.334c-5.517 0-8.294.334-8.294.334A2.675 2.675 0 0 0 5 10.984v10.034" +
-                "a2.675 2.675 0 0 0 2.674 2.676s2.582.332 8.294.332c5.709 0 8.357-.332 8.357-.332A2.673 2.673 0 0 0 27 21.018" +
-                "V10.982a2.673 2.673 0 0 0-2.675-2.673zM13.061 19.975V12.03L20.195 16l-7.134 3.975z",
+                    "a2.675 2.675 0 0 0 2.674 2.676s2.582.332 8.294.332c5.709 0 8.357-.332 8.357-.332A2.673 2.673 0 0 0 27 21.018" +
+                    "V10.982a2.673 2.673 0 0 0-2.675-2.673zM13.061 19.975V12.03L20.195 16l-7.134 3.975z",
         ).toNodes(),
         fill = SolidColor(Color.Black),
     ).build()
