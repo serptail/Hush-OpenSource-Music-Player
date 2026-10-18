@@ -27,10 +27,10 @@ DEPS = [
         "repo": "TeamNewPipe/NewPipeExtractor",
         "pom": "https://jitpack.io/com/github/teamnewpipe/NewPipeExtractor/{v}/NewPipeExtractor-{v}.pom",
     },
-    {   # The yt-dlp wrapper (Python, ffmpeg, glue). Same fork + registry as libs.versions.toml (Maven Central). yt-dlp ITSELF updates at runtime, see YtDlpUpdater.kt.
+    {   # The yt-dlp wrapper (Python, ffmpeg, glue). Versions are tagged in yausername/youtubedl-android but published to Maven Central as io.github.junkfood02 (what libs.versions.toml uses). yt-dlp ITSELF updates at runtime, see YtDlpUpdater.kt.
         "name": "youtubedl-android",
         "key": "youtubedl-android",
-        "repo": "JunkFood02/youtubedl-android",
+        "repo": "yausername/youtubedl-android",
         "pom": "https://repo1.maven.org/maven2/io/github/junkfood02/youtubedl-android/library/{v}/library-{v}.pom",
     },
 ]

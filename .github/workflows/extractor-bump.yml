@@ -3,7 +3,8 @@ name: extractor-bump
 #   1. finds a newer release upstream;  2. waits until it can be downloaded;
 #   3. resolves a few songs with the OLD and the NEW version (tools/extractor-smoke);
 #   4. only if the new one is no worse AND the app still builds: pushes the bump to the branch "extractor-bump",
-#      opens a pull request, and starts release.yml as a DRAFT release (not forced on users).
+#      opens a pull request, and starts release.yml as a DRAFT release (it only reaches users when you publish it,
+#      and then it is mandatory: force_min=true).
 #   5. you get an issue/notification; you test the draft APK, press "Publish release" and merge the PR.
 # While that pull request is open, no further bump is proposed.
 # Note: YouTube often blocks GitHub's servers ("Sign in to confirm you're not a bot"). Those failures say nothing about
@@ -180,7 +181,7 @@ jobs:
 
           # Retry: the branch is already pushed, so a failed dispatch must not be silently lost.
           for attempt in 1 2 3; do
-            if gh workflow run release.yml --ref extractor-bump -f force_min=false -f draft=true -f "notes=Updated: $SUMMARY"; then
+            if gh workflow run release.yml --ref extractor-bump -f force_min=true -f draft=true -f "notes=Updated: $SUMMARY"; then
               exit 0
             fi
             echo "dispatch attempt $attempt failed"; sleep $((attempt * 10))

@@ -56,7 +56,32 @@ class UpdateChecker(context: Context) {
 
     /** The newest manifest: from GitHub, else the last one seen, else null (never reached GitHub yet: let the user in). */
     suspend fun latest(): UpdateInfo? = withContext(Dispatchers.IO) {
-        fetch()?.also { prefs.edit().putString(KEY, json.encodeToString(UpdateInfo.serializer(), it)).apply() } ?: cached()
+        val fresh = fetch()
+        when {
+            fresh == null -> cached()          // GitHub unreachable: the last answer seen decides
+            !apkExists(fresh) -> null          // the manifest is out but its APK is not: nothing to offer, so no prompt and no block
+            else -> fresh.also { prefs.edit().putString(KEY, json.encodeToString(UpdateInfo.serializer(), it)).apply() }
+        }
+    }
+
+    /**
+     * Is the APK the manifest points to really there? Asks for one byte only.
+     * False only when GitHub clearly says no (a 4xx other than 429) or the size differs from the manifest.
+     * Network trouble or a 5xx proves nothing, so it does not hide an update.
+     */
+    private fun apkExists(info: UpdateInfo): Boolean = try {
+        val request = Request.Builder().url(info.apkUrl).header("Range", "bytes=0-0").build()
+        client.newCall(request).execute().use { response ->
+            if (response.code in 400..499 && response.code != 429) {
+                false
+            } else {
+                // "Content-Range: bytes 0-0/TOTAL" tells the full size.
+                val total = response.header("Content-Range")?.substringAfter('/')?.toLongOrNull()
+                total == null || info.sizeBytes <= 0 || total == info.sizeBytes
+            }
+        }
+    } catch (_: Exception) {
+        true
     }
 
     private fun fetch(): UpdateInfo? = try {
