@@ -64,6 +64,23 @@ jobs:
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/gamut.keystore"
           echo "GAMUT_KEYSTORE_FILE=$RUNNER_TEMP/gamut.keystore" >> "$GITHUB_ENV"
 
+      - name: App config (local.properties)
+        # local.properties is gitignored, so a fresh checkout does not have it. The app's public client settings
+        # (SUPABASE_URL, SUPABASE_ANON_KEY, GOOGLE_WEB_CLIENT_ID) live in this secret instead. Only public values here.
+        env:
+          LOCAL_PROPERTIES: ${{ secrets.LOCAL_PROPERTIES }}
+        run: |
+          if [ -z "$LOCAL_PROPERTIES" ]; then
+            echo "::error::Secret LOCAL_PROPERTIES is missing. Without it the app is built without its Supabase / Google sign-in settings."
+            exit 1
+          fi
+          # sdk.dir is a path on your own PC; the runner finds its Android SDK by itself.
+          printf '%s\n' "$LOCAL_PROPERTIES" | tr -d '\r' | grep -v '^[[:space:]]*sdk\.dir' > local.properties
+          for key in SUPABASE_URL SUPABASE_ANON_KEY GOOGLE_WEB_CLIENT_ID; do
+            grep -q "^${key}=." local.properties || { echo "::error::LOCAL_PROPERTIES has no value for $key"; exit 1; }
+          done
+          echo "Wrote local.properties with $(grep -c '=' local.properties) setting(s)"
+
       - name: Build
         id: build
         env:
