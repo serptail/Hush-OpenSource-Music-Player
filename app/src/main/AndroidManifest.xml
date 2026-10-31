@@ -9,6 +9,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <!-- "On this device": reads the songs stored on the phone (Android 13+ / older). -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
@@ -42,6 +43,8 @@
         <!-- Android Auto: this app is a media app. -->
         <meta-data android:name="com.google.android.gms.car.application" android:resource="@xml/automotive_app_desc" />
         <service android:name="com.gamut.feature.resolver.DownloadService" android:foregroundServiceType="dataSync" android:exported="false" />
+        <!-- Keeps "What's this song?" listening / identifying while the app is in the background. -->
+        <service android:name=".ShazamListenService" android:foregroundServiceType="microphone" android:exported="false" />
         <receiver android:name="com.gamut.update.UpdateInstallReceiver" android:exported="false" />
         <!-- WorkManager is started on demand (GamutApplication is its Configuration.Provider): skip its startup initializer, so app launch does no work for it. -->
         <provider

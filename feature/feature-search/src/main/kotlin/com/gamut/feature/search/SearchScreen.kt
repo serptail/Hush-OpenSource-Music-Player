@@ -65,6 +65,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -84,6 +85,7 @@ import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -138,6 +140,7 @@ import com.gamut.core.model.TrackSource
 import dev.chrisbanes.haze.HazeState
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 // The only expressive element is the flowing background, which takes its colors from the cover of
 // the track that is playing. Everything on top of it is a neutral "ink" (white on dark covers, near-black
@@ -215,6 +218,9 @@ fun SearchScreen(
         val chartsListState = rememberLazyListState()   // right-hand pane on wide windows
         var discoverTab by rememberSaveable { mutableIntStateOf(0) }
         var chartExpanded by rememberSaveable { mutableStateOf(false) }
+        val scope = rememberCoroutineScope()
+        // Feed cards for artists that only exist in Deezer's catalogue carry no Apple id: it is looked up on tap, then the page opens.
+        val openArtistItem: (DiscoverItem) -> Unit = { item -> scope.launch { viewModel.artistIdFor(item)?.let(onArtistSelected) } }
         var filter by rememberSaveable { mutableIntStateOf(FILTER_ALL) }
         val searchFocus = remember { FocusRequester() }
         var actionsTrack by remember { mutableStateOf<Track?>(null) }
@@ -273,11 +279,13 @@ fun SearchScreen(
         val gutter = if (wide) 16.dp else adaptiveGutter()   // phones: 0.dp
         val tabsHeight = GamutBottomBarTabsHeight + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         val stripHeight = maxOf(0.dp, barHeight - tabsHeight)
+        // Height of the pinned header (status bar included): the pull-to-refresh button rides in the gap that opens under it.
+        var headerHeightPx by remember { mutableIntStateOf(0) }
 
-        // Title + search scroll with the content as the first list item (key "header"): the field stays composed when
+        // Title + search stay pinned above the content (see the call in the main Column): the field stays composed when
         // the query goes from empty to "a", so it keeps focus, keyboard and cursor.
         val header: @Composable (Modifier) -> Unit = { m ->
-            Column(m.fillMaxWidth().statusBarsPadding()) {
+            Column(m.fillMaxWidth().onSizeChanged { headerHeightPx = it.height }.statusBarsPadding()) {
                 Row(Modifier.fillMaxWidth().padding(top = 22.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         "Discover",
@@ -364,8 +372,9 @@ fun SearchScreen(
                 }
                 }
                 Column(Modifier.fillMaxSize()) {
-                    // Wide: the header stays put above the panes (same position for every state, so the search field keeps focus).
-                    if (wide) header(Modifier.padding(horizontal = gutter + 24.dp))
+                    // The title + search stay pinned at the top, like the Library title (same position for every state, so the
+                    // search field keeps focus, keyboard and cursor when the content below switches).
+                    header(Modifier.padding(horizontal = gutter + 24.dp))
 
                     if (wide && showingDiscover && !showingRecents) {
                         Row(
@@ -381,6 +390,18 @@ fun SearchScreen(
                                     onArtistClick = onArtistSelected,
                                     onAlbumClick = onAlbumSelected,
                                     onRetry = { viewModel.refreshDiscover() },
+                                    onMoreClick = { actionsTrack = it },
+                                    onArtistItemClick = openArtistItem,
+                                )
+                                // Wide windows: the feed continues under the featured blocks on the left, the charts stay on the right.
+                                discoverFeedItems(
+                                    state = discover,
+                                    onTrackClick = onTrackSelected,
+                                    onMoreClick = { actionsTrack = it },
+                                    nowPlayingIsrc = nowPlayingIsrc,
+                                    onArtistItemClick = openArtistItem,
+                                    onAlbumClick = onAlbumSelected,
+                                    onLoadMore = { viewModel.loadMoreFeed() },
                                 )
                             }
                             LazyColumn(Modifier.weight(1f).fillMaxHeight(), state = chartsListState, contentPadding = PaddingValues(bottom = stripHeight + 32.dp)) {
@@ -403,7 +424,6 @@ fun SearchScreen(
                             modifier = Modifier.weight(1f).fillMaxWidth().offset { IntOffset(0, refresh.pull.coerceAtLeast(0f).roundToInt()) },
                             contentPadding = PaddingValues(start = gutter, end = gutter, bottom = stripHeight + 32.dp),
                         ) {
-                            if (!wide) item(key = "header") { header(Modifier.padding(horizontal = 24.dp)) }
                             if (showingRecents) {
                                 item(key = "recents-head") {
                                     Row(
@@ -442,6 +462,8 @@ fun SearchScreen(
                                     chartExpanded = chartExpanded,
                                     onToggleChartExpanded = { chartExpanded = !chartExpanded },
                                     onRetry = { viewModel.refreshDiscover() },
+                                    onArtistItemClick = openArtistItem,
+                                    onLoadMore = { viewModel.loadMoreFeed() },
                                 )
                             } else {
                                 val loadingEmpty = state.tracks.isEmpty() && (state.isLoading || !settled)
@@ -519,7 +541,7 @@ fun SearchScreen(
                         }
                     }
                 }
-                SlingshotIndicator(refresh)
+                SlingshotIndicator(refresh, topOffsetPx = headerHeightPx)
             }
         }
 

@@ -13,6 +13,7 @@ import com.gamut.feature.resolver.AndroidYtDlpEngine
 import com.gamut.feature.resolver.AudioSourceRepository
 import com.gamut.feature.resolver.ResolveTrackSourceUseCase
 import com.gamut.feature.resolver.YtDlpUpdateWorker
+import com.gamut.feature.search.ShazamSession
 import com.gamut.onboarding.AutoBackup
 import dagger.hilt.android.HiltAndroidApp
 import java.io.File
@@ -34,6 +35,7 @@ class GamutApplication : Application(), Configuration.Provider {
 	@Inject lateinit var downloadIndex: DownloadIndex
 	@Inject lateinit var syncManager: SyncManager
 	@Inject lateinit var profileStore: ProfileStore
+	@Inject lateinit var shazamSession: ShazamSession
 
 	override fun onCreate() {
 		super.onCreate()
@@ -63,12 +65,14 @@ class GamutApplication : Application(), Configuration.Provider {
 			private var started = 0
 			private var lastSyncAt = 0L
 			override fun onActivityStarted(activity: Activity) {
-				if (started++ == 0 && System.currentTimeMillis() - lastSyncAt > 30_000) {   // not on every rotation
+				if (started++ == 0) shazamSession.appVisible = true
+				if (started == 1 && System.currentTimeMillis() - lastSyncAt > 30_000) {   // not on every rotation
 					lastSyncAt = System.currentTimeMillis()
 					syncManager.syncNow()
 				}
 			}
-			override fun onActivityStopped(activity: Activity) { started-- }
+			// Not visible any more: a finished Shazam session now answers with a notification instead of the sheet.
+			override fun onActivityStopped(activity: Activity) { if (--started == 0) shazamSession.appVisible = false }
 			override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
 			override fun onActivityResumed(activity: Activity) {}
 			override fun onActivityPaused(activity: Activity) {}

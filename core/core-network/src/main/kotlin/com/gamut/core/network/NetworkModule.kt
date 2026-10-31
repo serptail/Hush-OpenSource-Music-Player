@@ -13,6 +13,7 @@ import javax.inject.Named
 import javax.inject.Singleton
 import kotlinx.serialization.json.Json
 import okhttp3.Cache
+import okhttp3.Dispatcher
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -70,6 +71,9 @@ object NetworkModule {
         // Deezer answers HTTP 200 with {"error":{"code":4,...}} once ~50 requests / 5 s are exceeded; those used to
         // be read as "no results" (and cached). Stay under the limit, and never cache an error body (see cached()).
         .addNetworkInterceptor(DeezerRateLimitInterceptor)
+        // OkHttp allows only 5 parallel calls per host by default, and a call waiting for its rate-limit slot keeps its place.
+        // The feed and the artist photos fire many Deezer calls at once, so give them room instead of queueing behind that.
+        .dispatcher(Dispatcher().apply { maxRequestsPerHost = 16 })
         .cached(cache)
         .build()
 
@@ -112,6 +116,11 @@ object NetworkModule {
     @Singleton
     fun deezerApi(@Named("deezer") client: OkHttpClient): DeezerApi =
         retrofit("https://api.deezer.com/", client).create(DeezerApi::class.java)
+
+    @Provides
+    @Singleton
+    fun deezerChartsApi(@Named("deezer") client: OkHttpClient): DeezerChartsApi =
+        retrofit("https://api.deezer.com/", client).create(DeezerChartsApi::class.java)
 
     @Provides
     @Singleton
@@ -174,27 +183,53 @@ private fun OkHttpClient.Builder.cached(cache: Cache): OkHttpClient.Builder = ca
         }
     }
 
+/**
+ * MusicBrainz requires "AppName/version ( contact )" where the contact is a URL or an e-mail address they can reach you on
+ * if the app misbehaves. Anonymous or generic agents get throttled or blocked. Switch to the repo URL once it is public.
+ */
+private const val MUSICBRAINZ_USER_AGENT = "Gamut/1.0 ( https://github.com/serptail )"
+
 private object UserAgentInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response = chain.proceed(
-        chain.request().newBuilder().header("User-Agent", "Gamut/1.0 (https://github.com/yourname/gamut)").build(),
+        chain.request().newBuilder().header("User-Agent", MUSICBRAINZ_USER_AGENT).build(),
     )
 }
 
-/** At most 40 network requests per 5 s window (Deezer's documented limit is 50). Cache hits never get here. */
+/**
+ * At most 40 network requests per 5 s window (Deezer's documented limit is 50). Cache hits never get here.
+ *
+ * Each request reserves a time slot under the lock (instant), then waits for its slot OUTSIDE the lock, in short steps so a
+ * cancelled call stops waiting at once. The old version slept while holding the lock, so one throttled request froze every
+ * other Deezer call behind it (logcat showed "Long monitor contention ... DeezerRateLimitInterceptor" for 3 s at a time).
+ * Slots are handed out in order and never earlier than the previous one, so the 40-per-window rule still holds.
+ */
 private object DeezerRateLimitInterceptor : Interceptor {
     private const val WINDOW_MS = 5_000L
     private const val MAX_REQUESTS = 40
     private val lock = Any()
-    private val times = ArrayDeque<Long>()
+    private val slots = ArrayDeque<Long>()
 
     override fun intercept(chain: Interceptor.Chain): Response {
-        synchronized(lock) {
-            while (true) {
-                val now = System.currentTimeMillis()
-                while (times.isNotEmpty() && now - times.first() >= WINDOW_MS) times.removeFirst()
-                if (times.size < MAX_REQUESTS) { times.addLast(now); break }
-                Thread.sleep(WINDOW_MS - (now - times.first()))
+        val waitMs = synchronized(lock) {
+            val now = System.currentTimeMillis()
+            while (slots.isNotEmpty() && slots.first() <= now - WINDOW_MS) slots.removeFirst()
+            var slot = now
+            if (slots.isNotEmpty()) slot = maxOf(slot, slots.last())
+            if (slots.size >= MAX_REQUESTS) slot = maxOf(slot, slots[slots.size - MAX_REQUESTS] + WINDOW_MS)
+            slots.addLast(slot)
+            slot - now
+        }
+        var remaining = waitMs
+        while (remaining > 0) {
+            if (chain.call().isCanceled()) throw java.io.IOException("Canceled")
+            val step = minOf(remaining, 100L)
+            try {
+                Thread.sleep(step)
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                throw java.io.IOException("Interrupted while waiting for the Deezer rate limit")
             }
+            remaining -= step
         }
         return chain.proceed(chain.request())
     }
@@ -239,28 +274,50 @@ private class BackoffInterceptor(private val maxAttempts: Int = 3) : Interceptor
 }
 
 /**
- * Same shape as BackoffInterceptor, but also retries on 403 -- the code iTunes returns
- * when its soft rate limit is tripped, rather than 429/5xx like most APIs. Kept as a
- * separate class rather than a flag on BackoffInterceptor so a 403 from an *authenticated*
- * client elsewhere in the app is never silently retried by accident.
+ * Backoff for iTunes, which signals its soft rate limit with 403 (not 429/5xx like most APIs) and keeps it up for a while.
+ * Retries 403, 429, 5xx and I/O errors up to [maxAttempts] times. If the server sends Retry-After (seconds) that wait is
+ * honoured, capped at [MAX_WAIT_MS] so an artist page never hangs on it; otherwise it waits 1 s, 2.5 s, 5 s (+ jitter).
+ * Stops at once when the call was cancelled (the user left the screen). Kept separate from BackoffInterceptor so a 403 from
+ * an authenticated client elsewhere in the app is never retried by accident.
  */
-private class ItunesBackoffInterceptor(private val maxAttempts: Int = 3) : Interceptor {
+private class ItunesBackoffInterceptor(private val maxAttempts: Int = 4) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
-        var lastResponse: Response? = null
-        var lastError: java.io.IOException? = null
-        repeat(maxAttempts) { attempt ->
-            lastResponse?.close()
+        var attempt = 0
+        while (true) {
+            if (chain.call().isCanceled()) throw java.io.IOException("Canceled")
+            var response: Response? = null
+            var error: java.io.IOException? = null
             try {
-                lastResponse = chain.proceed(chain.request())
-                lastError = null
-                val code = lastResponse!!.code
-                if (lastResponse!!.isSuccessful || (code < 500 && code != 403)) return lastResponse!!
-            } catch (error: java.io.IOException) {
-                lastError = error
+                response = chain.proceed(chain.request())
+            } catch (e: java.io.IOException) {
+                error = e
             }
-            if (attempt < maxAttempts - 1) Thread.sleep(300L * (1L shl attempt))
+            val code = response?.code
+            val retryable = error != null || code == 403 || code == 429 || (code != null && code >= 500)
+            if (!retryable || attempt >= maxAttempts - 1) {
+                response?.let { return it }
+                throw error ?: java.io.IOException("Request failed after $maxAttempts attempts")
+            }
+            val waitMs = waitMs(response, attempt)
+            response?.close()
+            attempt++
+            try {
+                Thread.sleep(waitMs)
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                throw java.io.IOException("Interrupted while backing off")
+            }
         }
-        lastResponse?.let { return it }
-        throw lastError ?: java.io.IOException("Request failed after $maxAttempts attempts")
+    }
+
+    private fun waitMs(response: Response?, attempt: Int): Long {
+        val retryAfter = response?.header("Retry-After")?.trim()?.toLongOrNull()
+        if (retryAfter != null && retryAfter > 0) return (retryAfter * 1_000L).coerceAtMost(MAX_WAIT_MS)
+        return STEPS_MS[attempt.coerceAtMost(STEPS_MS.size - 1)] + (0..300).random()
+    }
+
+    private companion object {
+        const val MAX_WAIT_MS = 8_000L
+        val STEPS_MS = longArrayOf(1_000L, 2_500L, 5_000L)
     }
 }

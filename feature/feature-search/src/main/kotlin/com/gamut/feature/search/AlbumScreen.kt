@@ -368,27 +368,26 @@ private fun ArtistAvatar(url: String?, artist: String) {
 }
 
 /**
- * Solid play button, filled with the text color and the icon in its inverse, so it has strong contrast on any
- * cover palette.
+ * Flat play button: a solid disc in the text color with the icon in its inverse (strong contrast on any cover palette).
+ * No drop shadow: on the flowing background it read as a grey, smudgy ring around the button.
  */
 @Composable
 private fun PlayFab(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val isLight = LocalCoverPalette.current.isLight
     Box(
         modifier
-            .size(58.dp)
-            .shadow(12.dp, CircleShape, ambientColor = Color.Black.copy(alpha = 0.2f), spotColor = Color.Black.copy(alpha = 0.3f))
+            .size(56.dp)
             .clip(CircleShape)
             .background(ink())
-            .pressScale(onClick = onClick, scaleDown = 0.94f),
+            .pressScale(onClick = onClick, scaleDown = 0.92f),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             PhosphorIcons.Fill.Play,
             "Play",
             tint = if (isLight) Color.White else Color.Black,
-            // A triangle's visual weight is left of its box; nudge it right so it looks centered.
-            modifier = Modifier.padding(start = 3.dp).size(24.dp),
+            // A triangle's visual weight sits left of its box; a small nudge right makes it look centered.
+            modifier = Modifier.padding(start = 2.dp).size(22.dp),
         )
     }
 }

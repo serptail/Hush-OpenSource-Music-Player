@@ -85,6 +85,15 @@ class AppUpdateViewModel @Inject constructor(
         if (s.required != null && !s.skipped && s.phase == UpdatePhase.NEEDS_PERMISSION && installer.canInstall()) startUpdate()
     }
 
+    /**
+     * Playback keeps failing: look for a fix right now instead of waiting for the next throttled check. If a release
+     * is out, the update screen takes over; if not, nothing visible happens.
+     */
+    fun recheckNow() {
+        lastCheckAt = 0L
+        check()
+    }
+
     private fun check() {
         if (!checker.enabled) {
             _state.update { it.copy(checking = false) }

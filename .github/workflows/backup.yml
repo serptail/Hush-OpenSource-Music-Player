@@ -125,6 +125,7 @@ jobs:
           [default]
           s3 =
               addressing_style = path
+              preferred_transfer_client = classic
           EOF
 
           chmod 600 "$HOME/.aws/config"
@@ -163,16 +164,40 @@ jobs:
           )"
 
           count=0
+          failed=0
           for bucket in $buckets; do
             echo "Syncing bucket: $bucket"
             mkdir -p "$out/$bucket"
-            aws --endpoint-url "$S3_ENDPOINT" \
-              s3 sync "s3://$bucket" "$out/$bucket" \
-              --only-show-errors
-            count=$((count + 1))
+
+            # s3 sync is incremental, so a retry only fetches what is missing.
+            ok=0
+            for attempt in 1 2 3; do
+              if aws --endpoint-url "$S3_ENDPOINT" \
+                  s3 sync "s3://$bucket" "$out/$bucket" \
+                  --only-show-errors; then
+                ok=1
+                break
+              fi
+              echo "::warning::Sync of bucket $bucket failed (attempt $attempt/3)"
+              sleep 10
+            done
+
+            if [[ $ok -eq 1 ]]; then
+              count=$((count + 1))
+            else
+              echo "::warning::Bucket $bucket synced with errors; some files were not downloaded"
+              failed=$((failed + 1))
+            fi
           done
 
-          echo "Downloaded $count bucket(s)."
+          echo "Downloaded $count bucket(s), $failed with errors."
+
+          # The database dump is the critical part and already exists, so a few
+          # bad files only warn. Fail only if no bucket could be synced at all.
+          if [[ $failed -gt 0 && $count -eq 0 ]]; then
+            echo "::error::All Storage buckets failed to sync"
+            exit 1
+          fi
 
       - name: Encrypt and validate backups
         shell: bash

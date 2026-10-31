@@ -466,18 +466,32 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
     }
     val context = LocalContext.current
     var resumeAfterShazam by remember { mutableStateOf(false) }
+    var askedNotifications by rememberSaveable { mutableStateOf(false) }
     val startShazam = {
         // The microphone would hear this app itself, so the music pauses while listening.
         resumeAfterShazam = playback is PlaybackState.Playing
         if (resumeAfterShazam) player.pause()
-        shazamVm.start()
+        shazamVm.start()   // the sheet shows "Listening" at once
+        // The foreground service keeps listening / identifying when the app goes to the background and posts the result notification.
+        try { ShazamListenService.start(context) } catch (e: Exception) { /* still listens while the app is open */ }
+    }
+    // Android 13+: the result notification needs this permission. Asked once before listening; listening works either way.
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> startShazam() }
+    // Mic is granted: ask for notifications once (Android 13+), then start.
+    val beginAfterMic = {
+        val needsNotif = android.os.Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        if (needsNotif && !askedNotifications) {
+            askedNotifications = true
+            notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else startShazam()
     }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) startShazam() else shazamVm.permissionDenied()
+        if (granted) beginAfterMic() else shazamVm.permissionDenied()
     }
     val onShazam = {
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        if (granted) startShazam() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+        if (granted) beginAfterMic() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
     // The microphone is only needed while listening: the music comes back as soon as that is over.
     LaunchedEffect(shazamState) {

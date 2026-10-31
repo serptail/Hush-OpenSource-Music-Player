@@ -29,6 +29,14 @@ data class DiscoverState(
     val tabs: List<DiscoverTab> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
+    /** The feed sections of the head (quick picks, new releases, personal ...), sorted by slot then order. */
+    val feed: List<FeedSection> = emptyList(),
+    /** Footer of the endless part (filled in by the view model, which owns the lazily loaded tail). */
+    val feedLoadingMore: Boolean = false,
+    val feedExhausted: Boolean = false,
+    val feedFailed: Boolean = false,
+    /** Always true now (it was false in demo mode); safe to delete once no screen reads it. */
+    val feedEnabled: Boolean = true,
 )
 
 /** [songs] is the complete catalogue; [popular] is only the short list shown on Overview. */
@@ -56,8 +64,8 @@ data class AlbumDetails(
 )
 
 /**
- * Apple RSS charts + iTunes lookup, blended with the Billboard Hot 100 (resolved through Deezer).
- * No API keys, no server.
+ * Apple RSS charts + iTunes lookup, blended with the Billboard Hot 100 (resolved through Deezer), plus the feed
+ * sections built by [FeedRepository]. No API keys, no server.
  */
 @Singleton
 class DiscoverRepository @Inject constructor(
@@ -66,6 +74,7 @@ class DiscoverRepository @Inject constructor(
     private val catalog: AppleCatalogRepository,
     private val diskCache: DiscoverDiskCache,
     private val billboard: BillboardRepository,
+    private val feedRepo: FeedRepository,
 ) {
     @Volatile private var cachedDiscover: DiscoverState? = null
     // Written from several coroutines (album screens opening while Discover loads): must be thread-safe.
@@ -76,6 +85,7 @@ class DiscoverRepository @Inject constructor(
         cachedDiscover = null
         albumCache.clear()
         billboard.clearCache()
+        feedRepo.clearCache()
     }
 
     /** Like runCatching, but never swallows cancellation (runCatching would eat timeouts and scope cancels). */
@@ -149,6 +159,22 @@ class DiscoverRepository @Inject constructor(
         val latest = latestFrom(songs)
         val resolved = HashMap<String, Track>() // Billboard key -> playable track; guarded by [lock]
 
+        // The feed: id -> section. Last session's sections are on screen at once; each fresh one replaces its family (the part
+        // of the id before the first ':') so a changed taste does not leave yesterday's "Because you follow ..." behind.
+        // Guarded by [lock] once the loaders run (the first send happens before any of them starts).
+        val feedSeed = feedRepo.seed()
+        val feedMap = LinkedHashMap<String, FeedSection>()
+        val freshFeedIds = HashSet<String>()
+        stale?.feed?.forEach { feedMap[it.id] = it }
+        fun putFeed(section: FeedSection) {
+            freshFeedIds += section.id
+            val family = section.id.substringBefore(':')
+            feedMap.keys.removeAll { it !in freshFeedIds && it.substringBefore(':') == family }
+            feedMap[section.id] = section
+        }
+        fun feedNow(): List<FeedSection> = feedMap.values.sortedWith(compareBy<FeedSection>({ it.slot.ordinal }, { it.order }))
+        feedRepo.quickPicks(songs.map { it.toDiscoverItem() }, feedSeed)?.let { putFeed(it) }
+
         fun buildTabs(): List<DiscoverTab> = buildList {
             blendTrending(songs, bb, resolved).takeIf { it.isNotEmpty() }?.let { add(DiscoverTab("Trending", "Trending now", it)) }
             if (bb.isNotEmpty()) {
@@ -174,12 +200,21 @@ class DiscoverRepository @Inject constructor(
         // The row stays at 10; the Albums tab has all 20. If the albums request failed, last session's row stays.
         val albumRow = if (albums.isNotEmpty()) albums.take(10).map { it.toDiscoverAlbum() } else stale?.albums.orEmpty()
         var tabsNow = buildTabs()
-        fun state() = DiscoverState(albums = albumRow, artists = artistsNow, tabs = tabsNow, isLoading = false)
+        fun state() = DiscoverState(albums = albumRow, artists = artistsNow, tabs = tabsNow, isLoading = false, feed = feedNow())
         send(state())
 
         val lock = Mutex()
         val gate = Semaphore(4)
         coroutineScope {
+            // The feed never blocks or breaks the charts: its own timeout, and any failure just means fewer sections.
+            launch {
+                withTimeoutOrNull(FEED_TIMEOUT_MS) {
+                    safe {
+                        val known = lock.withLock { artistsNow.map { artistKey(it.title) }.toSet() }
+                        feedRepo.head(known) { section -> lock.withLock { putFeed(section); send(state()) } }
+                    }
+                }
+            }
             launch {
                 withTimeoutOrNull(ARTIST_IMAGES_TIMEOUT_MS) {
                     coroutineScope {
@@ -237,7 +272,7 @@ class DiscoverRepository @Inject constructor(
 
     /** How much a saved state is worth: more tabs, albums and real portraits (not placeholders) beat fewer. */
     private fun DiscoverState.quality(): Int =
-        tabs.size * 10 + (if (albums.isNotEmpty()) 5 else 0) + artists.count { !it.id.startsWith("artist-seed:") }
+        tabs.size * 10 + (if (albums.isNotEmpty()) 5 else 0) + artists.count { !it.id.startsWith("artist-seed:") } + feed.size * 2
 
     /**
      * Trending = Apple and Billboard blended 50/50 by chart position (101 - rank). A song on both charts scores up to
@@ -294,8 +329,18 @@ class DiscoverRepository @Inject constructor(
 
     suspend fun artistHit(query: String): DiscoverItem? = catalog.searchArtistCard(query)
 
+    /**
+     * The Apple artist id behind a card. Chart and artist-row cards already have one; feed cards from Deezer (hot artists,
+     * "fans also like") are matched by name on tap, which keeps the feed itself free of per-artist lookups.
+     */
+    suspend fun artistIdFor(item: DiscoverItem): Long? = item.artistId ?: catalog.findArtistId(item.title)
+
+    /** The next section of the endless feed (see [FeedRepository.more]). */
+    suspend fun moreFeed(consumed: Set<String>, order: Int): MoreFeed = feedRepo.more(consumed, order)
+
     suspend fun album(item: DiscoverItem): AlbumDetails? {
         albumCache[item.id]?.let { return it }
+        if (item.id.startsWith(FeedRepository.DEEZER_ALBUM_PREFIX)) return feedRepo.album(item)?.also { albumCache[item.id] = it }
         if (!item.id.startsWith("apple-album:")) return null
         return withTimeoutOrNull(ALBUM_TIMEOUT_MS) {
             safe {
@@ -334,6 +379,7 @@ class DiscoverRepository @Inject constructor(
         const val CHART_TIMEOUT_MS = 10_000L // first attempt; retries get 2/3 of it. 6 s was too tight for a cold mobile connection
         const val ARTIST_IMAGES_TIMEOUT_MS = 20_000L // each portrait is retried up to 3x behind a 4-wide gate
         const val ALBUM_TIMEOUT_MS = 10_000L
+        const val FEED_TIMEOUT_MS = 25_000L // the head of the feed is a handful of parallel requests
         const val BILLBOARD_RESOLVE_TIMEOUT_MS = 45_000L // 100 entries; Deezer is rate-limited to ~8 req/s in NetworkModule
         const val BILLBOARD_TAB_LIMIT = 100 // the full Hot 100; tab rows are separate lazy items now
         const val PUSH_THROTTLE_MS = 500L
@@ -342,7 +388,7 @@ class DiscoverRepository @Inject constructor(
     }
 }
 /** "Today", "Yesterday", "3 days ago", "2 weeks ago", else "Mar 2026". Null when the date is missing or unparsable. */
-private fun releasedAgo(releaseDate: String?): String? {
+internal fun releasedAgo(releaseDate: String?): String? {
     val date = runCatching { LocalDate.parse(releaseDate.orEmpty().take(10)) }.getOrNull() ?: return null
     val days = java.time.temporal.ChronoUnit.DAYS.between(date, LocalDate.now())
     return when {

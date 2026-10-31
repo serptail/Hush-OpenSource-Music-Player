@@ -9,12 +9,14 @@ import com.gamut.core.network.DeezerArtistDto
 import com.gamut.core.network.DeezerPhotoArtist
 import com.gamut.core.network.ItunesApi
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
@@ -202,35 +204,50 @@ class AppleCatalogRepository @Inject constructor(
      */
     suspend fun artistOverview(id: Long): ArtistDetails? {
         (cache[id] ?: overviewCache[id])?.let { return it.withKnownPhoto() }
-        return withTimeoutOrNull(10_000) {
-            runCatching {
-                coroutineScope {
-                    val topJob = async { itunes.lookupAll(id.toString(), "song", 50).results }
-                    val rows = itunes.lookupAll(id.toString(), "album", 200).results
-                    val albums = rows.filter { it.wrapperType == "collection" && it.collectionId != null }
-                        .distinctBy { TextMatch.norm(it.collectionName.orEmpty()) }
-                        .sortedByDescending { it.releaseDate.orEmpty() }
-                    val top = topJob.await().filter { it.kind == "song" }
-                    ArtistDetails(
-                        id = id,
-                        name = rows.firstOrNull { it.wrapperType == "artist" }?.artistName
-                            ?: top.firstOrNull()?.artistName.orEmpty(),
-                        imageUrl = (top.firstOrNull()?.artworkUrl100 ?: albums.firstOrNull()?.artworkUrl100).big(),
-                        popular = top.take(10).map { it.toTrack() },
-                        songs = top.map { it.toTrack() },
-                        albums = albums.map {
-                            DiscoverItem(
-                                id = "apple-album:${it.collectionId}",
-                                title = it.collectionName.orEmpty(),
-                                subtitle = it.releaseDate.orEmpty().take(4),
-                                imageUrl = it.artworkUrl100.big(),
-                            )
-                        },
-                        songsLoaded = false,
-                    )
+        // One quiet retry: a throttled iTunes answer is often fine a moment later. Cancellation is never swallowed here.
+        return withTimeoutOrNull(14_000) {
+            var details: ArtistDetails? = null
+            for (attempt in 0..1) {
+                details = try {
+                    loadOverview(id)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
                 }
-            }.getOrNull()
+                if (details != null) break
+                if (attempt == 0) delay(1_500)
+            }
+            details
         }?.withKnownPhoto()?.also { overviewCache[id] = it }
+    }
+
+    private suspend fun loadOverview(id: Long): ArtistDetails? = coroutineScope {
+        val topJob = async { itunes.lookupAll(id.toString(), "song", 50).results }
+        val rows = itunes.lookupAll(id.toString(), "album", 200).results
+        val albums = rows.filter { it.wrapperType == "collection" && it.collectionId != null }
+            .distinctBy { TextMatch.norm(it.collectionName.orEmpty()) }
+            .sortedByDescending { it.releaseDate.orEmpty() }
+        val top = topJob.await().filter { it.kind == "song" }
+        // Nothing at all means the lookup was throttled or empty, not that the artist has no music: report "failed", not a blank page.
+        if (top.isEmpty() && albums.isEmpty()) return@coroutineScope null
+        ArtistDetails(
+            id = id,
+            name = rows.firstOrNull { it.wrapperType == "artist" }?.artistName
+                ?: top.firstOrNull()?.artistName.orEmpty(),
+            imageUrl = (top.firstOrNull()?.artworkUrl100 ?: albums.firstOrNull()?.artworkUrl100).big(),
+            popular = top.take(10).map { it.toTrack() },
+            songs = top.map { it.toTrack() },
+            albums = albums.map {
+                DiscoverItem(
+                    id = "apple-album:${it.collectionId}",
+                    title = it.collectionName.orEmpty(),
+                    subtitle = it.releaseDate.orEmpty().take(4),
+                    imageUrl = it.artworkUrl100.big(),
+                )
+            },
+            songsLoaded = false,
+        )
     }
 
     /**
@@ -242,14 +259,27 @@ class AppleCatalogRepository @Inject constructor(
         cache[base.id]?.let { return it }
         val albumIds = base.albums.mapNotNull { it.id.removePrefix("apple-album:").toLongOrNull() }
         val gate = Semaphore(2)
+        val failedBatches = AtomicInteger(0)
         val all = withTimeoutOrNull(40_000) {
             coroutineScope {
                 albumIds.chunked(6).map { batch ->
                     async {
                         gate.withPermit {
-                            runCatching {
-                                itunes.lookupAll(batch.joinToString(","), "song", 200).results
-                            }.getOrDefault(emptyList())
+                            // One retry per batch; a batch that still fails is counted so the page is not cached as complete.
+                            var rows: List<AppleLookupItem>? = null
+                            for (attempt in 0..1) {
+                                rows = try {
+                                    itunes.lookupAll(batch.joinToString(","), "song", 200).results
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (_: Exception) {
+                                    null
+                                }
+                                if (rows != null) break
+                                if (attempt == 0) delay(1_500)
+                            }
+                            if (rows == null) failedBatches.incrementAndGet()
+                            rows.orEmpty()
                         }
                     }
                 }.awaitAll().flatten()
@@ -263,7 +293,9 @@ class AppleCatalogRepository @Inject constructor(
             latestSongs = restTracks.distinctBy { TextMatch.norm(it.title) }.take(30),
             songsLoaded = true,
         )
-        if (all.isNotEmpty()) cache[base.id] = full // never cache a total failure
+        // Only a complete discography is cached. A partial one (some batches failed, or the 40 s ran out) is still shown
+        // now, but the next visit loads it again instead of serving the gap for the rest of the session.
+        if (all.isNotEmpty() && failedBatches.get() == 0) cache[base.id] = full
         return full
     }
 

@@ -94,6 +94,7 @@ fun SettingsScreen(
         GroupLabel("Support")
         Cell("Help & Feedback", icon = PhosphorIcons.Bold.Question, subtitle = "Report a bug or share an idea", onClick = onFeedback)
         Cell("About Gamut", icon = PhosphorIcons.Bold.Info, subtitle = "Version, license and credits", onClick = onAbout)
+
         // Always available, never nags: a small pill at the very bottom.
         SupportRow()
     }

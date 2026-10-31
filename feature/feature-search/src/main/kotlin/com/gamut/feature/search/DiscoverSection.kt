@@ -20,10 +20,12 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,9 +54,15 @@ import com.gamut.core.model.Track
 
 // Discover, top to bottom:
 //   1. Hero        the #1 song of the blended Trending chart, big, one tap to play
+//   1b. Feed TOP   "Picked for today": a 2-column grid of quick picks
 //   2. Artists     round portraits, horizontal
 //   3. Albums      square covers, horizontal
+//   3b. Feed MIDDLE  personal ("Because you follow ..."), the "New album" spotlight, New releases
 //   4. Charts      pill tabs (Trending / Billboard / Latest / Albums) + a numbered list, 10 rows, "Show all" for more
+//   5. Feed BOTTOM community trending, hot artists, then an endless run of genre sections loaded while scrolling (footer = trigger)
+//
+// The feed sections come from DiscoverState.feed (see FeedRepository); each FeedKind has one renderer below. Mixing
+// rails, square carousels, portrait rows and a big card is what keeps the page from reading as one repeated shelf.
 //
 // Chart rows are separate LazyColumn items (the old tab list was one eager item), so 50 rows cost nothing off screen.
 // Every block adds its own 24dp side gutter; rows use 16dp + 8dp inner padding so their text edge also lands on 24dp.
@@ -71,6 +79,8 @@ internal fun LazyListScope.discoverFeaturedItems(
     onArtistClick: (Long) -> Unit,
     onAlbumClick: (DiscoverItem) -> Unit,
     onRetry: () -> Unit = {},
+    onMoreClick: (Track) -> Unit = {},
+    onArtistItemClick: (DiscoverItem) -> Unit = {},
 ) {
     // Nothing yet: placeholders with the final shape, so the page does not jump when data lands.
     if (state.tabs.isEmpty()) {
@@ -126,6 +136,9 @@ internal fun LazyListScope.discoverFeaturedItems(
         }
     }
 
+    // 1b. Feed, top: today's quick picks under the hero --------------------------------------------------------------------
+    feedSectionItems(state.feed.filter { it.slot == FeedSlot.TOP }, onTrackClick, onMoreClick, nowPlayingIsrc, onArtistItemClick, onAlbumClick)
+
     // 2. Artists ---------------------------------------------------------------------------------------------------
     if (state.artists.isNotEmpty()) {
         item(key = "artists-title") { DiscoverSectionTitle("Artists to know") }
@@ -149,6 +162,37 @@ internal fun LazyListScope.discoverFeaturedItems(
             ) {
                 items(state.albums, key = { it.id }) { album -> AlbumCard(album) { onAlbumClick(album) } }
             }
+        }
+    }
+
+    // 3b. Feed, middle: personal rows, the new-album spotlight, new releases ---------------------------------------------------
+    feedSectionItems(state.feed.filter { it.slot == FeedSlot.MIDDLE }, onTrackClick, onMoreClick, nowPlayingIsrc, onArtistItemClick, onAlbumClick)
+}
+
+/**
+ * The part of the feed below the charts: community trending, hot artists, then the endless genre sections. The footer at the end is
+ * the "load more" trigger: it asks for the next section whenever it scrolls into view, until the plan is exhausted.
+ */
+internal fun LazyListScope.discoverFeedItems(
+    state: DiscoverState,
+    onTrackClick: (Track, List<Track>) -> Unit,
+    onMoreClick: (Track) -> Unit,
+    nowPlayingIsrc: String?,
+    onArtistItemClick: (DiscoverItem) -> Unit,
+    onAlbumClick: (DiscoverItem) -> Unit,
+    onLoadMore: () -> Unit,
+) {
+    if (state.tabs.isEmpty()) return
+    val bottom = state.feed.filter { it.slot == FeedSlot.BOTTOM }
+    feedSectionItems(bottom, onTrackClick, onMoreClick, nowPlayingIsrc, onArtistItemClick, onAlbumClick)
+    if (state.feedEnabled) {
+        item(key = "feed-footer") {
+            FeedFooter(
+                count = bottom.size,
+                exhausted = state.feedExhausted,
+                failed = state.feedFailed,
+                onLoadMore = onLoadMore,
+            )
         }
     }
 }
@@ -224,28 +268,49 @@ internal fun LazyListScope.discoverItems(
     chartExpanded: Boolean = false,
     onToggleChartExpanded: () -> Unit = {},
     onRetry: () -> Unit = {},
+    onArtistItemClick: (DiscoverItem) -> Unit = {},
+    onLoadMore: () -> Unit = {},
 ) {
-    discoverFeaturedItems(state, onTrackClick, nowPlayingIsrc, onArtistClick, onAlbumClick, onRetry)
+    discoverFeaturedItems(state, onTrackClick, nowPlayingIsrc, onArtistClick, onAlbumClick, onRetry, onMoreClick, onArtistItemClick)
     discoverChartItems(state, selectedTab, onSelectTab, onTrackClick, onMoreClick, nowPlayingIsrc, onAlbumClick, chartExpanded, onToggleChartExpanded)
+    discoverFeedItems(state, onTrackClick, onMoreClick, nowPlayingIsrc, onArtistItemClick, onAlbumClick, onLoadMore)
 }
 
 @Composable
-private fun DiscoverSectionTitle(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-        color = TextPrimary,
-        modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 28.dp, bottom = 12.dp),
-    )
+private fun DiscoverSectionTitle(text: String, subtitle: String? = null) {
+    Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 28.dp, bottom = 12.dp)) {
+        Text(
+            text,
+            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+            color = TextPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        // The small "why you are seeing this" line of a feed section.
+        if (subtitle != null) {
+            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
 }
 
-/** The #1 song: full-width cover with a soft scrim, rank chip, title, and a round play button. */
+/**
+ * The #1 song: full-width cover with a soft scrim, a label chip, title, and a play glyph. The feed reuses it for the
+ * "New album" spotlight ([opensAlbum] swaps the play glyph for a chevron, [aspect] makes it shorter).
+ */
 @Composable
-private fun HeroCard(item: DiscoverItem, isPlaying: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun HeroCard(
+    item: DiscoverItem,
+    isPlaying: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "#1 Trending",
+    opensAlbum: Boolean = false,
+    aspect: Float = 1.35f,
+) {
     Box(
         modifier
             .fillMaxWidth()
-            .aspectRatio(1.35f)
+            .aspectRatio(aspect)
             .shadow(18.dp, CardShapeLarge, clip = false, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.35f))
             .pressScale(onClick = onClick, scaleDown = 0.98f)
             .clip(CardShapeLarge),
@@ -267,7 +332,7 @@ private fun HeroCard(item: DiscoverItem, isPlaying: Boolean, onClick: () -> Unit
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Box(Modifier.clip(CircleShape).background(Color.White.copy(alpha = 0.2f)).padding(horizontal = 10.dp, vertical = 3.dp)) {
-                Text("#1 Trending", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                Text(label, style = MaterialTheme.typography.labelMedium, color = Color.White)
             }
             Spacer(Modifier.height(6.dp))
             Text(
@@ -288,6 +353,7 @@ private fun HeroCard(item: DiscoverItem, isPlaying: Boolean, onClick: () -> Unit
         // Just the glyph on the scrim: no circle behind it.
         Box(Modifier.align(Alignment.BottomEnd).padding(18.dp).size(44.dp), contentAlignment = Alignment.Center) {
             if (isPlaying) NowPlayingBars(color = Color.White)
+            else if (opensAlbum) Icon(PhosphorIcons.Bold.CaretRight, "Open album", tint = Color.White.copy(alpha = 0.95f), modifier = Modifier.size(28.dp))
             else Icon(PhosphorIcons.Fill.Play, "Play", tint = Color.White.copy(alpha = 0.95f), modifier = Modifier.size(34.dp))
         }
     }
@@ -320,8 +386,9 @@ private fun ArtistBubble(item: DiscoverItem, onClick: () -> Unit) {
     }
 }
 
+/** Square cover + title + artist (+ release age when known). Used for albums and, in the feed, for song carousels. */
 @Composable
-private fun AlbumCard(item: DiscoverItem, onClick: () -> Unit) {
+private fun AlbumCard(item: DiscoverItem, isPlaying: Boolean = false, onClick: () -> Unit) {
     Column(Modifier.width(148.dp).pressScale(onClick = onClick, scaleDown = 0.95f)) {
         ArtImage(
             url = remember(item.imageUrl) { squareArtUrl(item.imageUrl, 400) },
@@ -335,8 +402,8 @@ private fun AlbumCard(item: DiscoverItem, onClick: () -> Unit) {
         Spacer(Modifier.height(10.dp))
         Text(
             item.title,
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
-            color = TextPrimary,
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium),
+            color = if (isPlaying) MaterialTheme.colorScheme.primary else TextPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -347,6 +414,9 @@ private fun AlbumCard(item: DiscoverItem, onClick: () -> Unit) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+        item.meta?.let {
+            Text(it, style = MaterialTheme.typography.labelMedium, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
@@ -418,5 +488,171 @@ private fun TrendMark(trend: Trend?, delta: Int, accent: Color) {
         Trend.UP -> Text("\u25B2$delta", style = small, color = Color(0xFF3DDC84))
         Trend.DOWN -> Text("\u25BC$delta", style = small, color = Color(0xFFFF6B6B))
         Trend.SAME -> Text("\u2013", style = small, color = TextTertiary)
+    }
+}
+// ---------------------------------------------------------------------------------------------------------------------
+// Feed sections
+// ---------------------------------------------------------------------------------------------------------------------
+
+/**
+ * Renders [sections] in order: a title with its "why" line, then the body for the section's [FeedKind]. A tap on a song
+ * plays it inside the section's own queue; albums open the album page; artists resolve their page id on tap.
+ */
+private fun LazyListScope.feedSectionItems(
+    sections: List<FeedSection>,
+    onTrackClick: (Track, List<Track>) -> Unit,
+    onMoreClick: (Track) -> Unit,
+    nowPlayingIsrc: String?,
+    onArtistItemClick: (DiscoverItem) -> Unit,
+    onAlbumClick: (DiscoverItem) -> Unit,
+) {
+    sections.forEach { section ->
+        if (section.items.isEmpty()) return@forEach
+        val queue = section.items.mapNotNull { it.track }
+        val play: (DiscoverItem) -> Unit = { item -> item.track?.let { onTrackClick(it, queue) } }
+        val playing: (DiscoverItem) -> Boolean = { item -> nowPlayingIsrc != null && item.track?.isrc == nowPlayingIsrc }
+
+        if (section.kind == FeedKind.SPOTLIGHT) {
+            // One big card, no separate title: the chip on the card is the label.
+            item(key = "feed-${section.id}") {
+                val album = section.items.first()
+                HeroCard(
+                    item = album,
+                    isPlaying = false,
+                    onClick = { onAlbumClick(album) },
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
+                    label = section.title,
+                    opensAlbum = true,
+                    aspect = 1.7f,
+                )
+            }
+            return@forEach
+        }
+
+        item(key = "feed-${section.id}-title") { DiscoverSectionTitle(section.title, section.subtitle) }
+        item(key = "feed-${section.id}-body") {
+            when (section.kind) {
+                FeedKind.QUICK_PICKS -> QuickPicksGrid(section.items, playing, play)
+                FeedKind.TRACK_RAILS -> TrackRails(section.items, playing, play, onMoreClick)
+                FeedKind.TRACK_CAROUSEL -> LazyRow(
+                    contentPadding = PaddingValues(horizontal = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    items(section.items, key = { it.id }) { song -> AlbumCard(song, isPlaying = playing(song)) { play(song) } }
+                }
+                FeedKind.ALBUM_CAROUSEL -> LazyRow(
+                    contentPadding = PaddingValues(horizontal = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    items(section.items, key = { it.id }) { album -> AlbumCard(album) { onAlbumClick(album) } }
+                }
+                FeedKind.ARTIST_CAROUSEL -> LazyRow(
+                    contentPadding = PaddingValues(horizontal = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(18.dp),
+                ) {
+                    items(section.items, key = { it.id }) { artist -> ArtistBubble(artist) { onArtistItemClick(artist) } }
+                }
+                FeedKind.SPOTLIGHT -> Unit // handled above
+            }
+        }
+    }
+}
+
+/** Two columns of compact tiles: cover on the left, title on the right. One tap plays. */
+@Composable
+private fun QuickPicksGrid(items: List<DiscoverItem>, isPlaying: (DiscoverItem) -> Boolean, onPlay: (DiscoverItem) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items.chunked(2).forEach { pair ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                pair.forEach { item ->
+                    QuickPickTile(item, isPlaying(item), { onPlay(item) }, Modifier.weight(1f))
+                }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickPickTile(item: DiscoverItem, isPlaying: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val accent = MaterialTheme.colorScheme.primary
+    Row(
+        modifier
+            .height(56.dp)
+            .pressScale(onClick = onClick, scaleDown = 0.97f)
+            .clip(RoundedCornerShape(12.dp))
+            .background(ink(0.07f)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ArtImage(
+            url = remember(item.imageUrl) { squareArtUrl(item.imageUrl, 200) },
+            modifier = Modifier.size(56.dp),
+            contentDescription = item.title,
+            fallback = { ArtworkFallbackIcon() },
+        )
+        Text(
+            item.title,
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium),
+            color = if (isPlaying) accent else TextPrimary,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
+        )
+        if (isPlaying) NowPlayingBars(color = accent, modifier = Modifier.padding(end = 10.dp))
+    }
+}
+
+/** Songs three to a column, columns scroll sideways, the next column peeks in. Rows are the same ChartRow the charts use. */
+@Composable
+private fun TrackRails(
+    items: List<DiscoverItem>,
+    isPlaying: (DiscoverItem) -> Boolean,
+    onPlay: (DiscoverItem) -> Unit,
+    onMore: (Track) -> Unit,
+) {
+    val pages = remember(items) { items.chunked(3) }
+    // 16dp gutter + the row's own 8dp padding = the same 24dp text edge as everything else.
+    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        itemsIndexed(pages, key = { index, _ -> index }) { _, page ->
+            Column(Modifier.fillParentMaxWidth(0.9f)) {
+                page.forEach { item ->
+                    val track = item.track
+                    ChartRow(
+                        rank = null,
+                        item = item,
+                        isPlaying = isPlaying(item),
+                        onClick = { onPlay(item) },
+                        onMore = track?.let { t -> { onMore(t) } },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * End of the feed. While more is available it is the trigger: composing it (it scrolled into view) asks for the next
+ * section, and each new section re-arms it. Then a spinner, a retry line after a failure, or the "caught up" line.
+ */
+@Composable
+private fun FeedFooter(count: Int, exhausted: Boolean, failed: Boolean, onLoadMore: () -> Unit) {
+    LaunchedEffect(count, exhausted, failed) { if (!exhausted && !failed) onLoadMore() }
+    Box(Modifier.fillMaxWidth().padding(top = 28.dp, bottom = 12.dp).height(56.dp), contentAlignment = Alignment.Center) {
+        when {
+            failed -> Text(
+                "Couldn\u2019t load more. Tap to retry",
+                style = MaterialTheme.typography.labelLarge,
+                color = TextSecondary,
+                modifier = Modifier.pressScale(onClick = onLoadMore, scaleDown = 0.92f).padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+            exhausted -> Text(
+                "You\u2019re all caught up \u00B7 pull down for a fresh mix",
+                style = MaterialTheme.typography.labelMedium,
+                color = TextTertiary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 24.dp),
+            )
+            else -> CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
+        }
     }
 }

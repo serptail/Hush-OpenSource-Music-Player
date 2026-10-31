@@ -34,6 +34,17 @@ data class SearchUiState(
     val error: String? = null,
 )
 
+/** State of the lazily loaded part of the Discover feed (see [SearchViewModel.loadMoreFeed]). */
+private data class FeedTail(
+    val sections: List<FeedSection> = emptyList(),
+    val loading: Boolean = false,
+    val exhausted: Boolean = false,
+    val failed: Boolean = false,
+)
+
+/** Lazily loaded sections sort after the head's BOTTOM sections (their orders are 30 and 31). */
+private const val FEED_TAIL_ORDER_BASE = 100
+
 /** Only the first results are likely to be played; prefetching all of them wastes network and CPU. */
 private const val PREFETCH_LIMIT = 5
 private const val MIN_QUERY_LENGTH = 2
@@ -52,8 +63,27 @@ class SearchViewModel @Inject constructor(
     private val query = MutableStateFlow("")
     private val _state = MutableStateFlow(SearchUiState())
     val state: StateFlow<SearchUiState> = _state.asStateFlow()
+    /** What the repository's flow produced: charts, artists, albums and the head of the feed. Replaced as a whole on each emission. */
     private val _discover = MutableStateFlow(DiscoverState())
-    val discover: StateFlow<DiscoverState> = _discover.asStateFlow()
+
+    /**
+     * The endless part of the feed. It lives here, not in [_discover], because the repository re-emits the whole state many
+     * times while Billboard resolves and would wipe sections the user has already scrolled to.
+     */
+    private val _tail = MutableStateFlow(FeedTail())
+    private var moreJob: Job? = null
+    private val consumedFeedIds = HashSet<String>()
+
+    /** The screen's Discover: the repository state with the lazily loaded sections appended. */
+    val discover: StateFlow<DiscoverState> = combine(_discover, _tail) { base, tail ->
+        if (base.tabs.isEmpty()) base
+        else base.copy(
+            feed = base.feed + tail.sections,
+            feedLoadingMore = tail.loading,
+            feedExhausted = tail.exhausted,
+            feedFailed = tail.failed,
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, DiscoverState())
 
     /** What Deezer says about the artist matching the CURRENT query; the gate for [artistHit]. */
     private val artistSignal = MutableStateFlow<ArtistSignal?>(null)
@@ -114,9 +144,54 @@ class SearchViewModel @Inject constructor(
     /** Pull-to-refresh / "Try again": drops the in-memory copy and loads Discover from scratch (cancels a load still running). */
     fun refreshDiscover() {
         discoverRepository.clearCache()
+        // A new mix: forget the endless part too (clearCache also changed the seed, so the genres come in a new order).
+        moreJob?.cancel()
+        consumedFeedIds.clear()
+        _tail.value = FeedTail()
         // From the error screen show the skeleton at once, so the tap visibly does something.
         _discover.update { if (it.tabs.isEmpty()) DiscoverState() else it }
         loadDiscover()
+    }
+
+    /**
+     * Loads the next section of the endless feed. Called by the footer whenever it scrolls into view; a call while one is
+     * running (or after the end) does nothing.
+     */
+    fun loadMoreFeed() {
+        val tail = _tail.value
+        if (tail.loading || tail.exhausted || _discover.value.tabs.isEmpty()) return
+        moreJob = viewModelScope.launch {
+            _tail.update { it.copy(loading = true, failed = false) }
+            val result = try {
+                discoverRepository.moreFeed(consumedFeedIds.toSet(), FEED_TAIL_ORDER_BASE + _tail.value.sections.size)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+            if (result == null) {
+                _tail.update { it.copy(loading = false, failed = true) }
+                return@launch
+            }
+            consumedFeedIds += result.consumed
+            _tail.update {
+                it.copy(
+                    sections = it.sections + listOfNotNull(result.section),
+                    loading = false,
+                    exhausted = result.exhausted,
+                    failed = result.failed,
+                )
+            }
+        }
+    }
+
+    /** The Apple artist id for a feed card (Deezer-only artists are matched by name), or null. */
+    suspend fun artistIdFor(item: DiscoverItem): Long? = try {
+        discoverRepository.artistIdFor(item)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        null
     }
 
     init {

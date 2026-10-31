@@ -145,9 +145,13 @@ fun rememberSlingshotRefresh(enabled: Boolean, onRefresh: () -> Unit): Slingshot
     }
 }
 
-/** The round refresh button that rides in the gap the stretch opens. Draw it AFTER (on top of) the list. */
+/**
+ * The round refresh button that rides in the gap the stretch opens. Draw it AFTER (on top of) the list.
+ * [topOffsetPx]: when something stays pinned above the list (a fixed header), pass its height in px (status bar included):
+ * the gap then opens under it, so the button is placed there instead of at the very top of the screen.
+ */
 @Composable
-fun BoxScope.SlingshotIndicator(state: SlingshotRefreshState) {
+fun BoxScope.SlingshotIndicator(state: SlingshotRefreshState, topOffsetPx: Int = -1) {
     val progress = state.pull / state.thresholdPx
     if (state.pull < 1f && !state.refreshing) return
     val ready = progress >= 1f || state.refreshing
@@ -159,8 +163,8 @@ fun BoxScope.SlingshotIndicator(state: SlingshotRefreshState) {
     Box(
         Modifier
             .align(Alignment.TopCenter)
-            .statusBarsPadding()
-            .offset { IntOffset(0, (state.pull.coerceAtLeast(0f) / 2f - sizePx / 2f).roundToInt()) }
+            .then(if (topOffsetPx < 0) Modifier.statusBarsPadding() else Modifier)
+            .offset { IntOffset(0, topOffsetPx.coerceAtLeast(0) + (state.pull.coerceAtLeast(0f) / 2f - sizePx / 2f).roundToInt()) }
             .graphicsLayer {
                 val p = progress.coerceIn(0f, 1f)
                 alpha = if (state.refreshing) 1f else p
