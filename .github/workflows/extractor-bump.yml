@@ -59,7 +59,7 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         if: steps.plan.outputs.changed == 'true'
 
       - name: Wait until the new versions can be downloaded
