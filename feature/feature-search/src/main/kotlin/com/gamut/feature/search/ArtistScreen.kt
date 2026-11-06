@@ -110,26 +110,22 @@ class ArtistViewModel @Inject constructor(
     private val _state = MutableStateFlow<ArtistDetails?>(null)
     val state: StateFlow<ArtistDetails?> = _state.asStateFlow()
     private val _followKey = MutableStateFlow<String?>(null)
-    /** "<provider>:<id>" of this artist, the key follows are stored and synced under. Null until resolved. */
     val followKey: StateFlow<String?> = _followKey.asStateFlow()
     private val _failed = MutableStateFlow(false)
-    /** True when the artist could not be loaded at all (so the screen stops spinning). */
     val failed: StateFlow<Boolean> = _failed.asStateFlow()
 
     init {
         viewModelScope.launch {
             val id = artistId ?: repository.findArtistId(savedStateHandle.get<String>("artistName").orEmpty())
-            _followKey.value = id?.let { "deezer:$it" }      // assumes Deezer artist ids
+            _followKey.value = id?.let { "deezer:$it" }
             val base = id?.let { repository.artistOverview(it) }
-            _state.value = base          // the page is usable here: top songs + albums
+            _state.value = base
             _failed.value = base == null
             if (base == null) return@launch
-            // Similar artists load on their own, so a slow answer never holds up the page.
             launch {
                 val similar = repository.similarArtists(base)
                 _state.update { it?.copy(similar = similar) }
             }
-            // The portrait loads on its own, whether or not the songs are already there.
             launch { loadPortrait(base) }
             if (base.songsLoaded) return@launch
             val full = repository.artistSongs(base)
@@ -137,7 +133,6 @@ class ArtistViewModel @Inject constructor(
         }
     }
 
-    /** Deezer can be slow or rate-limited, so a single empty answer is not final: retry with growing pauses. */
     private suspend fun loadPortrait(base: ArtistDetails) {
         repeat(4) { attempt ->
             val photo = repository.artistPhoto(base)
@@ -154,23 +149,16 @@ class ArtistViewModel @Inject constructor(
 fun ArtistScreen(
     viewModel: ArtistViewModel = viewModel(),
     onBack: () -> Unit,
-    /** The picked track plus the list it was picked from (the queue). */
     onTrackSelected: (Track, List<Track>) -> Unit,
     onAlbumSelected: (DiscoverItem) -> Unit = {},
-    /** Opens another artist's page by name (Similar artists; the app resolves the name when it is tapped). */
     onSimilarArtist: (String) -> Unit = {},
-    /** Opens the artist page of a track (by name), from the actions sheet. */
     onTrackArtist: (Track) -> Unit = {},
-    /** ISRCs of the user's favorites, for the actions sheet. */
     favoriteIsrcs: Set<String> = emptySet(),
     onToggleFavorite: (Track) -> Unit = {},
-    /** The user's playlists, for "Add to playlist". */
     playlists: List<TrackPlaylistOption> = emptyList(),
     onAddToPlaylist: (Track, String) -> Unit = { _, _ -> },
-    /** ISRC of the track loaded in the player: its row gets the accent title + animated bars (like Search / Discover). */
     nowPlayingIsrc: String? = null,
     nowPlaying: @Composable () -> Unit = {},
-    /** Keys ("deezer:123") of the artists the user follows. */
     followedKeys: Set<String> = emptySet(),
     onToggleFollow: (key: String, name: String, imageUrl: String?) -> Unit = { _, _, _ -> },
 ) {
@@ -181,13 +169,10 @@ fun ArtistScreen(
     val settled = LocalNavSettled.current
     val wide = isWideLayout()
     CoverTheme(palette) {
-        // Skeleton while loading AND while the slide runs; the real page composes once the slide has finished.
         if (artist == null || !settled) {
             Box(Modifier.fillMaxSize().statusBarsPadding()) {
                 if (!failed) {
-                    // Placeholder in the final layout (round portrait + song rows) instead of a lone spinner.
                     if (wide) {
-                        // Wide window: same split as the real page (portrait centred on the left, song rows on the right).
                         Row(Modifier.fillMaxSize().padding(top = 78.dp, start = 56.dp, end = 24.dp, bottom = 24.dp)) {
                             Box(Modifier.weight(0.38f).fillMaxHeight(), contentAlignment = Alignment.Center) {
                                 Box(Modifier.widthIn(max = 300.dp).fillMaxWidth(0.92f).aspectRatio(1f).clip(CircleShape).shimmer())
@@ -223,7 +208,6 @@ fun ArtistScreen(
             }
         }
         val tabs = listOf("Overview", "Songs", "Albums", "Latest")
-        // Same three-dots flow as the Search screen and Discover: actions sheet -> share / playlist picker.
         var actionsTrack by remember { mutableStateOf<Track?>(null) }
         var shareTrack by remember { mutableStateOf<Track?>(null) }
         var artistPickTrack by remember { mutableStateOf<Track?>(null) }
@@ -244,7 +228,6 @@ fun ArtistScreen(
                     color = ink(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    // Wide window: the name sits next to the back arrow instead of floating over the right-hand pane.
                     textAlign = if (wide) TextAlign.Start else TextAlign.End,
                     modifier = Modifier.weight(1f).padding(start = 12.dp),
                 )
@@ -316,7 +299,6 @@ fun ArtistScreen(
     }
 }
 
-/** Share of the row width each Overview album card takes. A set width also stops long titles stretching a card. */
 private const val OVERVIEW_ALBUM_FRACTION = 0.8f
 
 @Composable
@@ -333,7 +315,6 @@ private fun ArtistOverview(
     following: Boolean,
     onFollowClick: () -> Unit,
 ) {
-    // The round portrait with the Follow button under it (shared by both layouts).
     val portrait: @Composable () -> Unit = {
         Column(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             SubcomposeAsyncImage(
@@ -348,9 +329,7 @@ private fun ArtistOverview(
         }
     }
     if (wide) {
-        // Wide window (tablet / TV): the portrait + Follow on the left, popular songs, albums and similar artists on the right.
         Row(Modifier.fillMaxSize()) {
-            // Portrait + Follow centred in the pane (scrolls if the window is too short to fit them).
             BoxWithConstraints(Modifier.weight(0.38f).fillMaxHeight()) {
                 val paneHeight = maxHeight
                 Column(
@@ -359,8 +338,6 @@ private fun ArtistOverview(
                     verticalArrangement = Arrangement.Center,
                 ) { portrait() }
             }
-            // No end padding on the list itself: the carousels keep it as their own content padding, so they scroll
-            // to the window edge instead of being chopped 24dp short of it.
             LazyColumn(
                 Modifier.weight(0.62f).fillMaxHeight().fadeEdges(),
                 contentPadding = PaddingValues(start = 12.dp, bottom = 24.dp),
@@ -377,7 +354,6 @@ private fun ArtistOverview(
     }
 }
 
-/** Popular songs, Albums and Similar artists: below the portrait on a phone, the right pane on a wide window. */
 private fun LazyListScope.overviewBody(
     artist: ArtistDetails,
     wide: Boolean,
@@ -388,7 +364,6 @@ private fun LazyListScope.overviewBody(
     onAlbum: (DiscoverItem) -> Unit,
     onArtist: (String) -> Unit,
     onViewAll: () -> Unit,
-    /** Right margin applied per item, for lists whose own end padding is 0 so the carousels can bleed to the edge. */
     endPad: Dp = 0.dp,
 ) {
     item {
@@ -398,7 +373,6 @@ private fun LazyListScope.overviewBody(
         }
     }
     if (wide) {
-        // Wide window: song columns like the Songs tab (min 380dp each, at most two), so the page is not one endless row per song.
         item(key = "popular") {
             BoxWithConstraints(Modifier.fillMaxWidth().padding(end = endPad)) {
                 val columns = ((maxWidth + 20.dp) / (380.dp + 20.dp)).toInt().coerceIn(1, 2)
@@ -420,14 +394,12 @@ private fun LazyListScope.overviewBody(
     item {
         Text("Albums", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(top = 24.dp, bottom = 12.dp))
         BoxWithConstraints(Modifier.fillMaxWidth()) {
-            // ~80% of the available width: one big cover with the next one peeking in.
             val cardWidth = (maxWidth * OVERVIEW_ALBUM_FRACTION).let { if (wide) it.coerceAtMost(220.dp) else it }
             LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(end = endPad)) {
                 items(artist.albums.take(6), key = { it.id }) { AlbumCard(it, onAlbum, Modifier.width(cardWidth)) }
             }
         }
     }
-    // Last on the page: artists related to this one (collaborators, rivals, same scene).
     if (artist.similar.isNotEmpty()) item(key = "similar") {
         Text("Similar artists", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(top = 24.dp, bottom = 12.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(end = endPad)) {
@@ -451,7 +423,6 @@ private fun TrackList(
         return
     }
     if (wide) {
-        // Wide window: as many song columns as fit (min 380dp each), like Search.
         LazyVerticalGrid(
             columns = GridCells.Adaptive(380.dp),
             modifier = Modifier.fillMaxSize().fadeEdges(),
@@ -469,7 +440,6 @@ private fun TrackList(
     }
     LazyColumn(Modifier.fillMaxSize().fadeEdges(), contentPadding = PaddingValues(start = 12.dp, end = 24.dp, bottom = 24.dp)) {
         itemsIndexed(tracks, key = { i, t -> "${t.isrc}-$i" }) { _, t -> TrackLine(t, isPlaying = t.isrc == nowPlayingIsrc, accent = accent, onClick = onTrack, onMore = onMore) }
-        // The rest of the discography is still arriving: show it instead of a list that looks finished.
         if (loading) item(key = "loading") {
             Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = ink(), strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
@@ -512,14 +482,12 @@ private fun TrackLine(track: Track, isPlaying: Boolean, accent: Color, onClick: 
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AsyncImage(
-            // Same 200 px url as the other lists, so covers already seen elsewhere come straight from the cache.
             model = remember(track.albumArtUrl) { squareArtUrl(track.albumArtUrl, 200) },
             contentDescription = null,
             modifier = Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)).background(ink(0.08f)),
             contentScale = ContentScale.Crop,
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-            // The playing track: accent title + animated bars, exactly like the Search results.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (isPlaying) NowPlayingBars(color = accent, modifier = Modifier.padding(end = 8.dp))
                 Text(
@@ -597,15 +565,13 @@ private fun AlbumLine(album: DiscoverItem) {
 
 @Composable
 private fun ArtistPlaceholder() {
-    // Opaque and flat on purpose: AlbumLine puts a shadow behind this, and a translucent tile let it bleed through as haze.
     ArtPlaceholder()
 }
 
-/** Colours come from [ink] (the cover-adaptive foreground), so the button reads on light and dark covers alike. */
 @Composable
 private fun FollowButton(following: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val fg = ink()
-    val onFg = if (fg.luminance() > 0.5f) Color.Black else Color.White   // text on the solid pill
+    val onFg = if (fg.luminance() > 0.5f) Color.Black else Color.White
     val shape = RoundedCornerShape(50)
     Box(
         modifier

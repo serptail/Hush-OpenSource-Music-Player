@@ -98,28 +98,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/*
- * Share flow
- * ----------
- * What leaves the app:
- *   - "Image and URL": a PNG of the card you are looking at (rendered from the exact composable, so what you see is
- *     what is sent) + "Title – Artist" + the link. Goes out through FileProvider, so every app that accepts images
- *     gets it (WhatsApp/Telegram show it with the text as caption).
- *   - "URL Only": plain text, "Title – Artist" + the link.
- *
- * The row at the bottom is built from what is actually installed (PackageManager), with the real app icons, ordered
- * by a small priority list and then by the system's own ranking. "More" opens the system chooser with an image
- * preview + title, which also gives Direct Share targets (recent chats) and Nearby Share.
- *
- * Needs (see manifest_additions.xml / share_file_paths.xml):
- *   - <queries> for ACTION_SEND so the app list is visible on Android 11+
- *   - a FileProvider with authority "${applicationId}.share" pointing at cache/share/
- */
-
 private val CardW = 280.dp
 private val CardH = 370.dp
 
-/** Apps shown first, in this order, when installed. Everything else follows in the system's ranking. */
 private val PriorityPackages = listOf(
     "com.whatsapp",
     "org.telegram.messenger",
@@ -132,7 +113,6 @@ private val PriorityPackages = listOf(
     "com.google.android.gm",
 )
 
-/** What the sheet needs to know about a song (kept free of the app's Track model so any module can use it). */
 private class ShareItem(val title: String, val artist: String, val artUrl: String?)
 
 private val SheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
@@ -163,40 +143,26 @@ private class ShareApp(val label: String, val component: ComponentName, val icon
 
 private class ShareCardStyle(val top: Color, val bottom: Color, val text: Color)
 
-/** First card follows the cover colour (the sheet sits inside CoverTheme); the rest are fixed looks. */
 @Composable
 private fun rememberShareStyles(): List<ShareCardStyle> {
     val primary = MaterialTheme.colorScheme.primary
     return remember(primary) {
         listOf(
-            // Darkened so white text always reads, whatever the cover colour is.
             ShareCardStyle(lerp(primary, Color.Black, 0.35f), lerp(primary, Color.Black, 0.8f), Color.White),
             ShareCardStyle(Color(0xFF2A2A2E), Color(0xFF0A0A0B), Color.White),
             ShareCardStyle(Color(0xFFFAF7F2), Color(0xFFE6E0D4), Color(0xFF141414)),
-            ShareCardStyle(Color(0xFF7B4BC4), Color(0xFF22103D), Color.White),   // violet
-            ShareCardStyle(Color(0xFF2A7DE1), Color(0xFF0A2552), Color.White),   // ocean
-            ShareCardStyle(Color(0xFFEC6B3A), Color(0xFF8E1B4F), Color.White),   // sunset
-            ShareCardStyle(Color(0xFF2F9E67), Color(0xFF0B3022), Color.White),   // forest
-            ShareCardStyle(Color(0xFFE5487F), Color(0xFF5E1030), Color.White),   // rose
+            ShareCardStyle(Color(0xFF7B4BC4), Color(0xFF22103D), Color.White),
+            ShareCardStyle(Color(0xFF2A7DE1), Color(0xFF0A2552), Color.White),
+            ShareCardStyle(Color(0xFFEC6B3A), Color(0xFF8E1B4F), Color.White),
+            ShareCardStyle(Color(0xFF2F9E67), Color(0xFF0B3022), Color.White),
+            ShareCardStyle(Color(0xFFE5487F), Color(0xFF5E1030), Color.White),
         )
     }
 }
 
-/**
- * Link that goes out with the share. The song model carries no URL, so by default this is a YouTube Music search for
- * "title artist", which opens for anyone (and in the YT Music app if installed). Pass your own (a Gamut deep link,
- * a resolved video URL, ...) as `shareUrl` when you have one.
- */
 fun defaultShareUrl(title: String, artist: String): String =
     "https://music.youtube.com/search?q=" + Uri.encode("$title $artist")
 
-/**
- * Gamut's share sheet: a card preview (swipe between looks) + a row of the apps that can actually receive it.
- * See the notes at the top of this file for what is sent. Needs the FileProvider / <queries> from the manifest.
- *
- * @param shareUrl link sent along; defaults to a YouTube Music search for "title artist".
- * @param instagramAppId Facebook App ID. Only when set is the Instagram "Story" target offered.
- */
 @Composable
 fun ShareSheet(
     title: String,
@@ -233,7 +199,6 @@ private fun ShareSheetContent(
     }
     val instagramInstalled = remember { context.isInstalled("com.instagram.android") }
 
-    /** Runs [block] with the rendered card (or null in link-only mode / if rendering failed). One action at a time. */
     fun withCard(block: suspend (Bitmap?) -> Unit) {
         if (busy) return
         busy = true
@@ -256,11 +221,11 @@ private fun ShareSheetContent(
     fun shareIntent(uri: Uri?): Intent = Intent(Intent.ACTION_SEND).apply {
         putExtra(Intent.EXTRA_TEXT, text)
         putExtra(Intent.EXTRA_SUBJECT, track.title)
-        putExtra(Intent.EXTRA_TITLE, track.title) // chooser header on Android 10+
+        putExtra(Intent.EXTRA_TITLE, track.title)
         if (uri != null) {
             type = "image/png"
             putExtra(Intent.EXTRA_STREAM, uri)
-            clipData = ClipData.newRawUri(null, uri) // chooser thumbnail + permission grant
+            clipData = ClipData.newRawUri(null, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         } else {
             type = "text/plain"
@@ -277,7 +242,6 @@ private fun ShareSheetContent(
         Column(
             Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 16.dp),
         ) {
-            // ---- what to send
             Row(
                 Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -294,7 +258,6 @@ private fun ShareSheetContent(
                 }
             }
 
-            // ---- preview
             AnimatedVisibility(includeImage) {
                 Column {
                     Spacer(Modifier.height(16.dp))
@@ -326,7 +289,6 @@ private fun ShareSheetContent(
 
             HorizontalDivider(Modifier.padding(top = 16.dp), color = ink(0.1f))
 
-            // ---- where to send it
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 18.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -381,8 +343,6 @@ private fun ShareSheetContent(
     }
 }
 
-// ------------------------------------------------------------------ pieces
-
 @Composable
 private fun ModeChip(selected: Boolean, onClick: () -> Unit, content: @Composable RowScope.() -> Unit) {
     Row(
@@ -427,10 +387,6 @@ private fun LinkPreview(track: ShareItem, url: String) {
     }
 }
 
-/**
- * The card. Its content is recorded into [layer] while it draws, so [captureCard] can turn the exact thing on screen
- * into a PNG. Clip is applied outside the recording, so the exported image has square corners (no transparent edge).
- */
 @Composable
 private fun ShareCard(track: ShareItem, style: ShareCardStyle, layer: GraphicsLayer) {
     Column(
@@ -488,9 +444,6 @@ private fun AppIcon(icon: ImageBitmap?) {
     else Icon(PhosphorIcons.Bold.DotsThree, null, tint = ink(), modifier = Modifier.size(28.dp))
 }
 
-// ------------------------------------------------------------------ rendering + files
-
-/** Snapshot of the recorded card, or null if it was never drawn. Always returns a software bitmap. */
 private suspend fun captureCard(layer: GraphicsLayer): Bitmap? = try {
     if (layer.size.width == 0 || layer.size.height == 0) null
     else {
@@ -506,7 +459,6 @@ private fun fileName(track: ShareItem): String {
     return "gamut-$slug"
 }
 
-/** Writes the PNG to cache/share (old shares are wiped first) and returns its FileProvider uri. */
 private suspend fun writeToCache(context: Context, bmp: Bitmap, track: ShareItem): Uri? = withContext(Dispatchers.IO) {
     try {
         val dir = File(context.cacheDir, "share").apply { mkdirs() }
@@ -519,7 +471,6 @@ private suspend fun writeToCache(context: Context, bmp: Bitmap, track: ShareItem
     }
 }
 
-/** Android 10+ only (scoped storage: no permission needed). The caller hides the button below that. */
 private suspend fun saveToGallery(context: Context, bmp: Bitmap, track: ShareItem): Boolean = withContext(Dispatchers.IO) {
     try {
         val values = ContentValues().apply {
@@ -534,8 +485,6 @@ private suspend fun saveToGallery(context: Context, bmp: Bitmap, track: ShareIte
         false
     }
 }
-
-// ------------------------------------------------------------------ android glue
 
 private fun resolveShareApps(context: Context, withImage: Boolean): List<ShareApp> {
     val pm = context.packageManager
@@ -572,7 +521,6 @@ private fun Context.appIcon(pkg: String): ImageBitmap? =
 
 private fun Context.toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 
-/** Android 13+ shows its own "copied" confirmation; before that we show a toast. */
 private fun Context.copyText(label: String, text: String) {
     getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText(label, text))
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) toast("Link copied")

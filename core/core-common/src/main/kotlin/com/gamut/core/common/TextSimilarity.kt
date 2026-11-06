@@ -2,17 +2,7 @@ package com.gamut.core.common
 
 import kotlin.math.max
 
-/**
- * Shared fuzzy text matching used for:
- *  - re-ranking MusicBrainz search results against the user's raw query
- *  - deduping YouTube candidates against MusicBrainz tracks during unified search
- *  - scoring YouTube candidates during source resolution
- *
- * Extracted to core-common so feature-search and feature-resolver don't duplicate
- * (and drift on) normalization/similarity logic.
- */
 object TextSimilarity {
-
     private val NOISE_PATTERN = Regex(
         "\\(official video\\)|\\(official audio\\)|\\(official music video\\)|\\(lyrics?\\)|" +
             "\\(lyric video\\)|\\(audio\\)|\\[official video\\]|\\(visualizer\\)|\\(official\\)|" +
@@ -27,7 +17,6 @@ object TextSimilarity {
         .replace(EXTRA_WHITESPACE, " ")
         .trim()
 
-    /** Normalized Levenshtein similarity in [0.0, 1.0], 1.0 = identical. */
     fun similarity(left: String, right: String): Double {
         if (left == right) return 1.0
         if (left.isEmpty() || right.isEmpty()) return 0.0
@@ -47,7 +36,6 @@ object TextSimilarity {
         return 1.0 - previous[right.length].toDouble() / max(left.length, right.length)
     }
 
-    /** Convenience: similarity between two already-"artist title"-shaped strings, pre-normalized. */
     fun similarityNormalized(left: String, right: String): Double =
         similarity(normalize(left), normalize(right))
 }

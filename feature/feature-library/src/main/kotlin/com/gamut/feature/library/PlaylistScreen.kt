@@ -122,58 +122,33 @@ private val PanelShape = RoundedCornerShape(16.dp)
 private val DangerColor = Color(0xFFFF6B6B)
 private const val MAX_NAME_LENGTH = 60
 
-/** Sheet content color: follows the cover palette (dark text on a light sheet, white on a dark one), like ManageTracksSheet. */
 @Composable
 private fun sheetInk(alpha: Float = 1f): Color = ink(alpha)
 
 private enum class PlaylistSheet { None, Options, Edit }
 
-/** One item of the (possibly filtered) list, remembering where it sits in the full playlist. */
 private typealias Listed = IndexedValue<Track>
 
-/**
- * A playlist: a centered cover, the name, tags, a quiet status line and two flat pills (Play / Shuffle), then the songs.
- *
- * Top row: back, the download button (arrow -> progress ring -> tick), and a three-dots button that opens the
-
- * playlist sheet (Edit playlist, Manage playlist, Change cover art, Remove downloads, Delete playlist). "Edit playlist" opens a second
- * sheet with name, tags and cover; nothing is written until Save. Below it, a search field filters the songs.
- *
- * Every row has a three-dots button (Play, Move up, Move down, Remove); long-pressing a row opens the same panel.
- * Move up / down are off while a search is active, because positions in a filtered list mean nothing.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaylistScreen(
     playlistId: String,
-    /** Fallback name, used until the playlist itself has loaded. */
     title: String = "Playlist",
     onBack: () -> Unit,
-    /** Play the whole list from the top, in order. */
     onPlay: (List<Track>) -> Unit = {},
-    /** Play the whole list in random order. */
     onShuffle: (List<Track>) -> Unit = {},
     onTrackSelected: (Track) -> Unit = {},
-    /** The empty-state button: jump to search so songs can be added. */
     onAddSongs: () -> Unit = {},
-    /** ISRC of the track loaded in the player: its row gets the accent title + animated bars (like Search / Artist). */
     nowPlayingIsrc: String? = null,
-    /** ISRCs of the user's favorites, for the per-song panel. */
     favoriteIsrcs: Set<String> = emptySet(),
-    /**
-     * `local:` ISRCs that still exist on the phone (null = unknown, e.g. no permission: nothing is removed).
-     * Local songs missing from it were deleted from the device and are dropped from the playlist.
-     */
     existingLocalIsrcs: Set<String>? = null,
     onToggleFavorite: (Track) -> Unit = {},
-    /** Opens the artist page of a track (by name), from the per-song panel. */
     onTrackArtist: (Track) -> Unit = {},
     viewModel: PlaylistViewModel = viewModel(),
     downloads: PlaylistDownloadsViewModel = viewModel(),
     nowPlaying: @Composable () -> Unit = {},
 ) {
     val storedSongs by viewModel.tracks.collectAsStateWithLifecycle()
-    // A local song whose file was deleted from the phone disappears here and is dropped from the saved playlist.
     val songs = remember(storedSongs, existingLocalIsrcs) { storedSongs.withoutMissingLocal(existingLocalIsrcs) }
     LaunchedEffect(storedSongs, existingLocalIsrcs) {
         if (songs.size != storedSongs.size) viewModel.setTracks(songs)
@@ -202,9 +177,6 @@ fun PlaylistScreen(
     var searchFocused by remember { mutableStateOf(false) }
     val searching = query.isNotBlank()
 
-    // Downloads: one entry per distinct song.
-    // Songs stored on the phone count as downloaded, but no download / cancel / remove call ever touches them
-    // (so "Remove downloads" can never delete a user's own files).
     val streamed = remember(songs) { songs.filter { !it.isLocal } }
     val streamedIsrcs = remember(streamed) { streamed.map { it.isrc }.distinct() }
     val states = remember(downloadStates, songs) {
@@ -225,7 +197,6 @@ fun PlaylistScreen(
     val customCover = playlist?.coverUri
     val coverUrl = customCover ?: songs.lastOrNull()?.albumArtUrl
 
-    // Edit sheet: the cover picked there is a draft until Save. "Change cover art" in the options sheet saves at once.
     val pickDraftCover = rememberCoverPicker { draftCover = it }
     val pickQuickCover = rememberCoverPicker { uri -> playlist?.let { viewModel.save(it.name, it.tags, uri, null) } }
 
@@ -272,7 +243,6 @@ fun PlaylistScreen(
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 4.dp),
                 )
             }
-            // The list composes only after the strip slide has finished (see LocalNavSettled); the slide draws just the bar.
             val headerSlot: @Composable () -> Unit = {
                 PlaylistHeader(
                             title = name,
@@ -282,7 +252,7 @@ fun PlaylistScreen(
                             artistCount = songs.flatMap { splitArtists(it.artist) }.distinctBy { it.lowercase() }.size,
                             statusLine = when (downloadUi.status) {
                                 PlaylistDownloadStatus.Active -> "Downloading ${minOf(downloadUi.done + 1, downloadUi.total)} of ${downloadUi.total}"
-                                PlaylistDownloadStatus.Done -> null   // shown under the tags: "Available offline"
+                                PlaylistDownloadStatus.Done -> null
                                 PlaylistDownloadStatus.Idle -> if (downloadedCount > 0) "$downloadedCount of ${isrcs.size} downloaded" else null
                             },
                             downloadUi = downloadUi,
@@ -294,7 +264,6 @@ fun PlaylistScreen(
                         )
             }
             val listBody: LazyListScope.(Boolean) -> Unit = { showHeader ->
-                // While searching, the results start right under the field instead of below the big header.
                 if (showHeader && !searching) {
                     item(key = "header") { headerSlot() }
                 }
@@ -319,7 +288,6 @@ fun PlaylistScreen(
                         )
                     }
                 }
-                // Original index in the key: the same song can sit in a playlist twice.
                 itemsIndexed(visible, key = { _, item -> "${item.value.isrc}-${item.index}" }) { _, item ->
                     val song = item.value
                     PlaylistTrackRow(
@@ -338,7 +306,6 @@ fun PlaylistScreen(
                 item(key = "nav-space") { Box(Modifier.navigationBarsPadding()) }
             }
             if (settled && wide) {
-                // Wide window: header on the left (own scroll), search + list on the right.
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     Column(Modifier.weight(0.4f).fillMaxHeight().verticalScroll(rememberScrollState())) { headerSlot() }
                     Column(Modifier.weight(0.6f).fillMaxHeight()) {
@@ -360,7 +327,6 @@ fun PlaylistScreen(
             nowPlaying()
         }
 
-        // ---- per-song panel (indices are positions in the FULL playlist) ----
         val menuTrack = menuIndex?.let { songs.getOrNull(it) }
         if (menuIndex != null && menuTrack != null) {
             val i = menuIndex!!
@@ -396,7 +362,6 @@ fun PlaylistScreen(
             )
         }
 
-        // ---- playlist options sheet ----
         if (sheet == PlaylistSheet.Options) {
             val state = rememberModalBottomSheetState()
             GamutSheet(
@@ -428,7 +393,6 @@ fun PlaylistScreen(
             }
         }
 
-        // ---- edit sheet: name, tags, cover ----
         if (sheet == PlaylistSheet.Edit) {
             val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
             GamutSheet(
@@ -505,7 +469,6 @@ fun PlaylistScreen(
             }
         }
 
-        // ---- manage playlist: reorder (hold + drag), remove, download all ----
         if (showManage) {
             ManageTracksSheet(
                 title = "Manage playlist",
@@ -559,7 +522,6 @@ private fun TopIcon(icon: ImageVector, description: String, enabled: Boolean = t
     }
 }
 
-/** Flat pill-shaped search field: filters the songs of this playlist as you type. */
 @Composable
 private fun SearchField(query: String, onChange: (String) -> Unit, onFocus: (Boolean) -> Unit, onDone: () -> Unit, modifier: Modifier = Modifier) {
     val textStyle = MaterialTheme.typography.bodyLarge
@@ -598,7 +560,6 @@ private fun PlaylistHeader(
     artistCount: Int,
     statusLine: String?,
     downloadUi: PlaylistDownloadUi,
-    /** Every song downloaded: "Available offline" under the tags. */
     offline: Boolean,
     onDownload: () -> Unit,
     onMore: (() -> Unit)?,
@@ -608,7 +569,6 @@ private fun PlaylistHeader(
     Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.fillMaxWidth(0.62f).aspectRatio(1f)) {
             if (coverUrl.isNullOrBlank()) {
-                // No song yet: a flat placeholder. No shadow here, a translucent fill over a shadow shows as a dark box.
                 Box(Modifier.fillMaxSize().clip(HeaderCoverShape).background(ink(0.07f)), contentAlignment = Alignment.Center) {
                     Icon(PhosphorIcons.Bold.VinylRecord, null, tint = ink(0.6f), modifier = Modifier.size(56.dp))
                 }
@@ -642,8 +602,6 @@ private fun PlaylistHeader(
         }
         if (tags.isNotEmpty()) TagsRow(tags, Modifier.padding(horizontal = 24.dp).padding(top = 14.dp))
         if (offline) AvailableOfflineLine(Modifier.padding(top = if (tags.isNotEmpty()) 10.dp else 8.dp))
-        // One controls row under the cover: Play / Shuffle on the left, download + three dots on the right. The right
-        // icons are 40dp slots with a 12dp edge, exactly like the song rows below, so every column lines up.
         if (songCount > 0 || onMore != null) {
             Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, top = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (songCount > 0) {
@@ -658,7 +616,7 @@ private fun PlaylistHeader(
                         onDownload,
                         size = 40.dp,
                         glyphSize = 22.dp,
-                        idleIcon = PhosphorIcons.Bold.BoxArrowDown,   // all songs: box-arrow-down -> (ring) -> archive
+                        idleIcon = PhosphorIcons.Bold.BoxArrowDown,
                         doneIcon = PhosphorIcons.Fill.Archive,
                     )
                 }
@@ -672,7 +630,6 @@ private fun PlaylistHeader(
     }
 }
 
-/** Flat pill: the main action is solid ink, the other a quiet translucent ink. No blur, no glass. */
 @Composable
 private fun ActionPill(label: String, icon: ImageVector, filled: Boolean, onClick: () -> Unit) {
     val isLight = LocalCoverPalette.current.isLight
@@ -689,7 +646,6 @@ private fun ActionPill(label: String, icon: ImageVector, filled: Boolean, onClic
     }
 }
 
-/** Tap = play, long press = options panel (same press-scale feel as the other rows). */
 @OptIn(ExperimentalFoundationApi::class)
 private fun Modifier.rowPress(onClick: () -> Unit, onLongClick: () -> Unit): Modifier = composed {
     val source = remember { MutableInteractionSource() }
@@ -713,8 +669,6 @@ private fun PlaylistTrackRow(
     onLongClick: () -> Unit,
     onMore: () -> Unit,
 ) {
-    // Columns, left to right: cover | title + artist | download (40dp) | dots (40dp).
-    // Every slot has a fixed width whether or not it has content, so nothing shifts between rows or states.
     Row(
         Modifier
             .fillMaxWidth()
@@ -726,7 +680,6 @@ private fun PlaylistTrackRow(
             CoverImage(remember(track.albumArtUrl) { resolveCoverUrl(track.albumArtUrl, 160) }, Modifier.size(54.dp).softCover())
         }
         Column(Modifier.weight(1f).padding(start = 16.dp, end = 8.dp)) {
-            // The playing track: accent title + animated bars, exactly like the Search / Artist rows.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (isPlaying) NowPlayingBars(color = accent, modifier = Modifier.padding(end = 8.dp))
                 Text(
@@ -741,7 +694,6 @@ private fun PlaylistTrackRow(
             ArtistLine(track.artist, track.album, onArtist, stackSize = 18.dp, modifier = Modifier.padding(vertical = 1.dp)) { m ->
                 Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = m)
             }
-            // Fixed 2dp slot so the row doesn't change height when the progress line appears.
             Box(Modifier.padding(top = 5.dp).height(2.dp)) { DownloadProgressLine(downloadState) }
         }
         TrackDownloadButton(downloadState, onDownload = onDownload, onCancel = onCancelDownload, onDone = onMore, glyph = 20.dp)
@@ -751,7 +703,6 @@ private fun PlaylistTrackRow(
     }
 }
 
-/** The small per-song panel (opened by the three dots or a long press). Every action closes it. */
 @Composable
 private fun TrackOptionsPanel(
     track: Track,
@@ -793,7 +744,7 @@ private fun TrackOptionsPanel(
             if (!local) when (downloadState) {
                 DownloadState.Done -> PanelAction(PhosphorIcons.Fill.CheckCircle, "Remove download", true) { onRemoveDownload(); onDismiss() }
                 null, is DownloadState.Failed -> PanelAction(PhosphorIcons.Bold.ArrowCircleDown, "Download", true) { onDownload(); onDismiss() }
-                else -> Unit   // queued / downloading: the song's own button cancels it
+                else -> Unit
             }
             PanelAction(
                 if (isFavorite) PhosphorIcons.Fill.Heart else PhosphorIcons.Bold.Heart,
@@ -824,7 +775,6 @@ private fun PanelAction(icon: ImageVector, label: String, enabled: Boolean, onCl
     }
 }
 
-/** A row of the playlist sheet. [danger] paints it red (Delete). */
 @Composable
 private fun SheetAction(icon: ImageVector, label: String, danger: Boolean = false, onClick: () -> Unit) {
     Row(
@@ -841,7 +791,6 @@ private fun SheetAction(icon: ImageVector, label: String, danger: Boolean = fals
 
 @Composable
 private fun SheetButton(label: String, filled: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    // Filled pill = ink on the sheet, so its label takes the sheet color; the quiet pill keeps ink.
     val content = if (filled) LocalCoverPalette.current.base else ink()
     Box(
         Modifier

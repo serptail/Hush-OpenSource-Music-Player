@@ -52,26 +52,9 @@ import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
 
-// Discover, top to bottom:
-//   1. Hero        the #1 song of the blended Trending chart, big, one tap to play
-//   1b. Feed TOP   "Picked for today": a 2-column grid of quick picks
-//   2. Artists     round portraits, horizontal
-//   3. Albums      square covers, horizontal
-//   3b. Feed MIDDLE  personal ("Because you follow ..."), the "New album" spotlight, New releases
-//   4. Charts      pill tabs (Trending / Billboard / Latest / Albums) + a numbered list, 10 rows, "Show all" for more
-//   5. Feed BOTTOM community trending, hot artists, then an endless run of genre sections loaded while scrolling (footer = trigger)
-//
-// The feed sections come from DiscoverState.feed (see FeedRepository); each FeedKind has one renderer below. Mixing
-// rails, square carousels, portrait rows and a big card is what keeps the page from reading as one repeated shelf.
-//
-// Chart rows are separate LazyColumn items (the old tab list was one eager item), so 50 rows cost nothing off screen.
-// Every block adds its own 24dp side gutter; rows use 16dp + 8dp inner padding so their text edge also lands on 24dp.
-
-/** Tabs whose order is a ranking: they get position numbers. Latest and Albums are not rankings. */
 private val NUMBERED_TABS = setOf("Trending", "Billboard")
 private const val COLLAPSED_ROWS = 10
 
-/** Hero, artists and albums. On wide windows this is the left-hand pane. Shows the skeleton / error card while there is no data. */
 internal fun LazyListScope.discoverFeaturedItems(
     state: DiscoverState,
     onTrackClick: (Track, List<Track>) -> Unit,
@@ -82,7 +65,6 @@ internal fun LazyListScope.discoverFeaturedItems(
     onMoreClick: (Track) -> Unit = {},
     onArtistItemClick: (DiscoverItem) -> Unit = {},
 ) {
-    // Nothing yet: placeholders with the final shape, so the page does not jump when data lands.
     if (state.tabs.isEmpty()) {
         if (state.error != null && !state.isLoading) {
             item(key = "discover-error") {
@@ -124,7 +106,6 @@ internal fun LazyListScope.discoverFeaturedItems(
     val trending = state.tabs.first()
     val heroItem = trending.items.firstOrNull { it.track != null }
 
-    // 1. Hero ------------------------------------------------------------------------------------------------------
     if (heroItem != null) {
         item(key = "hero") {
             HeroCard(
@@ -136,10 +117,8 @@ internal fun LazyListScope.discoverFeaturedItems(
         }
     }
 
-    // 1b. Feed, top: today's quick picks under the hero --------------------------------------------------------------------
     feedSectionItems(state.feed.filter { it.slot == FeedSlot.TOP }, onTrackClick, onMoreClick, nowPlayingIsrc, onArtistItemClick, onAlbumClick)
 
-    // 2. Artists ---------------------------------------------------------------------------------------------------
     if (state.artists.isNotEmpty()) {
         item(key = "artists-title") { DiscoverSectionTitle("Artists to know") }
         item(key = "artists-row") {
@@ -152,7 +131,6 @@ internal fun LazyListScope.discoverFeaturedItems(
         }
     }
 
-    // 3. Albums ----------------------------------------------------------------------------------------------------
     if (state.albums.isNotEmpty()) {
         item(key = "albums-title") { DiscoverSectionTitle("Albums on the rise") }
         item(key = "albums-row") {
@@ -165,14 +143,9 @@ internal fun LazyListScope.discoverFeaturedItems(
         }
     }
 
-    // 3b. Feed, middle: personal rows, the new-album spotlight, new releases ---------------------------------------------------
     feedSectionItems(state.feed.filter { it.slot == FeedSlot.MIDDLE }, onTrackClick, onMoreClick, nowPlayingIsrc, onArtistItemClick, onAlbumClick)
 }
 
-/**
- * The part of the feed below the charts: community trending, hot artists, then the endless genre sections. The footer at the end is
- * the "load more" trigger: it asks for the next section whenever it scrolls into view, until the plan is exhausted.
- */
 internal fun LazyListScope.discoverFeedItems(
     state: DiscoverState,
     onTrackClick: (Track, List<Track>) -> Unit,
@@ -197,7 +170,6 @@ internal fun LazyListScope.discoverFeedItems(
     }
 }
 
-/** Charts: pill tabs + the ranked list. On wide windows this is the right-hand pane. */
 internal fun LazyListScope.discoverChartItems(
     state: DiscoverState,
     selectedTab: Int,
@@ -210,7 +182,6 @@ internal fun LazyListScope.discoverChartItems(
     onToggleChartExpanded: () -> Unit = {},
 ) {
     if (state.tabs.isEmpty()) return
-    // 4. Charts ----------------------------------------------------------------------------------------------------
     val tabIndex = selectedTab.coerceIn(0, state.tabs.lastIndex)
     val tab = state.tabs[tabIndex]
     item(key = "charts-title") { DiscoverSectionTitle("Charts") }
@@ -255,7 +226,6 @@ internal fun LazyListScope.discoverChartItems(
     }
 }
 
-/** Phone layout: everything in one list (featured blocks, then charts). */
 internal fun LazyListScope.discoverItems(
     state: DiscoverState,
     selectedTab: Int,
@@ -286,17 +256,12 @@ private fun DiscoverSectionTitle(text: String, subtitle: String? = null) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        // The small "why you are seeing this" line of a feed section.
         if (subtitle != null) {
             Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
 
-/**
- * The #1 song: full-width cover with a soft scrim, a label chip, title, and a play glyph. The feed reuses it for the
- * "New album" spotlight ([opensAlbum] swaps the play glyph for a chevron, [aspect] makes it shorter).
- */
 @Composable
 private fun HeroCard(
     item: DiscoverItem,
@@ -321,7 +286,6 @@ private fun HeroCard(
             contentDescription = item.title,
             fallback = { ArtworkFallbackIcon() },
         )
-        // Scrim: only the bottom half darkens, so the cover keeps its colour where the text is not.
         Box(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(0.45f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.72f)),
@@ -350,7 +314,6 @@ private fun HeroCard(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        // Just the glyph on the scrim: no circle behind it.
         Box(Modifier.align(Alignment.BottomEnd).padding(18.dp).size(44.dp), contentAlignment = Alignment.Center) {
             if (isPlaying) NowPlayingBars(color = Color.White)
             else if (opensAlbum) Icon(PhosphorIcons.Bold.CaretRight, "Open album", tint = Color.White.copy(alpha = 0.95f), modifier = Modifier.size(28.dp))
@@ -386,7 +349,6 @@ private fun ArtistBubble(item: DiscoverItem, onClick: () -> Unit) {
     }
 }
 
-/** Square cover + title + artist (+ release age when known). Used for albums and, in the feed, for song carousels. */
 @Composable
 private fun AlbumCard(item: DiscoverItem, isPlaying: Boolean = false, onClick: () -> Unit) {
     Column(Modifier.width(148.dp).pressScale(onClick = onClick, scaleDown = 0.95f)) {
@@ -420,11 +382,6 @@ private fun AlbumCard(item: DiscoverItem, isPlaying: Boolean = false, onClick: (
     }
 }
 
-/**
- * One chart line: position number with its weekly movement underneath (Billboard), cover, title + artist + a small
- * meta line (peak and weeks, or release age), then three dots for songs or a chevron for albums. A playing song swaps
- * the number for animated bars and takes the accent.
- */
 @Composable
 private fun ChartRow(rank: Int?, item: DiscoverItem, isPlaying: Boolean, onClick: () -> Unit, onMore: (() -> Unit)?) {
     val accent = MaterialTheme.colorScheme.primary
@@ -478,7 +435,6 @@ private fun ChartRow(rank: Int?, item: DiscoverItem, isPlaying: Boolean, onClick
     }
 }
 
-/** Weekly movement: green up, red down, accent NEW, a dash when unchanged. Nothing for charts without movement. */
 @Composable
 private fun TrendMark(trend: Trend?, delta: Int, accent: Color) {
     val small = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
@@ -490,14 +446,7 @@ private fun TrendMark(trend: Trend?, delta: Int, accent: Color) {
         Trend.SAME -> Text("\u2013", style = small, color = TextTertiary)
     }
 }
-// ---------------------------------------------------------------------------------------------------------------------
-// Feed sections
-// ---------------------------------------------------------------------------------------------------------------------
 
-/**
- * Renders [sections] in order: a title with its "why" line, then the body for the section's [FeedKind]. A tap on a song
- * plays it inside the section's own queue; albums open the album page; artists resolve their page id on tap.
- */
 private fun LazyListScope.feedSectionItems(
     sections: List<FeedSection>,
     onTrackClick: (Track, List<Track>) -> Unit,
@@ -513,7 +462,6 @@ private fun LazyListScope.feedSectionItems(
         val playing: (DiscoverItem) -> Boolean = { item -> nowPlayingIsrc != null && item.track?.isrc == nowPlayingIsrc }
 
         if (section.kind == FeedKind.SPOTLIGHT) {
-            // One big card, no separate title: the chip on the card is the label.
             item(key = "feed-${section.id}") {
                 val album = section.items.first()
                 HeroCard(
@@ -552,13 +500,12 @@ private fun LazyListScope.feedSectionItems(
                 ) {
                     items(section.items, key = { it.id }) { artist -> ArtistBubble(artist) { onArtistItemClick(artist) } }
                 }
-                FeedKind.SPOTLIGHT -> Unit // handled above
+                FeedKind.SPOTLIGHT -> Unit
             }
         }
     }
 }
 
-/** Two columns of compact tiles: cover on the left, title on the right. One tap plays. */
 @Composable
 private fun QuickPicksGrid(items: List<DiscoverItem>, isPlaying: (DiscoverItem) -> Boolean, onPlay: (DiscoverItem) -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -602,7 +549,6 @@ private fun QuickPickTile(item: DiscoverItem, isPlaying: Boolean, onClick: () ->
     }
 }
 
-/** Songs three to a column, columns scroll sideways, the next column peeks in. Rows are the same ChartRow the charts use. */
 @Composable
 private fun TrackRails(
     items: List<DiscoverItem>,
@@ -611,7 +557,6 @@ private fun TrackRails(
     onMore: (Track) -> Unit,
 ) {
     val pages = remember(items) { items.chunked(3) }
-    // 16dp gutter + the row's own 8dp padding = the same 24dp text edge as everything else.
     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         itemsIndexed(pages, key = { index, _ -> index }) { _, page ->
             Column(Modifier.fillParentMaxWidth(0.9f)) {
@@ -630,10 +575,6 @@ private fun TrackRails(
     }
 }
 
-/**
- * End of the feed. While more is available it is the trigger: composing it (it scrolled into view) asks for the next
- * section, and each new section re-arms it. Then a spinner, a retry line after a failure, or the "caught up" line.
- */
 @Composable
 private fun FeedFooter(count: Int, exhausted: Boolean, failed: Boolean, onLoadMore: () -> Unit) {
     LaunchedEffect(count, exhausted, failed) { if (!exhausted && !failed) onLoadMore() }

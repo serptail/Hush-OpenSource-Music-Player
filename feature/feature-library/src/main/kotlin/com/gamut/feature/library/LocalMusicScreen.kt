@@ -131,29 +131,20 @@ import com.gamut.core.designsystem.pressScale
 import com.gamut.core.model.Track
 import kotlinx.coroutines.launch
 
-// ---------------------------------------------------------------------------------------------------------------
-// The "on this device" look, shared by the Library row, this screen and the playlist rows: a phone glyph on a
-// soft accent-tinted tile. Streamed songs never wear it, so a local file is recognisable at a glance.
-// ---------------------------------------------------------------------------------------------------------------
-
-/** Accent gradient used by every "on device" surface. */
 @Composable
 internal fun deviceBrush(): Brush {
     val accent = MaterialTheme.colorScheme.primary
     return Brush.linearGradient(listOf(accent.copy(alpha = 0.95f), accent.copy(alpha = 0.55f)))
 }
 
-/** Square tile with the phone glyph: the Library row / grid cover of "On this device". */
 @Composable
 internal fun DeviceTile(
     size: Dp?,
     shape: androidx.compose.ui.graphics.Shape,
     modifier: Modifier = Modifier,
     background: Boolean = true,
-    /** The Library look: soft drop shadow and an opaque flat fill, exactly like the Liked songs tile. */
     raised: Boolean = false,
 ) {
-    // size == null: the caller sizes the tile (grid cell: full width, square).
     val base = if (size != null) modifier.size(size) else modifier
     val surface = when {
         raised -> base.softCover(shape).background(flatCoverFill())
@@ -165,16 +156,11 @@ internal fun DeviceTile(
     }
 }
 
-/**
- * The "stored on this device" tag pinned to the corner of a local song's cover: just the white phone glyph,
- * with no circle or halo behind it.
- */
 @Composable
 internal fun BoxScopeDeviceBadge(modifier: Modifier = Modifier) {
     Icon(PhosphorIcons.Fill.DeviceMobileCamera, "On this device", tint = Color.White, modifier = modifier.size(15.dp))
 }
 
-/** Fixed 40dp slot that replaces the download button on local songs, so row columns still line up. */
 @Composable
 internal fun OnDeviceMark(modifier: Modifier = Modifier) {
     Box(modifier.size(40.dp), contentAlignment = Alignment.Center) {
@@ -182,10 +168,6 @@ internal fun OnDeviceMark(modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * The "stored on this device" tag: a small disc in the theme's background colour with an ink phone glyph and an ink
- * outline. Everything follows the palette (like ink() elsewhere), so it stays readable on any cover and theme.
- */
 @Composable
 internal fun DeviceTag(modifier: Modifier = Modifier, size: Dp = 20.dp) {
     Box(
@@ -200,11 +182,6 @@ internal fun DeviceTag(modifier: Modifier = Modifier, size: Dp = 20.dp) {
     }
 }
 
-/**
- * A cover that carries the on-device tag when [local]. The tag is centred on the cover's top-right corner: half of it
- * outside the cover, half inside, so it sits ON TOP of the cover instead of inside it. (Siblings in a Box are not
- * clipped, so the half outside still draws.)
- */
 @Composable
 internal fun BadgedCover(local: Boolean, tagSize: Dp = 20.dp, cover: @Composable () -> Unit) {
     Box {
@@ -224,12 +201,6 @@ private enum class SongSheetMode { Actions, Playlists, EditChoice, NotFound }
 
 private enum class EditMode { Auto, Manual }
 
-/**
- * "On this device": the songs found on the phone. Nothing here is saved anywhere on its own: every song has a menu
- * (Play now, Add to playlist, Add to Favorites) and only then is it written to the library. Missing song info (artist,
- * album, cover) is looked up at that moment, never during a scan. The scan card runs an in-depth search for every
- * audio format; the format chips filter the list.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LocalMusicScreen(
@@ -272,7 +243,6 @@ fun LocalMusicScreen(
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         viewModel.refreshPermission(granted)
     }
-    // Browse: pick one song from storage and add it to "On this device".
     val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
             when (val r = viewModel.importPicked(uri)) {
@@ -281,7 +251,6 @@ fun LocalMusicScreen(
             }
         }
     }
-    // Coming back from system settings with the permission switched on.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshPermission() }
 
     val visible = remember(songs, query) {
@@ -296,8 +265,6 @@ fun LocalMusicScreen(
 
     fun closeSheet() { sheetSong = null; busy = false; pendingSave = null }
 
-    // Saving = the only moment missing song info is looked up. If nothing is found the sheet says so and lets the
-    // user edit by hand or save the song as it is.
     fun addToPlaylist(song: LocalSong, id: Long, name: String) {
         if (busy) return
         busy = true
@@ -455,7 +422,6 @@ fun LocalMusicScreen(
                 item(key = "nav-space") { Box(Modifier.navigationBarsPadding()) }
             }
             if (settled && wide) {
-                // Wide window: header on the left (own scroll), search + list on the right.
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     Column(Modifier.weight(0.4f).fillMaxHeight().verticalScroll(rememberScrollState())) { headerSlot() }
                     Column(Modifier.weight(0.6f).fillMaxHeight()) {
@@ -583,20 +549,13 @@ fun LocalMusicScreen(
     }
 }
 
-/** The app's display font for the primary scan button (res/font/codenext_extrabold.ttf). */
 private val CodeNextFont = FontFamily(Font(DesignR.font.codenext_extrabold, FontWeight.ExtraBold))
 
 private val ScanPlaces = listOf("Music", "Downloads", "Documents", "WhatsApp Audio", "Recordings", "Other folders")
 
-/**
- * The two buttons under the header: [Scan] (the in-depth search: while it runs the scan icon softly breathes and a soft
- * light sweeps along the bottom edge) and [Browse] (opens the system file picker to import a single song).
- * One status line below them cycles through the places being searched.
- */
 @Composable
 private fun ScanCard(scan: ScanUi, deepScanned: Boolean, onScan: () -> Unit, onBrowse: () -> Unit, modifier: Modifier = Modifier) {
     val running = scan.running
-    // Scan is the main button of the screen: a solid ink fill with a contrasting label. Browse is the quiet one.
     val onFill = if (LocalCoverPalette.current.isLight) Color.White else Color.Black
     val shape = RoundedCornerShape(16.dp)
     val lineColor = onFill.copy(alpha = 0.6f)
@@ -612,7 +571,6 @@ private fun ScanCard(scan: ScanUi, deepScanned: Boolean, onScan: () -> Unit, onB
         infiniteRepeatable(tween(1100, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "breathe",
     )
-    // 0 -> 1 smoothly when a scan starts / ends, so the icon eases in and out of its motion.
     val motion by animateFloatAsState(if (running) 1f else 0f, tween(450), label = "motion")
 
     var place by remember { mutableIntStateOf(0) }
@@ -627,7 +585,6 @@ private fun ScanCard(scan: ScanUi, deepScanned: Boolean, onScan: () -> Unit, onB
 
     Column(modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            // Scan
             Row(
                 Modifier
                     .weight(1f)
@@ -672,7 +629,6 @@ private fun ScanCard(scan: ScanUi, deepScanned: Boolean, onScan: () -> Unit, onB
                     )
                 }
             }
-            // Browse
             Row(
                 Modifier
                     .weight(1f)
@@ -745,11 +701,6 @@ private fun SongAction(icon: ImageVector, label: String, subtitle: String? = nul
     }
 }
 
-// ---------------------------------------------------------------------------------------------------------------
-// Edit metadata sheets
-// ---------------------------------------------------------------------------------------------------------------
-
-/** Manual edit: cover (photo or link), name and artist. Opens as its own sheet over the list. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ManualEditSheet(
@@ -872,7 +823,6 @@ private fun EditField(
 
 private val AutoSteps = listOf("Reading file tags…", "Searching online…", "Matching results…")
 
-/** Auto fetch: a short loading state, then every match appears live. Nothing is saved until the user picks one. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AutoFetchSheet(
@@ -961,7 +911,6 @@ private fun AutoFetchSheet(
     }
 }
 
-/** One match: fades and grows in when it arrives. Tap to select it. */
 @Composable
 private fun FoundRow(c: MetaCandidate, selected: Boolean, onClick: () -> Unit) {
     var shown by remember { mutableStateOf(false) }
@@ -999,7 +948,6 @@ private fun FoundRow(c: MetaCandidate, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** Soft pulsing placeholder shown while the first results are on their way. */
 @Composable
 private fun SkeletonRow() {
     val t = rememberInfiniteTransition(label = "skeleton")
@@ -1013,7 +961,6 @@ private fun SkeletonRow() {
     }
 }
 
-/** Tap = play now. The dots open Play now / Add to playlist / Add to Favorites: nothing is saved without a tap there. */
 @Composable
 private fun LocalSongRow(
     song: LocalSong,

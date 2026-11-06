@@ -31,11 +31,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
-/**
- * Owns the MediaLibrarySession: the notification-shade player ("This phone"), the lock-screen controls, Bluetooth
- * buttons and Android Auto (browse tree + playback) all come from it. Besides previous / play / next and the seek bar (which Media3 draws by itself) it adds
- * a shuffle and a repeat button, a Gamut small icon, and opens the app when the notification is tapped.
- */
 @OptIn(UnstableApi::class)
 @AndroidEntryPoint
 class GamutMediaSessionService : MediaLibraryService() {
@@ -47,15 +42,10 @@ class GamutMediaSessionService : MediaLibraryService() {
     private val repeatCommand = SessionCommand(ACTION_REPEAT, Bundle.EMPTY)
     private val shuffleCommand = SessionCommand(ACTION_SHUFFLE, Bundle.EMPTY)
 
-    // mediaSessionPlayer (not sessionPlayer): routes notification / lock-screen / Bluetooth next + previous
-    // through the queue logic in Media3MusicPlayer instead of ExoPlayer's single-item playlist.
     override fun onCreate() {
         super.onCreate()
         val player = musicPlayer as Media3MusicPlayer
 
-        // Small status-bar / notification-header icon: the Gamut mark. It must be the white-on-transparent one, because
-        // Android draws small icons as a flat mask (the colour version would turn into a solid blob). An optional
-        // ic_stat_gamut vector wins if you ever add one; without either, Media3's generic icon stays.
         val icon = listOf("ic_stat_gamut", "ic_gamut_mark_white")
             .map { resources.getIdentifier(it, "drawable", packageName) }
             .firstOrNull { it != 0 } ?: 0
@@ -71,17 +61,15 @@ class GamutMediaSessionService : MediaLibraryService() {
         }
         session = builder.build()
         refreshButtons()
-        // The buttons show the real state: repeat off / all / one, shuffle on / off.
         scope.launch {
             combine(musicPlayer.repeatMode, musicPlayer.shuffleEnabled) { _, _ -> }.collect { refreshButtons() }
         }
-        // Crossfade hands playback over to a second ExoPlayer: keep the notification / lock screen pointed at the current one.
         player.onSessionPlayerChanged = { session?.player = it }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = session
 
-    @Suppress("DEPRECATION")   // setCustomLayout / CommandButton.Builder() exist in every Media3 1.x, only newer ones prefer other names
+    @Suppress("DEPRECATION")
     private fun refreshButtons() {
         val shuffleOn = musicPlayer.shuffleEnabled.value
         val repeat = musicPlayer.repeatMode.value
@@ -112,7 +100,6 @@ class GamutMediaSessionService : MediaLibraryService() {
 
     private inner class LibraryCallback : MediaLibrarySession.Callback {
         override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
-            // Library commands (browse / search) are part of this set; the plain session set would reject Android Auto.
             val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
                 .add(repeatCommand)
                 .add(shuffleCommand)
@@ -140,8 +127,6 @@ class GamutMediaSessionService : MediaLibraryService() {
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
         }
-
-        // ---- Browse ----
 
         override fun onGetLibraryRoot(
             session: MediaLibrarySession,
@@ -198,11 +183,6 @@ class GamutMediaSessionService : MediaLibraryService() {
             LibraryResult.ofItemList(ImmutableList.copyOf(items), params)
         }
 
-        // ---- Playback requests from the car / Assistant ----
-        // The items arrive with only a mediaId (or a voice-search query) and no stream URL. We look the tracks up and
-        // load them into OUR queue (setQueue); the session then calls setMediaItems on the forwarding player, which
-        // starts that queue through the resolver (see Media3MusicPlayer.prepareExternalQueue). ExoPlayer never sees them.
-
         override fun onAddMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
@@ -220,7 +200,6 @@ class GamutMediaSessionService : MediaLibraryService() {
             resolved.toMutableList()
         }
 
-        // "Resume" from a Bluetooth / car button when the app process was just started and nothing is loaded.
         override fun onPlaybackResumption(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
@@ -232,8 +211,6 @@ class GamutMediaSessionService : MediaLibraryService() {
             MediaSession.MediaItemsWithStartPosition(listOf(songItem(track.isrc, track)), 0, 0L)
         }
     }
-
-    // ---- MediaItem mapping ----
 
     private fun toItem(entry: BrowseEntry): MediaItem = when (entry) {
         is BrowseEntry.Folder -> folderItem(entry.id, entry.title, entry.subtitle, entry.artUrl)
@@ -274,7 +251,6 @@ class GamutMediaSessionService : MediaLibraryService() {
         return drop(from).take(pageSize)
     }
 
-    /** Runs [block] on the service scope and exposes it as the ListenableFuture Media3's callbacks want. */
     private fun <T> future(block: suspend () -> T): ListenableFuture<T> {
         val result = SettableFuture.create<T>()
         val job = scope.launch {
@@ -292,14 +268,10 @@ class GamutMediaSessionService : MediaLibraryService() {
         return result
     }
 
-    // While the next track is being resolved the player is briefly paused. Media3 would drop the foreground state
-    // right then, and Android then freezes the app on the lock screen: playback never resumes. Stay foreground
-    // for that gap.
     override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
         super.onUpdateNotification(session, startInForegroundRequired || (musicPlayer as Media3MusicPlayer).keepForeground)
     }
 
-    // Swiping the app out of recents: keep going if audio is playing, otherwise shut the service down.
     override fun onTaskRemoved(rootIntent: Intent?) {
         val player = session?.player
         if (player == null || !player.playWhenReady || player.mediaItemCount == 0) stopSelf()

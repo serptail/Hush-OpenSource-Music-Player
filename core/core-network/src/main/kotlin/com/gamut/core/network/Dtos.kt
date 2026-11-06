@@ -62,8 +62,6 @@ data class ItunesTrackDto(
     val artistName: String? = null,
     val collectionName: String? = null,
     val trackTimeMillis: Long? = null,
-    // Comes back as a 100x100 thumbnail URL (".../100x100bb.jpg"); the size segment can be
-    // rewritten to fetch a bigger image with zero extra requests -- see SearchRepository.kt.
     val artworkUrl100: String? = null,
     val kind: String? = null,
 )
@@ -130,7 +128,6 @@ data class DeezerTrackDto(
     val rank: Long = 0L,
     val isrc: String? = null,
     val artist: DeezerArtistDto,
-    // Absent in /album/{id}/tracks responses -- that was making every album fetch fail to decode.
     val album: DeezerAlbumDto = DeezerAlbumDto(),
 )
 

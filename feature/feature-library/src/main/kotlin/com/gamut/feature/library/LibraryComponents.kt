@@ -28,16 +28,8 @@ import com.adamglin.phosphoricons.bold.MusicNote
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
 
-/** Corner of every small cover in the library screens (same as Discover's song rows). */
 internal val RowArtShape = RoundedCornerShape(14.dp)
 
-/**
- * A remote cover that fills its modifier. Uses plain AsyncImage (no subcomposition, which is costly in lists):
- * a flat, OPAQUE tint shows while loading, and a music-note icon appears when there is no art or loading fails.
- * The tint must be opaque: [softCover]'s drop shadow is drawn behind the cover, and a translucent fill would let
- * it show through as a dark box with a lighter square inside.
- * Coil sizes the decode to the layout bounds, and the fade-in is off so fast scrolling doesn't animate.
- */
 @Composable
 internal fun CoverImage(url: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -66,11 +58,9 @@ internal fun CoverImage(url: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** ink(0.08f) flattened onto the cover background: the blank-cover look, but opaque so nothing shows through it. */
 @Composable
 internal fun flatCoverFill(): Color = ink(0.08f).compositeOver(LocalCoverPalette.current.base)
 
-/** A cover with the soft drop shadow used on all small covers. */
 internal fun Modifier.softCover(shape: androidx.compose.ui.graphics.Shape = RowArtShape): Modifier = this
     .shadow(4.dp, shape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
     .clip(shape)

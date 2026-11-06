@@ -36,28 +36,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/**
- * ---------------------------------------------------------------------------
- *  GAMUT — light, minimal design system ("acrylic bottle" look)
- *  Thin single-weight outlines, soft shadows, gentle spring-based press
- *  feedback, and a gradient that adapts to whatever's actually playing.
- *  No blur, no dark theme — clean and light, with just enough shadow/gloss
- *  to feel like polished acrylic rather than flat paper.
- * ---------------------------------------------------------------------------
- */
-
-// ---- Neutrals ----
 val GamutInk = Color(0xFF1B1B1F)
 val GamutMist = Color(0xFF7A7680)
 val GamutPaper = Color(0xFFFAFAFC)
 val GamutCard = Color(0xFFFFFFFF)
 val GamutHairline = Color(0xFFE9E7EC)
-val GamutShadow = Color(0x1F1B1B1F) // soft, low-alpha ink shadow — never pure black
+val GamutShadow = Color(0x1F1B1B1F)
 
-// ---- Default accent trio (before any artwork has been analyzed) ----
-val GamutAccentA = Color(0xFF8E8CF0) // soft violet
-val GamutAccentB = Color(0xFF6FC8E8) // soft sky
-val GamutAccentC = Color(0xFFB8A6F5) // soft lilac
+val GamutAccentA = Color(0xFF8E8CF0)
+val GamutAccentB = Color(0xFF6FC8E8)
+val GamutAccentC = Color(0xFFB8A6F5)
 
 private val GamutColors = lightColorScheme(
     primary = GamutAccentA,
@@ -70,13 +58,6 @@ private val GamutColors = lightColorScheme(
     error = Color(0xFFE0526B),
 )
 
-/**
- * Fonts, bundled as .ttf under THIS module's res/font/
- * (core/core-designsystem/src/main/res/font/). File names must be lowercase a-z, 0-9 and underscores,
- * so CodeNext-ExtraBold.ttf has to be named codenext_extrabold.ttf, and so on.
- *
- * CodeNext ExtraBold (and its italic, via fontStyle = FontStyle.Italic) is the display face for headings.
- */
 val GamutDisplayFont = FontFamily(
     Font(R.font.codenext_extrabold, FontWeight.ExtraBold, FontStyle.Normal),
     Font(R.font.codenext_extrabolditalic, FontWeight.ExtraBold, FontStyle.Italic),
@@ -113,7 +94,6 @@ private val GamutDarkColors = darkColorScheme(
     error = Color(0xFFFF7A8E),
 )
 
-/** [dark] = the resolved light/dark of the whole app (Appearance settings, or the cover in Auto mode). */
 @Composable
 fun GamutTheme(dark: Boolean = false, content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = if (dark) GamutDarkColors else GamutColors, typography = GamutTypography, content = content)
@@ -129,23 +109,15 @@ val PillShape = RoundedCornerShape(50)
 val ArtworkShape = RoundedCornerShape(16.dp)
 val ArtworkShapeLarge = RoundedCornerShape(24.dp)
 
-/** Thin, single-weight 1dp outline — the recurring "container" look across the app. */
 fun Modifier.hairlineBorder(shape: Shape = CardShape, color: Color = GamutHairline): Modifier =
     this.border(width = 1.dp, color = color, shape = shape)
 
-/** Flat white card with a hairline outline and a soft, low ambient shadow — reads as gently raised acrylic, not flat paper. */
 fun Modifier.thinCard(shape: Shape = CardShape, elevation: androidx.compose.ui.unit.Dp = 6.dp): Modifier = this
     .shadow(elevation = elevation, shape = shape, ambientColor = GamutShadow, spotColor = GamutShadow, clip = false)
     .clip(shape)
     .background(GamutCard, shape)
     .hairlineBorder(shape)
 
-/**
- * The "acrylic" frame for album artwork: a thin bright outline that lifts it
- * off the background (the "pop" the person asked for), plus a soft shadow
- * underneath. [strength] scales both — use 1f for the full player's big
- * artwork, ~0.4f for small thumbnails in lists so they only lift a little.
- */
 fun Modifier.acrylicFrame(shape: Shape = ArtworkShape, strength: Float = 1f, outlineColor: Color = Color.White): Modifier = this
     .shadow(
         elevation = (10f * strength).dp,
@@ -157,11 +129,6 @@ fun Modifier.acrylicFrame(shape: Shape = ArtworkShape, strength: Float = 1f, out
     .clip(shape)
     .border(width = (1.2f * strength).dp.coerceAtLeast(0.5.dp), color = outlineColor.copy(alpha = 0.55f * strength + 0.15f), shape = shape)
 
-/**
- * Diagonal gloss highlight — a faint white sheen across the top-left corner
- * of a surface, the detail that sells "acrylic/glass" over "flat sticker."
- * Draw this as the LAST element inside a Box wrapping the artwork/card.
- */
 @Composable
 fun BoxScope.AcrylicGloss(shape: Shape = ArtworkShape, alpha: Float = 0.16f) {
     Box(
@@ -178,12 +145,6 @@ fun BoxScope.AcrylicGloss(shape: Shape = ArtworkShape, alpha: Float = 0.16f) {
     )
 }
 
-/**
- * Three-stop adaptive gradient behind the full-screen player — colors are
- * expected to already be pre-animated (see rememberDynamicAccent), so this
- * itself needs no animation logic. Diagonal rather than vertical reads
- * cleaner with three stops instead of muddying in the middle.
- */
 fun adaptivePlayerGradient(top: Color, mid: Color, bottom: Color): Brush = Brush.linearGradient(
     colors = listOf(top, mid, bottom),
     start = Offset(0f, 0f),

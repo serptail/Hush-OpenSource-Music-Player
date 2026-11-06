@@ -20,10 +20,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
-/**
- * Only keeps the process alive (with a low-key notification) while [TrackDownloadManager] has work, so downloads
- * continue with the screen off or the app in the background. The downloading itself happens in the manager.
- */
 class DownloadService : Service() {
     @EntryPoint
     @InstallIn(SingletonComponent::class)

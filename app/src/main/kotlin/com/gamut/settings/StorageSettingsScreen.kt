@@ -94,7 +94,6 @@ private val CacheLimitChoices = listOf(
 )
 private const val PAGE = 8
 
-/** Settings > Storage & Downloads. Every number is live: it follows the same download index the rest of the app uses. */
 @Composable
 fun StorageSettingsScreen(
     onBack: () -> Unit,
@@ -119,8 +118,6 @@ fun StorageSettingsScreen(
     var confirm by remember { mutableStateOf<Confirm?>(null) }
     var dialog by remember { mutableStateOf<StorageDialog?>(null) }
 
-    // Opening the page tidies up and measures; while it is open the numbers are refreshed every few seconds
-    // (the image cache grows without telling anyone).
     LaunchedEffect(active) {
         if (active) {
             vm.onOpened()
@@ -129,7 +126,6 @@ fun StorageSettingsScreen(
             selecting = false; selected = emptySet(); visible = PAGE
         }
     }
-    // A row that was deleted is hidden at once (animated); once it is gone from the list the marker is dropped.
     LaunchedEffect(songs) { removing = removing.filter { id -> songs.any { it.isrc == id } }.toSet() }
 
     val sorted = remember(songs, sort) {
@@ -143,14 +139,13 @@ fun StorageSettingsScreen(
     fun deleteSongs(ids: Collection<String>, announce: String) {
         removing = removing + ids
         scope.launch {
-            delay(260)   // let the rows play their exit before the files go
+            delay(260)
             vm.delete(ids)
             notifier.success(announce)
         }
     }
 
     GamutPage(title = "Storage & Downloads", onBack = onBack, nowPlaying = nowPlaying) {
-
         SoftHeader("Used by Gamut")
         UsageHero(snap, fmt)
 
@@ -162,7 +157,6 @@ fun StorageSettingsScreen(
             onAllowMobile = { vm.settings.update { it.copy(wifiOnly = false) } },
         )
 
-        // ---------------- Downloads ----------------
         SoftHeader("Your downloads")
         SoftCard {
             Column(Modifier.softResize()) {
@@ -239,7 +233,6 @@ fun StorageSettingsScreen(
             }
         }
 
-        // ---------------- Cache ----------------
         SoftHeader("Cache")
         SoftCard {
             Column(Modifier.softResize()) {
@@ -260,7 +253,6 @@ fun StorageSettingsScreen(
             }
         }
 
-        // ---------------- Settings ----------------
         SoftHeader("Settings")
         SoftCard {
             SoftSwitchRow(
@@ -296,7 +288,6 @@ fun StorageSettingsScreen(
         }
     }
 
-    // ---------------- Dialogs ----------------
     when (val c = confirm) {
         is Confirm.DeleteSong -> GamutDialog(
             title = "Delete this song?",
@@ -359,15 +350,10 @@ fun StorageSettingsScreen(
 
 private fun limitLabel(mb: Int) = CacheLimitChoices.firstOrNull { it.value == mb }?.label ?: "$mb MB"
 
-// ======================================================================================================
-// Pieces
-// ======================================================================================================
-
 @Composable
 private fun ClearDialog(title: String, body: String, onDismiss: () -> Unit, onConfirm: () -> Unit) =
     GamutDialog(title = title, body = body, confirmLabel = "Clear", destructive = true, onDismiss = onDismiss, onConfirm = onConfirm)
 
-/** Big number + a bar that shows what the app's storage is made of, and how much of the device it takes. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun UsageHero(snap: StorageSnapshot?, fmt: (Long) -> String) {
@@ -420,14 +406,12 @@ private fun LegendItem(color: Color, label: String, value: String) {
     }
 }
 
-/** Collects the fast-changing download state itself, so only this card recomposes while a song downloads. */
 @Composable
 private fun QueueCard(manager: TrackDownloadManager, onCancelAll: () -> Unit, onRetry: () -> Unit, onClearFailed: () -> Unit, onAllowMobile: () -> Unit) {
     val batch by manager.batch.collectAsState()
     val live by manager.states.collectAsState()
     val failed = live.values.count { it is DownloadState.Failed }
     val progress = live.values.filterIsInstance<DownloadState.Active>().firstOrNull()?.progress ?: 0f
-    // Keep the last numbers on screen while the card slides away.
     var shownBatch by remember { mutableStateOf(batch) }
     if (batch.total > 0) shownBatch = batch
     var shownFailed by remember { mutableIntStateOf(failed) }
@@ -545,10 +529,6 @@ private fun EmptyDownloads() {
     }
 }
 
-/**
- * Tappable setting row: title on the left, value + chevron pinned to the right of the title line, and the description
- * on its own full-width line below, so long text can use the whole row instead of a narrow squeezed column.
- */
 @Composable
 private fun StorageValueRow(title: String, value: String, subtitle: String? = null, onClick: () -> Unit) {
     Column(
@@ -569,7 +549,6 @@ private fun StorageValueRow(title: String, value: String, subtitle: String? = nu
     }
 }
 
-/** Cache line: what it is, how big it is, and a small Clear pill (greyed out when there is nothing to clear). */
 @Composable
 private fun CacheRow(title: String, size: String, hasData: Boolean, onClear: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 14.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -601,7 +580,6 @@ private fun TextAction(
     )
 }
 
-/** Same look as "Reset audio settings": a flat tint of the warning colour. */
 @Composable
 private fun DestructiveButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     Box(

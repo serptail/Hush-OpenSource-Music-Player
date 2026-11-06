@@ -73,12 +73,10 @@ class StatsViewModel @Inject constructor(private val store: PlayStatsStore) : Vi
     private val period = MutableStateFlow(StatsPeriod.ALL)
     val selected: StateFlow<StatsPeriod> = period.asStateFlow()
 
-    // Only computed while the Statistics tab is on screen (WhileSubscribed), off the main thread.
     val summary: StateFlow<StatsSummary> = combine(store.snapshot, period) { data, p ->
         summarize(data, p, System.currentTimeMillis())
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StatsSummary())
 
-    /** Called by MainActivity when a song starts playing. */
     fun record(track: Track) = store.record(track)
 
     fun select(p: StatsPeriod) { period.value = p }
@@ -86,15 +84,8 @@ class StatsViewModel @Inject constructor(private val store: PlayStatsStore) : Vi
 }
 
 private const val COLLAPSED_SONGS = 5
-private const val COLLAPSED_ARTISTS = 4 // two rows of two; the next row is teased under a fade
+private const val COLLAPSED_ARTISTS = 4
 
-/**
- * The "Statistics" tab of Recently played. One calm, aligned layout:
- *   1. period switch (text tabs with a thin underline),
- *   2. one summary strip: plays / songs / artists as three equal, evenly spaced figures (they count up),
- *   3. Top artists: a 2-column grid (portrait, name, combined plays), in rank order left to right,
- *   4. Top songs: ranked rows (rank | cover | title + share bar | plays), 5 shown and "Show more" for the rest.
- */
 @Composable
 internal fun StatsTab(vm: StatsViewModel) {
     val summary by vm.summary.collectAsState()
@@ -187,7 +178,6 @@ internal fun StatsTab(vm: StatsViewModel) {
     }
 }
 
-/** Text tabs; the selected one gets a short accent underline. */
 @Composable
 private fun PeriodSwitch(selected: StatsPeriod, onSelect: (StatsPeriod) -> Unit, modifier: Modifier = Modifier) {
     val accent = MaterialTheme.colorScheme.primary
@@ -207,7 +197,6 @@ private fun PeriodSwitch(selected: StatsPeriod, onSelect: (StatsPeriod) -> Unit,
     }
 }
 
-/** Plays / Songs / Artists: three equal columns in one soft panel, thin dividers between. */
 @Composable
 private fun SummaryStrip(summary: StatsSummary) {
     Row(
@@ -225,7 +214,6 @@ private fun SummaryStrip(summary: StatsSummary) {
 
 @Composable
 private fun Figure(value: Int, label: String, modifier: Modifier = Modifier) {
-    // Counts up from zero the first time and glides between values afterwards.
     var target by remember { mutableStateOf(0) }
     LaunchedEffect(value) { target = value }
     val shown by animateIntAsState(target, tween(700, easing = FastOutSlowInEasing), label = "stats-figure")
@@ -247,10 +235,6 @@ private fun SectionTitle(text: String) {
     )
 }
 
-/**
- * Shared row for both lists: rank | image | name (+ subtitle) with a share bar | plays.
- * The bar is drawn with a scaled layer, so its grow-in animation never triggers layout.
- */
 @Composable
 private fun RankRow(
     rank: Int,
@@ -298,10 +282,6 @@ private fun ShareBar(fraction: Float, modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * Top artists as a 2-column grid: portrait, name, and the plays of ALL their songs combined underneath.
- * Collapsed: two rows, then a third row teased under a fade with "Show more" sitting on it.
- */
 @Composable
 private fun ArtistGrid(artists: List<RankedArtist>, expanded: Boolean, onToggle: () -> Unit) {
     val hasMore = artists.size > COLLAPSED_ARTISTS
@@ -351,7 +331,6 @@ private fun ArtistCell(artist: RankedArtist, modifier: Modifier = Modifier) {
     }
 }
 
-/** Fades the content to transparent toward the bottom (a mask, so it works on any background). */
 private fun Modifier.fadeOutBottom(): Modifier = this
     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
     .drawWithContent {
@@ -362,7 +341,6 @@ private fun Modifier.fadeOutBottom(): Modifier = this
         )
     }
 
-/** Verified portrait (the same resolver the artist stacks use) in a circle; the initial while there is none. */
 @Composable
 private fun ArtistCircle(artist: RankedArtist, size: Dp) {
     val photo = rememberArtistPhoto(artist.name, artist.album)
@@ -384,7 +362,6 @@ private fun rememberArtistPhoto(name: String, album: String?): String? {
     val resolver = LocalArtistPhotoResolver.current
     var url by remember(name) { mutableStateOf<String?>(null) }
     LaunchedEffect(name, album, resolver) {
-        // Joint credits ("Drake & Don Toliver") rarely exist as one artist: fall back to the lead artist's portrait.
         url = resolver?.invoke(name, album) ?: leadArtist(name)?.let { resolver?.invoke(it, album) }
     }
     return url

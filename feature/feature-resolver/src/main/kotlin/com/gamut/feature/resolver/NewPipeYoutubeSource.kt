@@ -26,11 +26,6 @@ import javax.inject.Singleton
 class NewPipeYoutubeSource @Inject constructor(
     @Named("youtube") private val client: OkHttpClient,
 ) : YoutubeMusicSearchSource {
-    /**
-     * Extracts a direct audio URL. No caching here: [AudioSourceRepositoryImpl] owns the cache, the in-flight sharing and
-     * forceRefresh (a cache down here would hand a dead URL back after a refresh).
-     * Cancellation is rethrown, not turned into a failed Result (runCatching swallowed it).
-     */
     suspend fun audioUrl(videoId: String, quality: StreamQuality = StreamQuality.NORMAL): Result<String> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         try {
             ensureInitialized()
@@ -45,11 +40,6 @@ class NewPipeYoutubeSource @Inject constructor(
         }
     }
 
-    /**
-     * Data saver / Normal prefer AAC/m4a (same preference as the yt-dlp path: cheaper to decode, plays natively in
-     * ExoPlayer): lowest bitrate for Data saver, highest for Normal. High takes the highest bitrate of any codec.
-     * (AUTO is turned into a concrete level before it gets here; it is treated as High if it ever does.)
-     */
     private fun List<AudioStream>.pickFor(quality: StreamQuality): String? {
         val usable = filter { it.isUrl && it.content.isNotBlank() }
         val ordered = when (quality) {
@@ -65,10 +55,6 @@ class NewPipeYoutubeSource @Inject constructor(
         return ordered.firstOrNull()?.content
     }
 
-    /**
-     * Highest-bitrate direct audio stream of ANY codec (Opus/WebM ~160 kbps beats AAC ~128 kbps). Used by downloads,
-     * which save the stream untouched; playback keeps preferring m4a in [audioUrl].
-     */
     suspend fun bestAudioUrl(videoId: String): Result<String> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         try {
             ensureInitialized()
@@ -104,8 +90,6 @@ class NewPipeYoutubeSource @Inject constructor(
                     .mapNotNull { it.toCandidate() }
                     .take(25)
             } catch (e: CancellationException) {
-                // runCatching used to swallow this: a cancelled search came back as "no results", and
-                // HybridYoutubeMusicSearchSource then started a slow yt-dlp search nobody was waiting for.
                 throw e
             } catch (e: Exception) {
                 emptyList()
@@ -114,11 +98,6 @@ class NewPipeYoutubeSource @Inject constructor(
 
     override suspend fun searchBroad(query: String): List<YoutubeCandidate> = emptyList()
 
-    /**
-     * Pays the one-off cold-start cost (downloader init, visitor_id, ...) before the first tap, so the first play
-     * does not sit near [AudioSourceRepositoryImpl]'s 8 s NewPipe ceiling and fall back to the slow yt-dlp path.
-     * Failures are ignored: this is only a warm-up.
-     */
     suspend fun warmUp() {
         runCatching { searchSongs("music") }
     }

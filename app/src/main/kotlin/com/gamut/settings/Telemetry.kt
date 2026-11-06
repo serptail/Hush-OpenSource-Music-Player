@@ -28,16 +28,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Local-only diagnostics. Nothing here leaves the phone on its own: [snapshot] is read when the user ticks
- * "Attach diagnostics" on the feedback screen, and the screen can show the exact text first.
- *
- * Collected: app/device/OS versions, memory, free storage, battery %, network *type*, audio output *types*, the last
- * crash (scrubbed), and a small ring buffer of recent events. NOT collected: account, email, track names, ids,
- * location, installed apps, advertising ids, IP address.
- *
- * Call [install] once from MainActivity.onCreate. Use [breadcrumb] / [recordError] anywhere you want more context.
- */
 @Singleton
 class TelemetryCollector @Inject constructor(
     @ApplicationContext context: Context,
@@ -49,7 +39,6 @@ class TelemetryCollector @Inject constructor(
     private val startedAt = System.currentTimeMillis()
     private val crashFile = File(File(app.filesDir, "telemetry").apply { mkdirs() }, "last_crash.txt")
 
-    /** One short line of context ("player: started", "nav: opened settings"). Never put user content in here. */
     fun breadcrumb(tag: String, message: String) {
         val line = "+${(System.currentTimeMillis() - startedAt) / 1000}s ${tag.take(20)}: ${scrub(message).take(160)}"
         synchronized(lock) {
@@ -58,7 +47,6 @@ class TelemetryCollector @Inject constructor(
         }
     }
 
-    /** A handled error: class, scrubbed message and the top three frames. */
     fun recordError(tag: String, t: Throwable) {
         val where = t.stackTrace.take(3).joinToString(" < ") { "${it.fileName}:${it.lineNumber}" }
         breadcrumb("error/$tag", "${t.javaClass.simpleName}: ${t.message.orEmpty()} @ $where")
@@ -87,12 +75,11 @@ class TelemetryCollector @Inject constructor(
 
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
-            try { writeCrash(thread, error) } catch (_: Exception) { /* never let reporting mask the real crash */ }
+            try { writeCrash(thread, error) } catch (_: Exception) { }
             previous?.uncaughtException(thread, error)
         }
     }
 
-    /** Human-readable report. Safe to call from any thread; capped at [MAX_CHARS]. */
     fun snapshot(extras: Map<String, String> = emptyMap()): String {
         val out = StringBuilder()
         fun line(k: String, v: Any?) { out.append(k).append(": ").append(v).append('\n') }
@@ -194,7 +181,6 @@ class TelemetryCollector @Inject constructor(
         private val TOKEN = Regex("\\b[A-Za-z0-9_-]{32,}\\b")
         private val IPV4 = Regex("\\b\\d{1,3}(\\.\\d{1,3}){3}\\b")
 
-        /** Strips emails, URL query strings, long token-like strings and IPv4 addresses. */
         fun scrub(s: String): String = s
             .replace(EMAIL, "<email>")
             .replace(URL_QUERY, "\$1?<redacted>")

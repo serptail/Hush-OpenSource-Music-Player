@@ -45,15 +45,10 @@ import kotlinx.coroutines.withContext
 sealed interface SyncStatus {
     data object Idle : SyncStatus
     data object Syncing : SyncStatus
-    /** Signed in but no working internet: nothing is wrong, changes wait in the queue. */
     data object Offline : SyncStatus
     data class Error(val message: String) : SyncStatus
 }
 
-/**
- * Runs [SyncEngine] when signed in + online: at start, after local changes (debounced), on reconnect, every 15 min,
- * and after a failure with exponential backoff (30 s, 1 min, 2 min ... capped at 15 min).
- */
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 @Singleton
 class SyncManager @Inject constructor(
@@ -69,7 +64,6 @@ class SyncManager @Inject constructor(
     val lastSyncedMs: StateFlow<Long?> = _lastSyncedMs
 
     private val _signedOutRemotely = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    /** Fires once when the server says this session is over (signed out elsewhere / account deleted). */
     val signedOutRemotely: SharedFlow<Unit> = _signedOutRemotely.asSharedFlow()
     @Volatile private var offline = false
 
@@ -81,10 +75,8 @@ class SyncManager @Inject constructor(
 
     fun syncNow() { manual.tryEmit(Unit) }
 
-    /** Runs [block] while no sync can run (used before wiping local data, so a sync cannot re-insert rows mid-wipe). */
     suspend fun <T> withSyncPaused(block: suspend () -> T): T = lock.withLock { block() }
 
-    /** After an account is deleted but its local copy is kept: that data is now plain guest data for the next sign-in. */
     suspend fun forgetOwner() = withSyncPaused { state.put(SyncStateEntity(SYNC_OWNER_KEY, "")) }
 
     fun start(scope: CoroutineScope) {
@@ -104,8 +96,8 @@ class SyncManager @Inject constructor(
                 .flatMapLatest { active ->
                     if (!active) emptyFlow()
                     else merge(
-                        flow { while (true) { emit(Unit); delay(PERIOD_MS) } },                       // start + periodic
-                        pending.observeCount().filter { it > 0 }.debounce(2_000).map { },             // local changes
+                        flow { while (true) { emit(Unit); delay(PERIOD_MS) } },
+                        pending.observeCount().filter { it > 0 }.debounce(2_000).map { },
                         manual,
                     )
                 }
@@ -123,7 +115,7 @@ class SyncManager @Inject constructor(
             _lastSyncedMs.value = state.get("last_synced_ms")?.toLongOrNull()
             _status.value = SyncStatus.Idle
         } catch (e: CancellationException) {
-            _status.value = if (offline) SyncStatus.Offline else SyncStatus.Idle   // never stay stuck on "Syncing"
+            _status.value = if (offline) SyncStatus.Offline else SyncStatus.Idle
             throw e
         } catch (e: SessionEndedException) {
             failures = 0
@@ -136,7 +128,6 @@ class SyncManager @Inject constructor(
         }
     }
 
-    /** A dead connection can surface as many exception types; walk the causes instead of showing a raw URL. */
     private fun Throwable.isNetworkProblem(depth: Int = 0): Boolean {
         if (depth > 6) return false
         if (this is java.io.IOException || this::class.java.simpleName == "HttpRequestException") return true
@@ -157,7 +148,6 @@ class SyncManager @Inject constructor(
 
     private fun online() = callbackFlow {
         val cm = context.getSystemService(ConnectivityManager::class.java)
-        // "Connected" must mean the internet really works (VALIDATED), not just that wifi or mobile data is attached.
         fun hasInternet() = cm.getNetworkCapabilities(cm.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) { trySend(hasInternet()) }
@@ -178,7 +168,6 @@ class SyncManager @Inject constructor(
     }
 }
 
-/** "Clear local data" on sign-out / delete account. Wipes the queue and cursors too, so the next sign-in starts clean. */
 class LocalDataCleaner @Inject constructor(private val db: GamutDatabase, private val sync: SyncManager) {
     suspend fun clear() = sync.withSyncPaused { withContext(Dispatchers.IO) { db.clearAllTables() } }
 }

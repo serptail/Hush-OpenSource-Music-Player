@@ -25,11 +25,6 @@ import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-/**
- * What the release workflow publishes next to every APK as `latest.json` (see .github/workflows/release.yml).
- * [minVersionCode]: every build below this must update before it can be used. The workflow sets it to the new build's own
- * code, so every release is mandatory (unless it was started with force_min = false).
- */
 @Serializable
 data class UpdateInfo(
     val versionCode: Int,
@@ -43,7 +38,6 @@ data class UpdateInfo(
 
 private val json = Json { ignoreUnknownKeys = true }
 
-/** Asks GitHub which build is the latest. The last good answer is kept, so a blocked app stays blocked while offline. */
 class UpdateChecker(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("app_update", Context.MODE_PRIVATE)
     private val client = OkHttpClient.Builder()
@@ -51,31 +45,23 @@ class UpdateChecker(context: Context) {
         .readTimeout(8, TimeUnit.SECONDS)
         .build()
 
-    /** Off for debug builds and for local builds that were not given a repository. */
     val enabled: Boolean get() = BuildConfig.UPDATE_MANIFEST_URL.isNotBlank() && !BuildConfig.DEBUG
 
-    /** The newest manifest: from GitHub, else the last one seen, else null (never reached GitHub yet: let the user in). */
     suspend fun latest(): UpdateInfo? = withContext(Dispatchers.IO) {
         val fresh = fetch()
         when {
-            fresh == null -> cached()          // GitHub unreachable: the last answer seen decides
-            !apkExists(fresh) -> null          // the manifest is out but its APK is not: nothing to offer, so no prompt and no block
+            fresh == null -> cached()
+            !apkExists(fresh) -> null
             else -> fresh.also { prefs.edit().putString(KEY, json.encodeToString(UpdateInfo.serializer(), it)).apply() }
         }
     }
 
-    /**
-     * Is the APK the manifest points to really there? Asks for one byte only.
-     * False only when GitHub clearly says no (a 4xx other than 429) or the size differs from the manifest.
-     * Network trouble or a 5xx proves nothing, so it does not hide an update.
-     */
     private fun apkExists(info: UpdateInfo): Boolean = try {
         val request = Request.Builder().url(info.apkUrl).header("Range", "bytes=0-0").build()
         client.newCall(request).execute().use { response ->
             if (response.code in 400..499 && response.code != 429) {
                 false
             } else {
-                // "Content-Range: bytes 0-0/TOTAL" tells the full size.
                 val total = response.header("Content-Range")?.substringAfter('/')?.toLongOrNull()
                 total == null || info.sizeBytes <= 0 || total == info.sizeBytes
             }
@@ -102,14 +88,12 @@ class UpdateChecker(context: Context) {
     private companion object { const val KEY = "latest" }
 }
 
-/** Downloads the APK, checks it, and hands it to Android's package installer. */
 class UpdateInstaller(private val context: Context) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    /** Installing from outside the Play Store is a per-app switch the user has to turn on once. */
     fun canInstall(): Boolean = context.packageManager.canRequestPackageInstalls()
 
     fun openInstallSettings() {
@@ -118,10 +102,6 @@ class UpdateInstaller(private val context: Context) {
         context.startActivity(intent)
     }
 
-    /**
-     * Fetches the APK into the cache (reusing a finished copy), verifying its SHA-256. [onProgress] is 0..1.
-     * An interrupted download keeps its .part file: the next call hashes what is there and asks GitHub only for the rest.
-     */
     suspend fun download(info: UpdateInfo, onProgress: (Float) -> Unit): File = withContext(Dispatchers.IO) {
         if (!info.apkUrl.startsWith("https://github.com/")) throw IOException("Unexpected download address")
         val dir = File(context.cacheDir, "update").apply { mkdirs() }
@@ -143,10 +123,9 @@ class UpdateInstaller(private val context: Context) {
                     done += n
                 }
             }
-            if (info.sizeBytes > 0 && done > info.sizeBytes) { part.delete(); digest.reset(); done = 0L }   // not ours: start over
+            if (info.sizeBytes > 0 && done > info.sizeBytes) { part.delete(); digest.reset(); done = 0L }
         }
 
-        // Everything is already here (the app stopped between the last byte and the rename): nothing left to ask for.
         if (info.sizeBytes <= 0 || done != info.sizeBytes) {
             val request = Request.Builder().url(info.apkUrl).apply { if (done > 0) header("Range", "bytes=$done-") }.build()
             client.newCall(request).execute().use { response ->
@@ -154,7 +133,7 @@ class UpdateInstaller(private val context: Context) {
                 if (!response.isSuccessful) throw IOException("Download failed (HTTP ${response.code})")
                 val body = response.body ?: throw IOException("Empty download")
                 val resumed = response.code == 206 && done > 0
-                if (!resumed) { digest.reset(); done = 0L }   // a full answer (or a fresh start): from the first byte
+                if (!resumed) { digest.reset(); done = 0L }
                 val total = info.sizeBytes.takeIf { it > 0 } ?: body.contentLength().takeIf { it > 0 }?.let { done + it } ?: 0L
                 var lastPercent = -1
                 if (total > 0) { lastPercent = (done * 100 / total).toInt(); onProgress(lastPercent / 100f) }
@@ -187,10 +166,6 @@ class UpdateInstaller(private val context: Context) {
         target
     }
 
-    /**
-     * Android refuses an update signed with a different key, with a cryptic error. Catch it first, with a clear message.
-     * Null = fine (or not checkable on this Android version).
-     */
     fun signerProblem(apk: File): String? {
         if (Build.VERSION.SDK_INT < 28) return null
         return runCatching {
@@ -208,14 +183,12 @@ class UpdateInstaller(private val context: Context) {
         }.getOrNull()
     }
 
-    /** Streams the APK into a package-installer session. The result arrives at [UpdateInstallReceiver]. */
     fun install(apk: File) {
         val installer = context.packageManager.packageInstaller
         installer.mySessions.forEach { runCatching { installer.abandonSession(it.sessionId) } }
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(context.packageName)
             setSize(apk.length())
-            // Once Gamut has installed an update itself, newer Androids can apply the next ones without a confirmation.
             if (Build.VERSION.SDK_INT >= 31) setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
         }
         val id = installer.createSession(params)
@@ -227,7 +200,6 @@ class UpdateInstaller(private val context: Context) {
                 }
             }
             val callback = Intent(context, UpdateInstallReceiver::class.java).setAction(ACTION_RESULT)
-            // The system adds the result to this intent, so it has to be mutable.
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
             session.commit(PendingIntent.getBroadcast(context, id, callback, flags).intentSender)
         }
@@ -249,7 +221,6 @@ class UpdateInstaller(private val context: Context) {
     companion object { const val ACTION_RESULT = "com.gamut.update.INSTALL_RESULT" }
 }
 
-/** Install failures, from the receiver to whoever is showing the update screen. */
 object UpdateStatusBus {
     private val _failures = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val failures: SharedFlow<String> = _failures
@@ -257,12 +228,10 @@ object UpdateStatusBus {
     fun fail(message: String) { _failures.tryEmit(message) }
 }
 
-/** Gets the installer's verdict. A success needs no handling: Android replaces and restarts the app. */
 class UpdateInstallReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-                // Android wants the user's OK (the first update always does): show its confirmation screen.
                 val confirm = if (Build.VERSION.SDK_INT >= 33) {
                     intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
                 } else {

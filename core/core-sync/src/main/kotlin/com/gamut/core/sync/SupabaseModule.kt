@@ -17,7 +17,6 @@ import javax.inject.Singleton
 import kotlinx.serialization.json.Json
 
 object SyncConfig {
-    /** False in forks that have not configured a Supabase project: the app then stays purely local. */
     val enabled: Boolean get() = BuildConfig.SUPABASE_URL.isNotBlank() && BuildConfig.SUPABASE_ANON_KEY.isNotBlank()
 }
 
@@ -30,7 +29,6 @@ object SupabaseModule {
         supabaseUrl = BuildConfig.SUPABASE_URL.ifBlank { "https://unconfigured.invalid" },
         supabaseKey = BuildConfig.SUPABASE_ANON_KEY.ifBlank { "unconfigured" },
     ) {
-        // Nulls must be sent explicitly: deleted_at = null is how a soft-deleted row is brought back.
         defaultSerializer = KotlinXSerializer(Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = true })
         install(Auth) { sessionManager = EncryptedSessionManager(context) }
         install(Postgrest)

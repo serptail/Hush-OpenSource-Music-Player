@@ -18,33 +18,22 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 sealed interface ShazamResult {
-    /** The song, already shaped as a regular [Track] (cover, album, length when known), ready to save or play. */
     data class Match(val track: Track, val shazamUrl: String?) : ShazamResult
     data object NoMatch : ShazamResult
     data class Failure(val message: String) : ShazamResult
 }
 
-/**
- * Recognizes a song fully on the device: the audio is fingerprinted locally ([ShazamSignature]) and only the
- * fingerprint (not the audio) is sent to Shazam's public discovery endpoint. No server and no API key are involved.
- * The same request ShazamIO makes, so the same caveat applies: it is an unofficial, undocumented endpoint.
- *
- * Plain HttpURLConnection + org.json on purpose: no extra dependencies.
- */
 @Singleton
 class ShazamClient @Inject constructor(private val configs: ShazamConfigStore) {
-
-    /** One try: the outcome, and whether the failure looks like the request itself is outdated (a fresh config may fix it). */
     private class Sent(val result: ShazamResult, val configProblem: Boolean = false)
 
-    /** [pcm] = raw 16 kHz mono 16-bit little-endian PCM (what MicRecorder produces), ideally 5 to 12 seconds. */
     suspend fun recognize(pcm: ByteArray): ShazamResult = withContext(Dispatchers.IO) {
         val signature = try {
             ShazamSignature.fromPcm16(pcm)
         } catch (e: Exception) {
             return@withContext ShazamResult.Failure("Couldn't analyse the audio")
         }
-        configs.refreshIfDue()   // at most one short lookup every few hours
+        configs.refreshIfDue()
         val first = send(signature, configs.current())
         if (first.configProblem && configs.refreshNow()) {
             Log.i(TAG, "retrying with the newer request config")
@@ -72,7 +61,6 @@ class ShazamClient @Inject constructor(private val configs: ShazamConfigStore) {
         } catch (e: Exception) {
             return Sent(ShazamResult.Failure("Recognition failed"), configProblem = true)
         }
-        // A blocking socket read can't be interrupted, but closing the connection from here makes it throw.
         val onCancel = currentCoroutineContext().job.invokeOnCompletion { cause -> if (cause != null) connection.disconnect() }
         return try {
             connection.requestMethod = "POST"
@@ -132,10 +120,8 @@ class ShazamClient @Inject constructor(private val configs: ShazamConfigStore) {
         val images = track.optJSONObject("images")
         val cover = images?.str("coverarthq") ?: images?.str("coverart")
 
-        // Shazam doesn't know the track length; iTunes does (best effort, never fails the recognition).
         val extra = itunes(title, artist)
 
-        // Shazam almost always has an ISRC; if it doesn't, a stable id of our own keeps the library key unique.
         val isrc = track.str("isrc") ?: "shazam:${track.str("key") ?: "$artist-$title".lowercase()}"
         return ShazamResult.Match(
             track = Track(
@@ -143,7 +129,7 @@ class ShazamClient @Inject constructor(private val configs: ShazamConfigStore) {
                 title = title,
                 artist = artist,
                 album = album ?: extra?.album,
-                durationMs = extra?.durationMs ?: 0L,   // 0 = unknown; the player learns it from the stream
+                durationMs = extra?.durationMs ?: 0L,
                 albumArtUrl = cover ?: extra?.artworkUrl,
                 source = TrackSource.ITUNES,
             ),
@@ -153,7 +139,6 @@ class ShazamClient @Inject constructor(private val configs: ShazamConfigStore) {
 
     private class ItunesInfo(val durationMs: Long?, val album: String?, val artworkUrl: String?)
 
-    /** Length / album / cover of the same song from the iTunes catalog. Returns null if not found (never throws). */
     private suspend fun itunes(title: String, artist: String): ItunesInfo? {
         val wantedTitle = norm(title)
         val wantedArtist = norm(artist)
@@ -195,11 +180,9 @@ class ShazamClient @Inject constructor(private val configs: ShazamConfigStore) {
         return null
     }
 
-    /** Lower-case letters and digits only, without "(feat. ...)" / "[Remastered]" parts. Works for any script. */
     private fun norm(text: String): String =
         text.replace(BRACKETS, "").filter { it.isLetterOrDigit() }.lowercase()
 
-    /** A string field, or null when it is missing, JSON null, or blank (org.json would give "null" for a JSON null). */
     private fun JSONObject.str(name: String): String? =
         if (isNull(name)) null else optString(name).takeIf { it.isNotBlank() }
 

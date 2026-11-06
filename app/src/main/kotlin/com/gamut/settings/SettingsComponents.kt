@@ -33,7 +33,6 @@ import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 
-/** Shared frame of the settings screens: back arrow + title, the body, and the docked mini player at the bottom. */
 @Composable
 fun SettingsScaffold(
     title: String,
@@ -41,7 +40,6 @@ fun SettingsScaffold(
     nowPlaying: @Composable () -> Unit,
     body: @Composable () -> Unit,
 ) {
-    // Same as every other screen: ink() (white on dark covers, near-black on light ones) comes from CoverTheme.
     val palette = LocalCoverPalette.current
     if (LocalPageActive.current) TransparentStatusBar(darkIcons = palette.isLight)
     CoverTheme(palette) {
@@ -104,7 +102,6 @@ fun SettingsRow(
     }
 }
 
-/** Flat translucent-ink button, like every other surface in the app. */
 @Composable
 fun SettingsButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, destructive: Boolean = false) {
     Box(

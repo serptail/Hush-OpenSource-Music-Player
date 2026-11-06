@@ -12,24 +12,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
 
-// ======================================================================================
-// Tuning. Everything you are likely to want to change is here.
-// ======================================================================================
-
-/**
- * false: mint (#1CF2C0) is the hot spot at the top edge and magenta (#EE22FF) fades out at the bottom (the reference
- *        image flipped upside down).
- * true:  magenta at the top, mint at the bottom (the stops read literally from offset 0 at the focal point).
- */
 private const val MagentaAtBottom = false
 
-/** How close to the bottom edge the hot spot sits (0 = centre of the blob, 0.99 = on the bottom edge). */
 private const val BlobFocalDistance = 0.97f
 
-/** How much of the outer edge fades out (0 = hard edge, 1 = fades from the hot spot). Top softness, mostly. */
 private const val BlobFalloff = 0.55f
 
-/** Your stops. Offsets are baked into the shader's ramp(): 0, .20, .40, .55, .72, .86, 1. */
 private val BlobColors = listOf(
     Color(0xFFEE22FF),
     Color(0xFFA02CFF),
@@ -41,15 +29,6 @@ private val BlobColors = listOf(
 )
 private val BlobOffsets = floatArrayOf(0f, 0.2f, 0.4f, 0.55f, 0.72f, 0.86f, 1f)
 
-/**
- * Focal radial gradient inside a circle, in the style of the Paper Shaders "static-radial-gradient"
- * (paper-design/shaders, Apache-2.0). The gradient's focal point sits near the bottom edge of the circle, so the colour
- * starts there and spreads downward. Written from the technique, not copied line by line.
- *
- * For each pixel we cast a ray from the focal point through it, find where that ray leaves the circle, and use
- * (distance from focal point) / (distance to the edge) as the gradient position. That is what makes the bottom edge
- * crisp and the far edge long and soft.
- */
 private const val BlobAgsl = """
 uniform float2 resolution;
 uniform float3 c0;
@@ -103,10 +82,6 @@ half4 main(float2 fc) {
 }
 """
 
-/**
- * The welcome-screen blob. The shape is an ellipse that fills the box, so size it to the width and height you want;  its bottom edge sits at the
- * bottom of the box. [intensity] scales the opacity (lower it in light mode so text stays readable).
- */
 @Composable
 fun GradientBlob(modifier: Modifier = Modifier, intensity: Float = 1f) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -132,7 +107,6 @@ private fun ShaderBlob(modifier: Modifier, intensity: Float) {
     }
 }
 
-/** Below Android 13 there is no AGSL: a plain radial gradient from the bottom centre gives the same feel. */
 @Composable
 private fun GradientBlobFallback(modifier: Modifier, intensity: Float) {
     Canvas(modifier) {

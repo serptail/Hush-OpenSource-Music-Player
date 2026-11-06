@@ -11,10 +11,6 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-/**
- * Persists [AppearanceSettings] in SharedPreferences. Read synchronously at construction, so the very first frame
- * (and the window background set in MainActivity.onCreate) already uses the saved look: no flash of the wrong theme.
- */
 @Singleton
 class AppearanceStore @Inject constructor(@ApplicationContext context: Context) {
     private val prefs = context.getSharedPreferences("gamut_appearance", Context.MODE_PRIVATE)

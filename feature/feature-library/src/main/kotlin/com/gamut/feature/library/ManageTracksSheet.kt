@@ -77,27 +77,14 @@ import com.gamut.core.designsystem.pressScale
 import com.gamut.core.model.Track
 import com.gamut.feature.resolver.DownloadState
 
-/** Background of every bottom sheet (same as the queue sheet: LocalCoverPalette.current.base). */
 internal val LibrarySheetBackground: Color @Composable get() = LocalCoverPalette.current.base
 private val ManageTextSecondary: Color @Composable get() = ink(0.6f)
 private val ManageDestructive = Color(0xFFFF6B6B)
 
-/** Fastest auto-scroll while dragging at an edge, in pixels per frame. */
 private const val MAX_AUTOSCROLL_PX = 14f
-
-// ---------------------------------------------------------------------------------------------------------------
-// Manage sheet
-// ---------------------------------------------------------------------------------------------------------------
 
 private fun songsLabel(n: Int) = if (n == 1) "1 song" else "$n songs"
 
-/**
- * Manage a list of songs (favorites or a playlist): every song in a list, in order.
- *  - Hold a song, then move it up or down: the others make room, the new order is saved when you let go.
- *  - Tap a song to remove it from favorites (an Undo pill appears at the bottom).
- *  - Download everything for offline listening, or remove the downloads.
- * The list shown is a local draft while you drag; the database is written once, on drop.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ManageTracksSheet(
@@ -120,12 +107,10 @@ internal fun ManageTracksSheet(
     val draft = remember { mutableStateListOf<Track>().apply { addAll(tracks) } }
     var draggingKey by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
-    // Which way the finger last moved (-1 up, 1 down, 0 not yet): the list only auto-scrolls the way you are heading.
     var dragDirection by remember { mutableIntStateOf(0) }
     var undo by remember { mutableStateOf<Pair<Int, Track>?>(null) }
     var confirmRemoveDownloads by remember { mutableStateOf(false) }
 
-    // Follow the database (a removal, an undo, a like from elsewhere), but never while a drag is in progress.
     LaunchedEffect(tracks) {
         if (draggingKey == null) {
             draft.clear()
@@ -133,22 +118,16 @@ internal fun ManageTracksSheet(
         }
     }
 
-    // Songs stored on the phone have nothing to download: the download row only counts the streamed ones.
     val isrcs = remember(tracks) { tracks.filter { !it.isLocal }.map { it.isrc }.distinct() }
     val downloadUi = remember(isrcs, downloadStates) { playlistDownloadUi(isrcs, downloadStates) }
     val downloadedCount = remember(isrcs, downloadStates) { isrcs.count { downloadStates[it] == DownloadState.Done } }
 
-    /**
-     * The dragged row's slot in the list, but only when the layout has caught up with the last swap (otherwise its
-     * numbers are one row stale). Null = not dragging, scrolled out of view, or still catching up.
-     */
     fun draggedItem(): androidx.compose.foundation.lazy.LazyListItemInfo? {
         val key = draggingKey ?: return null
         val item = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key } ?: return null
         return if (item.index == draft.indexOfFirst { it.isrc == key }) item else null
     }
 
-    /** Boundary: the dragged row can never leave the list, top or bottom (it stops at the edge, it does not float out). */
     fun clampOffset(raw: Float): Float {
         val item = draggedItem() ?: return raw
         val info = listState.layoutInfo
@@ -157,7 +136,6 @@ internal fun ManageTracksSheet(
         return if (max < min) raw else raw.coerceIn(min, max)
     }
 
-    /** Moves the dragged song when its middle crosses into a neighbour. Rows are all the same height. */
     fun swapIfNeeded() {
         val current = draggedItem() ?: return
         val key = draggingKey ?: return
@@ -167,19 +145,13 @@ internal fun ManageTracksSheet(
         val target = info.firstOrNull { it.key != key && middle >= it.offset && middle < it.offset + it.size } ?: return
         val to = draft.indexOfFirst { it.isrc == target.key }
         if (to < 0) return
-        // A LazyColumn keeps its first visible ITEM (by key) in place when the list is reordered. If the swap moves
-        // that item (dragging near the top), the whole list would jump by a row and throw the row off your finger.
-        // So remember the scroll position and pin it again after the swap.
         val firstIndex = listState.firstVisibleItemIndex
         val firstOffset = listState.firstVisibleItemScrollOffset
         draft.add(to, draft.removeAt(from))
         listState.requestScrollToItem(firstIndex, firstOffset)
-        // The row now sits where the target was: shift the finger offset so it stays under the finger.
         dragOffset += (current.offset - target.offset)
     }
 
-    // Near the top or bottom edge the list scrolls by itself, in the direction you are dragging, faster the closer
-    // you get to the edge. Nothing happens until you actually move towards an edge.
     LaunchedEffect(draggingKey) {
         if (draggingKey == null) return@LaunchedEffect
         while (draggingKey != null) {
@@ -196,7 +168,6 @@ internal fun ManageTracksSheet(
                     else -> 0f
                 }
                 if (speed != 0f) {
-                    // The content moves under the row: add what was really scrolled, so the row stays under the finger.
                     dragOffset += listState.scrollBy(speed)
                 }
             }
@@ -232,7 +203,6 @@ internal fun ManageTracksSheet(
                 modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 2.dp, bottom = 14.dp),
             )
 
-            // Download everything: the whole row and the button on it do the same thing.
             if (isrcs.isNotEmpty()) Row(
                 Modifier
                     .fillMaxWidth()
@@ -271,7 +241,7 @@ internal fun ManageTracksSheet(
                     glyphSize = 22.dp,
                     tint = ink(0.85f),
                     accent = ink(),
-                    idleIcon = PhosphorIcons.Bold.BoxArrowDown,   // all of them: box-arrow-down -> (ring) -> archive
+                    idleIcon = PhosphorIcons.Bold.BoxArrowDown,
                     doneIcon = PhosphorIcons.Fill.Archive,
                 )
             }
@@ -329,7 +299,6 @@ internal fun ManageTracksSheet(
                             dragOffset = 0f
                             if (draft.map { it.isrc } != tracks.map { it.isrc }) onReorder(draft.toList())
                         },
-                        // Remote: a grabbed row moves one place per Up / Down press.
                         onMove = { delta ->
                             val at = draft.indexOfFirst { it.isrc == track.isrc }
                             val to = at + delta
@@ -374,7 +343,7 @@ internal fun ManageTracksSheet(
                             .pressScale(onClick = {
                                 draft.add(at.coerceIn(0, draft.size), removed)
                                 undo = null
-                                onReorder(draft.toList())   // re-adds it, in its old place
+                                onReorder(draft.toList())
                             })
                             .padding(horizontal = 16.dp, vertical = 14.dp),
                     )
@@ -391,13 +360,6 @@ internal fun ManageTracksSheet(
     }
 }
 
-/**
- * One favorite in the manage list. Tapping the row does nothing (no accidental removal). Reordering:
- *  - touch the grip on the right and move: the row follows the finger at once;
- *  - or hold anywhere else on the row, then move.
- * The trash button removes the song (the sheet offers Undo). All of it is one gesture handler so the zones
- * (row / trash / grip) never fight over the same touch.
- */
 @Composable
 private fun ManageRow(
     track: Track,
@@ -412,7 +374,6 @@ private fun ManageRow(
     onMove: (Int) -> Unit,
     onMoveDone: () -> Unit,
 ) {
-    // Remote: OK grabs this row, Up / Down then move it, OK (or moving focus away) drops it. Right goes to the trash button.
     var grabbed by remember { mutableStateOf(false) }
     val moveNow by rememberUpdatedState(onMove)
     val doneNow by rememberUpdatedState(onMoveDone)
@@ -451,10 +412,8 @@ private fun ManageRow(
             .pointerInput(track.isrc) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    // Right edge: [trash 44dp][grip 44dp][12dp padding].
                     val gripStart = size.width - 56.dp.toPx()
                     val trashStart = gripStart - 44.dp.toPx()
-                    // The trash button handles its own tap.
                     if (down.position.x in trashStart..gripStart) return@awaitEachGesture
                     val grabbed = if (down.position.x >= gripStart) {
                         awaitVerticalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
@@ -465,7 +424,6 @@ private fun ManageRow(
                         start()
                         try {
                             drag(grabbed.id) { change ->
-                                // Read the movement BEFORE consuming: a consumed change reports zero movement.
                                 val dy = change.positionChange().y
                                 change.consume()
                                 dragBy(dy)

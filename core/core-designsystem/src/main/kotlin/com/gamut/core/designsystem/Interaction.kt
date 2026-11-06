@@ -61,18 +61,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-/**
- * THE pressScale (delete the one in GamutTheme.kt): your draw-phase version (the animation runs in a coroutine and is
- * only READ inside graphicsLayer, so pressing a row never recomposes it) plus hover and a haptic tick.
- *
- *  - press:   shrinks fast and firm (critically damped, no wobble while the finger is down)
- *  - release: springs back with a small overshoot, which is the soft bounce
- *  - hover:   mouse / stylus / trackpad (ChromeOS, tablets, desktop mode) gets a gentle lift; touch never hovers
- *  - focus:   D-pad / keyboard focus NEVER resizes the item (scaling pushed rows past screen / card edges and shifted their
- *             text). It draws a soft fill plus a 2dp ring entirely INSIDE the item's own bounds, so no parent can clip it
- *             and nothing around it moves. Enter / D-pad center clicks (clickable handles that)
- *  - a light haptic tick on click
- */
 fun Modifier.pressScale(
     onClick: () -> Unit,
     scaleDown: Float = 0.94f,
@@ -83,7 +71,6 @@ fun Modifier.pressScale(
 ): Modifier = composed {
     val interaction = remember { MutableInteractionSource() }
     val scale = remember { Animatable(1f) }
-    // 0..1, read only in the draw phase: the D-pad focus ring fades in without recomposing the row.
     val ring = remember { Animatable(0f) }
     val ringColor = ink(0.9f)
     val fillColor = ink(0.10f)
@@ -101,7 +88,6 @@ fun Modifier.pressScale(
                 is PressInteraction.Release, is PressInteraction.Cancel -> pressed = false
                 is HoverInteraction.Enter -> hovered = true
                 is HoverInteraction.Exit -> hovered = false
-                // D-pad / keyboard focus (TV, ChromeOS): clickable is focusable and emits these on our source.
                 is FocusInteraction.Focus -> focused = true
                 is FocusInteraction.Unfocus -> focused = false
             }
@@ -120,8 +106,6 @@ fun Modifier.pressScale(
             scaleX = scale.value
             scaleY = scale.value
         }
-        // Focus look: soft fill behind the content, 2dp ring on top, both inside the item's bounds (never clipped, never
-        // overlapping neighbours). Round for pills / circles, 16dp otherwise.
         .drawWithContent {
             val a = ring.value
             val corner = minOf(16.dp.toPx(), size.minDimension / 2f)
@@ -152,10 +136,6 @@ fun Modifier.pressScale(
         }
 }
 
-/**
- * Visible D-pad focus for rows that have their own click handling (combinedClickable, toggleable...).
- * Put it BEFORE the clickable in the chain, so it observes that clickable's focus target.
- */
 fun Modifier.focusRing(shape: Shape = RoundedCornerShape(14.dp)): Modifier = composed {
     var focused by remember { mutableStateOf(false) }
     val color = ink(0.9f)
@@ -167,7 +147,6 @@ fun Modifier.focusRing(shape: Shape = RoundedCornerShape(14.dp)): Modifier = com
         .then(if (focused) Modifier.background(fill, shape).border(2.dp, color, shape) else Modifier)
 }
 
-/** Moving highlight for placeholders. Needs CoverTheme (uses [ink]). */
 fun Modifier.shimmer(): Modifier = composed {
     val t = rememberInfiniteTransition(label = "shimmer")
     val x by t.animateFloat(
@@ -189,13 +168,11 @@ fun Modifier.shimmer(): Modifier = composed {
     }
 }
 
-/** A placeholder bar. */
 @Composable
 fun SkeletonBar(width: Dp, height: Dp = 14.dp, modifier: Modifier = Modifier) {
     Box(modifier.width(width).height(height).clip(RoundedCornerShape(6.dp)).shimmer())
 }
 
-/** One song row placeholder (54dp cover + two lines), same metrics as the real rows. */
 @Composable
 fun TrackRowSkeleton(modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -208,13 +185,8 @@ fun TrackRowSkeleton(modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * Full-screen placeholder for Album / Playlist while the data arrives. Phone: hero square + song rows.
- * Wide window: the hero on the left and the rows on the right, like the real two-pane screen.
- */
 @Composable
 fun HeroListSkeleton(modifier: Modifier = Modifier, rows: Int = 6) {
-    // 720dp = the app-wide WideBreakpoint (checked here directly so the design system needs no dependency on it).
     if (LocalConfiguration.current.screenWidthDp >= 720) {
         Row(modifier.fillMaxSize()) {
             Box(Modifier.weight(0.4f).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {

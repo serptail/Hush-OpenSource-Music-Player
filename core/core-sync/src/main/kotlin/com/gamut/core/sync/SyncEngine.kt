@@ -40,13 +40,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Key of the account that owns the local library. Blank = nobody (guest data). */
 internal const val SYNC_OWNER_KEY = "owner"
 
-/** The server no longer knows this session (signed out on another device, or the account was deleted). */
 class SessionEndedException : Exception("This account was signed out elsewhere or deleted")
 
-/** Several independent sync steps failed. The first failure is the cause; the others are suppressed. */
 class SyncFailure(errors: List<Throwable>) : Exception(
     errors.first().let { (it.message ?: it::class.java.simpleName) + if (errors.size > 1) " (+${errors.size - 1} more)" else "" },
     errors.first(),
@@ -54,14 +51,6 @@ class SyncFailure(errors: List<Throwable>) : Exception(
     init { errors.drop(1).forEach { addSuppressed(it) } }
 }
 
-/**
- * Sync order: push the pending queue, then pull everything changed since the per-table cursor.
- * Every step is isolated: one failing step (a poison row, a rate limit) never blocks the others, and a queue entry is
- * removed only after the server accepted it. Cursors are SERVER updated_at values (never the device clock) and are
- * re-read with a small overlap, so a transaction that committed late is never missed. Conflict rules: last-write-wins
- * for favorites and playlist meta (a locally pending change is never overwritten by a pull); playlist songs merge row
- * by row.
- */
 @Singleton
 class SyncEngine @Inject constructor(
     private val supabase: SupabaseClient,
@@ -75,29 +64,22 @@ class SyncEngine @Inject constructor(
     private val exporter: DataExporter,
     @ApplicationContext private val context: Context,
 ) {
-    /** isrc -> server song uuid, so a song is resolved at most once per process. */
     private val songIds = ConcurrentHashMap<String, String>()
 
     suspend fun sync() {
         val uid = supabase.auth.currentUserOrNull()?.id ?: return
         ensureSessionValid()
         val errors = ArrayList<Throwable>()
-        claimOwner(uid)                       // a failure here aborts: nothing else is safe before the account is claimed
+        claimOwner(uid)
         push(uid, errors)
         val now = System.currentTimeMillis()
         val last = state.get(LAST_SYNC)?.toLongOrNull()
-        // Offline longer than the tombstone window: deletions may have been purged, so do a full resync.
         if (last != null && now - last > TOMBSTONE_WINDOW_MS) resetCursors()
         pull(errors)
         if (errors.isNotEmpty()) throw SyncFailure(errors)
-        state.put(SyncStateEntity(LAST_SYNC, now.toString()))   // only a fully successful run counts as "synced"
+        state.put(SyncStateEntity(LAST_SYNC, now.toString()))
     }
 
-    /**
-     * Upserts in batches. If the server permanently rejects a batch (a constraint, a quota), it is split in halves until
-     * the single bad row is found and dropped, so one poison row can never make every later sync fail. Temporary
-     * trouble (offline, 401, 429, 5xx) is rethrown unchanged and retried next time.
-     */
     private suspend inline fun <reified T : Any> upsertResilient(table: String, rows: List<T>, conflict: String, chunk: Int) {
         rows.chunked(chunk).forEach { part ->
             sendResilient(part) { piece -> supabase.from(table).upsert(piece) { onConflict = conflict } }
@@ -123,11 +105,6 @@ class SyncEngine @Inject constructor(
         (statusCode in 400..499 && statusCode != 401 && statusCode != 408 && statusCode != 429) ||
             message.orEmpty().contains("quota exceeded", ignoreCase = true)
 
-    /**
-     * Data requests only check the access token's signature, so a session revoked by "sign out of all devices" or an
-     * account deleted on another device keeps working until that token expires (up to an hour), and a pull of an empty
-     * server even looks like a successful sync. Asking the server about the user catches both right away.
-     */
     private suspend fun ensureSessionValid() {
         try {
             supabase.auth.retrieveUserForCurrentSession(updateSession = false)
@@ -135,7 +112,7 @@ class SyncEngine @Inject constructor(
             throw e
         } catch (e: RestException) {
             if (e.statusCode == 401 || e.statusCode == 403 || e.statusCode == 404) {
-                runCatching { supabase.auth.clearSession() }      // local only; local library data is kept
+                runCatching { supabase.auth.clearSession() }
                 throw SessionEndedException()
             }
             throw e
@@ -150,21 +127,11 @@ class SyncEngine @Inject constructor(
         errors += e; false
     }
 
-    // ---------------------------------------------------------------- first sign-in / account switch
-
-    /**
-     * First time this account signs in on this device: queue the whole local library. Before that, local playlists
-     * that have no server id yet adopt a same-named playlist the account already has (case-insensitive, one-to-one),
-     * so signing in on a second device or after a restore merges instead of duplicating every playlist.
-     */
     private suspend fun claimOwner(uid: String) {
         val owner = state.get(OWNER)?.takeIf { it.isNotBlank() }
         if (owner == uid) return
         resetCursors()
         if (owner != null) {
-            // The library on this phone belongs to a DIFFERENT account. It must never be uploaded into this one, so:
-            // keep a copy on the device (shows up under Restore), then start this account from an empty library.
-            // If the copy cannot be written, abort and retry later rather than lose or mix anything.
             saveSafetyBackup()
             wipeLocalLibrary()
         }
@@ -178,7 +145,7 @@ class SyncEngine @Inject constructor(
         }
         favorites.all().forEach { mark(SyncTypes.FAV, it.isrc) }
         follows.all().forEach { mark(SyncTypes.FOLLOW, it.artistKey) }
-        state.put(SyncStateEntity(OWNER, uid))      // last: if anything above threw, the whole claim is retried
+        state.put(SyncStateEntity(OWNER, uid))
     }
 
     private suspend fun adoptRemotePlaylists() {
@@ -207,7 +174,7 @@ class SyncEngine @Inject constructor(
     }
 
     private suspend fun saveSafetyBackup() {
-        val bytes = exporter.exportOrNull(null) ?: return          // empty library: nothing to lose
+        val bytes = exporter.exportOrNull(null) ?: return
         withContext(Dispatchers.IO) {
             val dir = File(context.filesDir, "backups").apply { mkdirs() }
             val stamp = SimpleDateFormat("yyyy-MM-dd-HHmmss", Locale.US).format(Date())
@@ -220,7 +187,6 @@ class SyncEngine @Inject constructor(
         }
     }
 
-    /** Straight through the DAOs (not the repository), so the removals are NOT queued as deletions for the new account. */
     private suspend fun wipeLocalLibrary() {
         playlists.getAll().forEach { playlistTracks.clear(it.id); playlists.delete(it.id) }
         favorites.all().forEach { favorites.remove(it.isrc) }
@@ -230,8 +196,6 @@ class SyncEngine @Inject constructor(
 
     private suspend fun resetCursors() = CURSORS.forEach { state.put(SyncStateEntity(it, EPOCH)) }
 
-    // ---------------------------------------------------------------- push
-
     private suspend fun push(uid: String, errors: MutableList<Throwable>) {
         val entries = pending.all()
         if (entries.isEmpty()) return
@@ -240,10 +204,8 @@ class SyncEngine @Inject constructor(
         val nowMs = System.currentTimeMillis()
 
         suspend fun finish(ids: List<Long>) { ids.chunked(500).forEach { pending.deleteIds(it) } }
-        /** A song we could not resolve right now (offline provider, rate limit) is retried for a week, then dropped. */
         fun retryable(e: PendingSyncEntity, isrc: String) = parseIsrc(isrc) != null && nowMs - e.createdAtEpochMs < RETRY_WINDOW_MS
 
-        // 1. playlist deletes (soft delete = tombstone)
         val delEntries = byType[SyncTypes.PL_DEL].orEmpty()
         guarded(errors) {
             for (chunk in delEntries.chunked(100)) {
@@ -253,14 +215,13 @@ class SyncEngine @Inject constructor(
             }
         }
 
-        // 2. playlist meta (assigns remoteId on first push; the upsert is idempotent, so a retry is safe)
         val plOk = guarded(errors) {
             val rows = ArrayList<PlaylistRow>()
             val doneIds = ArrayList<Long>()
             val dropIds = ArrayList<Long>()
             for (e in byType[SyncTypes.PL].orEmpty()) {
                 val local = e.itemKey.toLongOrNull()?.let { playlists.get(it) }
-                if (local == null) { dropIds += e.id; continue }                 // deleted meanwhile
+                if (local == null) { dropIds += e.id; continue }
                 val remote = local.remoteId ?: UUID.randomUUID().toString().also { playlists.setRemoteId(local.id, it) }
                 rows += PlaylistRow(
                     remote, uid, local.name.trim().take(100).ifBlank { "Untitled" }, local.tags.take(500),
@@ -273,12 +234,10 @@ class SyncEngine @Inject constructor(
             finish(doneIds)
         }
 
-        // 3. songs must exist server-side before favorites / playlist_songs can reference them
         val favEntries = byType[SyncTypes.FAV].orEmpty()
         val plsEntries = byType[SyncTypes.PLS].orEmpty()
         val ids = ensureSongIds((favEntries.map { it.itemKey } + plsEntries.map { it.itemKey.substringAfter('|') }).toSet(), errors)
 
-        // 4. favorites
         guarded(errors) {
             val upserts = ArrayList<FavoriteRow>()
             val removals = ArrayList<String>()
@@ -287,8 +246,8 @@ class SyncEngine @Inject constructor(
                 val local = favorites.get(e.itemKey)
                 val songId = ids[e.itemKey]
                 if (songId == null) {
-                    if (local != null && retryable(e, e.itemKey)) continue      // transient: keep it queued
-                    doneIds += e.id; continue                                     // unsyncable id / nothing to remove remotely
+                    if (local != null && retryable(e, e.itemKey)) continue
+                    doneIds += e.id; continue
                 }
                 doneIds += e.id
                 if (local != null) upserts += FavoriteRow(uid, songId, Instant.ofEpochMilli(local.addedAtEpochMs).toString())
@@ -301,7 +260,6 @@ class SyncEngine @Inject constructor(
             finish(doneIds)
         }
 
-        // 5. artist follows: row still present locally = follow (upsert revives a tombstone), absent = unfollow
         val followEntries = byType[SyncTypes.FOLLOW].orEmpty()
         guarded(errors) {
             val upserts = ArrayList<FollowRow>()
@@ -329,15 +287,14 @@ class SyncEngine @Inject constructor(
             finish(doneIds)
         }
 
-        // 6. playlist songs (need their playlist row on the server, so skipped when step 2 failed)
         if (plOk) guarded(errors) {
             val upserts = ArrayList<PlaylistSongRow>()
             val removals = HashMap<String, MutableList<String>>()
             val doneIds = ArrayList<Long>()
             for (e in plsEntries) {
                 val local = playlists.get(e.itemKey.substringBefore('|').toLongOrNull() ?: -1)
-                if (local == null) { doneIds += e.id; continue }                 // playlist deleted meanwhile
-                val remote = local.remoteId ?: continue                           // not pushed yet: retry next time
+                if (local == null) { doneIds += e.id; continue }
+                val remote = local.remoteId ?: continue
                 val isrc = e.itemKey.substringAfter('|')
                 val position = e.payload?.toIntOrNull()
                 val songId = ids[isrc]
@@ -361,11 +318,6 @@ class SyncEngine @Inject constructor(
         }
     }
 
-    /**
-     * isrc -> server song id. Cache -> songs table -> resolve-metadata Edge Function, in batches of 50.
-     * Never throws: on a failure (offline, rate limit) it records the error and returns what it has, so everything
-     * already resolved still syncs and the rest stays queued.
-     */
     private suspend fun ensureSongIds(isrcs: Set<String>, errors: MutableList<Throwable>): Map<String, String> {
         val parsed = isrcs.mapNotNull { isrc -> parseIsrc(isrc)?.let { isrc to it } }
         val need = parsed.filter { songIds[it.first] == null }
@@ -386,15 +338,12 @@ class SyncEngine @Inject constructor(
                 )
                 response.body<ResolveResponse>().songs.forEach { songIds["${it.provider}:${it.providerSongId}"] = it.id }
             }
-            if (!ok) break      // most likely the 30/min rate limit or no network: stop hammering, retry next sync
+            if (!ok) break
         }
         return parsed.mapNotNull { (isrc, _) -> songIds[isrc]?.let { isrc to it } }.toMap()
     }
 
-    // ---------------------------------------------------------------- pull
-
     private suspend fun pull(errors: MutableList<Throwable>) {
-        // playlists first, so playlist_songs can find their local playlist
         val playlistsOk = guarded(errors) {
             pageThrough<PlaylistPull>(
                 "playlists", "id,name,tags,created_at,updated_at,deleted_at", CUR_PLAYLISTS, listOf("id"), { it.updatedAt },
@@ -417,7 +366,6 @@ class SyncEngine @Inject constructor(
             }
         }
 
-        // If playlists failed, playlist_songs rows could not find their playlist, and the cursor would skip them forever.
         if (playlistsOk) guarded(errors) {
             pageThrough<PlaylistSongPull>(
                 "playlist_songs", "playlist_id,position,updated_at,deleted_at,$SONG_EMBED", CUR_PLAYLIST_SONGS,
@@ -428,7 +376,7 @@ class SyncEngine @Inject constructor(
                     val song = r.songs ?: continue
                     val local = playlists.getByRemoteId(r.playlistId) ?: continue
                     val isrc = song.isrc()
-                    if (pending.has(SyncTypes.PLS, "${local.id}|$isrc")) continue   // local change not pushed yet wins
+                    if (pending.has(SyncTypes.PLS, "${local.id}|$isrc")) continue
                     if (r.deletedAt != null) playlistTracks.remove(local.id, isrc)
                     else playlistTracks.upsert(PlaylistTrackCrossRef(local.id, isrc, r.position))
                 }
@@ -455,19 +403,13 @@ class SyncEngine @Inject constructor(
             ) { rows ->
                 for (r in rows) {
                     val key = "${r.provider}:${r.providerArtistId}"
-                    if (pending.has(SyncTypes.FOLLOW, key)) continue          // local change not pushed yet wins
+                    if (pending.has(SyncTypes.FOLLOW, key)) continue
                     if (r.deletedAt != null) follows.remove(key) else follows.add(FollowEntity(key, r.name, r.artworkUrl, ms(r.createdAt)))
                 }
             }
         }
     }
 
-    /**
-     * Reads every row with updated_at >= (cursor - overlap), then advances the cursor. Re-applying a few rows is
-     * harmless (every apply is idempotent and respects pending local changes); the overlap covers transactions that
-     * committed after a newer one. Paging is ordered by updated_at + primary key, so rows sharing a timestamp are never
-     * skipped or repeated between pages.
-     */
     private suspend inline fun <reified T : Any> pageThrough(
         table: String,
         columns: String,

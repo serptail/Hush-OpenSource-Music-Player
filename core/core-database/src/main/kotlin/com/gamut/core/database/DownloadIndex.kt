@@ -15,10 +15,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
-/**
- * Every finished download, kept in memory (isrc -> row) and in step with the `downloads` table, so the player can ask
- * "is this track on disk?" synchronously. Uses the existing `downloads` table: no schema change, no migration.
- */
 @Singleton
 class DownloadIndex @Inject constructor(database: GamutDatabase) : LocalAudioIndex {
     private val dao = database.downloadDao()
@@ -32,7 +28,6 @@ class DownloadIndex @Inject constructor(database: GamutDatabase) : LocalAudioInd
 
     suspend fun save(entity: DownloadEntity) = dao.upsert(entity)
 
-    /** Deletes the row and returns the file path it pointed at (the caller deletes the file). */
     suspend fun remove(isrc: String): String? {
         val path = downloads.value[isrc]?.localFilePath
         dao.delete(isrc)

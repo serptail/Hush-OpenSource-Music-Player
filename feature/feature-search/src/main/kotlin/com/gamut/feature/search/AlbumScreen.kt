@@ -104,7 +104,6 @@ class AlbumViewModel @Inject constructor(
     private val _failed = MutableStateFlow(false)
     val failed: StateFlow<Boolean> = _failed.asStateFlow()
     private val _artistImage = MutableStateFlow<String?>(null)
-    /** Verified artist photo; arrives after the album so it never delays the screen. */
     val artistImage: StateFlow<String?> = _artistImage.asStateFlow()
 
     init {
@@ -123,25 +122,16 @@ class AlbumViewModel @Inject constructor(
     }
 }
 
-/**
- * Minimal album page. The cover is a single, crisp, rounded object floating on the flowing background (no edge-to-edge
- * bleed, no gradient fade), followed by a quiet title block and a clean numbered track list.
- */
 @Composable
 fun AlbumScreen(
     viewModel: AlbumViewModel,
     onBack: () -> Unit,
-    /** The picked track plus the list it was picked from (the queue). */
     onTrackSelected: (Track, List<Track>) -> Unit,
-    /** Opens the artist page of a track (by name), from the actions sheet. */
     onTrackArtist: (Track) -> Unit = {},
-    /** ISRCs of the user's favorites, for the actions sheet. */
     favoriteIsrcs: Set<String> = emptySet(),
     onToggleFavorite: (Track) -> Unit = {},
-    /** The user's playlists, for "Add to playlist". */
     playlists: List<TrackPlaylistOption> = emptyList(),
     onAddToPlaylist: (Track, String) -> Unit = { _, _ -> },
-    /** ISRC of the track loaded in the player: its row gets the accent title + animated bars instead of the number. */
     nowPlayingIsrc: String? = null,
     nowPlaying: @Composable () -> Unit = {},
 ) {
@@ -150,11 +140,9 @@ fun AlbumScreen(
     val artistImage by viewModel.artistImage.collectAsStateWithLifecycle()
     var artistPickTrack by remember { mutableStateOf<Track?>(null) }
     val palette = LocalCoverPalette.current
-    // The cover no longer sits under the status bar, so icons simply follow the palette.
     TransparentStatusBar(darkIcons = palette.isLight)
     val settled = LocalNavSettled.current
     CoverTheme(palette) {
-        // Same three-dots flow as Artist / Search / Discover: actions sheet -> share / playlist picker.
         var actionsTrack by remember { mutableStateOf<Track?>(null) }
         var shareTrack by remember { mutableStateOf<Track?>(null) }
         var pickerTrack by remember { mutableStateOf<Track?>(null) }
@@ -164,19 +152,16 @@ fun AlbumScreen(
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     val value = album
                     when {
-                        // Real content only after the slide has finished; until then (and while loading) the skeleton.
                         value != null && settled -> {
                             val heroContent: @Composable () -> Unit = {
                                 AlbumHero(
                                         album = value,
                                         artistImageUrl = artistImage,
                                         onPlay = { value.tracks.firstOrNull()?.let { onTrackSelected(it, value.tracks) } },
-                                        // The album header has no track of its own: borrow the first one as the carrier.
                                         onArtist = { name -> value.tracks.firstOrNull()?.let { onTrackArtist(it.copy(artist = name)) } },
                                     )
                             }
                             val trackItems: LazyListScope.() -> Unit = {
-                                // Index in the key: duplicate ISRCs in one album would otherwise crash LazyColumn.
                                 itemsIndexed(value.tracks, key = { i, t -> "${t.isrc}-$i" }) { index, track ->
                                     AlbumTrackRow(
                                         number = index + 1,
@@ -191,7 +176,6 @@ fun AlbumScreen(
                                 item(key = "nav-space") { Box(Modifier.navigationBarsPadding()) }
                             }
                             if (isWideLayout()) {
-                                // Wide window: cover + title on the left (own scroll), the numbered tracks on the right.
                                 Row(Modifier.fillMaxSize()) {
                                     Column(Modifier.weight(0.4f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
                                         heroContent()
@@ -219,7 +203,6 @@ fun AlbumScreen(
                             )
                         }
                         else -> {
-                            // Shimmering placeholder: the screen reacts on the very first frame of the tap.
                             HeroListSkeleton()
                             BackButton(onBack)
                         }
@@ -271,10 +254,8 @@ private fun AlbumHero(album: AlbumDetails, artistImageUrl: String?, onPlay: () -
         Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            // Leaves room for the floating back button.
             .padding(top = 68.dp),
     ) {
-        // The cover: one clean object with a soft, deep shadow so it lifts off the background.
         Box(
             Modifier
                 .padding(horizontal = 44.dp)
@@ -287,7 +268,6 @@ private fun AlbumHero(album: AlbumDetails, artistImageUrl: String?, onPlay: () -
                     spotColor = Color.Black.copy(alpha = 0.45f),
                 )
                 .clip(RoundedCornerShape(14.dp))
-                // OPAQUE tile: the 28 dp shadow above showed through the old translucent fill as a hazy square.
                 .background(artTileColor()),
         ) {
             SubcomposeAsyncImage(
@@ -295,7 +275,7 @@ private fun AlbumHero(album: AlbumDetails, artistImageUrl: String?, onPlay: () -
                 contentDescription = album.title,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
-                loading = {},   // the tile behind is already flat and opaque
+                loading = {},
                 error = { ArtPlaceholder() },
             )
         }
@@ -318,8 +298,6 @@ private fun AlbumHero(album: AlbumDetails, artistImageUrl: String?, onPlay: () -
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.size(8.dp))
-                // One artist: the verified portrait + name. Several: a faded stack of portraits + the joined names.
-                // Either way the whole line opens the artist (or the picker when there are several).
                 ArtistLine(
                     credit = album.artist,
                     albumTitle = album.title,
@@ -349,7 +327,6 @@ private fun AlbumHero(album: AlbumDetails, artistImageUrl: String?, onPlay: () -
     }
 }
 
-/** Small inline artist photo; falls back to a quiet glass disc while loading or when no verified photo exists. */
 @Composable
 private fun ArtistAvatar(url: String?, artist: String) {
     val modifier = Modifier.size(24.dp).clip(CircleShape)
@@ -367,10 +344,6 @@ private fun ArtistAvatar(url: String?, artist: String) {
     }
 }
 
-/**
- * Flat play button: a solid disc in the text color with the icon in its inverse (strong contrast on any cover palette).
- * No drop shadow: on the flowing background it read as a grey, smudgy ring around the button.
- */
 @Composable
 private fun PlayFab(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val isLight = LocalCoverPalette.current.isLight
@@ -386,22 +359,11 @@ private fun PlayFab(onClick: () -> Unit, modifier: Modifier = Modifier) {
             PhosphorIcons.Fill.Play,
             "Play",
             tint = if (isLight) Color.White else Color.Black,
-            // A triangle's visual weight sits left of its box; a small nudge right makes it look centered.
             modifier = Modifier.padding(start = 2.dp).size(22.dp),
         )
     }
 }
 
-/**
- * Numbered, text-only row. Every track shares the album cover, so repeating it per row was noise. The artist is only
- * shown when it differs from the album artist (features, compilations).
- *
- * Interaction: on hover (mouse, stylus, ChromeOS) a soft tint fades in and the number turns into a play glyph. On press
- * the row squeezes down and springs back with a small overshoot, the bounce.
- *
- * The playing track swaps its number for the animated bars and gets the accent title; a quiet three-dots button on
- * the right opens the actions sheet.
- */
 @Composable
 private fun AlbumTrackRow(
     number: Int,
@@ -435,7 +397,6 @@ private fun AlbumTrackRow(
             .padding(horizontal = 16.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(12.dp))
-            // Read in the draw phase: the press tint animates without recomposing the row.
             .drawBehind { drawRect(tint) }
             .focusRing(RoundedCornerShape(12.dp))
             .hoverable(interaction)
@@ -444,7 +405,6 @@ private fun AlbumTrackRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(32.dp), contentAlignment = Alignment.CenterStart) {
-            // No Crossfade here: one per row meant an animated layer for every visible track.
             if (active) {
                 Icon(PhosphorIcons.Fill.Play, null, tint = ink(), modifier = Modifier.size(14.dp))
             } else if (isPlaying) {
@@ -465,7 +425,6 @@ private fun AlbumTrackRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            // Shown when it differs from the album artist (features, compilations) or when there are several.
             if (showArtist || splitArtists(track.artist).size > 1) {
                 ArtistLine(track.artist, track.album, onArtist, stackSize = 16.dp, modifier = Modifier.padding(vertical = 2.dp)) { m ->
                     Text(
@@ -502,7 +461,6 @@ private fun BackButton(onBack: () -> Unit) {
         modifier = Modifier.statusBarsPadding().padding(start = 20.dp, top = 12.dp),
         size = 44.dp,
     ) {
-        // Ink instead of hardcoded white: the button now floats over the background, not over a cover.
         Icon(PhosphorIcons.Bold.ArrowLeft, "Back", tint = ink(), modifier = Modifier.size(22.dp))
     }
 }

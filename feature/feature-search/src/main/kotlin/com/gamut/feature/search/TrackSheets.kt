@@ -69,10 +69,6 @@ import com.gamut.core.model.Track
 
 internal val SheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
 
-/**
- * A playlist as the "Saved in" sheet needs it. A song counts as already in it when [contains] is set or its ISRC is
- * in [trackIsrcs] (every song in the playlist), which lets one list serve every song the sheet is opened for.
- */
 data class TrackPlaylistOption(
     val id: String,
     val name: String,
@@ -82,16 +78,8 @@ data class TrackPlaylistOption(
     val trackIsrcs: Set<String> = emptySet(),
 )
 
-/**
- * "Take this song out of the playlist with this id", used when a ticked row in [SavedInSheet] is tapped again.
- * Provided once at the app root, so the many screens that open the sheet need no extra parameter.
- */
 val LocalPlaylistRemove = staticCompositionLocalOf<(Track, String) -> Unit> { { _, _ -> } }
 
-/**
- * Same touch feel as the search result rows: a soft tint fades in on hover/press and a press squeezes the row to 97%
- * then springs back with a small overshoot. No ripple.
- */
 internal fun Modifier.bounceClick(onClick: () -> Unit): Modifier = composed {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
@@ -114,9 +102,6 @@ internal fun Modifier.bounceClick(onClick: () -> Unit): Modifier = composed {
         .clickable(interactionSource = source, indication = null, onClick = onClick)
 }
 
-// ------------------------------------------------------------------ actions sheet
-
-/** Replaces the small dropdown: Share, Add to favorites, Add to playlist, Go to artist. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TrackActionsSheet(
@@ -133,7 +118,6 @@ internal fun TrackActionsSheet(
             TrackHeader(track)
             HorizontalDivider(Modifier.padding(top = 14.dp, bottom = 6.dp), color = ink(0.1f))
             ActionRow(PhosphorIcons.Bold.ShareNetwork, "Share") { onShare() }
-            // Stays open: the icon fills and the label changes in place.
             ActionRow(
                 if (isFavorite) PhosphorIcons.Fill.HeartFill else PhosphorIcons.Bold.Heart,
                 if (isFavorite) "Added to favorites" else "Add to favorites",
@@ -172,13 +156,6 @@ private fun ActionRow(icon: ImageVector, label: String, tint: Color = ink(), onC
     }
 }
 
-// ------------------------------------------------------------------ saved in / add to playlist
-
-/**
- * "Saved in" sheet. With [showFavorites] (opened by the + button) the first row is Favorites, already checked, and the
- * playlists below can be ticked to add the song there too. Without it, it is the plain "Add to playlist" picker.
- * Playlists that already hold the song start ticked; tapping a tick again takes the song back out.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SavedInSheet(
@@ -189,7 +166,6 @@ internal fun SavedInSheet(
     onAddToPlaylist: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    // Local ticks so the check responds instantly; the real state is the caller's.
     val removeFromPlaylist = LocalPlaylistRemove.current
     val ticked = remember {
         mutableStateListOf<String>().apply { addAll(playlists.filter { it.contains || track.isrc in it.trackIsrcs }.map { it.id }) }
@@ -262,7 +238,6 @@ private fun PlaylistRow(
             Text(name, style = MaterialTheme.typography.bodyLarge, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (sub != null) Text(sub, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f))
         }
-        // Plus circle that turns into a filled check circle once added.
         Crossfade(targetState = checked, label = "added") { on ->
             if (on) Icon(PhosphorIcons.Fill.CheckCircle, "Added", tint = accent, modifier = Modifier.size(28.dp))
             else Icon(PhosphorIcons.Bold.PlusCircle, "Add", tint = ink(0.6f), modifier = Modifier.size(28.dp))

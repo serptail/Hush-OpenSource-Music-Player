@@ -16,14 +16,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
-/**
- * Warms up the first few of [prefetch]'s tracks (typically the top search results), so tapping one starts fast.
- *
- * Gentle on purpose, because resolving can mean a search plus a yt-dlp run per track:
- *  - it waits [DEBOUNCE_MS] after the LAST call, so typing / quick re-searches start nothing;
- *  - it resolves one track at a time (never in parallel);
- *  - it does nothing in battery saver, at low battery, or when the phone is hot.
- */
 @Singleton
 class PrefetchCoordinator @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -39,7 +31,7 @@ class PrefetchCoordinator @Inject constructor(
             delay(DEBOUNCE_MS)
             if (!allowed()) return@launch
             for (track in tracks.take(PREFETCH_COUNT)) {
-                ensureActive()   // resolve() swallows cancellation (runCatching), so stop explicitly
+                ensureActive()
                 resolve(track).onSuccess { source -> audio.audioUrl(source.youtubeVideoId) }
             }
         }

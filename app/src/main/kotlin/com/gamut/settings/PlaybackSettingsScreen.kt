@@ -44,7 +44,6 @@ import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.roundToInt
 
-/** Both stores are app-wide singletons that outlive this screen; the ViewModel only hands them to the UI. */
 @HiltViewModel
 class PlaybackSettingsViewModel @Inject constructor(
     val settings: PlaybackSettings,
@@ -65,7 +64,6 @@ private val FadeChoices = listOf(
 private fun hzLabel(hz: Int) =
     if (hz >= 1_000) String.format(Locale.US, "%.1f kHz", hz / 1_000f).replace(".0 ", " ") else "$hz Hz"
 
-/** Compact label under each vertical band. */
 private fun hzShort(hz: Int) =
     if (hz >= 1_000) String.format(Locale.US, "%.1fk", hz / 1_000f).replace(".0k", "k") else "$hz"
 
@@ -74,7 +72,6 @@ private fun dbLabel(mb: Int) = String.format(Locale.US, "%+.1f dB", mb / 100f)
 private val LnMinHz = ln(20f)
 private val LnMaxHz = ln(20_000f)
 
-/** Every band's frequency and width. Frequency is a log slider: equal steps are equal musical intervals. */
 @Composable
 private fun BandEditorDialog(bands: List<EqBand>, sound: SoundSettings, onDismiss: () -> Unit) {
     GamutDialog(
@@ -118,7 +115,6 @@ private fun balanceLabel(b: Float): String {
     }
 }
 
-/** Settings > Playback & Audio. Every change is saved and applied to the player straight away. */
 @Composable
 fun PlaybackSettingsScreen(
     onBack: () -> Unit,
@@ -133,7 +129,6 @@ fun PlaybackSettingsScreen(
     val sound = vm.sound
 
     GamutPage(title = "Playback & Audio", onBack = onBack, nowPlaying = nowPlaying) {
-
         SoftHeader("Streaming")
         SoftCard {
             SoftValueRow(
@@ -271,7 +266,6 @@ fun PlaybackSettingsScreen(
                 valueLabel = "${snd.widthPercent}%",
                 value = snd.widthPercent.toFloat(),
                 range = 0f..200f,
-                // Snap to the middle so "as recorded" is easy to hit.
                 onChange = { v -> sound.setWidth(if (abs(v - 100f) < 4f) 100 else v.roundToInt()) },
                 subtitle = "0% is mono, 100% is the recording as it is.",
                 centered = true,
@@ -292,7 +286,6 @@ fun PlaybackSettingsScreen(
                 valueLabel = balanceLabel(s.balance),
                 value = s.balance,
                 range = -1f..1f,
-                // Snap to the middle so "centred" is easy to hit.
                 onChange = { v -> settings.update { it.copy(balance = if (abs(v) < 0.04f) 0f else v) } },
                 centered = true,
             )

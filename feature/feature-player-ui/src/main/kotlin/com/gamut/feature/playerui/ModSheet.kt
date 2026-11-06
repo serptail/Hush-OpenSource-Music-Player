@@ -63,7 +63,6 @@ import com.gamut.core.player.ModSettings
 import com.gamut.feature.playerui.components.bounceTap
 import kotlin.math.roundToInt
 
-/** The Mod panel: a 3x3 grid of presets, and below it only the controls that belong to the selected one. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ModSheet(accent: Color, onDismiss: () -> Unit) {
@@ -151,7 +150,6 @@ private fun PresetCell(preset: ModPreset, selected: Boolean, accent: Color, modi
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Two lines allowed: a long name ("Slowed + Reverb") used to be clipped to "Slowed +".
         Text(
             preset.label, fontSize = 13.sp, lineHeight = 15.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, color = ink(),
@@ -170,8 +168,6 @@ private fun presetHint(preset: ModPreset): String = when (preset) {
     ModPreset.CUSTOM -> "Everything"
     else -> "%.2fx".format(preset.defaults().speed)
 }
-
-// ---- Sliders ----
 
 private class Spec(
     val label: String,
@@ -229,7 +225,6 @@ private fun ControlRow(control: ModControl, settings: ModSettings, accent: Color
     }
 }
 
-/** Same pill as the equalizer's Enable/Disable button: filled accent when on, outlined when off. */
 @Composable
 private fun TogglePill(on: Boolean, accent: Color, onClick: () -> Unit) {
     val shape = RoundedCornerShape(50)
@@ -249,7 +244,6 @@ private fun TogglePill(on: Boolean, accent: Color, onClick: () -> Unit) {
     )
 }
 
-/** The equalizer's hairline slider (thin track, accent fill, small white dot), for a float range with snapping. */
 @Composable
 private fun LineSlider(value: Float, min: Float, max: Float, step: Float, accent: Color, onChange: (Float) -> Unit) {
     val onChangeNow by rememberUpdatedState(onChange)
@@ -258,8 +252,6 @@ private fun LineSlider(value: Float, min: Float, max: Float, step: Float, accent
         Modifier
             .fillMaxWidth()
             .height(32.dp)
-            // Remote: the slider is a focus stop. Left / Right change the value by one step (holding the key speeds up);
-            // Up / Down are not consumed, so they move to the previous / next control.
             .focusRing(RoundedCornerShape(12.dp))
             .onKeyEvent { e ->
                 val dir = when (e.key) { Key.DirectionLeft -> -1; Key.DirectionRight -> 1; else -> 0 }
@@ -294,7 +286,7 @@ private fun LineSlider(value: Float, min: Float, max: Float, step: Float, accent
         val stroke = 4.dp.toPx()
         drawLine(trackC, Offset(pad, cy), Offset(size.width - pad, cy), stroke, StrokeCap.Round)
         drawLine(accent, Offset(pad, cy), Offset(x, cy), stroke, StrokeCap.Round)
-        drawCircle(accent.copy(alpha = 0.25f), 12.dp.toPx(), Offset(x, cy))   // soft halo
+        drawCircle(accent.copy(alpha = 0.25f), 12.dp.toPx(), Offset(x, cy))
         drawCircle(dotC, 7.dp.toPx(), Offset(x, cy))
     }
 }

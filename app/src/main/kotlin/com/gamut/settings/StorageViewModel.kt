@@ -56,11 +56,9 @@ class StorageViewModel @Inject constructor(
     val settings: StorageSettings,
     private val index: DownloadIndex,
 ) : ViewModel() {
-
     private val refresh = MutableStateFlow(0)
     private val metadata = ConcurrentHashMap<String, Track>()
 
-    /** The downloaded songs, straight from the same index the player and every other screen read. */
     val songs: StateFlow<List<DownloadedSong>> = index.downloads
         .mapLatest { rows -> buildSongs(rows) }
         .flowOn(Dispatchers.IO)
@@ -70,7 +68,6 @@ class StorageViewModel @Inject constructor(
         .map { computeStats(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, DownloadStats())
 
-    /** Re-measured when downloads change, when a run of downloads ends, and on [refreshNow]. Null until the first pass. */
     val snapshot: StateFlow<StorageSnapshot?> = combine(
         index.downloads, refresh, downloads.batch.map { it.total == 0 }.distinctUntilChanged(),
     ) { _, _, _ -> }
@@ -79,11 +76,9 @@ class StorageViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     init {
-        // The screen is pre-composed shortly after launch, which makes this the "trim at startup" hook as well.
         viewModelScope.launch(Dispatchers.IO) { delay(5_000); manager.trimCacheIfNeeded() }
     }
 
-    /** The page slid open: tidy up, then re-measure. */
     fun onOpened() {
         viewModelScope.launch { manager.repair(); manager.trimCacheIfNeeded(); refresh.value++ }
     }
@@ -133,7 +128,6 @@ class StorageViewModel @Inject constructor(
     private fun computeStats(list: List<DownloadedSong>): DownloadStats {
         if (list.isEmpty()) return DownloadStats()
         val bytes = list.sumOf { it.bytes }
-        // Chart songs have no duration saved: estimate those from their size (about 144 kbps on average).
         val playtime = list.sumOf { if (it.durationMs > 0) it.durationMs else it.bytes * 1_000L / 18_000L }
         return DownloadStats(
             count = list.size, bytes = bytes, playtimeMs = playtime, averageBytes = bytes / list.size,

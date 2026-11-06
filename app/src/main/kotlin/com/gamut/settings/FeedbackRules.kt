@@ -8,7 +8,6 @@ enum class FeedbackType(val label: String) { BUG("Bug"), FEEDBACK("Feedback"), I
 
 enum class MessageProblem { TOO_SHORT, TOO_LONG, TOO_MANY_LINKS, REPETITIVE }
 
-/** Everything that decides what text is acceptable. Pure functions, easy to unit-test. */
 object FeedbackRules {
     const val MIN_WORDS = 4
     const val MAX_WORDS = 250
@@ -17,14 +16,12 @@ object FeedbackRules {
     const val MAX_EMAIL = 254
     const val MAX_LINKS = 2
 
-    // Zero-width, bidi-override and BOM characters: used to hide text or spoof what a message says.
     private val INVISIBLE = Regex("[\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u2069\\uFEFF]")
     private val CONTROL = Regex("[\\p{Cntrl}&&[^\\n]]")
     private val BLANK_LINES = Regex("\\n{3,}")
     private val LINK = Regex("(?i)(https?://|www\\.)\\S+")
     private val LONG_RUN = Regex("(.)\\1{19,}")
 
-    /** Removes control and invisible characters. A single-line field also loses its newlines (header-injection guard). */
     fun sanitize(input: String, multiline: Boolean): String {
         var s = input.replace("\r\n", "\n").replace('\r', '\n').replace(INVISIBLE, "")
         if (!multiline) s = s.replace('\n', ' ')
@@ -45,7 +42,6 @@ object FeedbackRules {
         return count
     }
 
-    /** Cuts [s] right after its [max]-th word. Used while typing/pasting, so the limit is a hard stop, not a warning. */
     fun limitWords(s: String, max: Int): String {
         var count = 0
         var i = 0
@@ -62,7 +58,6 @@ object FeedbackRules {
     fun isValidEmail(s: String): Boolean =
         s.length <= MAX_EMAIL && s.none { it.isWhitespace() } && Patterns.EMAIL_ADDRESS.matcher(s).matches()
 
-    /** Null = fine. Expects an already [sanitize]d message. */
     fun checkMessage(message: String): MessageProblem? {
         val words = wordCount(message)
         return when {
@@ -86,14 +81,12 @@ object FeedbackRules {
     }
 }
 
-/** Why a send was blocked on the device, before any network call. */
 sealed interface SendBlock {
     data class Cooldown(val seconds: Int) : SendBlock
     object DailyLimit : SendBlock
     object Duplicate : SendBlock
 }
 
-/** Persistent client-side throttle: 60 s between sends, 5 per rolling 24 h, no identical message twice in 24 h. */
 class SubmissionGuard(context: Context) {
     private val prefs = context.getSharedPreferences("feedback_guard", Context.MODE_PRIVATE)
 
@@ -112,7 +105,6 @@ class SubmissionGuard(context: Context) {
         prefs.edit().putString("times", times).putString("fp", fingerprint).putLong("fp_at", now).apply()
     }
 
-    // Timestamps from the future (clock set back) are dropped so they can't lock the user out for good.
     private fun recentTimes(now: Long): List<Long> =
         prefs.getString("times", "").orEmpty().split(",").mapNotNull { it.toLongOrNull() }.filter { now - it in 0 until DAY_MS }
 

@@ -21,11 +21,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-/** Small animated equalizer shown next to the title of the track that is playing. */
 @Composable
 fun NowPlayingBars(color: Color, modifier: Modifier = Modifier) {
     val t = rememberInfiniteTransition(label = "now-playing")
-    // Different periods per bar so they never move in lockstep.
     val periods = listOf(420, 560, 480)
     val levels = periods.mapIndexed { i, ms ->
         t.animateFloat(

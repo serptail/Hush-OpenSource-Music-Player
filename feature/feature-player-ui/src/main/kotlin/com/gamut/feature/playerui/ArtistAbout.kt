@@ -44,10 +44,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-// ============================================================================================================
-//  Data
-// ============================================================================================================
-
 @Immutable
 data class ArtistCredit(val name: String, val roles: String)
 
@@ -61,18 +57,7 @@ data class ArtistInfo(
     val credits: List<ArtistCredit>,
 )
 
-/**
- * Artist picture + credits for the track that is playing. Track itself only carries title / artist / ISRC / cover, so
- * this asks two free, key-less services (best effort, every step is optional, nothing here can crash the player):
- *
- *  - Deezer (api.deezer.com): artist photo, fan count, album, year and the contributing artists, found by ISRC.
- *  - MusicBrainz (musicbrainz.org): writers / producers / mixers of that recording, found by ISRC. Needs a
- *    descriptive User-Agent and at most 1 request per second, hence the pauses.
- *
- * Results are cached for the session. A lookup that found nothing is NOT cached, so offline -> online recovers.
- */
 object ArtistInfoRepository {
-    /** MusicBrainz asks for app name + contact in the User-Agent. Put a real contact address here. */
     private const val TAG = "ArtistInfo"
     private const val USER_AGENT = "Gamut/1.0 ( contact@your-domain.example )"
 
@@ -102,21 +87,19 @@ object ArtistInfoRepository {
 
     private suspend fun load(track: Track): ArtistInfo {
         val leadName = lead(track.artist)
-        // Track.isrc is the app's own id for a track and is not always a real ISRC: only a value shaped like one is trusted.
         val isrc = track.isrc.orEmpty().uppercase().takeIf { isrcShape.matches(it) }
         val coreTitle = track.title.replace(Regex("""\s*[(\[].*?[)\]]"""), "").substringBefore(" - ").trim().ifBlank { track.title }
         var image: String? = null
         var fans: Long? = null
         var album: String? = null
         var year: String? = null
-        val roles = LinkedHashMap<String, LinkedHashSet<String>>()   // name -> roles, in the order first seen
+        val roles = LinkedHashMap<String, LinkedHashSet<String>>()
         fun add(name: String?, role: String) {
             val n = name?.trim().orEmpty()
             if (n.isNotEmpty()) roles.getOrPut(n) { LinkedHashSet() }.add(role)
         }
         fun realPicture(url: String?) = url?.takeIf { it.isNotBlank() && !it.contains("/artist//") }
 
-        // 1. Find the song on Deezer: by ISRC when there is a real one, otherwise (or when that misses) by title + artist.
         var deezer: JSONObject? = null
         if (isrc != null) deezer = json("https://api.deezer.com/track/isrc:$isrc")?.takeIf { !it.has("error") }
         if (deezer == null) {
@@ -150,7 +133,6 @@ object ArtistInfoRepository {
                 }
             }
         }
-        // 2. Deezer artist search: photo (when the track did not give one) and fan count. Only a name match is accepted.
         json("https://api.deezer.com/search/artist?q=${enc(leadName)}&limit=1")
             ?.optJSONArray("data")?.optJSONObject(0)?.let { a ->
                 val n = norm(a.optString("name"))
@@ -161,8 +143,6 @@ object ArtistInfoRepository {
             }
         if (roles.isEmpty()) add(leadName, "Main artist")
 
-        // 3. MusicBrainz: writers, producers, mixers. By the real ISRC when known, else by title + artist. Slow
-        //    (1 request/s), so it comes last. Many songs, especially new ones, have no such credits there yet.
         var musicBrainz = "skipped"
         runCatching {
             var rec: String? = null
@@ -219,7 +199,6 @@ object ArtistInfoRepository {
         }
         Log.i(TAG, "\"${track.title}\": deezerTrack=${deezer != null} realIsrc=$realIsrc musicBrainz=$musicBrainz credits=${roles.size} photo=${image != null}")
 
-        // Writers first, then production, then who performs on it.
         fun rank(set: Set<String>) = when {
             set.any { it == "Composer" || it == "Lyricist" || it == "Writer" } -> 0
             set.any { it.contains("Producer") || it.contains("Mixer") || it.contains("ngineer") } -> 1
@@ -232,7 +211,6 @@ object ArtistInfoRepository {
         return ArtistInfo(leadName, image, fans, album, year, credits)
     }
 
-    /** GET [url] as JSON; null on any failure or 404 (callers treat every source as optional). */
     private fun json(url: String): JSONObject? = try {
         val c = URL(url).openConnection() as HttpURLConnection
         try {
@@ -252,11 +230,6 @@ object ArtistInfoRepository {
     }
 }
 
-// ============================================================================================================
-//  UI
-// ============================================================================================================
-
-/** "About the artist": round photo in the middle, the name under it, then the credits. */
 @Composable
 internal fun ArtistAboutSection(
     artistName: String,
@@ -277,7 +250,7 @@ internal fun ArtistAboutSection(
                 .padding(horizontal = 20.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            val photo = info?.imageUrl ?: fallbackArtUrl   // no artist photo found: the cover, cropped round
+            val photo = info?.imageUrl ?: fallbackArtUrl
             Box(
                 Modifier.size(140.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.1f)).tapTarget(onArtistClick),
                 contentAlignment = Alignment.Center,

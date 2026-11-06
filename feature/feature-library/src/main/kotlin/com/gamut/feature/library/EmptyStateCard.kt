@@ -35,11 +35,6 @@ import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 
-/**
- * The five cover arts shown in the empty-state spread. Nothing fancy: call [offer] with any art URLs you already
- * have (search results, for example) and the first five distinct ones are kept for the session. Until then the
- * spread shows plain placeholder tiles, so it never looks broken. To hard-code them instead, replace `urls`.
- */
 object EmptyStateCovers {
     var urls by mutableStateOf<List<String>>(emptyList())
         private set
@@ -50,7 +45,6 @@ object EmptyStateCovers {
     }
 }
 
-/** Same idea as [EmptyStateCovers], but for artist photos (shown in circles on the Artists card). */
 object EmptyStateArtistCovers {
     var urls by mutableStateOf<List<String>>(emptyList())
         private set
@@ -61,10 +55,6 @@ object EmptyStateArtistCovers {
     }
 }
 
-/**
- * A rounded card with a spread of covers, a bold title, a quiet line and one white pill button.
- * Used by an empty playlist ("Add songs to your playlist") and by the Library (no playlists / no artists).
- */
 @Composable
 fun EmptyStateCard(
     title: String,
@@ -72,9 +62,7 @@ fun EmptyStateCard(
     modifier: Modifier = Modifier,
     buttonLabel: String? = null,
     onButton: () -> Unit = {},
-    /** Cover URLs for the spread. Defaults to the shared song covers; pass artist images for the artists card. */
     covers: List<String> = EmptyStateCovers.urls,
-    /** Round covers (artists) instead of rounded squares. */
     circleCovers: Boolean = false,
 ) {
     val palette = LocalCoverPalette.current
@@ -112,17 +100,13 @@ fun EmptyStateCard(
     }
 }
 
-/** Five overlapping covers, the middle one biggest, the outer ones smaller and dimmer. */
 @Composable
 private fun CoverSpread(urls: List<String>, circle: Boolean = false) {
-    // (x offset from centre, size, alpha) for slots 0..4, left to right.
     val slots = listOf(
         Triple(-96, 62, 0.55f), Triple(-48, 78, 0.8f), Triple(0, 96, 1f), Triple(48, 78, 0.8f), Triple(96, 62, 0.55f),
     )
-    // Photos fill the middle slot first, then outwards, so a card with only one to three photos still looks balanced.
     val fillOrder = listOf(2, 1, 3, 0, 4)
     Box(Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
-        // Draw the outer ones first so the centre cover ends up on top.
         listOf(0, 4, 1, 3, 2).forEach { i ->
             val (dx, size, alpha) = slots[i]
             val url = urls.getOrNull(fillOrder.indexOf(i))

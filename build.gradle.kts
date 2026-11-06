@@ -31,7 +31,6 @@ subprojects {
             }
         }
     }
-    // The baseline profile module is a "test" module: same Java level as the rest, or Kotlin and Java disagree.
     plugins.withId("com.android.test") {
         extensions.configure<BaseExtension> {
             compileOptions {

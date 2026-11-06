@@ -80,7 +80,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Represents the state of lyrics fetching. */
 sealed interface LyricsState {
     @Immutable
     object Loading : LyricsState
@@ -95,16 +94,13 @@ sealed interface LyricsState {
     data class Error(val message: String) : LyricsState
 }
 
-/** One word (or syllable) of a line, with the time window in which it is sung. */
 @Immutable
 data class LyricsWord(
     val startMs: Long,
     val endMs: Long,
-    /** Includes its trailing space, so words can be concatenated as-is. */
     val text: String,
 )
 
-/** A single line of lyrics with its timestamp and per-word timing. */
 @Immutable
 data class LyricsLine(
     val timestampMs: Long,
@@ -113,16 +109,13 @@ data class LyricsLine(
     val words: List<LyricsWord> = emptyList(),
 )
 
-
 private class FetchedLyrics(val lines: List<LyricsLine>, val isSynced: Boolean)
 
-/** Lyrics from LRCLIB (https://lrclib.net), the open synced-lyrics database. Results are cached in memory. */
 object LyricsRepository {
     private const val BASE_URL = "https://lrclib.net/api"
     private const val USER_AGENT = "Gamut/1.0 (Android)"
     private const val TAG = "Lyrics"
 
-    /** A synced result whose length differs from the track by more than this is probably another version (live, remix). */
     private const val MAX_DURATION_DIFF_S = 10.0
 
     private val lineStampsRegex = Regex("""^(?:\s*\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\])+""")
@@ -130,7 +123,6 @@ object LyricsRepository {
     private val wordStampRegex = Regex("""<(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?>""")
     private val whitespaceRegex = Regex("\\s+")
 
-    // "(feat. X)", "[Official Video]", "- Remastered 2011", ... only get in the way of matching.
     private val bracketNoise = Regex(
         """\s*[(\[][^)\]]*\b(feat\.?|ft\.?|featuring|with|official|video|audio|lyrics?|visuali[sz]er|remaster(?:ed)?|live|explicit)\b[^)\]]*[)\]]""",
         RegexOption.IGNORE_CASE,
@@ -146,17 +138,10 @@ object LyricsRepository {
 
     private fun cacheKey(track: Track) = track.isrc.orEmpty().ifBlank { "${track.title}|${track.artist}" }
 
-    // The length (whole seconds) each cached result was looked up with: plain lyrics are looked up again when the
-    // length of the audio that actually plays turns out to differ.
     private val cachedSeconds = Collections.synchronizedMap(HashMap<String, Int>())
 
-    /** Lyrics already fetched for [track] this session, or null. Lets the player skip the spinner on re-open. */
     fun cached(track: Track): LyricsState.Loaded? = cache[cacheKey(track)]
 
-    /**
-     * [durationMs] is the length of the audio that is actually playing (the stream's, once known): synced lyrics only
-     * fit the version they were timed against, so that is what the lookup matches. Defaults to the catalog length.
-     */
     suspend fun fetchLyrics(track: Track, durationMs: Long = track.durationMs): LyricsState {
         val key = cacheKey(track)
         val seconds = (durationMs / 1000).toInt()
@@ -179,13 +164,11 @@ object LyricsRepository {
         }
     }
 
-    /** First artist of "A, B", "A & B", "A x B", "A feat. B" ...: lyrics databases usually list just that one. */
     private val artistSplit = Regex("""\s*(?:,|;|/|&|\band\b|\bx\b|\bwith\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*""", RegexOption.IGNORE_CASE)
     private fun primaryArtist(artist: String) = artist.split(artistSplit).firstOrNull { it.isNotBlank() }?.trim() ?: artist
 
     private fun norm(s: String) = s.lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
 
-    /** True if a search hit is plausibly this song (used for the loose queries, which can return unrelated songs). */
     private fun looksLike(o: JSONObject, title: String, artist: String, seconds: Double): Boolean {
         val t = norm(o.optString("trackName", o.optString("name", "")))
         val a = norm(o.optString("artistName", ""))
@@ -193,7 +176,6 @@ object LyricsRepository {
         val wantA = norm(artist)
         val titleOk = t.isNotEmpty() && wantT.isNotEmpty() && (t == wantT || t.startsWith(wantT) || wantT.startsWith(t))
         val artistOk = a.isNotEmpty() && wantA.isNotEmpty() && (a.contains(wantA) || wantA.contains(a))
-        // Same title and (nearly) the same length is the same song even when the artist is spelled / transliterated differently.
         val durationOk = seconds > 0 && o.has("duration") && !o.isNull("duration") && abs(o.optDouble("duration") - seconds) <= 3.0
         return titleOk && (artistOk || durationOk)
     }
@@ -204,10 +186,8 @@ object LyricsRepository {
         val artist = track.artist.replace(featuringNoise, "").trim().ifBlank { track.artist }
         val lead = primaryArtist(track.artist)
         val seconds = durationMs / 1000.0
-        // A network failure on one request must not end the lookup: later requests may still work. Only when nothing
-        // was found AND something failed is the answer "error, try again" rather than "no lyrics exist".
         var failed = false
-        var offline = false   // no network at all: don't wait through ten more doomed requests
+        var offline = false
         fun get(url: String): String? {
             if (offline) return null
             return try {
@@ -219,8 +199,6 @@ object LyricsRepository {
             }
         }
 
-        // LRCLIB often holds several records of one song, and the best metadata match can be the one that only has
-        // plain text. A plain hit is therefore kept as a fallback while the search for a synced record goes on.
         var plainFallback: FetchedLyrics? = null
         fun synced(found: FetchedLyrics?): FetchedLyrics? {
             if (found == null) return null
@@ -229,7 +207,6 @@ object LyricsRepository {
             return null
         }
 
-        // 1. Exact match by title + artist + length. One small request, and the right version of the song.
         if (seconds > 0) {
             for (a in listOf(artist, lead).distinct()) {
                 val exact = get("$BASE_URL/get?track_name=${enc(title)}&artist_name=${enc(a)}&duration=${seconds.roundToInt()}")
@@ -237,8 +214,6 @@ object LyricsRepository {
             }
         }
 
-        // 2. Search, then pick the result whose length is closest to the track's. The first queries are targeted;
-        //    the loose ones are filtered so an unrelated song can never be shown.
         data class Q(val query: String, val strict: Boolean)
         val queries = listOf(
             Q("track_name=${enc(title)}&artist_name=${enc(artist)}", false),
@@ -265,7 +240,6 @@ object LyricsRepository {
         val synced = items.filter { hasText(it, "syncedLyrics") }.minByOrNull(::diff)
         if (synced != null && diff(synced) <= MAX_DURATION_DIFF_S) return toLyrics(synced)
         if (synced != null) Log.i(TAG, "synced version exists but its length is ${"%.1f".format(diff(synced))}s off the audio: not used")
-        // No well-matching synced version: plain text beats highlighting against the wrong timing.
         val plain = items.filter { hasText(it, "plainLyrics") }.minByOrNull(::diff)
         if (plain != null) return toLyrics(plain, preferPlain = true)
         return synced?.let { toLyrics(it) }
@@ -287,14 +261,13 @@ object LyricsRepository {
 
     private fun enc(v: String) = URLEncoder.encode(v, "UTF-8")
 
-    /** [httpGet] with up to three tries for timeouts, 429 and 5xx (the public service is sometimes slow or busy). */
     private fun httpGetRetrying(url: String): String? {
         var last: IOException? = null
         repeat(3) { attempt ->
             try {
                 return httpGet(url)
             } catch (e: UnknownHostException) {
-                throw e   // no network: retrying only delays the answer
+                throw e
             } catch (e: IOException) {
                 last = e
                 if (attempt < 2) Thread.sleep(500L * (attempt + 1))
@@ -303,7 +276,6 @@ object LyricsRepository {
         throw last ?: IOException("request failed")
     }
 
-    /** GET [url]; the body on 200, null on 404 (no such lyrics), an [IOException] on anything else. */
     private fun httpGet(url: String): String? {
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
@@ -326,10 +298,6 @@ object LyricsRepository {
         return (min.toLong() * 60 + sec.toLong()) * 1000 + fracMs
     }
 
-    /**
-     * Parses LRC. Works with plain line-synced LRC (`[mm:ss.xx] text`, including several stamps on one
-     * line for a repeated chorus) and with "enhanced" LRC that also carries word stamps (`<mm:ss.xx> word`).
-     */
     private fun parseLrc(lrcText: String): List<LyricsLine> {
         val raw = mutableListOf<Pair<Long, String>>()
         lrcText.lines().forEach { line ->
@@ -350,10 +318,6 @@ object LyricsRepository {
         }
     }
 
-    /**
-     * When the line ends. Right up to the next line if that is close; otherwise a length-based
-     * estimate, so a long instrumental gap doesn't stretch the last words of a line across it.
-     */
     private fun lineEnd(start: Long, text: String, nextStart: Long?): Long {
         val estimate = 400L + text.length * 85L
         val gap = nextStart?.let { it - start }
@@ -365,7 +329,6 @@ object LyricsRepository {
         return start + duration.coerceAtLeast(300L)
     }
 
-    /** Exact word timings from enhanced-LRC stamps, or null when the line has none. */
     private fun parseEnhancedWords(body: String, lineEnd: Long): List<LyricsWord>? {
         val stamps = wordStampRegex.findAll(body).toList()
         if (stamps.isEmpty()) return null
@@ -377,7 +340,6 @@ object LyricsRepository {
             val segment = body.substring(m.range.last + 1, next?.range?.first ?: body.length)
             when {
                 segment.isBlank() -> {
-                    // A bare space between two stamps belongs to the previous word.
                     if (words.isNotEmpty() && segment.isNotEmpty()) {
                         val last = words.removeAt(words.lastIndex)
                         words.add(last.copy(text = last.text.trimEnd() + " "))
@@ -389,10 +351,6 @@ object LyricsRepository {
         return words.ifEmpty { null }
     }
 
-    /**
-     * Fallback when the source only has line timestamps: spread the line's duration over its
-     * words in proportion to their length. Not exact, but it tracks singing closely enough.
-     */
     private fun estimateWords(text: String, start: Long, end: Long): List<LyricsWord> {
         val parts = text.split(whitespaceRegex).filter { it.isNotEmpty() }
         if (parts.isEmpty()) return emptyList()
@@ -408,30 +366,21 @@ object LyricsRepository {
         }
     }
 
-    /** Parses plain lyrics without timestamps. */
     private fun parsePlainLyrics(plainText: String): List<LyricsLine> =
         plainText.lines()
             .filter { it.isNotBlank() }
             .map { LyricsLine(timestampMs = 0L, text = it.trim()) }
 }
 
-
-private val LyricsTitleHeight = 36.dp        // the "Lyrics" title row that sits above the card
-private val LyricsCollapsedHeight = 92.dp    // card height when folded: 14 + 28 + 8 + 28 + 14 (two lines)
-private val PreviewPaddingV = 14.dp          // top/bottom padding of the folded snippet
-private val PreviewLineGap = 8.dp            // gap between the two folded lines
-private const val PreviewFadeStart = 0.3f    // fade begins at this fraction of line 2's height (top of the letters' body)
-private const val PreviewFadeEnd = 0.75f     // fully invisible from here down (~ the baseline, so the bottom half of the letters is truly gone)
+private val LyricsTitleHeight = 36.dp
+private val LyricsCollapsedHeight = 92.dp
+private val PreviewPaddingV = 14.dp
+private val PreviewLineGap = 8.dp
+private const val PreviewFadeStart = 0.3f
+private const val PreviewFadeEnd = 0.75f
 private val LyricsCardShape = RoundedCornerShape(14.dp)
-private val AcrylicBlur = 72.dp              // how hard the art behind the lyrics card is blurred
+private val AcrylicBlur = 72.dp
 
-/**
- * Collapsible lyrics card with its "Lyrics" title outside, on top. Folded, the card shows a snippet
- * of the first lines fading out toward the bottom; expanded, it fills the space it is given and
- * shows the auto-scrolling, word-highlighted lyrics.
- *
- * [positionMs] is a lambda so only the parts that need the frame-by-frame position read it.
- */
 @Composable
 fun LyricsSection(
     lyricsState: LyricsState,
@@ -440,7 +389,6 @@ fun LyricsSection(
     expanded: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
-    /** Tap on the "no lyrics" / error message: look the lyrics up again. */
     onRetry: () -> Unit = {},
 ) {
     BoxWithConstraints(modifier) {
@@ -455,7 +403,6 @@ fun LyricsSection(
         val chevron by animateFloatAsState(if (expanded) 0f else 180f, tween(250), label = "lyrics-chevron")
 
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
-            // Title, outside (above) the card.
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -474,7 +421,6 @@ fun LyricsSection(
                 )
             }
 
-            // Real frosted glass: blurs the screen's cover backdrop (see acrylicSource above) behind the card.
             AcrylicSurface(
                 Modifier
                     .fillMaxWidth()
@@ -486,7 +432,6 @@ fun LyricsSection(
                         spotColor = Color.Black.copy(alpha = 0.45f),
                         clip = false,
                     )
-                    // Folded, tapping anywhere on the snippet opens it.
                     .tapTarget { if (!expanded) onToggle() },
                 shape = LyricsCardShape,
                 material = AcrylicMaterials.UltraThin,
@@ -524,7 +469,6 @@ fun LyricsSection(
     }
 }
 
-/** Folded-card content: the first lyric up top, the lines under it fading out toward the bottom. */
 @Composable
 private fun LyricsPreview(lyricsState: LyricsState) {
     val font = rememberLyricsFont()
@@ -543,8 +487,6 @@ private fun LyricsPreview(lyricsState: LyricsState) {
                     lineHeight = 28.sp,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
-                // Measured heights of the two lines, so the fade can be aimed at the second line
-                // exactly (its own vertical middle), whatever the font size / wrapping is.
                 val density = LocalDensity.current
                 var firstLinePx by remember { mutableIntStateOf(0) }
                 var secondLinePx by remember { mutableIntStateOf(0) }
@@ -555,9 +497,7 @@ private fun LyricsPreview(lyricsState: LyricsState) {
                     Modifier
                         .fillMaxSize()
                         .fadeOutBetween(
-                            // Fully visible down to the top of line 2's letters...
                             start = { secondTop() + secondLinePx * PreviewFadeStart },
-                            // ...and completely invisible from its baseline down.
                             end = { secondTop() + secondLinePx * PreviewFadeEnd },
                             hasSecondLine = { secondLinePx > 0 },
                         ),
@@ -571,7 +511,7 @@ private fun LyricsPreview(lyricsState: LyricsState) {
                         lyricsState.lines.take(2).forEachIndexed { i, line ->
                             Text(
                                 text = line.text,
-                                color = Color.White.copy(alpha = 0.6f), // unhighlighted lyric color (same as unsung words in the expanded view); same on both lines: the fade alone does the cutting
+                                color = Color.White.copy(alpha = 0.6f),
                                 style = style,
                                 maxLines = 2,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -601,7 +541,6 @@ private fun LyricsPreviewMessage(message: String) {
     }
 }
 
-/** Empty state for lyrics. */
 @Composable
 internal fun LyricsEmptyState(message: String, onClick: (() -> Unit)? = null) {
     Box(
@@ -629,11 +568,6 @@ internal fun LyricsEmptyState(message: String, onClick: (() -> Unit)? = null) {
     }
 }
 
-/**
- * Loads `res/font/lyrics.ttf` (it lives in core-designsystem). It is looked up by name at runtime,
- * so this module doesn't need a dependency on that module's R class. Falls back to the system
- * sans if the font can't be found.
- */
 @Composable
 internal fun rememberLyricsFont(): FontFamily {
     val context = LocalContext.current
@@ -645,9 +579,8 @@ internal fun rememberLyricsFont(): FontFamily {
     }
 }
 
-private const val HighlightStepMs = 40L   // the word colors are refreshed 25x a second: smooth to the eye, 2.5x cheaper than every frame
+private const val HighlightStepMs = 40L
 
-/** Auto-scrolling list. The active line sits in the upper-middle of the card. */
 @Composable
 internal fun LyricsList(
     lines: List<LyricsLine>,
@@ -659,16 +592,12 @@ internal fun LyricsList(
     val font = rememberLyricsFont()
     val listState = rememberLazyListState()
 
-    // One stable reader for every line, so lines whose state didn't change skip recomposition
-    // even though the caller's lambda instance may change.
     val latestPosition by rememberUpdatedState(positionMs)
     val readPosition = remember { { latestPosition() } }
 
     val activeIndex by remember(lines, isSynced) {
         derivedStateOf { if (isSynced) activeLineIndex(lines, readPosition()) else -1 }
     }
-    // Only a finger on the list pauses the auto-scroll. (isScrollInProgress would also be true while our own
-    // animation is still running, which made the list skip lines when they changed quickly.)
     val dragged by listState.interactionSource.collectIsDraggedAsState()
 
     LaunchedEffect(lines) { listState.scrollToItem(activeIndex.coerceAtLeast(0)) }
@@ -701,11 +630,6 @@ internal fun LyricsList(
     }
 }
 
-/**
- * One line. Words already sung are the accent color, the word being sung fades into it as it is
- * sung, and words still to come stay dim. Only the active line reads the position, so only it
- * recomposes while the song plays.
- */
 @Composable
 private fun LyricLine(
     line: LyricsLine,
@@ -718,7 +642,7 @@ private fun LyricLine(
 ) {
     val style = TextStyle(
         fontFamily = font,
-        fontWeight = FontWeight.Normal, // the bundled file is already SemiBold; don't let Compose fake-bold it
+        fontWeight = FontWeight.Normal,
         fontSize = 22.sp,
         lineHeight = 30.sp,
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -734,7 +658,6 @@ private fun LyricLine(
         return
     }
 
-    // The line being sung is full size and full brightness; lines already sung recede the most.
     val lineAlpha by animateFloatAsState(
         targetValue = when {
             isActive -> 1f
@@ -750,14 +673,13 @@ private fun LyricLine(
         label = "lyric-line-scale",
     )
     val unsung = Color.White.copy(alpha = 0.6f)
-    // Quantized position: this line recomposes only when the step changes, not on every frame.
     val step by remember(isActive, readPosition) {
         derivedStateOf { if (isActive) readPosition() / HighlightStepMs else 0L }
     }
     val now = when {
         isActive -> step * HighlightStepMs
-        isPast -> Long.MAX_VALUE / 2 // every word done
-        else -> -1_000_000L          // no word started
+        isPast -> Long.MAX_VALUE / 2
+        else -> -1_000_000L
     }
     val text = buildAnnotatedString {
         line.words.forEach { word ->
@@ -773,7 +695,6 @@ private fun LyricLine(
     )
 }
 
-/** Index of the last line that has started at [positionMs], or -1 before the first line. */
 internal fun activeLineIndex(lines: List<LyricsLine>, positionMs: Long): Int {
     var lo = 0
     var hi = lines.lastIndex

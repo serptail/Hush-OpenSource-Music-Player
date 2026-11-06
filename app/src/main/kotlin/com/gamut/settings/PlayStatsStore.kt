@@ -17,19 +17,16 @@ import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** One song and how many times it was played, all time. */
 data class PlayedSong(
     val isrc: String,
     val title: String,
     val artist: String,
     val artUrl: String?,
-    /** Helps tell namesake artists apart when looking up a portrait; null for songs that carry no album. */
     val album: String? = null,
     val plays: Int,
     val lastPlayedMs: Long,
 )
 
-/** One play, kept (capped) so Week / Month can be answered after the fact. */
 data class PlayEvent(val isrc: String, val atMs: Long)
 
 data class PlayStatsData(
@@ -58,10 +55,6 @@ private const val DAY_MS = 24L * 60 * 60 * 1000
 
 private class ArtistTally(val name: String, var plays: Int = 0, var album: String? = null)
 
-/**
- * Acts whose NAME contains a separator ("Simon & Garfunkel", "Tyler, The Creator", "Lil Nas X").
- * They are pulled out whole before a credit is split. Add more here whenever one gets torn apart.
- */
 private val KEEP_TOGETHER = listOf(
     "Simon & Garfunkel", "Tyler, The Creator", "Earth, Wind & Fire", "Hall & Oates", "Daryl Hall & John Oates",
     "Crosby, Stills, Nash & Young", "Crosby, Stills & Nash", "Emerson, Lake & Palmer", "Sly & The Family Stone",
@@ -71,12 +64,11 @@ private val KEEP_TOGETHER = listOf(
     "Smokey Robinson & The Miracles", "Martha Reeves & The Vandellas", "Ike & Tina Turner", "Brooks & Dunn",
     "Big & Rich", "Sam & Dave", "Years & Years", "Mumford & Sons", "Belle & Sebastian", "Matt & Kim",
     "Chase & Status", "Lil Nas X", "Malcolm X",
-).sortedByDescending { it.length } // longest first, so "Crosby, Stills, Nash & Young" wins over "Crosby, Stills & Nash"
+).sortedByDescending { it.length }
 
 private val CREDIT_SPLIT = Regex("""\s*[,;]\s*|\s+(?:&|x|feat\.?|ft\.?|featuring|vs\.?)\s+""", RegexOption.IGNORE_CASE)
 private val LEADING_FEAT = Regex("""^(?:feat\.?|ft\.?|featuring|vs\.?)\s+""", RegexOption.IGNORE_CASE)
 
-/** "Drake & Don Toliver" -> [Drake, Don Toliver]; "Tyler, The Creator feat. Kali Uchis" -> [Tyler, The Creator, Kali Uchis]. */
 internal fun splitArtists(raw: String): List<String> {
     var rest = raw.replace(Regex("""[()\[\]]"""), " ")
     val out = LinkedHashMap<String, String>()
@@ -94,7 +86,6 @@ internal fun splitArtists(raw: String): List<String> {
     return out.values.toList().ifEmpty { listOfNotNull(raw.trim().takeIf { it.isNotEmpty() }) }
 }
 
-/** Pure function: everything the Statistics card shows for one period. */
 internal fun summarize(data: PlayStatsData, period: StatsPeriod, nowMs: Long): StatsSummary {
     val days = period.days
     val counts: Map<String, Int> =
@@ -107,8 +98,6 @@ internal fun summarize(data: PlayStatsData, period: StatsPeriod, nowMs: Long): S
     val ranked = counts
         .mapNotNull { (isrc, n) -> data.songs[isrc]?.let { RankedSong(it, n) } }
         .sortedWith(compareByDescending<RankedSong> { it.plays }.thenByDescending { it.song.lastPlayedMs })
-    // A collab credits every artist on it: "Drake & Don Toliver" x2 plays = 2 for Drake AND 2 for Don Toliver.
-    // (totalPlays above still counts each play once.)
     val tally = LinkedHashMap<String, ArtistTally>()
     for (r in ranked) {
         for (name in splitArtists(r.song.artist)) {
@@ -119,7 +108,7 @@ internal fun summarize(data: PlayStatsData, period: StatsPeriod, nowMs: Long): S
     }
     val artists = tally.values
         .map { RankedArtist(it.name, it.plays, it.album) }
-        .sortedByDescending { it.plays } // stable: ties keep the order of the songs (most played / most recent first)
+        .sortedByDescending { it.plays }
     return StatsSummary(
         totalPlays = ranked.sumOf { it.plays },
         uniqueSongs = ranked.size,
@@ -129,10 +118,6 @@ internal fun summarize(data: PlayStatsData, period: StatsPeriod, nowMs: Long): S
     )
 }
 
-/**
- * Local play counter. Call [record] once each time a song STARTS playing (the same moment "Recently played" is updated).
- * Stored in its own SharedPreferences file, so there is no database schema or migration to touch.
- */
 @Singleton
 class PlayStatsStore @Inject constructor(@ApplicationContext context: Context) {
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -147,7 +132,6 @@ class PlayStatsStore @Inject constructor(@ApplicationContext context: Context) {
         val changed = synchronized(lock) {
             val cur = _snapshot.value
             val last = cur.events.lastOrNull()
-            // The same song reported twice within moments (a recomposed callback, a double tap) is one play.
             if (last != null && last.isrc == track.isrc && atMs - last.atMs < DEDUPE_MS) return@synchronized false
             val prev = cur.songs[track.isrc]
             val song = PlayedSong(
@@ -171,14 +155,12 @@ class PlayStatsStore @Inject constructor(@ApplicationContext context: Context) {
         persist()
     }
 
-    /** Always writes the LATEST snapshot, so racing writes can never leave older data on disk. */
     private fun persist() {
         scope.launch {
             writeMutex.withLock {
                 try {
                     prefs.edit().putString(KEY, encode(_snapshot.value)).apply()
                 } catch (_: Exception) {
-                    // stats are best-effort; never crash playback over them
                 }
             }
         }
@@ -234,6 +216,6 @@ class PlayStatsStore @Inject constructor(@ApplicationContext context: Context) {
         const val PREFS = "play_stats"
         const val KEY = "data_v1"
         const val DEDUPE_MS = 3_000L
-        const val MAX_EVENTS = 5_000 // plenty for 30 days; all-time counts live on the songs and are never trimmed
+        const val MAX_EVENTS = 5_000
     }
 }

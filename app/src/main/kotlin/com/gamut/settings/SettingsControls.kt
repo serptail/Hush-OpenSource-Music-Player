@@ -25,11 +25,6 @@ import com.adamglin.phosphoricons.bold.Check
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 
-/**
- * Extra controls for the settings screens, in the same flat style as [SettingsKit]: no containers, colours from ink().
- */
-
-/** A [Cell] with a [GamutSwitch] on the right. The whole row toggles. */
 @Composable
 fun SwitchCell(
     title: String,
@@ -51,7 +46,6 @@ fun SwitchCell(
     )
 }
 
-/** Slim hairline slider. Delegates to [PillSlider] so every slider in the app looks the same. */
 @Composable
 fun GamutSlider(
     value: Float,
@@ -73,7 +67,6 @@ fun GamutSlider(
     )
 }
 
-/** Title + value on one line, slider underneath. */
 @Composable
 fun SliderCell(
     title: String,
@@ -103,7 +96,6 @@ fun SliderCell(
 
 data class Choice<T>(val value: T, val label: String, val hint: String? = null)
 
-/** Pick one of a few options. Tapping an option selects it and closes the dialog. */
 @Composable
 fun <T> GamutChoiceDialog(
     title: String,
@@ -121,9 +113,7 @@ fun <T> GamutChoiceDialog(
         dismissLabel = null,
         body = note,
     ) {
-        // Rows close through the dialog's own animated dismiss, not the raw callback.
         val close = LocalDialogDismiss.current
-        // Scrolls when there are many options (the equalizer presets).
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
             choices.forEach { choice ->
                 Row(

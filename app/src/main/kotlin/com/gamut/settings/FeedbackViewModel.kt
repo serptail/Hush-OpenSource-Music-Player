@@ -38,7 +38,6 @@ class FeedbackViewModel @Inject constructor(
     private val telemetry: TelemetryCollector,
     private val playback: PlaybackSettings,
 ) : ViewModel() {
-
     private val sound: SoundSettings = SoundSettings.get(app)
     private val guard = SubmissionGuard(app)
 
@@ -47,16 +46,12 @@ class FeedbackViewModel @Inject constructor(
 
     private var contactTouched = false
 
-    // ---- form -----------------------------------------------------------------------------------------------------
-
     fun setType(t: FeedbackType) = _ui.update {
         it.copy(type = t, error = null, attachDiagnostics = if (t == FeedbackType.BUG) true else it.attachDiagnostics)
     }
 
-    /** Tapping the star you already have clears the rating. */
     fun setRating(r: Int) = _ui.update { it.copy(rating = if (it.rating == r) 0 else r.coerceIn(0, 5)) }
 
-    /** The limits are hard stops while typing and pasting, not warnings. */
     fun setMessage(raw: String) {
         var s = raw
         if (s.length > FeedbackRules.MAX_CHARS) s = s.take(FeedbackRules.MAX_CHARS)
@@ -74,7 +69,6 @@ class FeedbackViewModel @Inject constructor(
         _ui.update { it.copy(email = raw.filterNot { c -> c.isWhitespace() }.take(FeedbackRules.MAX_EMAIL), emailError = false) }
     }
 
-    /** Fills the contact fields from the account once, unless the user has already typed in them. */
     fun prefill(name: String, email: String) {
         if (contactTouched) return
         _ui.update { if (it.name.isBlank() && it.email.isBlank()) it.copy(name = name.take(FeedbackRules.MAX_NAME), email = email) else it }
@@ -82,9 +76,6 @@ class FeedbackViewModel @Inject constructor(
 
     fun setAttachDiagnostics(v: Boolean) = _ui.update { it.copy(attachDiagnostics = v) }
 
-    // ---- diagnostics ----------------------------------------------------------------------------------------------
-
-    /** The exact text that would be attached. Same call as [send] makes, so the preview is the truth. */
     suspend fun diagnosticsPreview(): String = withContext(Dispatchers.IO) { telemetry.snapshot(audioExtras()) }
 
     private fun audioExtras(): Map<String, String> {
@@ -108,12 +99,9 @@ class FeedbackViewModel @Inject constructor(
         )
     }
 
-    // ---- send -----------------------------------------------------------------------------------------------------
-
-    /** [captcha] shows the hCaptcha challenge and returns its token. It runs only after local validation passes. */
     fun send(captcha: suspend () -> Result<String>) {
         val u = _ui.value
-        if (u.status != FeedbackStatus.IDLE) return   // one send in flight, ever: a double tap cannot double post
+        if (u.status != FeedbackStatus.IDLE) return
 
         val message = FeedbackRules.sanitize(u.message, multiline = true)
         val name = FeedbackRules.sanitize(u.name, multiline = false).take(FeedbackRules.MAX_NAME)
@@ -159,7 +147,6 @@ class FeedbackViewModel @Inject constructor(
         }
     }
 
-    /** The screen calls this after it has shown the thank-you. */
     fun acknowledgeSent() = _ui.update { if (it.status == FeedbackStatus.SENT) it.copy(status = FeedbackStatus.IDLE) else it }
 
     private fun fail(text: String) = _ui.update { it.copy(error = text) }
@@ -168,8 +155,6 @@ class FeedbackViewModel @Inject constructor(
         val info = app.packageManager.getPackageInfo(app.packageName, 0)
         info.versionName.orEmpty()
     }.getOrDefault("unknown")
-
-    // ---- messages -------------------------------------------------------------------------------------------------
 
     private fun problemText(p: MessageProblem) = when (p) {
         MessageProblem.TOO_SHORT -> "Please write at least ${FeedbackRules.MIN_WORDS} words so we can understand it."

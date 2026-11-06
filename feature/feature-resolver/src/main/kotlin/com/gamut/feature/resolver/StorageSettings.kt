@@ -16,14 +16,9 @@ enum class DownloadQuality(val label: String, val hint: String) {
 data class StorageSettingsState(
     val wifiOnly: Boolean = false,
     val downloadQuality: DownloadQuality = DownloadQuality.BEST,
-    /** Cap for the image / temporary-file cache in MB. 0 = no limit. */
     val cacheLimitMb: Int = 0,
 )
 
-/**
- * Storage & Downloads preferences. Lives next to [TrackDownloadManager] (which reads it) so the resolver module does not
- * have to depend on the settings module. Same shape as PlaybackSettings: [state], [update], [reset].
- */
 @Singleton
 class StorageSettings @Inject constructor(@ApplicationContext context: Context) {
     private val prefs = context.getSharedPreferences("storage_settings", Context.MODE_PRIVATE)

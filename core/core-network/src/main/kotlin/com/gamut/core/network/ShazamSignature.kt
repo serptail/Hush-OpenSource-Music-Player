@@ -10,29 +10,17 @@ import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.sin
 
-/**
- * Pure-Kotlin port of Shazam's audio fingerprint ("signature") algorithm, as implemented by shazamio-core
- * (https://github.com/shazamio/shazamio-core, itself a port of SongRec's reverse engineering).
- *
- * Input:  16 kHz, mono, 16-bit PCM samples.
- * Output: a `data:audio/vnd.shazam.sig;base64,...` URI that Shazam's discovery endpoint understands.
- *
- * No Android APIs are used besides java.util, so it can be unit-tested on the plain JVM.
- */
 object ShazamSignature {
-
     const val SAMPLE_RATE_HZ = 16_000
 
     private const val FFT_SIZE = 2048
     private const val BINS = 1025
     private const val HOP = 128
-    private const val RING = 256            // number of FFT frames kept; must stay a power of two
+    private const val RING = 256
     private const val DATA_URI_PREFIX = "data:audio/vnd.shazam.sig;base64,"
 
-    /** Result of fingerprinting: the URI to send and the audio length it covers. */
     class Result(val uri: String, val sampleMs: Int)
 
-    /** [pcm] = little-endian signed 16-bit mono samples at 16 kHz (what MicRecorder produces). */
     fun fromPcm16(pcm: ByteArray): Result {
         val samples = ShortArray(pcm.size / 2)
         ByteBuffer.wrap(pcm, 0, samples.size * 2).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(samples)
@@ -45,11 +33,8 @@ object ShazamSignature {
         return Result(uri, (samples.size.toFloat() / SAMPLE_RATE_HZ * 1000f).toInt())
     }
 
-    // ------------------------------------------------------------------------------------------------------------
-
     private class Peak(val pass: Int, val magnitude: Int, val bin: Int)
 
-    /** Frequency band of a peak (index 0..3), or -1 when outside 250 Hz .. 5.5 kHz. */
     private fun bandOf(hz: Int): Int = when (hz) {
         in 250..519 -> 0
         in 520..1449 -> 1
@@ -59,7 +44,6 @@ object ShazamSignature {
     }
 
     private val hann = FloatArray(FFT_SIZE) { i ->
-        // Same values as shazamio-core's HANNING_WINDOW_2048_MULTIPLIERS (leading/trailing zeros omitted).
         (0.5 - 0.5 * cos(2.0 * PI * (i + 1) / (FFT_SIZE + 1))).toFloat()
     }
 
@@ -76,7 +60,7 @@ object ShazamSignature {
         private val bands = Array(4) { ArrayList<Peak>() }
 
         fun run(samples: ShortArray): Array<ArrayList<Peak>> {
-            val chunks = samples.size / HOP                      // a trailing partial chunk is ignored, like the original
+            val chunks = samples.size / HOP
             val chunk = ShortArray(HOP)
             for (c in 0 until chunks) {
                 System.arraycopy(samples, c * HOP, chunk, 0, HOP)
@@ -95,7 +79,7 @@ object ShazamSignature {
                 windowed[i] = ringSamples[(i + ringIndex) and (FFT_SIZE - 1)] * hann[i]
             }
             val out = fftOut[fftIndex]
-            fft.powerSpectrum(windowed, out)                     // |X|^2 for bins 0..1024
+            fft.powerSpectrum(windowed, out)
             for (i in 0 until BINS) out[i] = max(out[i] / (1 shl 17).toFloat(), 0.0000000001f)
             fftIndex = (fftIndex + 1) and (RING - 1)
         }
@@ -137,7 +121,7 @@ object ShazamSignature {
                 val var2 = (magAfter - magBefore) * 32f / var1
                 if (var1.isNaN() || var2.isNaN()) continue
 
-                val corrected = ((bin * 64) + var2.toInt()) and 0xFFFF       // u16, like the original
+                val corrected = ((bin * 64) + var2.toInt()) and 0xFFFF
                 val hz = (corrected.toFloat() * (16000f / 2f / 1024f / 64f)).toInt()
                 val band = bandOf(hz)
                 if (band < 0) continue
@@ -149,8 +133,6 @@ object ShazamSignature {
 
     private val FREQ_NEIGHBORS = intArrayOf(-10, -7, -4, -3, 1, 2, 5, 8)
     private val TIME_NEIGHBORS = intArrayOf(-53, -45, 165, 172, 179, 186, 193, 200, 214, 221, 228, 235, 242, 249)
-
-    // ------------------------------------------------------------------------------------------------------------
 
     private fun encode(numberSamples: Int, bands: Array<ArrayList<Peak>>): ByteArray {
         val body = java.io.ByteArrayOutputStream()
@@ -178,17 +160,17 @@ object ShazamSignature {
         val bodyBytes = body.toByteArray()
 
         val out = ByteBuffer.allocate(48 + 8 + bodyBytes.size).order(ByteOrder.LITTLE_ENDIAN)
-        out.putInt(0xcafe2580.toInt())                       // magic1
-        out.putInt(0)                                        // crc32, filled in below
-        out.putInt(bodyBytes.size + 8)                       // size minus header
-        out.putInt(0x94119c00.toInt())                       // magic2
-        out.putInt(0).putInt(0).putInt(0)                    // void1
-        out.putInt(3 shl 27)                                 // sample-rate id for 16 kHz, shifted
-        out.putInt(0).putInt(0)                              // void2
+        out.putInt(0xcafe2580.toInt())
+        out.putInt(0)
+        out.putInt(bodyBytes.size + 8)
+        out.putInt(0x94119c00.toInt())
+        out.putInt(0).putInt(0).putInt(0)
+        out.putInt(3 shl 27)
+        out.putInt(0).putInt(0)
         out.putInt(numberSamples + (SAMPLE_RATE_HZ * 0.24f).toInt())
-        out.putInt((15 shl 19) + 0x40000)                    // fixed value
+        out.putInt((15 shl 19) + 0x40000)
         out.putInt(0x40000000)
-        out.putInt(bodyBytes.size + 8)                       // size minus header (again)
+        out.putInt(bodyBytes.size + 8)
         out.put(bodyBytes)
         val bytes = out.array()
 
@@ -197,9 +179,6 @@ object ShazamSignature {
         return bytes
     }
 
-    // ------------------------------------------------------------------------------------------------------------
-
-    /** Radix-2 FFT of a real signal, returning the power spectrum |X[k]|^2 for k = 0..n/2. */
     private class RealFft(private val n: Int) {
         private val cosT = DoubleArray(n / 2) { cos(2.0 * PI * it / n) }
         private val sinT = DoubleArray(n / 2) { -sin(2.0 * PI * it / n) }

@@ -66,14 +66,6 @@ import com.gamut.core.model.Track
 
 private val FavoriteRed = Color(0xFFFF4D6D)
 
-/**
- * The "what's this song?" sheet. It shows what the app is doing (listening, identifying), and when a song is found,
- * the result with the cover art and the same actions Search offers on a song: play, favorite (the heart saves, then
- * offers the playlists, like the + in Search), and the three-dots sheet with share, add to playlist and go to artist,
- * all through the shared TrackActionsSheet / SavedInSheet / ShareSheet / ArtistPickerSheet. Pure UI: the caller decides
- * what each action does, and the sheet stays open so a song can go to several places. Dismissing it (swipe down, tap
- * outside) stops listening.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShazamSheet(
@@ -87,9 +79,7 @@ fun ShazamSheet(
     onPlay: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onAddToQueue: (Track) -> Unit,
-    /** Adds the track to the playlist with this id (same shape as SearchScreen's onAddToPlaylist). */
     onAddToPlaylist: (Track, String) -> Unit,
-    /** Opens the artist page of the track (by name). The caller closes the Shazam sheet. */
     onTrackArtist: (Track) -> Unit,
 ) {
     GamutSheet(onDismiss = onDismiss) {
@@ -145,8 +135,6 @@ private fun ListeningContent(level: Float, searching: Boolean, onCancel: () -> U
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(Modifier.size(200.dp), contentAlignment = Alignment.Center) {
-            // Two rings that grow and fade (time based), and a core that swells with the sound. Everything animated
-            // here is read inside graphicsLayer, so it never recomposes: only the draw step runs.
             for (offset in floatArrayOf(0f, 0.5f)) {
                 Box(
                     Modifier
@@ -170,8 +158,6 @@ private fun ListeningContent(level: Float, searching: Boolean, onCancel: () -> U
                     }
                     .background(ink(0.14f), CircleShape),
             )
-            // ic_shazam is a circle with the S carved out of it, so it is drawn as the white circle itself.
-            // A base-coloured disc sits behind it so the carved S reads as solid dark instead of showing the pulsing core.
             Box(Modifier.size(88.dp), contentAlignment = Alignment.Center) {
                 Box(Modifier.size(82.dp).background(LocalCoverPalette.current.base, CircleShape))
                 Icon(painterResource(R.drawable.ic_shazam), null, tint = ink(), modifier = Modifier.size(88.dp))
@@ -233,13 +219,11 @@ private fun FoundContent(
     onTrackArtist: (Track) -> Unit,
 ) {
     val accent = MaterialTheme.colorScheme.primary
-    // The same four follow-up sheets Search uses, opened from this one.
     var actionsOpen by remember { mutableStateOf(false) }
     var savedOpen by remember { mutableStateOf(false) }
     var pickerOpen by remember { mutableStateOf(false) }
     var shareOpen by remember { mutableStateOf(false) }
     var artistPickOpen by remember { mutableStateOf(false) }
-    // What the last action did, so "Add to queue" visibly worked without closing the sheet.
     var note by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
@@ -269,7 +253,6 @@ private fun FoundContent(
                 contentAlignment = Alignment.Center,
             ) { Text("Play", style = MaterialTheme.typography.labelLarge, color = LocalCoverPalette.current.base) }
             Spacer(Modifier.width(12.dp))
-            // Like the + in Search: saves straight to favorites, then offers the playlists. Tapping again undoes the save.
             Box(
                 Modifier
                     .size(48.dp)

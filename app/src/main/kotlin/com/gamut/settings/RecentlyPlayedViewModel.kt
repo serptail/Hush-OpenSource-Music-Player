@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** Created once in GamutApp (activity scope): it records every track the player loads, and feeds the list screen. */
 @HiltViewModel
 class RecentlyPlayedViewModel @Inject constructor(private val repo: RecentlyPlayedRepository) : ViewModel() {
     val tracks = repo.observe().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

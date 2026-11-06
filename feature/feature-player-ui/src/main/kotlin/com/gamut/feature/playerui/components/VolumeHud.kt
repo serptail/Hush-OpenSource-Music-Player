@@ -58,7 +58,6 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
-/** State of the edge-drag volume control. Drives the real music stream volume. */
 @Stable
 internal class VolumeHud(private val audio: AudioManager, private val haptic: HapticFeedback) {
     private val maxSteps = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
@@ -69,11 +68,9 @@ internal class VolumeHud(private val audio: AudioManager, private val haptic: Ha
     var fraction by mutableFloatStateOf(0f)
         private set
 
-    /** Where the cover sits on screen. The swipe is only live on the cover, and the pill sits just above it. */
     var anchor by mutableStateOf(Rect.Zero)
         internal set
 
-    /** Bottom edge (root coordinates) of the title + artist block: the pill is centered between it and the cover. */
     var headerBottom by mutableFloatStateOf(0f)
         internal set
 
@@ -90,7 +87,7 @@ internal class VolumeHud(private val audio: AudioManager, private val haptic: Ha
         val step = (fraction * maxSteps).roundToInt()
         if (step != lastStep) {
             lastStep = step
-            audio.setStreamVolume(AudioManager.STREAM_MUSIC, step, 0)   // flag 0: no system volume panel on top of ours
+            audio.setStreamVolume(AudioManager.STREAM_MUSIC, step, 0)
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
     }
@@ -100,33 +97,19 @@ internal class VolumeHud(private val audio: AudioManager, private val haptic: Ha
     fun fractionNow(): Float = fraction
 }
 
-/** Put this on the cover (the box that holds the artwork and its ring): the swipe lives on it. */
 internal fun Modifier.volumeHudAnchor(hud: VolumeHud): Modifier =
     onGloballyPositioned { hud.anchor = it.boundsInRoot() }
 
-/** Put this on the title + artist block: the pill is centered in the gap between it and the cover. */
 internal fun Modifier.volumeHudHeaderAnchor(hud: VolumeHud): Modifier =
     onGloballyPositioned { hud.headerBottom = it.boundsInRoot().bottom }
 
-/** The artwork sits this far inside the cover box (the room for the progress ring + waveform). Keep equal to RingInset. */
 private val CoverArtInset = 18.dp
 
-/** A swipe only counts when it starts this far inside the cover box: the ring band around the art belongs to the scrubber. */
 private val CoverSwipeInset = 28.dp
 
-/**
- * Swipe sideways on the cover to change the volume: left to right = louder, right to left = quieter.
- *
- *  - Only a touch that starts on the artwork itself reacts (not the ring band around it, which scrubs the song).
- *  - It only claims the touch once the finger has clearly moved horizontally: taps (play / pause) and vertical
- *    scrolling pass through untouched.
- *  - Relative: the volume moves by the drag distance from where it is, so it never jumps.
- *
- * Put it BEFORE any padding on the full-screen container, so positions line up with [VolumeHud.anchor] (root coordinates).
- */
 internal fun Modifier.swipeVolumeGesture(
     hud: VolumeHud,
-    fullRange: Dp = 240.dp,   // finger travel for 0 -> 100 %
+    fullRange: Dp = 240.dp,
 ): Modifier = pointerInput(hud) {
     val rangePx = fullRange.toPx()
     val insetPx = CoverSwipeInset.toPx()
@@ -165,10 +148,6 @@ internal fun Modifier.swipeVolumeGesture(
     }
 }
 
-/**
- * One small horizontal pill with an icon and the level as a number, centered between the title / artist block and the
- * cover. Draw it on top of the screen (it takes no touches); it fades out shortly after release.
- */
 @Composable
 internal fun VolumeHudOverlay(hud: VolumeHud, modifier: Modifier = Modifier) {
     var visible by remember { mutableStateOf(false) }
@@ -178,7 +157,6 @@ internal fun VolumeHudOverlay(hud: VolumeHud, modifier: Modifier = Modifier) {
     var origin by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current
     val pillHeightPx = with(density) { PillHeight.toPx() }
-    // Halfway between the bottom of the title block and the top of the artwork (not of its ring room).
     val artTop = hud.anchor.top + with(density) { CoverArtInset.toPx() }
     val centerY = if (hud.headerBottom > 0f && hud.anchor.height > 0f) (hud.headerBottom + artTop) / 2f else hud.anchor.top
     val top = (centerY - origin.y - pillHeightPx / 2f - with(density) { PillLift.toPx() }).roundToInt()
@@ -199,7 +177,6 @@ internal fun VolumeHudOverlay(hud: VolumeHud, modifier: Modifier = Modifier) {
 private val PillWidth = 176.dp
 private val PillHeight = 34.dp
 
-/** Nudge up from the exact middle of the gap, so the pill keeps clear of the cover's ring. */
 private val PillLift = 9.dp
 
 @Composable
@@ -211,7 +188,6 @@ private fun VolumePill(fraction: Float, modifier: Modifier = Modifier) {
         else -> PhosphorIcons.Regular.SpeakerHigh
     }
     val shape = RoundedCornerShape(PillHeight / 2)
-    // Icon at the start, number at the end: each turns dark while the white fill is behind it, white otherwise.
     val iconTint = if (f > 0.15f) Color.Black.copy(alpha = 0.8f) else Color.White
     val numberTint = if (f > 0.88f) Color.Black.copy(alpha = 0.8f) else Color.White
     Box(

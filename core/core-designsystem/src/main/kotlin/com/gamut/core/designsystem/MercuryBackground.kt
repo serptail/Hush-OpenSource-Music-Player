@@ -12,38 +12,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
 
-/** Which look the adaptive background has. Everything except [Flow] needs Android 13+; older phones keep the flow look. */
 enum class FlowStyle { Flow, Mercury, Metaballs, Dithering }
 
-// ======================================================================================
-// Tuning. Everything you are likely to want to change is here.
-// ======================================================================================
-
-/** How much the field is pushed around (0..1+). Higher = more folded, flowing shapes. */
 private const val MercuryDistortion = 0.8f
 
-/** How much the field twists around the center (0..1). */
 private const val MercurySwirl = 0.35f
 
-/** Animation speed multiplier on top of the shared clock. */
 private const val MercurySpeed = 0.6f
 
-/**
- * Weight of the two base-colored points relative to each accent point (1 = same).
- * Higher = the cover's majority color covers more of the screen and the accents stay smaller.
- */
 private const val MercuryBaseWeight = 0.9f
 
-/**
- * Standalone copy of the Paper Shaders "mesh-gradient" (paper-design/shaders, Apache-2.0, via the AGSL port
- * paper-shaders-android by André Frélicot). Shepard interpolation: every pixel averages the color points,
- * weighted by 1 / distance^3.5, while the points drift along sin/cos paths and the space is warped and twisted.
- * Nothing is drawn, the softness is the average itself. The grain options are dropped (unused by default).
- *
- * The color points are the cover palette: three accents plus two points of the base color, so the base stays
- * the majority color. [strength] then fades between the plain base and the full mesh, which is how the intensity
- * setting and the light-mode damping from the flowing background carry over.
- */
 private const val MercuryAgsl = """
 uniform float2 resolution;
 uniform float time;
@@ -129,7 +107,6 @@ internal fun MercuryBackground(
 ) {
     val shader = remember { RuntimeShader(MercuryAgsl) }
     val brush = remember(shader) { ShaderBrush(shader) }
-    // Colors, strength and the light/dark flip already arrive animated from FlowingBackground.
     Canvas(modifier.fillMaxSize()) {
         shader.setFloatUniform("resolution", size.width, size.height)
         shader.setFloatUniform("time", clock.floatValue * MercurySpeed)

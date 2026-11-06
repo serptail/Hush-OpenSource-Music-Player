@@ -27,8 +27,6 @@ data class BillboardEntry(
     val key: String = "$titleKey|$artistKey"
 }
 
-// ---- Normalisation shared by Billboard, Apple chart items and Deezer results ----
-
 private val NON_ALNUM = Regex("[^\\p{L}\\p{N}]+")
 private val BRACKETED = Regex("\\s*[(\\[].*?[)\\]]")
 private val FEAT_TAIL = Regex("(?i)\\s+(feat\\.?|ft\\.?|featuring)\\s+.*")
@@ -37,21 +35,17 @@ private val BAD_VERSION = Regex("remix|karaoke|instrumental|live|cover")
 
 private val DIACRITICS = Regex("\\p{M}+")
 
-/** Lowercase, accents folded ("ADÉLA" == "ADELA"), punctuation collapsed. */
 private fun norm(s: String) =
     java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD).replace(DIACRITICS, "")
         .lowercase().replace(NON_ALNUM, " ").trim()
 
-/** "Song (feat. X) - Radio Edit" and "Song" give the same key. */
 internal fun titleKey(title: String): String =
     norm(title.replace(BRACKETED, "").replace(FEAT_TAIL, "").substringBefore(" - "))
 
-/** Lead artist only: "A Featuring B", "A & B", "A, B" all become "a". */
 internal fun artistKey(artist: String): String = norm(artist.split(ARTIST_SPLIT).first())
 
 internal fun chartKey(title: String, artist: String) = "${titleKey(title)}|${artistKey(artist)}"
 
-/** A track the resolver can still play: it falls back to a YouTube search on "artist title". */
 internal fun BillboardEntry.placeholderTrack() = Track(
     isrc = "billboard:$key", musicBrainzId = null, title = title, artist = artist, album = null,
     durationMs = 0L, albumArtUrl = null, source = TrackSource.ITUNES, youtubeVideoId = null,
@@ -73,11 +67,6 @@ internal fun BillboardEntry.toDiscoverItem(resolved: Track?): DiscoverItem {
     )
 }
 
-/**
- * Billboard Hot 100 (keyless JSON on raw.githubusercontent). Entries carry no ids or artwork, so they are
- * resolved against Deezer search (generous rate limit, art included) -- NOT iTunes, whose ~20 req/min
- * limit could not cover 100 lookups. Resolutions are kept for the process lifetime.
- */
 @Singleton
 class BillboardRepository @Inject constructor(
     private val api: BillboardApi,
@@ -88,13 +77,11 @@ class BillboardRepository @Inject constructor(
     @Volatile private var snapshot: Snapshot? = null
     private val resolvedCache = ConcurrentHashMap<String, Track>()
 
-    /** Forgets the chart and every resolved track (Storage > Clear cache). */
     fun clearCache() {
         snapshot = null
         resolvedCache.clear()
     }
 
-    /** Never throws (except cancellation): on failure returns the last good chart, or empty. */
     suspend fun chart(): List<BillboardEntry> {
         snapshot?.takeIf { System.currentTimeMillis() - it.atMs < CHART_TTL_MS }?.let { return it.entries }
         return try {
@@ -110,7 +97,6 @@ class BillboardRepository @Inject constructor(
         }
     }
 
-    /** Resolves entries 4 at a time, calling [onResolved] as each one lands. Unresolvable entries are skipped. */
     suspend fun resolve(entries: List<BillboardEntry>, onResolved: suspend (BillboardEntry, Track) -> Unit) =
         coroutineScope {
             val gate = Semaphore(4)
@@ -127,8 +113,6 @@ class BillboardRepository @Inject constructor(
         }
 
     private suspend fun lookup(e: BillboardEntry): Track? = try {
-        // One plain query first (it resolved nearly everything and Deezer allows only ~50 requests / 5 s); the strict
-        // field query is only the fallback. Brackets are dropped from the query: "(FIFA World Cup ...)" matches nothing.
         val lead = e.artist.split(ARTIST_SPLIT).first().replace("\"", "")
         val title = e.title.replace(BRACKETED, "").replace("\"", "").trim()
         pick(deezer.searchTracks("$lead $title", limit = 10).data, e)

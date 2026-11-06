@@ -14,7 +14,6 @@ import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQu
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 
-/** Long-lived, very popular videos: if these cannot be resolved, the extractor is broken (or YouTube is blocking us). */
 private val VIDEOS = listOf("dQw4w9WgXcQ", "9bZkp7q19f0", "kJQP7kiw5Fk", "JGwWNGJdvx8", "fJ9rUzIMcZQ")
 
 fun main() {
@@ -33,11 +32,9 @@ fun main() {
     total++
     if (attempt("song search") { searchWorks() }) passed++
 
-    // CI reads this line.
     println("SMOKE_RESULT passed=$passed total=$total")
 }
 
-/** Two tries, because one flaky response is not a broken extractor. */
 private fun attempt(label: String, block: () -> Boolean): Boolean {
     repeat(2) { n ->
         try {
@@ -51,7 +48,6 @@ private fun attempt(label: String, block: () -> Boolean): Boolean {
     return false
 }
 
-/** The real failure mode is a stream URL that resolves but does not play (403 / throttled), so fetch its first bytes. */
 private fun streamPlays(client: OkHttpClient, videoId: String): Boolean {
     val info = StreamInfo.getInfo("https://www.youtube.com/watch?v=$videoId")
     val stream = info.audioStreams
@@ -74,7 +70,6 @@ private fun searchWorks(): Boolean {
     return SearchInfo.getInfo(service, handler).relatedItems.filterIsInstance<StreamInfoItem>().isNotEmpty()
 }
 
-/** The same bridge the app uses (NewPipeYoutubeSource.kt), so the test goes through the same HTTP behaviour. */
 private class SmokeDownloader(private val client: OkHttpClient) : Downloader() {
     override fun execute(request: Request): Response {
         val headers = Headers.Builder().apply {

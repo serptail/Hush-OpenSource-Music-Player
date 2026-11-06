@@ -12,11 +12,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * Last session's Discover on disk, so the next launch can show it at once while fresh data loads.
- * Plain org.json (part of Android) instead of kotlinx.serialization: [DiscoverItem] and [DiscoverTab] are not
- * @Serializable and this module may not apply the serialization plugin. A missing or unreadable file is just "no cache".
- */
 @Singleton
 class DiscoverDiskCache @Inject constructor(@ApplicationContext context: Context) {
     private val file = File(context.cacheDir, "discover.json")
@@ -30,7 +25,6 @@ class DiscoverDiskCache @Inject constructor(@ApplicationContext context: Context
                 DiscoverTab(tab.getString("label"), tab.getString("title"), tab.getJSONArray("items").objects().map { it.toItem() })
             }
             if (tabs.isEmpty()) return@runCatching null
-            // The feed is optional: a file without it (older app) or with a bad section still gives the charts.
             val feed = runCatching { root.optJSONArray("feed")?.objects()?.mapNotNull { it.toSection() }.orEmpty() }.getOrDefault(emptyList())
             DiscoverState(
                 albums = root.getJSONArray("albums").objects().map { it.toItem() },
@@ -42,7 +36,6 @@ class DiscoverDiskCache @Inject constructor(@ApplicationContext context: Context
         }.getOrNull()
     }
 
-    /** Size of the cached Discover on disk (0 when there is none). */
     suspend fun sizeBytes(): Long = withContext(Dispatchers.IO) {
         file.length() + File(file.parentFile, "discover.json.tmp").length()
     }
@@ -62,7 +55,6 @@ class DiscoverDiskCache @Inject constructor(@ApplicationContext context: Context
                     JSONObject().put("label", tab.label).put("title", tab.title)
                         .put("items", JSONArray(tab.items.map { it.toJson() }))
                 }))
-            // Write-then-rename: a crash mid-write must not leave a half file behind.
             val tmp = File(file.parentFile, file.name + ".tmp")
             tmp.writeText(root.toString())
             tmp.renameTo(file)
@@ -74,7 +66,6 @@ class DiscoverDiskCache @Inject constructor(@ApplicationContext context: Context
         .put("title", title).put("subtitle", subtitle ?: JSONObject.NULL)
         .put("items", JSONArray(items.map { it.toJson() }))
 
-    /** Null for a section kind this build does not know (a newer app wrote it): it is dropped, not fatal. */
     private fun JSONObject.toSection(): FeedSection? {
         val kind = runCatching { FeedKind.valueOf(getString("kind")) }.getOrNull() ?: return null
         val slot = runCatching { FeedSlot.valueOf(getString("slot")) }.getOrNull() ?: return null
@@ -129,9 +120,5 @@ class DiscoverDiskCache @Inject constructor(@ApplicationContext context: Context
 
     private fun JSONArray.objects(): List<JSONObject> = List(length()) { getJSONObject(it) }
 
-    // 3: drops copies saved while Billboard art was unresolved (Deezer quota errors) so they are not shown as "stale".
-    // 4: items carry meta / trend (Billboard movement, release age) and followers.
-    // The optional "feed" array (sections of the Discover feed) was added WITHOUT a bump: it is read leniently, so v4 files
-    // stay valid and simply have no feed.
     private companion object { const val VERSION = 4 }
 }

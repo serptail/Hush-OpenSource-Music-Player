@@ -39,11 +39,6 @@ import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
 import com.gamut.core.model.QueueState
 
-/**
- * "Up next" bottom sheet. [queue] is in play order (already shuffled if shuffle is on).
- * Tap a row to jump to it, tap the cross to remove it. The current track is highlighted
- * and cannot be removed.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun QueueSheet(

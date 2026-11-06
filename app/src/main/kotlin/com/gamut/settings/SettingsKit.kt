@@ -73,23 +73,12 @@ import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 
-/**
- * Minimal kit shared by Settings and Profile: no cards, no containers around rows. Type and spacing do the grouping.
- * The only filled shapes are [Tile]s (Profile) and fields/buttons. Everything reads colour through ink(), which comes
- * from CoverTheme, so it follows the current cover palette (light/dark) like every other screen.
- */
 val GamutDestructive = Color(0xFFFF6B6B)
 
-/** The ONE place that decides which style is a "heading". Point it at your CodeNext-ExtraBold style if the theme's isn't. */
 val GamutHeading: TextStyle @Composable get() = MaterialTheme.typography.headlineMedium
 
-/**
- * False while a pre-composed page is parked off-screen or closing. Pages must not set the status bar then, and anything
- * animated inside them (previews, shaders) should pause. Defaults to true for ordinary NavHost screens.
- */
 val LocalPageActive = androidx.compose.runtime.compositionLocalOf { true }
 
-/** Page: back button + title, scrolling body, the now-playing strip docked underneath. Themed from the ambient palette. */
 @Composable
 fun GamutPage(title: String, onBack: () -> Unit, nowPlaying: @Composable () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     val palette = LocalCoverPalette.current
@@ -111,19 +100,16 @@ fun GamutPage(title: String, onBack: () -> Unit, nowPlaying: @Composable () -> U
     }
 }
 
-/** Section heading: big, bold, no box. */
 @Composable
 fun GroupLabel(text: String) {
     Text(text, style = GamutHeading, color = ink(), modifier = Modifier.padding(top = 16.dp, bottom = 4.dp))
 }
 
-/** Kept for source compatibility: a plain column, no surface. */
 @Composable
 fun GroupCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier.fillMaxWidth(), content = content)
 }
 
-/** Rows are flat now; spacing separates them. Kept so existing call sites compile. */
 @Composable
 fun CellDivider(inset: Boolean = true) = Unit
 
@@ -160,7 +146,6 @@ fun Cell(
     }
 }
 
-/** Square action tile (Profile). Pass it `Modifier.weight(1f)` inside a Row for a two-up grid. [badge] sits top-right. */
 @Composable
 fun Tile(
     label: String,
@@ -219,7 +204,6 @@ fun GamutCheck(checked: Boolean, label: String, onChange: (Boolean) -> Unit, war
         Modifier.fillMaxWidth().pressScale(onClick = { onChange(!checked) }, scaleDown = 0.98f).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Same colour family on both sides of each blend (alpha 0 instead of Transparent), so it does not darken midway.
         val fill by animateColorAsState(if (checked) ink(0.95f) else ink(0.95f).copy(alpha = 0f), tween(GamutMotion.CONTENT_MS), label = "check-fill")
         val edge by animateColorAsState(if (checked) ink(0.3f).copy(alpha = 0f) else ink(0.3f), tween(GamutMotion.CONTENT_MS), label = "check-edge")
         Box(
@@ -253,7 +237,6 @@ fun GamutCheck(checked: Boolean, label: String, onChange: (Boolean) -> Unit, war
     }
 }
 
-/** Single-line text field in the app's look. */
 @Composable
 fun GamutField(
     value: String,
@@ -281,22 +264,10 @@ fun GamutField(
     }
 }
 
-/**
- * Every close path of the enclosing [GamutDialog] (Cancel, scrim tap, back, and rows inside it that finish the job)
- * should call this instead of the raw onDismiss: it plays the exit animation first, then dismisses.
- */
 val LocalDialogDismiss = staticCompositionLocalOf<() -> Unit> { {} }
 
 private const val DIALOG_EXIT_MS = 150
 
-/**
- * The one confirmation dialog. Uses the AMBIENT palette (captured before the Dialog window opens) instead of a fixed
- * Neutral one, so it follows light/dark with the rest of the app.
- *
- * Motion: the card fades and scales in, the scrim fades with it, and every close path plays the exit before calling
- * its callback. Pass [confirmCloses] = false when [onConfirm] can leave the dialog open (validation): that path then
- * runs at once and the caller decides.
- */
 @Composable
 fun GamutDialog(
     title: String,
@@ -307,7 +278,7 @@ fun GamutDialog(
     body: String? = null,
     dismissLabel: String? = "Cancel",
     confirmCloses: Boolean = true,
-    content: (@Composable ColumnScope.() -> Unit)? = null,   // keep LAST so `GamutDialog(...) { }` binds here
+    content: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
     val palette = LocalCoverPalette.current
     val state = remember { MutableTransitionState(false).apply { targetState = true } }
@@ -324,7 +295,6 @@ fun GamutDialog(
     val confirm: () -> Unit = { if (confirmCloses) finish(onConfirm) else onConfirm() }
 
     Dialog(onDismissRequest = dismiss) {
-        // The window's own dim would pop in and out; take it over and fade it with the card.
         val window = (LocalView.current.parent as? DialogWindowProvider)?.window
         SideEffect { window?.setDimAmount(0f) }
         AnimatedVisibility(

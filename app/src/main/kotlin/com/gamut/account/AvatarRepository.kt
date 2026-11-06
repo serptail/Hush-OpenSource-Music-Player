@@ -29,12 +29,6 @@ import kotlinx.serialization.Serializable
 
 @Serializable private data class AvatarRow(@SerialName("avatar_url") val avatarUrl: String? = null)
 
-/**
- * Profile picture: center-cropped to 256x256 WebP (~15-30 KB) on the phone, kept locally per account (works offline and
- * for guests) and mirrored to Supabase Storage as `avatars/<uid>.webp` + profiles.avatar_url. The model handed to the UI
- * is the local file when present, else the remote URL (Coil caches it). The local file name changes on every upload, so
- * the image cache never serves a stale picture.
- */
 @Singleton
 class AvatarRepository @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -50,10 +44,8 @@ class AvatarRepository @Inject constructor(
     private fun localFile(userId: String?): File? =
         dir.listFiles { f -> f.name.startsWith("${key(userId)}_") }?.maxByOrNull { it.lastModified() }
 
-    /** File (local), String (remote URL) or null (no picture). */
     fun model(userId: String?): Flow<Any?> = tick.map { localFile(userId) ?: prefs.getString(urlKey(userId), null) }
 
-    /** Returns true when the picture is stored everywhere it needs to be; false = saved on this phone, upload pending. */
     suspend fun set(userId: String?, resolver: ContentResolver, uri: Uri): Result<Boolean> = runCatching {
         val bytes = withContext(Dispatchers.IO) { encode(resolver, uri) }
         withContext(Dispatchers.IO) {
@@ -78,7 +70,6 @@ class AvatarRepository @Inject constructor(
         }
     }
 
-    /** On sign-in / app start: push a picture that failed to upload, otherwise adopt the one from the account. */
     suspend fun refresh(userId: String?) {
         if (userId == null) return
         runCatching {
@@ -90,7 +81,6 @@ class AvatarRepository @Inject constructor(
             val remote = supabase.from("profiles").select(Columns.list("avatar_url")) { filter { eq("id", userId) } }
                 .decodeSingleOrNull<AvatarRow>()?.avatarUrl
             if (remote != prefs.getString(urlKey(userId), null)) {
-                // changed on another device: drop the local copy so the new one shows
                 prefs.edit().apply { if (remote == null) remove(urlKey(userId)) else putString(urlKey(userId), remote) }.apply()
                 withContext(Dispatchers.IO) { dir.listFiles { f -> f.name.startsWith("${key(userId)}_") }.orEmpty().forEach { it.delete() } }
             }
@@ -98,7 +88,6 @@ class AvatarRepository @Inject constructor(
         }
     }
 
-    /** "Clear library on this device". */
     suspend fun clearLocal() {
         withContext(Dispatchers.IO) { dir.listFiles().orEmpty().forEach { it.delete() } }
         prefs.edit().clear().apply()
@@ -108,13 +97,11 @@ class AvatarRepository @Inject constructor(
     private suspend fun upload(uid: String, bytes: ByteArray) {
         val bucket = supabase.storage.from(BUCKET)
         bucket.upload("$uid.webp", bytes) { upsert = true; contentType = ContentType.parse("image/webp") }
-        // ?v= busts the image cache on other devices; the path itself never changes (one file per user).
         val url = "${bucket.publicUrl("$uid.webp")}?v=${System.currentTimeMillis()}"
         supabase.from("profiles").update({ set("avatar_url", url) }) { filter { eq("id", uid) } }
         prefs.edit().putString(urlKey(uid), url).putBoolean(dirtyKey(uid), false).apply()
     }
 
-    /** Decode with subsampling, honour EXIF rotation, center-crop to a square, scale to 256, WebP. */
     private fun encode(resolver: ContentResolver, uri: Uri): ByteArray {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         resolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it, null, bounds) }

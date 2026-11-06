@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** How much audio quality (and data) a streamed track uses. Downloads always take the best stream, whatever this says. */
 enum class StreamQuality(val label: String, val hint: String) {
     AUTO("Auto", "High on Wi-Fi, Normal on mobile data"),
     LOW("Data saver", "Smallest files, about 48 kbps"),
@@ -17,31 +16,17 @@ enum class StreamQuality(val label: String, val hint: String) {
     HIGH("High", "Best stream available, up to about 160 kbps Opus"),
 }
 
-/**
- * App-wide playback / audio preferences (everything on the "Playback & Audio" screen except the equalizer, which has
- * its own [EqualizerController]). Saved to SharedPreferences, so they survive restarts.
- *
- * Readers: [Media3MusicPlayer] observes [state] and applies it live; the resolver calls [effectiveQuality] each time it
- * picks a stream.
- */
 @Singleton
 class PlaybackSettings @Inject constructor(@ApplicationContext private val context: Context) {
-
     data class State(
         val streamQuality: StreamQuality = StreamQuality.AUTO,
-        /** Resolve + warm up the next track while this one plays (gapless end, instant skip). */
         val preload: Boolean = true,
-        /** Only look ahead on an unmetered connection (Wi-Fi). */
         val preloadUnmeteredOnly: Boolean = false,
-        /** Volume ramp on pause / resume, in ms. 0 = off. */
         val fadeMs: Int = 0,
-        /** How long the end of one track and the start of the next overlap, in ms. 0 = off (gapless instead). */
         val crossfadeMs: Int = 0,
         val skipSilence: Boolean = false,
         val pauseOnUnplug: Boolean = true,
-        /** Fold both channels into one. */
         val mono: Boolean = false,
-        /** -1 = all left, 0 = centre, +1 = all right. */
         val balance: Float = 0f,
     )
 
@@ -65,16 +50,11 @@ class PlaybackSettings @Inject constructor(@ApplicationContext private val conte
 
     fun reset() = update { State() }
 
-    /** What a stream lookup should use right now: [StreamQuality.AUTO] is turned into a concrete level. */
     fun effectiveQuality(): StreamQuality = when (val q = _state.value.streamQuality) {
         StreamQuality.AUTO -> if (onUnmeteredNetwork()) StreamQuality.HIGH else StreamQuality.NORMAL
         else -> q
     }
 
-    /**
-     * True on Wi-Fi / ethernet. Needs ACCESS_NETWORK_STATE; if that is missing or the query fails we answer false
-     * (the careful choice: treat it as mobile data).
-     */
     fun onUnmeteredNetwork(): Boolean = runCatching {
         !context.getSystemService(ConnectivityManager::class.java).isActiveNetworkMetered
     }.getOrDefault(false)

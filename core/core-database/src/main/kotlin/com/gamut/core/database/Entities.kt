@@ -32,11 +32,8 @@ data class PlaylistEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val createdAtEpochMs: Long,
-    /** User-picked cover (`file:` URI), null = fall back to the last song's art. */
     val coverUri: String? = null,
-    /** Tags joined with "\n" (see LibraryRepository). */
     @ColumnInfo(defaultValue = "''") val tags: String = "",
-    /** Supabase playlists.id (uuid). Null until the playlist has been pushed once. */
     val remoteId: String? = null,
 )
 
@@ -58,17 +55,12 @@ data class ArtworkCacheEntity(
     val cachedAtEpochMs: Long,
 )
 
-/** A track the user has liked. One row per track; the track itself lives in [TrackEntity]. */
 @Entity(tableName = "favorites")
 data class FavoriteEntity(
     @PrimaryKey val isrc: String,
     val addedAtEpochMs: Long,
 )
 
-/**
- * Pending-sync queue. State-based "dirty markers": one row per (type, itemKey), newer replaces older, and the payload
- * is only what cannot be re-read from the local tables (a playlist song's position, or null = removed).
- */
 @Entity(tableName = "pending_sync", indices = [Index(value = ["type", "itemKey"], unique = true)])
 data class PendingSyncEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -78,15 +70,12 @@ data class PendingSyncEntity(
     val createdAtEpochMs: Long,
 )
 
-/** A song the user opened (one row per song, replaying moves it to the top). Local only, not synced. */
 @Entity(tableName = "recently_played")
 data class RecentEntity(@PrimaryKey val isrc: String, val playedAtEpochMs: Long)
 
-/** Small key/value store for sync cursors (server timestamps), owner id, last sync time. */
 @Entity(tableName = "sync_state")
 data class SyncStateEntity(@PrimaryKey val name: String, val value: String)
 
-/** An artist the user follows. artistKey = "<provider>:<provider_artist_id>", e.g. "deezer:123". No counts are kept. */
 @Entity(tableName = "artist_follows")
 data class FollowEntity(
     @PrimaryKey val artistKey: String,
@@ -96,9 +85,9 @@ data class FollowEntity(
 )
 
 object SyncTypes {
-    const val FAV = "fav"        // itemKey = isrc
-    const val PL = "pl"          // itemKey = local playlist id (name/tags changed or playlist created)
-    const val PLS = "pls"        // itemKey = "<local playlist id>|<isrc>", payload = position, null = removed
-    const val PL_DEL = "pl_del"  // itemKey = remote playlist uuid
-    const val FOLLOW = "follow"  // itemKey = artistKey; row present locally = follow, absent = unfollow
+    const val FAV = "fav"
+    const val PL = "pl"
+    const val PLS = "pls"
+    const val PL_DEL = "pl_del"
+    const val FOLLOW = "follow"
 }

@@ -14,14 +14,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 
-/**
- * Downloads the update APK for [AppUpdateViewModel], so the download keeps going when the app is closed.
- * WorkManager restarts it if the system stops it or the connection drops; [UpdateInstaller.download] then continues
- * from the part already on disk. Only the download happens here: installing needs the user, so it is left to the app
- * when it is on screen (the finished file is already there by then, so that step is instant).
- */
 class UpdateDownloadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
-
     override suspend fun doWork(): Result {
         val info = UpdateInfo(
             versionCode = inputData.getInt(K_CODE, 0),
@@ -52,7 +45,6 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
 
         fun nameFor(info: UpdateInfo) = "app-update-download-${info.versionCode}"
 
-        /** Starts (or restarts) the download of [info] and returns the id of that job. */
         fun enqueue(context: Context, info: UpdateInfo): UUID {
             val request = OneTimeWorkRequestBuilder<UpdateDownloadWorker>()
                 .setInputData(

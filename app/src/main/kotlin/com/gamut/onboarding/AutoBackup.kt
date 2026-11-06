@@ -24,7 +24,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-/** Daily JSON backup of favorites + playlists + followed artists, kept on the device (no cloud). */
 object AutoBackup {
     private const val WORK = "gamut-auto-backup"
     private const val PREFIX = "gamut-backup-"
@@ -38,7 +37,6 @@ object AutoBackup {
         val request = PeriodicWorkRequestBuilder<AutoBackupWorker>(1, TimeUnit.DAYS)
             .setConstraints(Constraints.Builder().setRequiresBatteryNotLow(true).build())
             .build()
-        // KEEP: calling this on every launch is harmless, it does not reset the timer.
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK, ExistingPeriodicWorkPolicy.KEEP, request)
     }
 
@@ -50,24 +48,16 @@ object AutoBackup {
 
     fun backupDir(context: Context) = File(context.filesDir, "backups")
 
-    /** "Clear local data" must also remove these: they hold the whole library of whoever was signed in. */
     suspend fun deleteAll(context: Context) = writeLock.withLock {
         withContext(Dispatchers.IO) { backupDir(context).listFiles()?.forEach { it.delete() } }
     }
 
-    /** Newest first. Only files this class wrote (foreign files in the folder are never listed or deleted). */
     fun list(context: Context): List<BackupFile> =
         backupDir(context).listFiles { f -> f.isFile && f.name.startsWith(PREFIX) && f.name.endsWith(EXT) }
             ?.sortedByDescending { it.name }
             ?.map { BackupFile(it, it.name, it.lastModified(), it.length()) }
             .orEmpty()
 
-    /**
-     * Writes today's backup (same-day reruns replace it) and prunes to the newest [KEEP].
-     * Returns null when the library is empty: an empty backup is never written, otherwise ten days after a wipe the
-     * rotation would have deleted every good backup.
-     * The file appears atomically (temp file + rename), so a crash can never leave a half-written or lost backup.
-     */
     suspend fun write(context: Context, exporter: DataExporter): File? = writeLock.withLock {
         val bytes = exporter.exportOrNull(password = null) ?: return@withLock null
         withContext(Dispatchers.IO) {
@@ -93,19 +83,17 @@ object AutoBackup {
 }
 
 class AutoBackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
-
     @EntryPoint
     @InstallIn(SingletonComponent::class)
     interface Deps { fun exporter(): DataExporter }
 
     override suspend fun doWork(): Result = try {
         val exporter = EntryPointAccessors.fromApplication(applicationContext, Deps::class.java).exporter()
-        AutoBackup.write(applicationContext, exporter)   // null (empty library) is fine: nothing to do
+        AutoBackup.write(applicationContext, exporter)
         Result.success()
     } catch (e: CancellationException) {
-        throw e                                         // never swallow cancellation
+        throw e
     } catch (e: Exception) {
-        // a few retries for transient trouble, then give up until tomorrow's run instead of retrying forever
         if (runAttemptCount < 3) Result.retry() else Result.failure()
     }
 }

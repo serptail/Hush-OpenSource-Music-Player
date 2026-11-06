@@ -12,30 +12,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
 
-// ======================================================================================
-// Tuning. Everything you are likely to want to change is here.
-// ======================================================================================
-
-/** Number of balls (1..10). */
 private const val MetaballsCount = 9f
 
-/** Ball size multiplier. 1 = default, 0.6 = small droplets, 1.5 = big merging blobs. */
 private const val MetaballsSize = 1.0f
 
-/** Animation speed multiplier on top of the shared clock. */
 private const val MetaballsSpeed = 0.6f
 
-/** Edge width of the blobs: about one pixel, just enough to avoid jagged edges. Raise it only to soften them. */
 private const val MetaballsEdge = 0.003f
 
-/**
- * Metaballs over the whole screen, in the style of the Paper Shaders "metaballs" shader (paper-design/shaders,
- * Apache-2.0). Each ball adds a smooth falloff to a scalar field; the blobs merge because the fields add up before
- * the threshold. Ball colors cycle through the cover's three accents; the colors blend smoothly
- * inside merged blobs, weighted by how much each ball contributes, while the outline stays sharp. The base color is the background. Written from the technique, not copied line by line.
- *
- * [strength] fades the balls in over the base, so the intensity setting and the light-mode damping carry over.
- */
 private const val MetaballsAgsl = """
 uniform float2 resolution;
 uniform float time;

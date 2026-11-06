@@ -57,7 +57,6 @@ class AppearanceViewModel @Inject constructor(private val store: AppearanceStore
     fun reset() = store.update { AppearanceSettings() }
 }
 
-/** Appearance: theme mode, adaptive background (or a fixed color preset), and the glass (acrylic) effect. */
 @Composable
 fun AppearanceScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: AppearanceViewModel = hiltViewModel()) {
     val s by vm.settings.collectAsState()
@@ -68,7 +67,6 @@ fun AppearanceScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm:
         Spacer(Modifier.height(8.dp))
         Preview()
 
-        // ---- theme ----
         SoftHeader("Theme")
         SoftCard {
             val modes = buildList {
@@ -89,7 +87,6 @@ fun AppearanceScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm:
             }
         }
 
-        // ---- background ----
         SoftHeader("Background")
         SoftCard(Modifier.softResize()) {
             SoftSwitchRow(
@@ -151,7 +148,6 @@ fun AppearanceScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm:
             }
         }
 
-        // ---- glass ----
         SoftHeader("Glass")
         SoftCard(Modifier.softResize()) {
             SoftSwitchRow(
@@ -187,7 +183,6 @@ private fun levels(low: String, mid: String, high: String) = listOf(
     Choice(AppearanceLevel.High, high),
 )
 
-/** A padded block inside a card: optional title, the control, optional caption underneath. */
 @Composable
 private fun OptionBlock(title: String? = null, caption: String? = null, content: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
@@ -196,7 +191,6 @@ private fun OptionBlock(title: String? = null, caption: String? = null, content:
         }
         content()
         if (caption != null) {
-            // The caption changes with the choice above: crossfade it and let the card follow its height.
             Box(Modifier.softResize()) {
                 Crossfade(targetState = caption, animationSpec = tween(GamutMotion.CONTENT_MS), label = "option-caption") { c ->
                     Text(c, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 10.dp, start = 4.dp))
@@ -206,11 +200,9 @@ private fun OptionBlock(title: String? = null, caption: String? = null, content:
     }
 }
 
-/** Live preview: the real background + a real glass pill, so every change is visible right away. */
 @Composable
 private fun Preview() {
     val palette = LocalCoverPalette.current
-    // This page is pre-composed and parked off-screen: only animate the background while it is actually shown.
     val active = LocalPageActive.current
     Box(Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(26.dp)).border(1.dp, ink(0.12f), RoundedCornerShape(26.dp))) {
         AcrylicHost(Modifier.fillMaxSize()) {

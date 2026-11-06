@@ -24,10 +24,6 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/**
- * Rotated tab labels in a narrow rail (read bottom to top). The active one is solid ink with a small dot
- * beside it, the others are faded. Used on Discover and on the artist page. Must be inside CoverTheme.
- */
 @Composable
 fun VerticalTabs(
     labels: List<String>,
@@ -63,7 +59,6 @@ fun VerticalTabs(
     }
 }
 
-/** Rotates content -90 degrees and swaps its measured width and height so it takes the rotated space. */
 private fun Modifier.verticalText(): Modifier = this
     .layout { measurable, _ ->
         val p = measurable.measure(Constraints())

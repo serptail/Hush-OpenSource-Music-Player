@@ -8,7 +8,6 @@ import com.hcaptcha.sdk.HCaptcha
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
-/** Web3Forms' shared hCaptcha sitekey for free plans (from their docs). Paid plans can use their own. */
 private const val SITE_KEY = "50b2fe65-b00b-4b9e-ad62-3ba471098be2"
 
 fun Context.findActivity(): Activity? {
@@ -17,9 +16,7 @@ fun Context.findActivity(): Activity? {
     return null
 }
 
-/** Shows the hCaptcha challenge and returns the token, or a failure if it was closed or couldn't load. */
 suspend fun Activity.solveHCaptcha(): Result<String> = suspendCancellableCoroutine { cont ->
-    // The SDK shows the challenge as a dialog fragment, so it needs a FragmentActivity (MainActivity must extend it).
     if (this !is FragmentActivity) {
         cont.resume(Result.failure(IllegalStateException("Activity is not a FragmentActivity")))
         return@suspendCancellableCoroutine

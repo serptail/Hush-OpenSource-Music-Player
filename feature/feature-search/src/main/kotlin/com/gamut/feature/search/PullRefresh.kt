@@ -49,11 +49,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/**
- * Slingshot pull-to-refresh. Pulling down at the top of a list stretches it with growing resistance; letting go past
- * the threshold fires [onRefresh] and the list springs to a "hold" position (with an overshoot bounce) while a round
- * refresh button spins, then it springs back up. Letting go early just bounces back.
- */
 @Stable
 class SlingshotRefreshState internal constructor(
     private val scope: CoroutineScope,
@@ -62,7 +57,6 @@ class SlingshotRefreshState internal constructor(
     private val enabled: () -> Boolean,
     private val onRefresh: () -> Unit,
 ) {
-    /** Current stretch in px (can dip just below 0 for a frame while the spring settles; clamp when drawing). */
     var pull by mutableFloatStateOf(0f)
         private set
     var refreshing by mutableStateOf(false)
@@ -82,14 +76,13 @@ class SlingshotRefreshState internal constructor(
         }
     }
 
-    /** Also usable from the refresh button itself. */
     fun trigger() {
         if (refreshing) return
         refreshing = true
         onRefresh()
         springTo(holdPx)
         scope.launch {
-            delay(MIN_SPIN_MS)          // the data keeps streaming in; the button just must not flash
+            delay(MIN_SPIN_MS)
             refreshing = false
             springTo(0f)
         }
@@ -100,7 +93,6 @@ class SlingshotRefreshState internal constructor(
     }
 
     val connection = object : NestedScrollConnection {
-        // Dragging back up first un-stretches the list before the list itself scrolls.
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
             if (!enabled() || source != NestedScrollSource.UserInput || pull <= 0f || available.y >= 0f) return Offset.Zero
             anim?.cancel()
@@ -110,7 +102,6 @@ class SlingshotRefreshState internal constructor(
             return Offset(0f, used)
         }
 
-        // Whatever the list could not scroll (already at the top) becomes stretch, with rubber-band resistance.
         override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
             if (!enabled() || refreshing || source != NestedScrollSource.UserInput || available.y <= 0f) return Offset.Zero
             anim?.cancel()
@@ -145,11 +136,6 @@ fun rememberSlingshotRefresh(enabled: Boolean, onRefresh: () -> Unit): Slingshot
     }
 }
 
-/**
- * The round refresh button that rides in the gap the stretch opens. Draw it AFTER (on top of) the list.
- * [topOffsetPx]: when something stays pinned above the list (a fixed header), pass its height in px (status bar included):
- * the gap then opens under it, so the button is placed there instead of at the very top of the screen.
- */
 @Composable
 fun BoxScope.SlingshotIndicator(state: SlingshotRefreshState, topOffsetPx: Int = -1) {
     val progress = state.pull / state.thresholdPx

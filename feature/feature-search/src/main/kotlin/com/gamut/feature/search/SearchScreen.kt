@@ -147,14 +147,6 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-// The only expressive element is the flowing background, which takes its colors from the cover of
-// the track that is playing. Everything on top of it is a neutral "ink" (white on dark covers, near-black
-// on light ones, supplied by CoverTheme) plus that cover's accent in a few small places (cursor, focus
-// ring, spinners, the playing row). Surfaces are flat, translucent ink.
-//
-// Rhythm used everywhere: 24dp page gutter, 16dp row gutter (+8dp inner padding = 24dp aligned text edge),
-// 28dp between sections, 12dp between a section title and its content.
-
 internal val TextPrimary: Color
     @Composable @ReadOnlyComposable get() = ink()
 internal val TextSecondary: Color
@@ -175,56 +167,39 @@ private const val FILTER_YOUTUBE = 2
 fun SearchScreen(
     viewModel: SearchViewModel,
     resolvingIsrc: String?,
-    /** The picked track plus the list it was picked from (the queue); empty = just this track. */
     onTrackSelected: (Track, List<Track>) -> Unit,
     onArtistSelected: (Long) -> Unit,
     onAlbumSelected: (DiscoverItem) -> Unit,
-    /** The round "what's this song?" button next to the profile icon (same 34dp circle as the profile avatar). */
     onShazam: () -> Unit,
-    /** Profile icon: opens the account / sync / backup screen. */
     onProfile: () -> Unit = {},
-    /** Feeds the generated profile circle: name = its letter, seed = auth user id (null = signed out). */
     profileName: String? = null,
     profileSeed: String? = null,
-    /** Current avatar image URL from the account ViewModel. */
     profileImage: Any? = null,
-    /** Extra modifier for the profile button (the app module passes the support heart badge, which lives outside this module). */
     profileModifier: Modifier = Modifier,
-    /** Three dots on a song row. Defaults to a no-op until the actions sheet is wired in MainActivity. */
     onTrackMore: (Track) -> Unit = {},
-    /** ISRC of the playing track: its row gets the accent title + animated bars. */
     nowPlayingIsrc: String? = null,
-    /** Opens the artist page of a track (by name). */
     onTrackArtist: (Track) -> Unit = {},
-    /** ISRCs of the user's favorites (the + turns into a check). */
     favoriteIsrcs: Set<String> = emptySet(),
-    /** Adds the track to favorites, or removes it when it is already there. */
     onToggleFavorite: (Track) -> Unit = {},
-    /** The user's playlists, for the "Saved in" sheet and "Add to playlist". */
     playlists: List<TrackPlaylistOption> = emptyList(),
-    /** Adds [Track] to the playlist with this id. */
     onAddToPlaylist: (Track, String) -> Unit = { _, _ -> },
-    /** Height of the shared bottom bar + mini player strip (owned by HomeTabs in MainActivity). */
     barHeight: Dp,
-    /** Bumped when something asks for search mode (empty-state "Find ..." buttons): scroll to the field, focus it, show the keyboard. */
     focusSearchTick: Int = 0,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val discover by viewModel.discover.collectAsStateWithLifecycle()
     val artistHit by viewModel.artistHit.collectAsStateWithLifecycle()
 
-    // The flowing background is drawn once, behind the NavHost (see MainActivity); this is only its palette.
     val palette = LocalCoverPalette.current
 
     CoverTheme(palette) {
         val accent = MaterialTheme.colorScheme.primary
         val showingDiscover = state.tracks.isEmpty() && state.query.isBlank()
         val listState = rememberLazyListState()
-        val chartsListState = rememberLazyListState()   // right-hand pane on wide windows
+        val chartsListState = rememberLazyListState()
         var discoverTab by rememberSaveable { mutableIntStateOf(0) }
         var chartExpanded by rememberSaveable { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
-        // Feed cards for artists that only exist in Deezer's catalogue carry no Apple id: it is looked up on tap, then the page opens.
         val openArtistItem: (DiscoverItem) -> Unit = { item -> scope.launch { viewModel.artistIdFor(item)?.let(onArtistSelected) } }
         var filter by rememberSaveable { mutableIntStateOf(FILTER_ALL) }
         val searchFocus = remember { FocusRequester() }
@@ -244,22 +219,17 @@ fun SearchScreen(
 
         LaunchedEffect(focusSearchTick) {
             if (focusSearchTick > 0) {
-                // The tab slide (HomeTabs, ~240 ms) is still running: focusing a field that is not on screen yet can fail.
                 delay(280)
                 listState.scrollToItem(0)
                 runCatching { searchFocus.requestFocus() }
                 keyboard?.show()
             }
         }
-        // Scrolling the list tucks the keyboard away (focus stays, so the cursor is still there when you tap back up).
         LaunchedEffect(listState) {
             snapshotFlow { listState.isScrollInProgress }.collect { if (it) keyboard?.hide() }
         }
-        // A new search starts on "All"; chips never carry over from the previous query.
         LaunchedEffect(state.query) { filter = FILTER_ALL }
 
-        // "No results" must not flash in the gap between typing and the request starting, so it waits until the
-        // state has stayed settled (not loading, still empty) for a moment.
         var settled by remember { mutableStateOf(false) }
         LaunchedEffect(state.query, state.isLoading, state.tracks.isEmpty()) {
             settled = false
@@ -279,16 +249,12 @@ fun SearchScreen(
             }
         }
 
-        // Wide windows (tablet, TV, unfolded fold, landscape) get a fixed header on top and two panes below.
         val wide = isWideLayout()
-        val gutter = if (wide) 16.dp else adaptiveGutter()   // phones: 0.dp
+        val gutter = if (wide) 16.dp else adaptiveGutter()
         val tabsHeight = GamutBottomBarTabsHeight + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         val stripHeight = maxOf(0.dp, barHeight - tabsHeight)
-        // Height of the pinned header (status bar included): the pull-to-refresh button rides in the gap that opens under it.
         var headerHeightPx by remember { mutableIntStateOf(0) }
 
-        // Title + search stay pinned above the content (see the call in the main Column): the field stays composed when
-        // the query goes from empty to "a", so it keeps focus, keyboard and cursor.
         val header: @Composable (Modifier) -> Unit = { m ->
             Column(m.fillMaxWidth().onSizeChanged { headerHeightPx = it.height }.statusBarsPadding()) {
                 Row(Modifier.fillMaxWidth().padding(top = 22.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -298,7 +264,6 @@ fun SearchScreen(
                         color = TextPrimary,
                         modifier = Modifier.weight(1f),
                     )
-                    // Remote / keyboard: there is no way to drag, so Discover gets a focusable refresh button.
                     if (showingDiscover && LocalInputModeManager.current.inputMode == InputMode.Keyboard) {
                         Box(
                             Modifier.size(44.dp).pressScale(onClick = { viewModel.refreshDiscover() }).semantics { contentDescription = "Refresh Discover" },
@@ -338,7 +303,6 @@ fun SearchScreen(
                     onSubmit = { saveRecent(state.query) },
                     armTick = focusSearchTick,
                 )
-                // A hairline progress bar replaces the old dimming-only feedback while a refined search is in flight.
                 Box(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 12.dp).height(2.dp)) {
                     if (state.isLoading && state.tracks.isNotEmpty()) {
                         LinearProgressIndicator(
@@ -354,14 +318,12 @@ fun SearchScreen(
             }
         }
 
-        // Pull down at the top of Discover: slingshot stretch + refresh button, reloads Discover from scratch.
         val refresh = rememberSlingshotRefresh(enabled = showingDiscover && !showingRecents, onRefresh = { viewModel.refreshDiscover() })
 
         AcrylicHost(Modifier.fillMaxSize(), state = LocalAcrylicState.current ?: remember { HazeState() }) {
             Box(Modifier.fillMaxSize().padding(bottom = tabsHeight).acrylicSource().nestedScroll(refresh.connection)) {
                 val resultsAlpha by animateFloatAsState(if (state.isLoading) 0.55f else 1f, tween(150), label = "results-alpha")
                 val resultCell: @Composable (Track) -> Unit = { track ->
-                    // While a refined search is loading, the old results dim instead of vanishing.
                     Box(Modifier.padding(horizontal = 16.dp).graphicsLayer { alpha = resultsAlpha }) {
                         val isFav = track.isrc in favoriteIsrcs
                         TrackResultRow(
@@ -377,8 +339,6 @@ fun SearchScreen(
                                 actionsTrack = track
                             },
                             onAdd = {
-                                // The + saves straight to favorites, then offers the playlists too.
-                                // Tapping it again (check showing) undoes the save.
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onToggleFavorite(track)
                                 if (!isFav) savedTrack = track
@@ -388,8 +348,6 @@ fun SearchScreen(
                 }
                 }
                 Column(Modifier.fillMaxSize()) {
-                    // The title + search stay pinned at the top, like the Library title (same position for every state, so the
-                    // search field keeps focus, keyboard and cursor when the content below switches).
                     header(Modifier.padding(horizontal = gutter + 24.dp))
 
                     if (wide && showingDiscover && !showingRecents) {
@@ -409,7 +367,6 @@ fun SearchScreen(
                                     onMoreClick = { actionsTrack = it },
                                     onArtistItemClick = openArtistItem,
                                 )
-                                // Wide windows: the feed continues under the featured blocks on the left, the charts stay on the right.
                                 discoverFeedItems(
                                     state = discover,
                                     onTrackClick = onTrackSelected,
@@ -487,7 +444,6 @@ fun SearchScreen(
 
                                 artistHit?.let { hit ->
                                     item(key = "artist-hit") {
-                                        // Eases in: the card arrives after the songs (it waits for its verification), so it must not jolt the list.
                                         val visible = remember { MutableTransitionState(false).apply { targetState = true } }
                                         AnimatedVisibility(
                                             visibleState = visible,
@@ -542,7 +498,6 @@ fun SearchScreen(
                                     }
                                     noResults -> item(key = "empty") { NoResults(state.query) }
                                     else -> if (wide) {
-                                        // Two songs per row on wide windows.
                                         itemsIndexed(visibleTracks.chunked(2), key = { i, pair -> "${pair.first().isrc}#$i" }) { _, pair ->
                                             Row(Modifier.fillMaxWidth()) {
                                                 pair.forEach { track -> Box(Modifier.weight(1f)) { resultCell(track) } }
@@ -607,15 +562,6 @@ fun SearchScreen(
     }
 }
 
-// ---------------------------------------------------------------------------------------------------------------------
-// Search field
-// ---------------------------------------------------------------------------------------------------------------------
-
-/**
- * Flat translucent field, no edge at rest. While focused it gets a hairline ring in the cover's accent and a
- * "Cancel" slides in beside it (clears the query and drops focus). The keyboard's action key is "Search" and
- * simply tucks the keyboard away: results already update as you type.
- */
 @Composable
 private fun SearchField(
     query: String,
@@ -624,15 +570,12 @@ private fun SearchField(
     focusRequester: FocusRequester,
     onFocusChange: (Boolean) -> Unit,
     onSubmit: () -> Unit,
-    /** Bumped by "Find songs / artists" buttons: start typing right away, even on a TV. */
     armTick: Int = 0,
 ) {
     var focused by remember { mutableStateOf(false) }
     val focus by animateFloatAsState(if (focused) 1f else 0f, tween(200), label = "search-focus")
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
-    // TV remote: the field must never grab focus (and pop the big keyboard) on its own, e.g. when the app opens or the tab is
-    // shown. With a remote it is a plain button first; OK arms it, and only then does it take focus and show the keyboard.
     val remote = LocalInputModeManager.current.inputMode == InputMode.Keyboard
     var editing by remember { mutableStateOf(false) }
     val live = com.gamut.core.designsystem.LocalFocusLive.current
@@ -709,11 +652,6 @@ private fun SearchField(
     }
 }
 
-// ---------------------------------------------------------------------------------------------------------------------
-// Small shared pieces (also used by DiscoverSection.kt)
-// ---------------------------------------------------------------------------------------------------------------------
-
-/** Tiny uppercase-free label above a block ("Top result"). */
 @Composable
 internal fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
@@ -724,7 +662,6 @@ internal fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** Quiet pill used for result filters and Discover's chart tabs. Selected = filled ink tint, others = faint. */
 @Composable
 internal fun Pill(label: String, selected: Boolean, onClick: () -> Unit) {
     val fill by animateColorAsState(ink(if (selected) 0.16f else 0.06f), tween(200), label = "pill-fill")
@@ -747,7 +684,6 @@ internal fun Pill(label: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** One recent query: clock, text, and an x to forget it. Tapping runs the search again. */
 @Composable
 private fun RecentRow(query: String, onClick: () -> Unit, onRemove: () -> Unit) {
     InteractiveSurface(
@@ -808,7 +744,6 @@ internal fun formatCount(n: Long): String = when {
     else -> n.toString()
 }
 
-/** Bolds the parts of [text] that the query matched, so you can see why a row is here. */
 private fun highlight(text: String, query: String, match: Color): AnnotatedString {
     val tokens = query.lowercase().split(' ').filter { it.isNotBlank() }
     val lower = text.lowercase()
@@ -834,10 +769,6 @@ private fun highlight(text: String, query: String, match: Color): AnnotatedStrin
     }
 }
 
-/**
- * YouTube mark (32x32 viewBox). Drawn black and always shown through `Icon(tint = ink())`, so it is dark on light
- * covers and white on dark ones: one glyph instead of a black and a white copy.
- */
 private val YouTubeGlyph: ImageVector by lazy {
     ImageVector.Builder(
         name = "YouTube",
@@ -855,11 +786,6 @@ private val YouTubeGlyph: ImageVector by lazy {
     ).build()
 }
 
-/**
- * Shared touch behaviour for rows and cards: a soft ink tint fades in on hover (mouse, stylus, ChromeOS) or press,
- * and a press squeezes the surface then springs it back with a small overshoot. Long press is optional (opens the
- * actions sheet on song rows). [content] receives `active` (hovered or pressed) so children can react too.
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun InteractiveSurface(
@@ -885,7 +811,6 @@ internal fun InteractiveSurface(
         label = "surface-tint",
     )
     Row(
-        // Scale is outermost so anything [modifier] draws squeezes with the content.
         Modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .then(modifier)
@@ -904,14 +829,6 @@ internal fun InteractiveSurface(
     ) { content(this, hovered || pressed) }
 }
 
-// ---------------------------------------------------------------------------------------------------------------------
-// Artist card + song row
-// ---------------------------------------------------------------------------------------------------------------------
-
-/**
- * The searched artist: round portrait, name in the display face, fan count, tap opens their page. No container: it
- * sits on the background like the rows below it, only larger. The hover/press tint is the one moment a shape appears.
- */
 @Composable
 private fun ArtistHit(item: DiscoverItem, onClick: (Long) -> Unit) {
     InteractiveSurface(
@@ -940,12 +857,10 @@ private fun ArtistHit(item: DiscoverItem, onClick: (Long) -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
-                // Big enough artists get the seal-check badge (follower count decides, see VerifiedBadge.kt).
                 if (isVerifiedArtist(item.followers)) VerifiedBadge(Modifier.padding(start = 8.dp), size = 22.dp)
             }
             Text("Artist", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
         }
-        // The arrow nudges forward on hover/press: a quiet "this opens".
         val slide by animateDpAsState(
             targetValue = if (active) 4.dp else 0.dp,
             animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
@@ -981,7 +896,6 @@ private fun TrackResultRow(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
     ) { active ->
-        // YouTube thumbnails keep their own 16:9 shape (bar-free frame), everything else is square.
         val isYoutubeThumb = track.albumArtUrl?.let { "ytimg.com" in it || "img.youtube.com" in it } == true
         ArtImage(
             url = remember(track.albumArtUrl) { squareArtUrl(track.albumArtUrl, 256) },
@@ -1005,7 +919,6 @@ private fun TrackResultRow(
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Off-catalog finds (fan edits, bootlegs) carry the YouTube mark inline instead of a text tag.
                 if (track.source == TrackSource.YOUTUBE) {
                     Icon(YouTubeGlyph, "From YouTube", tint = ink(0.6f), modifier = Modifier.padding(end = 4.dp).size(18.dp))
                 }
@@ -1025,7 +938,6 @@ private fun TrackResultRow(
             CircularProgressIndicator(Modifier.size(16.dp), color = accent, strokeWidth = 1.5.dp)
             Spacer(Modifier.width(8.dp))
         } else {
-            // Duration at rest; a play glyph replaces it on hover/press, so a row reads as tappable before it is tapped.
             val playAlpha by animateFloatAsState(if (active) 0.9f else 0f, tween(140), label = "row-play")
             val duration = formatDuration(track.durationMs)
             Box(Modifier.padding(horizontal = 6.dp).width(36.dp), contentAlignment = Alignment.CenterEnd) {

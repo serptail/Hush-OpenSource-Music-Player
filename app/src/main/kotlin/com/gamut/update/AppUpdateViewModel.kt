@@ -24,25 +24,14 @@ import kotlinx.coroutines.launch
 enum class UpdatePhase { READY, NEEDS_PERMISSION, DOWNLOADING, INSTALLING, FAILED }
 
 data class UpdateUiState(
-    /** The first check is still running (for at most [AppUpdateViewModel.GRACE_MS]): hold the app back a moment. */
     val checking: Boolean = true,
-    /** Non-null = this build is too old to be used. */
     val required: UpdateInfo? = null,
     val phase: UpdatePhase = UpdatePhase.READY,
     val progress: Float = 0f,
     val error: String? = null,
-    /** The user chose "Skip for now": let them into the app until it is closed. The screen returns on the next start. */
     val skipped: Boolean = false,
 )
 
-/**
- * The forced-update gate. On every start of the app it asks GitHub (see [UpdateChecker]) for the latest build. If this
- * build is older than the minimum, the app is blocked behind the update screen until the new APK is installed, or the user skips it for this session
- * (e.g. to reach music they downloaded). The next start asks again.
- *
- * Offline is not a lock-out: if GitHub cannot be reached, the last answer seen decides (so an app that already knows it
- * is outdated stays blocked, and one that never learned of an update carries on).
- */
 @HiltViewModel
 class AppUpdateViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -58,13 +47,11 @@ class AppUpdateViewModel @Inject constructor(
     private var updateJob: Job? = null
     private var watchJob: Job? = null
     private var watchedCode = 0
-    /** The download this session started (null = none yet: then whatever is already running or done is picked up). */
     private var expectedWork: UUID? = null
     private var installedWork: UUID? = null
     private var lastCheckAt = 0L
 
     init {
-        // A slow or unreachable GitHub must not hold the app hostage: after the grace period, carry on with what is known.
         viewModelScope.launch {
             delay(GRACE_MS)
             _state.update { if (it.checking) it.copy(checking = false) else it }
@@ -77,18 +64,12 @@ class AppUpdateViewModel @Inject constructor(
         }
     }
 
-    /** Called whenever the app comes to the foreground. */
     fun onStart() {
         check()
-        // Back from the "allow installs" screen: carry on where the user left off.
         val s = _state.value
         if (s.required != null && !s.skipped && s.phase == UpdatePhase.NEEDS_PERMISSION && installer.canInstall()) startUpdate()
     }
 
-    /**
-     * Playback keeps failing: look for a fix right now instead of waiting for the next throttled check. If a release
-     * is out, the update screen takes over; if not, nothing visible happens.
-     */
     fun recheckNow() {
         lastCheckAt = 0L
         check()
@@ -110,8 +91,8 @@ class AppUpdateViewModel @Inject constructor(
             _state.update { s ->
                 when {
                     required == null -> s.copy(checking = false, required = null, phase = UpdatePhase.READY, error = null, skipped = false)
-                    s.required?.versionCode == required.versionCode -> s.copy(checking = false)   // same update: keep its progress
-                    else -> s.copy(checking = false, required = required, phase = UpdatePhase.READY, progress = 0f, error = null, skipped = false)   // a newer update: ask again
+                    s.required?.versionCode == required.versionCode -> s.copy(checking = false)
+                    else -> s.copy(checking = false, required = required, phase = UpdatePhase.READY, progress = 0f, error = null, skipped = false)
                 }
             }
             if (required != null && watchedCode != required.versionCode) {
@@ -122,7 +103,6 @@ class AppUpdateViewModel @Inject constructor(
         }
     }
 
-    /** Lets the user into the app without updating, until the app is closed. */
     fun skip() {
         _state.update { it.copy(skipped = true) }
     }
@@ -137,15 +117,9 @@ class AppUpdateViewModel @Inject constructor(
             return
         }
         _state.update { it.copy(phase = UpdatePhase.DOWNLOADING, progress = 0f, error = null) }
-        // WorkManager runs the download, so it carries on (and resumes) when the app is closed.
         expectedWork = UpdateDownloadWorker.enqueue(context, info)
     }
 
-    /**
-     * Follows the download job for [info]: shows its progress, installs when it finishes while the app is on screen.
-     * A job that already finished before this session (app closed meanwhile) is not installed behind the user's back:
-     * the screen just offers "Update now", which then takes no time because the file is already on disk.
-     */
     private fun watch(info: UpdateInfo) {
         watchJob?.cancel()
         watchJob = viewModelScope.launch {
@@ -182,7 +156,7 @@ class AppUpdateViewModel @Inject constructor(
         updateJob = viewModelScope.launch {
             _state.update { it.copy(phase = UpdatePhase.INSTALLING, progress = 1f, error = null) }
             try {
-                val apk = installer.download(info) { }   // already on disk and checked by the worker: returns at once
+                val apk = installer.download(info) { }
                 installer.signerProblem(apk)?.let { throw IllegalStateException(it) }
                 installer.install(apk)
             } catch (e: CancellationException) {

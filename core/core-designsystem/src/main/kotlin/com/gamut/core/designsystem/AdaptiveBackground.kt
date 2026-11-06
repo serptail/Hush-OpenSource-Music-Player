@@ -48,17 +48,6 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.sin
 
-// ======================================================================================
-// Cover palette
-// ======================================================================================
-
-/**
- * A chameleon palette pulled from a cover. [base] is the cover's majority color and becomes the screen
- * background (it can be near-white or near-black, so the whole app flips between light and dark);
- * [onBase] is the readable text/icon color on top of it. [primary], [secondary] and [tertiary] are the
- * cover's accent colors that flow through the background as a gradient; [accent] is the UI tint
- * (cursor, focus ring, spinners).
- */
 data class CoverPalette(
     val primary: Color,
     val secondary: Color,
@@ -67,14 +56,9 @@ data class CoverPalette(
     val base: Color = Color(0xFF111111),
     val onBase: Color = Color.White,
     val isLight: Boolean = false,
-    /** False = flat [base] fill: no gradient, no animation (used when nothing is playing). */
     val flows: Boolean = true,
 ) {
     companion object {
-        /**
-         * Used when nothing is playing (or the cover is unreadable): a plain, solid dark fill. No gradient,
-         * no animation, no per-frame work.
-         */
         val Neutral = CoverPalette(
             primary = Color(0xFF2B2D3A),
             secondary = Color(0xFF2B2D3A),
@@ -84,7 +68,6 @@ data class CoverPalette(
             flows = false,
         )
 
-        /** Light twin of [Neutral]: used when the app is forced to light mode and nothing is playing. */
         val NeutralLight = CoverPalette(
             primary = Color(0xFFE4E4EA),
             secondary = Color(0xFFE4E4EA),
@@ -100,23 +83,13 @@ data class CoverPalette(
 
 private const val ThemeTransitionMs = 450
 
-/** The palette currently driving the UI; provided by [CoverTheme]. */
 val LocalCoverPalette = staticCompositionLocalOf { CoverPalette.Neutral }
 
-/**
- * Wrap screen content in this so text, icons and Material components follow the cover: dark text on a
- * light cover, white text on a dark one, accent-tinted controls. Anything that hardcodes Color.White
- * needs to switch to MaterialTheme.colorScheme.onBackground (or LocalContentColor.current).
- */
 @Composable
 fun CoverTheme(palette: CoverPalette, content: @Composable () -> Unit) {
-    // Every frame of these two animations recomposes everything that reads ink() / the accent, so they are kept
-    // short (the flowing background itself still takes 1.4 s to cross-fade).
     val onBase by animateColorAsState(palette.onBase, tween(ThemeTransitionMs), label = "cover-onbase")
     val accent by animateColorAsState(palette.accent, tween(ThemeTransitionMs), label = "cover-accent")
     val parent = MaterialTheme.colorScheme
-    // Sheets, dialogs and menus take their container from the surface roles, so those follow the palette too:
-    // a dark app never gets a white bottom sheet (and vice versa).
     val surfaceBase by animateColorAsState(palette.base, tween(ThemeTransitionMs), label = "cover-surface")
     val scheme = remember(parent, onBase, accent, surfaceBase) {
         val lift = if (palette.isLight) Color.Black else Color.White
@@ -151,10 +124,6 @@ private val paletteCache = object : LinkedHashMap<String, CoverPalette>(24, 0.75
     override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CoverPalette>?): Boolean = size > 24
 }
 
-/**
- * Palette for the cover at [url]. Extracted once per URL, off the main thread, and cached.
- * [forceLight]: true = the palette is forced to a light base, false = to a dark base, null = the cover decides.
- */
 @Composable
 fun rememberCoverPalette(url: String?, forceLight: Boolean? = null): CoverPalette {
     val context = LocalContext.current
@@ -180,21 +149,6 @@ private suspend fun loadPalette(context: Context, url: String, forceLight: Boole
     paletteFromBitmap(bitmap, forceLight)
 }.getOrNull()
 
-/**
- * Cover palette extraction, done in OKLab (a perceptual color space, so "close" means "looks close").
- *
- *  1. The cover is quantized into a handful of real colors with k-means; near-identical ones are merged.
- *  2. The biggest cluster is the majority color and decides the base: near-white if it is light, otherwise a
- *     deep, tinted near-black. A dark base is tinted with the cover's main accent hue, so an orange cover
- *     gives warm brown instead of black.
- *  3. Accents are chosen from the remaining clusters by size x chroma, so the cover's dominant color can
- *     itself be an accent (it used to be excluded) and a tiny saturated detail cannot outvote it. Greys are
- *     never accents (a partly transparent black over a light base just looks like dirt), and clusters far
- *     less colorful than the best one are skipped so no dusty midtones sneak in.
- *  4. Accents keep their own hue. Only lightness is nudged into a range that reads on the base, and chroma is
- *     boosted slightly. Brown stays brown and cream stays cream. Missing accents are lighter/darker shades of
- *     the first one, never a shifted hue.
- */
 private fun paletteFromBitmap(bitmap: Bitmap, forceLight: Boolean? = null): CoverPalette {
     val size = 48
     val sample = bitmap.scale(size, size, true)
@@ -208,13 +162,11 @@ private const val NeutralChroma = 0.035
 private const val LightBaseThreshold = 0.72
 private const val MaxAccents = 3
 
-/** A group of similar pixels: [count] pixels whose mean color is ([l], [a], [b]) in OKLab. */
 private class Cluster(val count: Int, val l: Double, val a: Double, val b: Double) {
     val chroma: Double get() = hypot(a, b)
-    val hue: Double get() = atan2(b, a) // radians
+    val hue: Double get() = atan2(b, a)
 }
 
-/** An OKLCH color (hue in radians). */
 private class Lch(val l: Double, val c: Double, val h: Double) {
     fun toColor(): Color = oklch(l, c, h)
     fun shaded(dL: Double, chromaMul: Double, lo: Double, hi: Double) = Lch((l + dL).coerceIn(lo, hi), c * chromaMul, h)
@@ -224,12 +176,10 @@ internal fun paletteFromPixels(pixels: IntArray, forceLight: Boolean? = null): C
     val n = pixels.size
     val lab = Array(n) { argbToOklab(pixels[it]) }
     val clusters = quantize(lab, ClusterCount)
-    val baseCluster = clusters[0] // largest
-    // The user's Light / Dark choice wins over the cover; Auto (null) lets the cover decide.
+    val baseCluster = clusters[0]
     val isLight = forceLight ?: (baseCluster.l > LightBaseThreshold)
     val onBase = if (isLight) Color(0xFF141414) else Color.White
 
-    // Accents: strict about size first (ignore specks), relaxed only if that leaves nothing.
     val accents = pickAccents(clusters, n, minFraction = 0.015).ifEmpty { pickAccents(clusters, n, minFraction = 0.0) }
 
     val base = if (isLight) {
@@ -243,7 +193,6 @@ internal fun paletteFromPixels(pixels: IntArray, forceLight: Boolean? = null): C
         oklch((0.12 + baseCluster.l * 0.20).coerceIn(0.17, 0.23), tintChroma, tintHue)
     }
 
-    // Same hue and character as the cover; lightness only nudged so it reads on the base.
     val lMin = if (isLight) 0.58 else 0.55
     val glow = accents.map { Lch(it.l.coerceIn(lMin, 0.80), minOf(it.chroma * 1.15, 0.30), it.hue) }
     val first = glow.firstOrNull() ?: Lch(if (isLight) 0.70 else 0.42, minOf(baseCluster.chroma, 0.03), baseCluster.hue)
@@ -272,10 +221,6 @@ private fun labDist(x: Cluster, y: Cluster): Double {
     return Math.sqrt(dl * dl + da * da + db * db)
 }
 
-/**
- * Up to [MaxAccents] colorful clusters, best first. Score = size^0.5 x (chroma + 0.04), damped when close to
- * one already chosen (more so when it has the same hue) so the picks differ. Anything much duller than the best pick is dropped.
- */
 private fun pickAccents(clusters: List<Cluster>, total: Int, minFraction: Double): List<Cluster> {
     var candidates = clusters.filter { it.chroma >= NeutralChroma && it.count.toDouble() / total >= minFraction }
     val chosen = mutableListOf<Cluster>()
@@ -292,8 +237,6 @@ private fun pickAccents(clusters: List<Cluster>, total: Int, minFraction: Double
             for (other in chosen) {
                 val f = minOf(1.0, labDist(c, other) / 0.12)
                 score *= f * f
-                // A second shade of the same hue adds nothing to the gradient; a different hue (gold next to a
-                // hot pink cover, say) does. Same-hue candidates are pushed down hard, distinct hues are not.
                 if (c.chroma >= NeutralChroma && other.chroma >= NeutralChroma) {
                     var dh = Math.abs(c.hue - other.hue)
                     if (dh > Math.PI) dh = 2 * Math.PI - dh
@@ -310,7 +253,6 @@ private fun pickAccents(clusters: List<Cluster>, total: Int, minFraction: Double
     return chosen
 }
 
-/** Deterministic k-means in OKLab (fixed seed: the same cover always gives the same palette), largest cluster first. */
 private fun quantize(lab: Array<DoubleArray>, k: Int): List<Cluster> {
     val n = lab.size
     var seed = 42L
@@ -323,7 +265,6 @@ private fun quantize(lab: Array<DoubleArray>, k: Int): List<Cluster> {
         return a * a + b * b + c * c
     }
 
-    // k-means++ seeding.
     val centers = ArrayList<DoubleArray>()
     centers += lab[(rnd() * n).toInt().coerceIn(0, n - 1)].copyOf()
     val d2 = DoubleArray(n) { Double.MAX_VALUE }
@@ -368,7 +309,6 @@ private fun quantize(lab: Array<DoubleArray>, k: Int): List<Cluster> {
     val list = ArrayList<Cluster>()
     for (c in centers.indices) if (counts[c] > 0) list += Cluster(counts[c], centers[c][0], centers[c][1], centers[c][2])
 
-    // Merge clusters that are visually the same color, so one color split in two can't win or lose by accident.
     var merged = true
     while (merged) {
         merged = false
@@ -395,8 +335,6 @@ private fun quantize(lab: Array<DoubleArray>, k: Int): List<Cluster> {
     return list
 }
 
-// ---------- OKLab conversion (Björn Ottosson's reference matrices) ----------
-
 private fun srgbToLinear(c: Double): Double = if (c <= 0.04045) c / 12.92 else Math.pow((c + 0.055) / 1.055, 2.4)
 
 private fun linearToSrgb(c: Double): Double {
@@ -418,7 +356,6 @@ private fun argbToOklab(argb: Int): DoubleArray {
     )
 }
 
-/** Linear (not gamma-encoded) RGB for an OKLab color; components can fall outside 0..1 when out of gamut. */
 private fun oklabToLinear(lightness: Double, a: Double, b: Double): DoubleArray {
     val l = Math.pow(lightness + 0.3963377774 * a + 0.2158037573 * b, 3.0)
     val m = Math.pow(lightness - 0.1055613458 * a - 0.0638541728 * b, 3.0)
@@ -435,7 +372,6 @@ private fun inGamut(lightness: Double, chroma: Double, hue: Double): Boolean {
     return rgb.all { it >= -1e-4 && it <= 1.0 + 1e-4 }
 }
 
-/** Largest chroma that still fits in sRGB at this lightness and hue. */
 private fun maxChroma(lightness: Double, hue: Double): Double {
     var lo = 0.0; var hi = 0.4
     repeat(14) {
@@ -445,43 +381,32 @@ private fun maxChroma(lightness: Double, hue: Double): Double {
     return lo
 }
 
-/** sRGB [Color] from OKLCH; chroma is reduced (hue and lightness kept) if it doesn't fit the screen's gamut. */
 private fun oklch(lightness: Double, chroma: Double, hue: Double): Color {
     val c = minOf(chroma, maxChroma(lightness, hue))
     val rgb = oklabToLinear(lightness, c * cos(hue), c * sin(hue))
     return Color(linearToSrgb(rgb[0]).toFloat(), linearToSrgb(rgb[1]).toFloat(), linearToSrgb(rgb[2]).toFloat())
 }
 
-// ======================================================================================
-// Flowing background
-// ======================================================================================
-
-/** How strong the color blobs are over the base. Lower = calmer, higher = more vivid. */
 private const val Intensity = 0.85f
 
-/** Clock units per real second. With the blob frequencies below, one wander cycle takes roughly 15 to 30 s. */
 private const val FlowRate = 0.9f
 
-/** How strong the accent gradient is on a light base (kept faint so it reads as a tint, not a stain). */
 private const val LightStrength = 0.5f
 
-/** Speed multiplier while paused: the flow doesn't stop, it just breathes. */
 private const val PausedSpeed = 0.3f
 
-/** Minimum seconds between flow updates (about 30 per second). */
 private const val FlowFrameInterval = 0.030f
 
-/** Size of the fallback (Android 12 and below) glows relative to their natural radius. Lower = smaller. */
 private const val BlobScale = 0.33f
 
 private class Blob(
-    val cx: Float, val cy: Float,     // resting center, as a fraction of the screen
-    val ax: Float, val ay: Float,     // wander distance, as a fraction of the screen
-    val fx: Float, val fy: Float,     // wander frequency (different on each axis so paths never repeat)
+    val cx: Float, val cy: Float,
+    val ax: Float, val ay: Float,
+    val fx: Float, val fy: Float,
     val phase: Float,
-    val radius: Float,                // relative to the screen's longer side
-    val stretch: Float,               // > 1 elongates the blob into a ribbon
-    val spin: Float,                  // rotation speed
+    val radius: Float,
+    val stretch: Float,
+    val spin: Float,
     val colorIndex: Int,
 )
 
@@ -492,26 +417,11 @@ private val Blobs = listOf(
     Blob(0.80f, 0.90f, 0.28f, 0.12f, 0.37f, 0.67f, 5.3f, 0.52f, 1.4f, -0.35f, 0),
 )
 
-/**
- * Chameleon background. The majority cover color fills the screen and the cover's accent colors flow
- * through it. On Android 13+ it's an AGSL shader: domain-warped soft color fields with a barely-there
- * dither (no banding, no visible grain, no visible circles). Older versions use the layered radial-glow version below. Everything
- * cross-fades when the track changes, including flipping between light and dark. The flow roams the whole screen; it stays within it.
- * Motion is read in the draw phase only, so
- * nothing recomposes per frame.
- *
- * With [CoverPalette.Neutral] (nothing playing) it is just a flat fill of [CoverPalette.base]: no shader,
- * no clock, no animation. When a track starts, the flow fades in over the solid fill.
- */
 @Composable
 fun FlowingBackground(
     palette: CoverPalette,
     isPlaying: Boolean,
     modifier: Modifier = Modifier,
-    /**
-     * False while something opaque covers the whole screen (the player): nothing is drawn and the clock is
-     * paused. Everything else is kept, so the flow resumes exactly where it left off, not from zero.
-     */
     visible: Boolean = true,
     settings: AppearanceSettings = LocalAppearance.current,
 ) {
@@ -523,10 +433,7 @@ fun FlowingBackground(
         (if (palette.isLight) LightStrength else 1f) * settings.flowIntensity.flowStrength,
         tween(1400), label = "flow-strength",
     )
-    // Mercury and Metaballs have defined shapes, so on a light base they keep the full cover color instead of the
-    // faint tint the soft Flow gradient needs.
     val fullStrength by animateFloatAsState(settings.flowIntensity.flowStrength, tween(1400), label = "flow-strength-full")
-    // 0 = solid fill, 1 = full flow. Fades, so going from "nothing playing" to a track isn't a cut.
     val flow by animateFloatAsState(if (palette.flows) 1f else 0f, tween(1400), label = "flow-amount")
     val clock = rememberFlowClock(
         isPlaying = isPlaying,
@@ -537,7 +444,6 @@ fun FlowingBackground(
     )
 
     if (!visible) {
-        // Covered by an opaque screen: draw nothing.
     } else if (flow <= 0f) {
         Box(modifier.fillMaxSize().background(base))
     } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -556,10 +462,6 @@ fun FlowingBackground(
     }
 }
 
-/**
- * Shared animation clock. Slows (never stops) while paused; frozen if system animations are off, and not
- * ticking at all while [running] is false (solid background), so a flat screen costs nothing per frame.
- */
 @Composable
 private fun rememberFlowClock(
     isPlaying: Boolean,
@@ -581,7 +483,6 @@ private fun rememberFlowClock(
     }
     LaunchedEffect(animationsOn, running, animated) {
         if (!running) return@LaunchedEffect
-        // "Animate" off (or system animations off): one still frame, no per-frame work at all.
         if (!animationsOn || !animated) {
             clock.floatValue = 3f
             return@LaunchedEffect
@@ -590,8 +491,6 @@ private fun rememberFlowClock(
         while (true) {
             withFrameNanos { now ->
                 val dt = (now - last) / 1_000_000_000f
-                // The flow drifts over 15 to 30 s per cycle, so 30 updates a second look identical to 60 or 120,
-                // but halve the shader + blur work that competes with scrolling for the GPU.
                 if (dt >= FlowFrameInterval) {
                     last = now
                     clock.floatValue += dt * FlowRate * speed
@@ -601,8 +500,6 @@ private fun rememberFlowClock(
     }
     return clock
 }
-
-// ---------- Android 13+: AGSL mesh gradient ----------
 
 private const val MeshAgsl = """
 uniform float2 resolution;
@@ -693,8 +590,6 @@ private fun MeshBackground(
         drawRect(brush)
     }
 }
-
-// ---------- Android 12 and below: layered radial glows ----------
 
 @Composable
 private fun BlobBackground(

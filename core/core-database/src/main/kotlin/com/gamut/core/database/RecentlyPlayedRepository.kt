@@ -6,7 +6,6 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-/** Local-only history (not synced). One row per song, replaying a song just moves it to the top. */
 @Singleton
 class RecentlyPlayedRepository @Inject constructor(
     private val recent: RecentDao,
@@ -15,7 +14,7 @@ class RecentlyPlayedRepository @Inject constructor(
     fun observe(): Flow<List<Track>> = recent.observeTracks(MAX_SHOWN).map { rows -> rows.map { it.toDomain() } }
 
     suspend fun record(track: Track) {
-        tracks.insertIgnore(listOf(track.toEntity()))   // the list joins on `tracks`; never overwrite a richer row
+        tracks.insertIgnore(listOf(track.toEntity()))
         recent.put(RecentEntity(track.isrc, System.currentTimeMillis()))
         recent.trim(MAX_KEPT)
     }

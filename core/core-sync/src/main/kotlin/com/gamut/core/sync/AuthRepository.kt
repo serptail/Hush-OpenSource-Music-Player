@@ -24,14 +24,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 
-/** Google-only sign-in. The identity key is always auth.uid(); the app never sees an email/password. */
 @Singleton
 class AuthRepository @Inject constructor(private val supabase: SupabaseClient) {
-
-    /**
-     * Signed-in user id, or null. Only an explicit rejection (or sign-out) yields null: a refresh that failed because
-     * the phone is offline keeps the cached session, so the local library still opens and the user is not logged out.
-     */
     val userId: Flow<String?> = supabase.auth.sessionStatus.map { status ->
         when (status) {
             is SessionStatus.Authenticated -> status.session.user?.id
@@ -40,7 +34,6 @@ class AuthRepository @Inject constructor(private val supabase: SupabaseClient) {
         }
     }.distinctUntilChanged()
 
-    /** true = signed in, false = signed out, null = still restoring the saved session. */
     val authState: Flow<Boolean?> = supabase.auth.sessionStatus.map { status ->
         when (status) {
             is SessionStatus.Authenticated -> true
@@ -52,7 +45,6 @@ class AuthRepository @Inject constructor(private val supabase: SupabaseClient) {
     fun currentUserId(): String? = supabase.auth.currentUserOrNull()?.id
     fun currentEmail(): String? = supabase.auth.currentUserOrNull()?.email
 
-    /** Name from the account (our own display_name, else Google's full_name / name, else the e-mail prefix). */
     fun defaultDisplayName(): String? {
         val user = supabase.auth.currentUserOrNull() ?: return null
         fun meta(key: String) = (user.userMetadata?.get(key) as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
@@ -64,7 +56,6 @@ class AuthRepository @Inject constructor(private val supabase: SupabaseClient) {
         Unit
     }
 
-    /** [activityContext] must be an Activity (Credential Manager shows its sheet on top of it). */
     suspend fun signInWithGoogle(activityContext: Context): Result<Unit> = runCatching {
         val rawNonce = UUID.randomUUID().toString()
         val hashedNonce = MessageDigest.getInstance("SHA-256").digest(rawNonce.toByteArray())
@@ -80,17 +71,12 @@ class AuthRepository @Inject constructor(private val supabase: SupabaseClient) {
         }
     }
 
-    /**
-     * This device is always signed out. "All devices" needs the server (it revokes every refresh token): offline it
-     * fails, the caller is told, and the other devices stay signed in. Other devices notice on their next sync check.
-     */
     suspend fun signOut(allDevices: Boolean): Result<Unit> {
         val remote = runCatching { supabase.auth.signOut(if (allDevices) SignOutScope.GLOBAL else SignOutScope.LOCAL) }
         if (remote.isFailure) runCatching { supabase.auth.clearSession() }
         return if (allDevices) remote else Result.success(Unit)
     }
 
-    /** Server deletes the auth user; ON DELETE CASCADE removes all cloud data. Local data is the caller's choice. */
     suspend fun deleteAccount(): Result<Unit> = runCatching {
         supabase.functions.invoke("delete-account", buildJsonObject { })
         runCatching { supabase.auth.signOut(SignOutScope.LOCAL) }

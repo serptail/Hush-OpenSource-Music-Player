@@ -44,5 +44,4 @@ class CandidateScorer @Inject constructor() {
         }
         return score + kotlin.math.ln((candidate.viewCount + 1).toDouble()) / 1_000_000.0
     }
-
 }

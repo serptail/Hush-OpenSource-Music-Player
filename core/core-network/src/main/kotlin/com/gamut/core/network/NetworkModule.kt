@@ -41,10 +41,6 @@ object NetworkModule {
     @Named("coverart")
     fun coverArtClient(): OkHttpClient = baseClient()
 
-    /**
-     * One on-disk HTTP cache shared by the catalogue clients (iTunes, Deezer, Apple charts). It survives restarts, so
-     * the same artist / album / photo lookups are not fetched again. Never used for YouTube: stream URLs expire.
-     */
     @Provides
     @Singleton
     @Named("catalog-cache")
@@ -55,11 +51,6 @@ object NetworkModule {
     @Singleton
     @Named("itunes")
     fun itunesClient(@Named("catalog-cache") cache: Cache): OkHttpClient = baseClient().newBuilder()
-        // iTunes has no documented hard limit but empirically throttles around
-        // ~20 requests/minute/IP and signals it with 403 rather than 429/5xx.
-        // SearchRepositoryImpl's Semaphore(1) + 10-min result cache already keep us well
-        // under that in normal typing; this interceptor is the safety net for the rare
-        // case we do trip it, since plain BackoffInterceptor ignores 403 by design.
         .addInterceptor(ItunesBackoffInterceptor())
         .cached(cache)
         .build()
@@ -68,11 +59,7 @@ object NetworkModule {
     @Singleton
     @Named("deezer")
     fun deezerClient(@Named("catalog-cache") cache: Cache): OkHttpClient = baseClient().newBuilder()
-        // Deezer answers HTTP 200 with {"error":{"code":4,...}} once ~50 requests / 5 s are exceeded; those used to
-        // be read as "no results" (and cached). Stay under the limit, and never cache an error body (see cached()).
         .addNetworkInterceptor(DeezerRateLimitInterceptor)
-        // OkHttp allows only 5 parallel calls per host by default, and a call waiting for its rate-limit slot keeps its place.
-        // The feed and the artist photos fire many Deezer calls at once, so give them room instead of queueing behind that.
         .dispatcher(Dispatcher().apply { maxRequestsPerHost = 16 })
         .cached(cache)
         .build()
@@ -137,7 +124,6 @@ object NetworkModule {
     fun youtubeApi(@Named("youtube") client: OkHttpClient): YoutubeMusicApi =
         retrofit("https://music.youtube.com/", client).create(YoutubeMusicApi::class.java)
 
-
     @Provides
     @Singleton
     fun resolverSyncApi(@Named("sync") client: OkHttpClient): ResolverSyncApi =
@@ -159,18 +145,11 @@ object NetworkModule {
     }.build()
 }
 
-/** How long a catalogue answer (artist, album list, chart, photo lookup) is reused without asking again. */
 private const val CATALOG_TTL_SECONDS = 3_600
 
-/**
- * Caches successful GET answers on disk for [CATALOG_TTL_SECONDS], whatever the server's own cache headers say:
- * iTunes and Deezer send none that are usable. Vary is dropped because these answers do not depend on request
- * headers, and OkHttp refuses to cache a response that says "Vary: *". Failures (e.g. iTunes' 403) are never cached.
- */
 private fun OkHttpClient.Builder.cached(cache: Cache): OkHttpClient.Builder = cache(cache)
     .addNetworkInterceptor { chain ->
         val response = chain.proceed(chain.request())
-        // Deezer reports quota errors as 200 + {"error":...}: caching that would serve "no results" for an hour.
         val apiError = response.isSuccessful && response.peekBody(256).string().trimStart().startsWith("{\"error\"")
         if (chain.request().method == "GET" && response.isSuccessful && !apiError) {
             response.newBuilder()
@@ -183,10 +162,6 @@ private fun OkHttpClient.Builder.cached(cache: Cache): OkHttpClient.Builder = ca
         }
     }
 
-/**
- * MusicBrainz requires "AppName/version ( contact )" where the contact is a URL or an e-mail address they can reach you on
- * if the app misbehaves. Anonymous or generic agents get throttled or blocked. Switch to the repo URL once it is public.
- */
 private const val MUSICBRAINZ_USER_AGENT = "Gamut/1.0 ( https://github.com/serptail )"
 
 private object UserAgentInterceptor : Interceptor {
@@ -195,14 +170,6 @@ private object UserAgentInterceptor : Interceptor {
     )
 }
 
-/**
- * At most 40 network requests per 5 s window (Deezer's documented limit is 50). Cache hits never get here.
- *
- * Each request reserves a time slot under the lock (instant), then waits for its slot OUTSIDE the lock, in short steps so a
- * cancelled call stops waiting at once. The old version slept while holding the lock, so one throttled request froze every
- * other Deezer call behind it (logcat showed "Long monitor contention ... DeezerRateLimitInterceptor" for 3 s at a time).
- * Slots are handed out in order and never earlier than the previous one, so the 40-per-window rule still holds.
- */
 private object DeezerRateLimitInterceptor : Interceptor {
     private const val WINDOW_MS = 5_000L
     private const val MAX_REQUESTS = 40
@@ -249,10 +216,6 @@ private object MusicBrainzRateLimitInterceptor : Interceptor {
     }
 }
 
-/**
- * Retries on 5xx AND on a slow/hanging response (timeout), not just non-2xx codes.
- * Shared by MusicBrainz and sync clients.
- */
 private class BackoffInterceptor(private val maxAttempts: Int = 3) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         var lastResponse: Response? = null
@@ -273,13 +236,6 @@ private class BackoffInterceptor(private val maxAttempts: Int = 3) : Interceptor
     }
 }
 
-/**
- * Backoff for iTunes, which signals its soft rate limit with 403 (not 429/5xx like most APIs) and keeps it up for a while.
- * Retries 403, 429, 5xx and I/O errors up to [maxAttempts] times. If the server sends Retry-After (seconds) that wait is
- * honoured, capped at [MAX_WAIT_MS] so an artist page never hangs on it; otherwise it waits 1 s, 2.5 s, 5 s (+ jitter).
- * Stops at once when the call was cancelled (the user left the screen). Kept separate from BackoffInterceptor so a 403 from
- * an authenticated client elsewhere in the app is never retried by accident.
- */
 private class ItunesBackoffInterceptor(private val maxAttempts: Int = 4) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         var attempt = 0

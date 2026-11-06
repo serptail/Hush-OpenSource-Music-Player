@@ -2,8 +2,6 @@ package com.gamut.core.model
 
 import kotlinx.serialization.Serializable
 
-// MUSICBRAINZ kept (not removed) so old cached DB rows / ResolvedSource entries with that
-// string value still deserialize cleanly (Mappers.kt falls back to it on unknown values too).
 @Serializable
 enum class TrackSource { MUSICBRAINZ, ITUNES, YOUTUBE }
 
@@ -29,8 +27,6 @@ data class ResolvedSource(
     val verifiedCount: Int,
 )
 
-// DIRECT added: used when a Track already carries its own youtubeVideoId (the new
-// YouTube-only unified-search results), so resolution can skip searching/scoring entirely.
 @Serializable
 enum class ResolutionMethod { TOPIC_CHANNEL, HARD_FILTER, MANUAL, DIRECT }
 
@@ -39,7 +35,6 @@ data class Playlist(
     val id: Long,
     val name: String,
     val createdAtEpochMs: Long,
-    /** A cover the user picked (a local `file:` URI). When set it always beats the art of the last song. */
     val coverUri: String? = null,
     val tags: List<String> = emptyList(),
 )
@@ -60,19 +55,12 @@ sealed interface PlaybackState {
     data class Error(val message: String) : PlaybackState
 }
 
-/** OFF = stop after the last track, ALL = loop the whole queue, ONE = loop the current track. */
 enum class RepeatMode { OFF, ALL, ONE }
 
-/**
- * The queue in *play order* (already shuffled when shuffle is on), so a UI can render it as is.
- * [currentIndex] is the position of the current track inside [tracks], or -1 if nothing is current.
- */
 data class QueueState(
     val tracks: List<Track> = emptyList(),
     val currentIndex: Int = -1,
 )
-/** "Is this track on disk?", answered synchronously. Implemented by the database module's DownloadIndex. */
 interface LocalAudioIndex {
-    /** Absolute path of the downloaded file for [isrc], or null if it has not been downloaded. */
     fun pathFor(isrc: String): String?
 }

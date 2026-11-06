@@ -23,12 +23,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/**
- * Keeps a Shazam listening session alive while the app is in the background (microphone foreground service).
- * Started from the UI while the app is visible (Android only allows that for the microphone). When the session ends:
- * if the app is not on screen, a result notification is posted, and tapping it opens the app on the Shazam sheet
- * (the sheet shows [ShazamSession.state], so it is already holding the result).
- */
 @AndroidEntryPoint
 class ShazamListenService : Service() {
     @Inject lateinit var session: ShazamSession
@@ -61,12 +55,11 @@ class ShazamListenService : Service() {
             return START_NOT_STICKY
         }
 
-        cancelResultNotification(this)   // an older result notification is obsolete now
-        session.start()                         // no-op when the UI already started it
+        cancelResultNotification(this)
+        session.start()
         scope.launch {
             val end = session.state.first { it !is ShazamState.Listening }
             stopForeground(STOP_FOREGROUND_REMOVE)
-            // Idle = the user cancelled / dismissed. Otherwise tell them, unless they are looking at the sheet.
             if (end !is ShazamState.Idle && !session.appVisible) postResult(end)
             stopSelf()
         }
@@ -95,7 +88,6 @@ class ShazamListenService : Service() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(openAppIntent(this))
             .build()
-        // Posting needs POST_NOTIFICATIONS on Android 13+; without it this silently does nothing and the sheet still waits in the app.
         getSystemService(NotificationManager::class.java).notify(ID_RESULT, notification)
     }
 
@@ -124,7 +116,6 @@ class ShazamListenService : Service() {
             )
         }
 
-        /** Brings the existing task to the front (or starts it); the sheet then shows the session state. */
         private fun openAppIntent(context: Context): PendingIntent {
             val intent = Intent(context, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)

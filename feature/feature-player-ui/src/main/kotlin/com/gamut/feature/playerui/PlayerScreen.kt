@@ -125,7 +125,7 @@ import kotlin.math.abs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 
-private val FavoriteColor = Color(0xFFFF4D6D)   // the heart when the track is a favorite
+private val FavoriteColor = Color(0xFFFF4D6D)
 private const val PrefsName = "player_ui"
 private const val PrefLyricsOn = "lyrics_on"
 
@@ -133,55 +133,33 @@ private const val PrefLyricsOn = "lyrics_on"
 fun PlayerScreen(
     player: MusicPlayer,
     onBack: () -> Unit = {},
-    /** ISRCs of the favorited tracks; the heart is filled in when the current track is in this set. */
     favoriteIsrcs: Set<String> = emptySet(),
     onToggleFavorite: (Track) -> Unit = {},
-    /** The playlists shown in the list-plus sheet. */
     playlists: List<PlaylistPickerItem> = emptyList(),
-    /** Called when the user taps a playlist in the list-plus sheet: add [Track] to the playlist with this id. */
     onAddToPlaylist: (Track, String) -> Unit = { _, _ -> },
-    /** Ids of the playlists that already contain the current track (shown with a check in the list-plus sheet). */
     playlistIdsWithTrack: Set<String> = emptySet(),
-    /** Called when the user un-checks a playlist in the list-plus sheet: remove [Track] from the playlist with this id. */
     onRemoveFromPlaylist: (Track, String) -> Unit = { _, _ -> },
-    /** "Go to artist" (options sheet, and a tap on the artist photo / name). The CALLER must close the player layer. */
     onGoToArtist: (Track) -> Unit = {},
-    /**
-     * False while the screen is parked off-screen (the player lives as a persistent layer, see PlayerLayer in MainActivity) or
-     * sliding away. Everything that costs something (lyrics / artist / waveform lookups, the per-frame clock) only runs while true.
-     */
     active: Boolean = true,
 ) {
     val state by player.playbackState.collectAsState()
-    // `state` changes every position tick. It is only read inside derivedStateOf, so this screen recomposes when
-    // the track / play state really changes, not twice a second.
     val liveTrack by remember { derivedStateOf { (state as? PlaybackState.Playing)?.track ?: (state as? PlaybackState.Paused)?.track } }
-    // No loading screen any more: while the next track resolves (state = Loading, no track) the player simply keeps
-    // showing the last one, with the spinner on the cover and the real load progress on the ring. This also removes
-    // the flash of an empty screen between two queue items.
     var lastTrack by remember { mutableStateOf<Track?>(null) }
     LaunchedEffect(liveTrack) { liveTrack?.let { lastTrack = it } }
     val track: Track? = liveTrack ?: lastTrack
 
     val isPlaying by remember { derivedStateOf { state is PlaybackState.Playing } }
-    // What the cover shows as "playing". A seek makes ExoPlayer report "not playing" for a moment while it
-    // re-buffers; a drop to "paused" only counts if it lasts, "playing" shows at once, and a tap flips it immediately.
     var shownPlaying by remember { mutableStateOf(isPlaying) }
     LaunchedEffect(isPlaying) {
         if (isPlaying) shownPlaying = true else { delay(700); shownPlaying = false }
     }
-    // True while a track change is in progress (state Loading, or a queue skip that already shows the new track as
-    // Playing while its URL resolves). Only then is loadProgress meaningful; afterwards it sits at 1.
     val showLoading by player.loadingTrack.collectAsState()
     val loadProgressState = player.loadProgress.collectAsState()
-    // The spinner also covers a re-buffer in the middle of a song, but only once it lasts, so a seek doesn't flash it.
     val awaiting by player.awaitingAudio.collectAsState()
     var bufferingShown by remember { mutableStateOf(false) }
     LaunchedEffect(awaiting) { if (awaiting) { delay(500); bufferingShown = true } else bufferingShown = false }
     val spinnerOn = showLoading || bufferingShown
 
-    // The stream's real length wins over the catalog's (another version of the song), but only when it is plausible:
-    // right after a track change this value can still belong to the PREVIOUS song, which gave a full or empty bar.
     val streamDuration by player.streamDurationMs.collectAsState()
     val catalogDuration = track?.durationMs ?: 0L
     val streamPlausible = streamDuration > 0L &&
@@ -201,8 +179,6 @@ fun PlayerScreen(
     var showMore by remember { mutableStateOf(false) }
     var showShare by remember { mutableStateOf(false) }
     var showAddToPlaylist by remember { mutableStateOf(false) }
-    // What the user changed per song this session (playlist id -> now inside?), so reopening the sheet shows the right
-    // checks even before the caller's own list catches up.
     val playlistChanges = remember { androidx.compose.runtime.mutableStateMapOf<String, Map<String, Boolean>>() }
     val modState by ModController.state.collectAsState()
     var showMod by remember { mutableStateOf(false) }
@@ -210,38 +186,28 @@ fun PlayerScreen(
     val haptic = LocalHapticFeedback.current
     val volumeHud = remember { VolumeHud(context.getSystemService(AudioManager::class.java), haptic) }
 
-    // "Lyrics: On / Off" from the options sheet. Remembered across launches.
     val prefs = remember { context.getSharedPreferences(PrefsName, Context.MODE_PRIVATE) }
     var lyricsOn by remember { mutableStateOf(prefs.getBoolean(PrefLyricsOn, true)) }
     var lyricsPanelOpen by remember { mutableStateOf(false) }
 
-    // `active` goes false the moment the user leaves: from then on the screen is a still picture (see PlayerClock).
-    // It is a persistent layer now, so it is never disposed: reset the lyrics panel once the slide-away is over.
     val leave: () -> Unit = { if (active) onBack() }
     BackHandler(enabled = active && !lyricsPanelOpen) { leave() }
-    BackHandler(enabled = active && lyricsPanelOpen) { lyricsPanelOpen = false }   // declared last: wins while the panel is open
+    BackHandler(enabled = active && lyricsPanelOpen) { lyricsPanelOpen = false }
     LaunchedEffect(active) { if (!active) { delay(GamutMotion.PLAYER_LAYER_OUT_MS + 120L); lyricsPanelOpen = false } }
     val clock = remember { PlayerClock() }
     LaunchedEffect(modState.settings.speed) { clock.setSpeed(modState.settings.speed) }
     LaunchedEffect(player) { clock.follow(player) }
-    // The per-frame tick only runs while the player is on screen (a parked layer must not keep the display refreshing).
     LaunchedEffect(clock.live, duration, active) { if (clock.live && active) clock.tick(duration) }
 
-    // While the progress line is dragged, the line and time label follow the finger; the real seek happens on release.
     var scrubFraction by remember { mutableStateOf<Float?>(null) }
     val durationKnown = effectiveDurationMs > 0L
     val currentKey = track?.let { it.isrc.orEmpty() + "|" + it.title }
     val progressProvider = remember(duration, durationKnown, currentKey, showLoading) {
         {
-            // Read the clock's state FIRST, unconditionally: the ring's draw scope and TimeRow's derivedStateOf only
-            // subscribe to what they read. On a fresh open the clock isn't anchored yet, so the branch below used to
-            // return 0f without touching positionMs, and nothing ever redrew once the clock started.
             val clockPosition = clock.positionMs
             val clockKey = clock.anchoredKey
             scrubFraction ?: when {
-                // Loading the next song: the ring shows the real load progress (it replaces the old loading screen's bar).
                 showLoading -> loadProgressState.value.coerceIn(0f, 1f)
-                // Not anchored to THIS track yet: the clock still holds the previous song's position.
                 durationKnown && clockKey == currentKey -> (clockPosition / duration).coerceIn(0f, 1f)
                 else -> 0f
             }
@@ -252,7 +218,7 @@ fun PlayerScreen(
 
     val seekToFraction: (Float) -> Unit = { fraction ->
         val target = (fraction * duration).toLong()
-        clock.anchor(target)   // move the line right away instead of waiting for the player's next tick
+        clock.anchor(target)
         player.seekTo(target)
     }
     val seekToMs: (Long) -> Unit = { ms ->
@@ -264,7 +230,6 @@ fun PlayerScreen(
         if (shownPlaying) player.pause() else player.resume()
         shownPlaying = !shownPlaying
     }
-    // TV remote: when the player opens, focus starts on the cover (OK = play / pause). Touch devices never get a focus ring.
     val coverFocus = remember { FocusRequester() }
     val inputMode = LocalInputModeManager.current
     LaunchedEffect(active) {
@@ -274,35 +239,28 @@ fun PlayerScreen(
         }
     }
 
-    // Lyrics. Keyed on the track so the previous song's lines never show for a frame on a track change.
     val lyricsKey = track?.let { it.isrc.orEmpty().ifBlank { "${it.title}|${it.artist}" } }
     var lyricsState by remember(lyricsKey) {
         mutableStateOf<LyricsState>(track?.let { LyricsRepository.cached(it) } ?: LyricsState.Loading)
     }
-    var lyricsRetry by remember(lyricsKey) { mutableIntStateOf(0) }   // bumped by tapping the card after a failure
+    var lyricsRetry by remember(lyricsKey) { mutableIntStateOf(0) }
     var lyricsTriedSeconds by remember(lyricsKey) { mutableIntStateOf(-1) }
-    // Lyrics are matched against the length of the audio that is really playing: once the stream's length is known
-    // it replaces the catalog's. Synced lyrics are final; plain ones are looked up once more if the length changed.
     val lyricsSeconds = (effectiveDurationMs / 1000).toInt()
     LaunchedEffect(lyricsKey, lyricsRetry, lyricsOn, lyricsSeconds, active) {
         val t = track ?: return@LaunchedEffect
-        if (!lyricsOn || !active) return@LaunchedEffect   // parked: no network for a screen nobody sees
+        if (!lyricsOn || !active) return@LaunchedEffect
         val shown = lyricsState
         if (shown is LyricsState.Loaded && (shown.isSynced || lyricsTriedSeconds == lyricsSeconds)) return@LaunchedEffect
         if (shown !is LyricsState.Loaded) lyricsState = LyricsState.Loading
         lyricsTriedSeconds = lyricsSeconds
-        // A failed lookup is usually a slow service or no network, not "no lyrics": keep retrying with growing pauses.
         var attempt = 0
         while (true) {
             val result = LyricsRepository.fetchLyrics(t, effectiveDurationMs)
-            // A failed re-check must not wipe plain lyrics that are already on screen.
             if (result is LyricsState.Loaded || shown !is LyricsState.Loaded) lyricsState = result
             if (result !is LyricsState.Error || ++attempt >= 20) break
             delay((2_000L * attempt).coerceAtMost(15_000L))
         }
     }
-    // Index of the line being sung. A derived state: it only notifies when the line changes, so the one-line view,
-    // the preview card and the panel recompose once per line, not once per frame.
     val activeLine = remember(lyricsState, clock) {
         derivedStateOf {
             val s = lyricsState
@@ -311,7 +269,6 @@ fun PlayerScreen(
     }
     val activeIndex: () -> Int = remember(activeLine) { { activeLine.value } }
 
-    // Artist photo + credits (Deezer / MusicBrainz, see ArtistInfoRepository). Nothing here blocks the player.
     var artistInfo by remember(lyricsKey) { mutableStateOf(track?.let { ArtistInfoRepository.cached(it) }) }
     var artistLoading by remember(lyricsKey) { mutableStateOf(artistInfo == null) }
     LaunchedEffect(lyricsKey, active) {
@@ -319,26 +276,23 @@ fun PlayerScreen(
         if (!active) return@LaunchedEffect
         if (artistInfo != null) { artistLoading = false; return@LaunchedEffect }
         var attempt = 0
-        while (artistInfo == null && attempt < 3) {   // offline -> online recovers on its own
+        while (artistInfo == null && attempt < 3) {
             artistInfo = ArtistInfoRepository.fetch(t).takeIf { it.imageUrl != null || it.credits.size > 1 }
             if (artistInfo == null) { attempt++; if (attempt < 3) delay(10_000L * attempt) }
         }
-        artistLoading = false   // gave up: the section just shows the name + cover, no spinner
+        artistLoading = false
     }
 
     val rawArt = track?.albumArtUrl
-    val artUrl = remember(rawArt) { backdropArtUrl(rawArt) }   // blurred backdrop + accent + gradient tint
+    val artUrl = remember(rawArt) { backdropArtUrl(rawArt) }
     val accent = rememberCoverAccent(artUrl)
-    val lyricHighlight = rememberCoverSubAccent(artUrl, fallback = accent)   // the cover's second colour for the sung words
+    val lyricHighlight = rememberCoverSubAccent(artUrl, fallback = accent)
     val tint = rememberCoverTint(artUrl)
     SideEffect {
         WaveformSource.init(context)
         WaveformSource.provider = { t -> player.sourceUrlFor(t.isrc) }
     }
-    val waveform = rememberWaveform(track.takeIf { active })   // parked: no audio analysis
-    // Word timing refined with the loudness envelope (skips real silences inside a line). The envelope fills in from
-    // the start; refine only once nearly all of it is measured. Line timestamps are unchanged, so activeIndex still
-    // uses lyricsState.
+    val waveform = rememberWaveform(track.takeIf { active })
     val waveformDone = waveform.isNotEmpty() && waveform.indexOfLast { it > 0f } >= waveform.size * 9 / 10
     val shownLyrics = remember(lyricsState, waveformDone, effectiveDurationMs) {
         val s = lyricsState
@@ -347,35 +301,24 @@ fun PlayerScreen(
         else s
     }
 
-    // The player does NOT close itself here: the caller closes the layer and navigates, so the two slides run together.
-    // One artist: straight to their page. Several: the picker sheet opens first (placed next to the other sheets below).
-    // The picked name goes to the caller as track.copy(artist = name), so the existing by-name lookup just works.
     val artistTap = rememberArtistTap(track?.artist.orEmpty(), track?.album) { name ->
         track?.let { t -> onGoToArtist(t.copy(artist = name)) }
     }
     val goToArtist: () -> Unit = artistTap.onClick
 
-    // The glass (sheets) takes its backing color from LocalCoverPalette; the player has its own dark backdrop, so
-    // inside it the palette is pinned to the neutral one (the same color as the screen, and still).
-    // Wide windows (tablet / unfolded): keep the player column at a phone-like width, centered. 0.dp on phones.
     val gutter = adaptiveGutter(AdaptiveLayout.PlayerMaxWidth)
     CompositionLocalProvider(LocalCoverPalette provides CoverPalette.Neutral) {
     AcrylicHost(
         Modifier
             .fillMaxSize()
             .background(CoverPalette.Neutral.base)
-            // The sideways volume swipe on the cover is dead while the lyrics panel covers the screen.
             .then(if (lyricsPanelOpen) Modifier else Modifier.swipeVolumeGesture(volumeHud)),
     ) {
         if (artUrl != null) PlayerBackdrop(artUrl, animateChanges = active)
 
-        // Phone: one scrolling column (player first, then lyrics card, then the artist).
-        // Wide window (tablet / TV / unfolded): the player on the left, lyrics preview + about the artist on the right.
         val wide = isWideLayout()
-        val edge = if (wide) 0.dp else gutter   // the phone-width centering only applies to the single column
+        val edge = if (wide) 0.dp else gutter
 
-        // Left side: header, cover with previous / next, time codes, the line being sung, and the controls.
-        // coverMax caps the cover so it still fits the screen height on a landscape tablet / TV.
         val playerContent: @Composable (Dp) -> Unit = { coverMax ->
             Spacer(Modifier.height(10.dp))
             Box(Modifier.volumeHudHeaderAnchor(volumeHud)) {
@@ -388,10 +331,8 @@ fun PlayerScreen(
                     onToggleFavorite = { track?.let(onToggleFavorite) },
                 )
             }
-            Spacer(Modifier.height(36.dp))   // the cover sits lower, closer to the middle of the screen
+            Spacer(Modifier.height(36.dp))
 
-            // [previous] cover [next]. The row may reach ArtworkExtraWidth past the screen padding on each side, and
-            // the cover takes whatever the two buttons leave. Play / pause is a tap on the cover itself.
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -433,7 +374,6 @@ fun PlayerScreen(
             Spacer(Modifier.height(10.dp))
             TimeRow(positionProvider, effectiveDurationMs)
 
-            // The line being sung: right under the cover and the time codes.
             if (lyricsOn) CurrentLyricLine(shownLyrics, activeIndex, lyricsPosition, tint, highlight = lyricHighlight)
 
             Spacer(Modifier.height(4.dp))
@@ -459,7 +399,6 @@ fun PlayerScreen(
             )
         }
 
-        // Right side on a wide window (below the player on a phone): the lyrics preview card, then the artist.
         val extrasContent: @Composable () -> Unit = {
             if (lyricsOn) {
                 LyricsPreviewCard(
@@ -483,13 +422,12 @@ fun PlayerScreen(
         }
 
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            FocusLive(!lyricsPanelOpen) {   // the full-screen lyrics panel covers the player: its controls must not take the remote
+            FocusLive(!lyricsPanelOpen) {
             PlayerTopBar(leave, onMore = { showMore = true }, modifier = Modifier.fillMaxWidth().padding(start = 24.dp + edge, end = 24.dp + edge, top = 14.dp))
 
             if (wide) {
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
-                        // Header, time codes, line and controls need about 360dp; the cover gets the rest of the height.
                         val coverMax = (maxHeight - 360.dp).coerceIn(220.dp, 560.dp)
                         Column(
                             Modifier
@@ -501,7 +439,6 @@ fun PlayerScreen(
                             Spacer(Modifier.height(32.dp).navigationBarsPadding())
                         }
                     }
-                    // Own scroll: the lyrics card and the artist section never push the controls out of view.
                     Column(
                         Modifier
                             .weight(1f)
@@ -515,7 +452,6 @@ fun PlayerScreen(
                     }
                 }
             } else {
-                // Everything below the top bar scrolls: controls first, then the lyrics card, then the artist.
                 Column(
                     Modifier
                         .weight(1f)
@@ -532,10 +468,8 @@ fun PlayerScreen(
                 }
 }
 
-        // Volume pill: drawn above the page, takes no touches.
         VolumeHudOverlay(volumeHud)
 
-        // The "opened mini player": every lyric on a gradient from the cover, with the controls at the bottom.
         AnimatedVisibility(
             visible = lyricsPanelOpen && track != null,
             enter = slideInVertically(tween(GamutMotion.PLAYER_IN_MS, easing = GamutMotion.EmphasizedDecelerate)) { it } + fadeIn(tween(200)),
@@ -568,7 +502,6 @@ fun PlayerScreen(
     }
     }
 
-    // Sheets sit OUTSIDE the Neutral pin: a sheet is its own window and follows the app's light / dark look.
     if (showMore) {
         PlayerOptionsSheet(
             isFavorite = track?.isrc?.let { it in favoriteIsrcs } == true,
@@ -663,7 +596,6 @@ private fun TrackHeader(
                 color = Color.White,
             )
             Spacer(Modifier.height(2.dp))
-            // Several artists: a faded stack of portraits before the names; the line opens the artist / the picker.
             ArtistLine(artist, albumTitle, onArtist, stackSize = 22.dp) { m ->
                 Box(m) {
                     BouncingText(
@@ -684,11 +616,6 @@ private fun TrackHeader(
     }
 }
 
-/**
- * Two rows on a four-column grid, so the second row sits centered under the first:
- *   Shuffle   Queue   Add to playlist   Repeat
- *             Share   Mod
- */
 @Composable
 private fun ControlsGrid(
     shuffleOn: Boolean,
@@ -754,63 +681,42 @@ private fun RowScope.GridCell(content: @Composable () -> Unit) {
     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { content() }
 }
 
-/**
- * How far the lyrics highlight runs ahead of the player's reported position. The position the player reports is
- * "what was handed to the audio pipeline", so what you hear trails it a little (output latency); a small lead
- * makes the words light up as they are sung instead of just after. Tune it (0 = off, try 150-400) if it still
- * feels early or late on your device.
- */
 internal const val LyricsSyncOffsetMs = 250L
 
-/** How far (per side) the cover row reaches past the screen's horizontal padding. Bigger = bigger cover. */
 private val ArtworkExtraWidth = 14.dp
 
-/** The previous / next buttons beside the cover: glyph size and the touch padding around it. Smaller = bigger cover. */
 private val SideButtonSize = 30.dp
 private val SideButtonPadding = 4.dp
 
-private const val RESYNC_THRESHOLD_MS = 400L   // ignore tick differences smaller than this
+private const val RESYNC_THRESHOLD_MS = 400L
 
-/**
- * Smooth, continuous playback position. The player only reports its position about twice a second, so between
- * reports it is advanced locally against a monotonic clock. The clock runs only while sound is really coming out
- * ([live]): not while the next track is still resolving / buffering. A report re-anchors it only when it differs
- * from our estimate by more than [RESYNC_THRESHOLD_MS], on a track change, or when [live] flips, so normal ticks
- * never make the line step backwards.
- */
 @Stable
 internal class PlayerClock {
     private var basePosition = 0L
     private var baseTimestamp = SystemClock.elapsedRealtime()
-    private var speed = 1f   // playback speed: the position advances this many ms per wall-clock ms
+    private var speed = 1f
 
-    /** Key of the track the position currently belongs to (null = none yet). */
     var anchoredKey by mutableStateOf<String?>(null)
         private set
 
-    /** True while audio is actually playing. */
     var live by mutableStateOf(false)
         private set
 
-    /** Current position in ms. Read it inside lambdas / draw scopes only. */
     var positionMs by mutableFloatStateOf(0f)
         private set
 
-    /** Jump to [positionMs] right now (used after a seek, so the UI doesn't wait for the next tick). */
     fun anchor(positionMs: Long) {
         basePosition = positionMs
         baseTimestamp = SystemClock.elapsedRealtime()
         this.positionMs = positionMs.toFloat()
     }
 
-    /** A mod changed the playback speed: re-anchor at the current position, then run at the new rate. */
     fun setSpeed(value: Float) {
         if (value == speed) return
         anchor(positionMs.toLong())
         speed = value
     }
 
-    /** Listens to the player's own position reports. Never returns; cancel it by leaving the composition. */
     suspend fun follow(player: MusicPlayer) {
         var lastTrackKey: String? = null
         var wasLive = false
@@ -818,13 +724,9 @@ internal class PlayerClock {
             val reported: Long
             val track: Track
             when (s) {
-                // The player's live position wins over the last published one, which can be stale (e.g. right after a
-                // gapless hand-over to the next track); -1 = unknown right now, use the published value.
                 is PlaybackState.Playing -> { reported = player.currentPositionMs().takeIf { it >= 0L } ?: s.positionMs; track = s.track }
                 is PlaybackState.Paused -> { reported = player.currentPositionMs().takeIf { it >= 0L } ?: s.positionMs; track = s.track }
                 else -> {
-                    // Loading / idle / error: the next track is not playing yet. Without this the clock kept the
-                    // PREVIOUS track's end position, so the bar showed full while the new song loaded.
                     live = false
                     wasLive = false
                     lastTrackKey = null
@@ -835,7 +737,7 @@ internal class PlayerClock {
             }
             val key = track.isrc.orEmpty() + "|" + track.title
             val nowLive = s is PlaybackState.Playing && !awaiting
-            if (key != lastTrackKey) anchoredKey = null   // until re-anchored below: the old position is not this track's
+            if (key != lastTrackKey) anchoredKey = null
             val now = SystemClock.elapsedRealtime()
             val estimate = if (wasLive) basePosition + ((now - baseTimestamp) * speed).toLong() else basePosition
             if (!nowLive || key != lastTrackKey || nowLive != wasLive || abs(reported - estimate) > RESYNC_THRESHOLD_MS) {
@@ -849,7 +751,6 @@ internal class PlayerClock {
         }
     }
 
-    /** Advances [positionMs] every frame. Only run it while [live]. */
     suspend fun tick(durationMs: Long) {
         while (true) {
             withFrameNanos {}
@@ -859,18 +760,11 @@ internal class PlayerClock {
     }
 }
 
+private val BackgroundBlur = 24.dp
 
-private val BackgroundBlur = 24.dp   // how hard the cover is blurred behind the screen (acrylic wants it soft, not recognisable)
-
-/**
- * The acrylic source: the blurred cover + a frosted tint + a faint white veil + a diagonal sheen, all in one
- * layer, so the lyrics card frosts exactly what is behind it instead of the raw, un-tinted art.
- */
 @Composable
 internal fun PlayerBackdrop(artUrl: String, animateChanges: Boolean = true) {
     Box(Modifier.fillMaxSize().acrylicSource()) {
-        // The 1.3x overscan must be clipped to the screen: unclipped it spills past the top edge, and while the
-        // screen slides that spill shows as an untinted band of blurred cover above the player.
         Box(Modifier.fillMaxSize().clipToBounds()) {
             AsyncImage(
                 model = rememberFadeRequest(artUrl, durationMs = if (animateChanges) 600 else 0),
@@ -878,11 +772,10 @@ internal fun PlayerBackdrop(artUrl: String, animateChanges: Boolean = true) {
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { scaleX = 1.3f; scaleY = 1.3f }   // overscan, so the blur never shows an edge
+                    .graphicsLayer { scaleX = 1.3f; scaleY = 1.3f }
                     .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(BackgroundBlur) else Modifier),
             )
         }
-        // Frosted tint: the app's base color, translucent, denser toward the bottom where the controls are.
         Box(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
@@ -893,9 +786,7 @@ internal fun PlayerBackdrop(artUrl: String, animateChanges: Boolean = true) {
                 ),
             ),
         )
-        // Luminosity veil: the milky depth that makes it read as acrylic and not just dimmed.
         Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.05f)))
-        // Diagonal sheen, brightest top-left where light would hit the slab.
         Box(
             Modifier.fillMaxSize().background(
                 Brush.linearGradient(
@@ -908,12 +799,9 @@ internal fun PlayerBackdrop(artUrl: String, animateChanges: Boolean = true) {
     }
 }
 
-/** Image request that fades in when the URL changes (a new track) instead of popping in. */
 @Composable
 private fun rememberFadeRequest(url: String?, durationMs: Int = 600): ImageRequest {
     val context = LocalContext.current
-    // The first image (already loaded elsewhere, e.g. in search) must appear instantly; only later
-    // track changes fade. A fade from the dark base on entry shows up as a flicker.
     val firstUrl = remember { url }
     return remember(url, durationMs == 0) {
         ImageRequest.Builder(context).data(url)

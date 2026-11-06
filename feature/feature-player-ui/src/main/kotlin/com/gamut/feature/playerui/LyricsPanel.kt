@@ -80,38 +80,26 @@ import kotlinx.coroutines.flow.collectLatest
 
 private val PreviewShape = RoundedCornerShape(16.dp)
 
-/** The hue of [base] at full brightness and strong saturation; white for a grey / neutral cover. */
 private fun vividLyricColor(base: Color): Color {
     val hsv = FloatArray(3)
     android.graphics.Color.colorToHSV(base.toArgb(), hsv)
     if (hsv[1] < 0.12f) return Color.White
     return Color(android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], (hsv[1] * 1.5f).coerceIn(0.65f, 0.95f), 1f)))
 }
-private const val PanelStepMs = 40L   // word colors refresh 25x a second
+private const val PanelStepMs = 40L
 
-// ============================================================================================================
-//  1. The single lyric line under the controls
-// ============================================================================================================
-
-/**
- * Just the line being sung, between the controls on the main player. Only shown for synced lyrics; collapses to
- * nothing otherwise so the layout doesn't leave a hole. Words fill in one by one in the cover's tint color.
- */
 @Composable
 internal fun CurrentLyricLine(
     lyricsState: LyricsState,
     activeIndex: () -> Int,
     positionMs: () -> Long,
     tint: CoverTint,
-    /** Colour the sung words fill with (the cover's sub accent). Null = the bright version of the tint hue. */
     highlight: Color? = null,
     modifier: Modifier = Modifier,
 ) {
     val loaded = lyricsState as? LyricsState.Loaded
     val show = loaded != null && loaded.isSynced && loaded.lines.isNotEmpty()
     val font = rememberLyricsFont()
-    // Sung words use the cover's sub accent when given (e.g. gold on a pink cover). Without one: the cover's own hue at
-    // full brightness (the card's background colour is dark by design and vanished against the backdrop).
     val sungColor = highlight ?: remember(tint.top) { vividLyricColor(tint.top) }
     val unsungColor = Color.White.copy(alpha = 0.5f)
     val latest by rememberUpdatedState(positionMs)
@@ -134,7 +122,7 @@ internal fun CurrentLyricLine(
                 val line = loaded?.lines?.getOrNull(index)
                 val step by remember(index) { derivedStateOf { latest() / PanelStepMs } }
                 val text = if (line == null || line.words.isEmpty()) {
-                    buildAnnotatedString { append(line?.text ?: "\u266A") }   // ♪ before the first line
+                    buildAnnotatedString { append(line?.text ?: "\u266A") }
                 } else {
                     val now = step * PanelStepMs
                     buildAnnotatedString {
@@ -158,10 +146,6 @@ internal fun CurrentLyricLine(
     }
 }
 
-// ============================================================================================================
-//  2. "Lyrics preview" card (gradient from the cover) + "Show lyrics" button
-// ============================================================================================================
-
 @Composable
 internal fun LyricsPreviewCard(
     lyricsState: LyricsState,
@@ -172,7 +156,7 @@ internal fun LyricsPreviewCard(
     modifier: Modifier = Modifier,
 ) {
     val font = rememberLyricsFont()
-    val soft = lerp(Color.White, tint.bottom, 0.5f)   // the light, slightly tinted text color of the card
+    val soft = lerp(Color.White, tint.bottom, 0.5f)
     Column(
         modifier
             .fillMaxWidth()
@@ -194,7 +178,6 @@ internal fun LyricsPreviewCard(
                     Text("Not synced for this song", color = soft.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(10.dp))
                 }
-                // A window of four lines that follows the song: one already sung, the active one, two to come.
                 val start = if (idx <= 0) 0 else (idx - 1).coerceAtMost((lines.size - 4).coerceAtLeast(0))
                 Box(Modifier.fillMaxWidth().height(236.dp).clipToBounds()) {
                     Crossfade(targetState = start, animationSpec = tween(300), label = "preview-window") { s ->
@@ -241,15 +224,6 @@ private fun PreviewMessage(text: String, color: Color) {
     }
 }
 
-// ============================================================================================================
-//  3. Full-screen lyrics panel: gradient, all lyrics, mini player at the bottom
-// ============================================================================================================
-
-/**
- * The "opened mini panel" of the player: gradient from the cover, every line of the lyrics (tap a synced line to
- * jump there), and the progress bar + transport controls at the bottom. [FullLyricsPanel] draws its own background
- * and swallows touches, so it can simply be stacked on top of the player.
- */
 @Composable
 internal fun FullLyricsPanel(
     title: String,
@@ -280,10 +254,9 @@ internal fun FullLyricsPanel(
         modifier
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(tint.top, tint.bottom)))
-            .pointerInput(Unit) { detectTapGestures { } },   // nothing underneath may receive touches
+            .pointerInput(Unit) { detectTapGestures { } },
     ) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-            // Header: close on the left, title + artist centered.
             Box(Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 12.dp)) {
                 DepthIcon(
                     PhosphorIcons.Bold.CaretDown, "Close lyrics",
@@ -323,7 +296,6 @@ internal fun FullLyricsPanel(
                 }
             }
 
-            // Mini player.
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                 DepthIcon(PhosphorIcons.Bold.ShareNetwork, "Share", Modifier.bounceTap(onClick = onShare).padding(6.dp), size = 22.dp)
                 Spacer(Modifier.weight(1f))
@@ -347,7 +319,6 @@ internal fun FullLyricsPanel(
     }
 }
 
-/** Big left-aligned lyrics. Sung lines are bright, the line being sung fills in word by word, upcoming lines are dim. */
 @Composable
 private fun PanelLyricsList(
     lines: List<LyricsLine>,
@@ -368,7 +339,6 @@ private fun PanelLyricsList(
         LaunchedEffect(lines) { listState.scrollToItem((if (isSynced) activeIndex() else 0).coerceAtLeast(0)) }
         LaunchedEffect(lines, isSynced) {
             if (!isSynced) return@LaunchedEffect
-            // collectLatest: a new line cancels a scroll that is still animating instead of queueing behind it.
             snapshotFlow { activeIndex() }.collectLatest { i ->
                 if (i >= 0 && !dragged) listState.animateScrollToItem(i)
             }

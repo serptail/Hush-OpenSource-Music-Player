@@ -57,13 +57,8 @@ import com.gamut.feature.resolver.DownloadState
 
 private val FailureColor = Color(0xFFFF6B6B)
 
-// ---------------------------------------------------------------------------------------------------------------
-// Whole-playlist download state
-// ---------------------------------------------------------------------------------------------------------------
-
 enum class PlaylistDownloadStatus { Idle, Active, Done }
 
-/** [progress] is 0..1 over the whole playlist; [done] / [total] count finished songs. */
 data class PlaylistDownloadUi(
     val status: PlaylistDownloadStatus = PlaylistDownloadStatus.Idle,
     val progress: Float = 0f,
@@ -71,7 +66,6 @@ data class PlaylistDownloadUi(
     val total: Int = 0,
 )
 
-/** Folds the per-song states into what the header button shows. Idle also covers "some songs still missing". */
 fun playlistDownloadUi(isrcs: List<String>, states: Map<String, DownloadState>): PlaylistDownloadUi {
     if (isrcs.isEmpty()) return PlaylistDownloadUi()
     var done = 0
@@ -93,10 +87,6 @@ fun playlistDownloadUi(isrcs: List<String>, states: Map<String, DownloadState>):
     return PlaylistDownloadUi(status, fraction / isrcs.size, done, isrcs.size)
 }
 
-// ---------------------------------------------------------------------------------------------------------------
-// Playlist button: arrow-circle-down -> progress ring (tap = stop) -> check-circle (tap = your call)
-// ---------------------------------------------------------------------------------------------------------------
-
 private val GlyphSize = 28.dp
 
 @Composable
@@ -107,17 +97,13 @@ fun DownloadButton(
     size: Dp = 44.dp,
     tint: Color = ink(0.85f),
     accent: Color = ink(),
-    /** Not downloaded yet. */
-    /** Size of the icon / ring inside the button. */
     glyphSize: Dp = GlyphSize,
     idleIcon: ImageVector = PhosphorIcons.Bold.ArrowCircleDown,
-    /** Everything downloaded. */
     doneIcon: ImageVector = PhosphorIcons.Fill.CheckCircle,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val press by animateFloatAsState(if (pressed) 0.88f else 1f, tween(120), label = "downloadPress")
-    // The check only plays its pop if the user watched the download finish, not when opening a finished playlist.
     var watched by remember { mutableStateOf(false) }
     LaunchedEffect(ui.status) { if (ui.status == PlaylistDownloadStatus.Active) watched = true }
 
@@ -152,16 +138,8 @@ fun DownloadButton(
     }
 }
 
-// ---------------------------------------------------------------------------------------------------------------
-// Per-song button (sits next to the three dots): same four looks, one fixed 40dp slot so rows always line up
-// ---------------------------------------------------------------------------------------------------------------
-
 private enum class Kind { Idle, Queued, Active, Done, Failed }
 
-/**
- * [onDownload]: not downloaded, or failed (tap retries). [onCancel]: queued / downloading. [onDone]: tapping the
- * finished check (the screen opens the song's panel, which has "Remove download").
- */
 @Composable
 fun TrackDownloadButton(
     state: DownloadState?,
@@ -207,7 +185,6 @@ fun TrackDownloadButton(
     }
 }
 
-/** 2dp line for a song row. Fills while downloading, completes to 100% and fades out when the song finishes. */
 @Composable
 fun DownloadProgressLine(
     state: DownloadState?,
@@ -239,11 +216,6 @@ fun DownloadProgressLine(
     }
 }
 
-// ---------------------------------------------------------------------------------------------------------------
-// Pieces
-// ---------------------------------------------------------------------------------------------------------------
-
-/** The filled check-circle (the check is cut out of the circle, so it shows on any background) popping in. */
 @Composable
 private fun CheckCirclePop(animate: Boolean, color: Color, size: Dp, icon: ImageVector = PhosphorIcons.Fill.CheckCircle) {
     val scale = remember { Animatable(if (animate) 0.35f else 1f) }
@@ -258,7 +230,6 @@ private fun CheckCirclePop(animate: Boolean, color: Color, size: Dp, icon: Image
     )
 }
 
-/** Progress ring with a small "stop" square in the middle. */
 @Composable
 private fun ActiveRing(progress: Float, track: Color, color: Color, size: Dp) {
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
@@ -279,7 +250,6 @@ private fun ProgressRing(progress: Float, track: Color, color: Color, modifier: 
     }
 }
 
-/** Waiting in the queue: a quarter arc turning around a faint ring. */
 @Composable
 private fun SpinnerArc(color: Color, modifier: Modifier, stroke: Dp) {
     val transition = rememberInfiniteTransition(label = "queued")
@@ -293,7 +263,6 @@ private fun SpinnerArc(color: Color, modifier: Modifier, stroke: Dp) {
     }
 }
 
-/** "(check) Available offline": shown under the name (and tags) of a playlist whose songs are all downloaded. */
 @Composable
 fun AvailableOfflineLine(modifier: Modifier = Modifier, color: Color = ink(0.6f)) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {

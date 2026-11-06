@@ -52,7 +52,6 @@ private const val AUTHOR_NAME = "serptail"
 private const val LOGO_AUTHOR_URL = "https://github.com/serptail"
 private const val LOGO_AUTHOR_NAME = "serptail"
 
-/** Third-party pieces Gamut is built on. Shown in the "Open source libraries" dialog. */
 private val Libraries = listOf(
     Choice("Jetpack Compose, Media3, Hilt", "AndroidX & Google", "Apache License 2.0"),
     Choice("NewPipe Extractor", "TeamNewPipe", "GPL-3.0"),
@@ -64,7 +63,6 @@ private fun versionLabel(context: Context): String = runCatching {
     "Version ${info.versionName}"
 }.getOrDefault("")
 
-/** Settings > About Gamut. Slides in as a persistent layer, like Playback & Audio. */
 @Composable
 fun AboutScreen(
     onBack: () -> Unit,
@@ -89,11 +87,8 @@ fun AboutScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // The colour mark is drawn as-is (no tint); only its text switches: dark text on a light page, light text on a dark one.
             val logo = if (LocalCoverPalette.current.isLight) DesignR.drawable.ic_gamut_stacked_color_darktext
             else DesignR.drawable.ic_gamut_stacked_color_lighttext
-            // A tiny drop shadow that follows the mark's own shape: a blurred, black copy sits 1dp lower, under the logo.
-            // (The blur needs Android 12+; on older versions the copy is a faint, sharp 1dp edge instead.)
             Box {
                 Image(
                     painter = painterResource(logo),
@@ -108,7 +103,7 @@ fun AboutScreen(
                 )
             }
             Spacer(Modifier.height(3.dp))
-            
+
             Text(
                 "A free, open-source music player.",
                 style = MaterialTheme.typography.bodyMedium, color = ink(0.7f),
@@ -137,7 +132,6 @@ fun AboutScreen(
         )
 
         GroupLabel("Legal")
-        // Put the SPDX name in the subtitle once it is settled (e.g. "GPL-3.0").
         Cell(
             "Open source license", icon = PhosphorIcons.Bold.Scales, subtitle = "Read the license on GitHub",
             onClick = { open(LICENSE_URL) }, trailing = external,

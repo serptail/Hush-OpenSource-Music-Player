@@ -63,14 +63,11 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/* Soft, rounded, animated controls for Playback & Audio. Same palette rules as the rest of the app: colours from ink(). */
-
 private val CardShape = RoundedCornerShape(26.dp)
 private val BouncySpec = spring<Float>(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium)
 
 @Composable
 fun SoftHeader(text: String) {
-    // GamutHeading is the app's CodeNext heading style; only the size is reduced for card titles.
     Text(
         text, style = GamutHeading.copy(fontSize = 20.sp), color = ink(0.9f),
         modifier = Modifier.padding(start = 8.dp, top = 30.dp, bottom = 10.dp),
@@ -97,7 +94,6 @@ private fun RowText(title: String, subtitle: String?, modifier: Modifier = Modif
     }
 }
 
-/** Animated switch: spring thumb, colour cross-fade. */
 @Composable
 fun PillSwitch(checked: Boolean, modifier: Modifier = Modifier) {
     val onInk = if (LocalCoverPalette.current.isLight) Color.White else Color.Black
@@ -133,7 +129,6 @@ fun SoftSwitchRow(
     }
 }
 
-/** Row that opens something; shows the current value on the right. */
 @Composable
 fun SoftValueRow(title: String, value: String? = null, subtitle: String? = null, onClick: () -> Unit) {
     Row(
@@ -143,8 +138,6 @@ fun SoftValueRow(title: String, value: String? = null, subtitle: String? = null,
         RowText(title, subtitle, Modifier.weight(1f))
         if (value != null) {
             Spacer(Modifier.width(12.dp))
-            // Not weighted: two weighted children split the row 50/50, which pushed the value into the middle.
-            // The title column takes all the space left over; a long value is capped and ellipsized instead.
             Text(
                 value, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f),
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 180.dp),
@@ -155,10 +148,6 @@ fun SoftValueRow(title: String, value: String? = null, subtitle: String? = null,
     }
 }
 
-/**
- * Thick pill slider. Tap or drag anywhere. [centered] fills outward from the middle (balance, stereo width).
- * The thumb grows while pressed.
- */
 @Composable
 fun PillSlider(
     value: Float,
@@ -202,7 +191,6 @@ fun PillSlider(
         val cy = size.height / 2f
         val x = pad + f * (size.width - 2 * pad)
         val r = th / 2f
-        // Hairline track runs exactly between the thumb's end positions.
         drawRoundRect(trackC, Offset(pad, cy - r), Size(size.width - 2 * pad, th), CornerRadius(r))
         val startX = if (centered) size.width / 2f else pad
         val l = min(startX, x); val rr = max(startX, x)
@@ -235,7 +223,6 @@ fun SoftSliderRow(
     }
 }
 
-/** Pill-shaped segmented control with a sliding indicator. */
 @Composable
 fun <T> SegmentedControl(options: List<Choice<T>>, selected: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
     val idx = options.indexOfFirst { it.value == selected }.coerceAtLeast(0)
@@ -259,7 +246,6 @@ fun <T> SegmentedControl(options: List<Choice<T>>, selected: T, onSelect: (T) ->
     }
 }
 
-/** Frequency response sketch: smooth curve through the bands on a log frequency axis. */
 @Composable
 fun EqCurve(bands: List<EqBand>, maxDb: Float, enabled: Boolean, lnMin: Float, lnMax: Float, modifier: Modifier = Modifier) {
     val line = ink(0.95f); val area = ink(0.12f); val grid = ink(0.1f)
@@ -289,7 +275,6 @@ fun EqCurve(bands: List<EqBand>, maxDb: Float, enabled: Boolean, lnMin: Float, l
     }
 }
 
-/** One vertical pill slider per band, evenly spaced. Reports which band is being dragged. */
 @Composable
 fun EqBandSliders(
     bands: List<EqBand>,

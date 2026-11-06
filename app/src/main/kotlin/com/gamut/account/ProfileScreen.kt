@@ -99,7 +99,6 @@ import com.gamut.settings.SoftHeader
 import kotlin.math.ceil
 import kotlinx.coroutines.delay
 
-/** Centered hero (circular avatar, name, status), icon pills, and soft section cards with an icon on every row. */
 @Composable
 fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: AccountViewModel = hiltViewModel()) {
     val context = LocalContext.current
@@ -117,8 +116,6 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
     val importSummary by vm.importSummary.collectAsState()
     val restorePrompt by vm.restorePrompt.collectAsState()
 
-    // Saveable: the system file picker can recreate the activity, and the user must come back to the same screen,
-    // with the same dialog state, password and chosen file.
     var editName by rememberSaveable { mutableStateOf(false) }
     var draft by remember(customName) { mutableStateOf(customName) }
     var disconnect by rememberSaveable { mutableStateOf(false) }
@@ -159,7 +156,6 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
     val openEditName = { draft = customName; editName = true }
 
     GamutPage(title = "", onBack = onBack, nowPlaying = nowPlaying) {
-        // ---- hero: avatar on the left, identity on the right, actions in one row underneath ----
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.pressScale(onClick = pickPhoto)) {
                 ProfileAvatar(name = name, seed = userId, size = 92.dp, guestIcon = PhosphorIcons.Bold.User, image = avatar, shape = CircleShape)
@@ -199,7 +195,6 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
             }
         }
 
-        // ---- sync ----
         if (SyncConfig.enabled) {
             SoftHeader("Sync")
             SoftCard {
@@ -215,7 +210,6 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
             }
         }
 
-        // ---- backup ----
         SoftHeader("Backup")
         SoftCard {
             IconRow(
@@ -267,12 +261,11 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
         }
     }
 
-    // ---- export: ask for the (optional) password right here, then open the file picker ----
     if (exportDialog) {
         GamutDialog(
             title = "Export backup",
             confirmLabel = "Choose location",
-            confirmCloses = false,   // a password mismatch keeps the dialog open
+            confirmCloses = false,
             onDismiss = { exportDialog = false },
             onConfirm = {
                 if (exportPassword.isNotEmpty() && exportPassword != exportConfirm) {
@@ -298,7 +291,6 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
         }
     }
 
-    // ---- import: same pop-up style, password + merge / replace ----
     pendingImport?.let { uri ->
         GamutDialog(
             title = "Import backup",
@@ -320,7 +312,6 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
         }
     }
 
-    // ---- restore from an on-device backup: preview first, then an explicit OK (outside tap / Cancel = nothing happens) ----
     restorePrompt?.let { p ->
         GamutDialog(
             title = "Restore this backup?",
@@ -335,7 +326,6 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
         }
     }
 
-    // ---- import / restore summary: everything that was added, already there, and skipped ----
     importSummary?.let { s ->
         GamutDialog(
             title = if (s.report.totalAdded == 0) "Nothing new to add" else "Import complete",
@@ -400,7 +390,6 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
     }
 }
 
-/** A card row with a tinted icon badge on the left, title + optional subtitle, and an optional trailing control. */
 @Composable
 private fun IconRow(
     icon: ImageVector?,
@@ -419,7 +408,6 @@ private fun IconRow(
     ) {
         Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
             when {
-                // Full-colour drawables (the Google logo) keep their own colours.
                 painter != null -> Icon(painter, null, tint = Color.Unspecified, modifier = Modifier.size(24.dp))
                 icon != null -> Icon(icon, null, tint = if (destructive) GamutDestructive else ink(0.85f), modifier = Modifier.size(24.dp))
             }
@@ -441,13 +429,11 @@ private fun IconRow(
     }
 }
 
-/** Divider inset past the icon badge. */
 @Composable
 private fun IconDivider() {
     Box(Modifier.padding(start = 76.dp).fillMaxWidth().height(1.dp).background(ink(0.06f)))
 }
 
-/** Rounded pill with an icon and a label. */
 @Composable
 private fun IconPill(icon: ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Row(
@@ -461,7 +447,6 @@ private fun IconPill(icon: ImageVector, label: String, onClick: () -> Unit, modi
     }
 }
 
-/** Radio-style option for the import dialog. */
 @Composable
 private fun ChoiceRow(selected: Boolean, title: String, subtitle: String, onClick: () -> Unit, warn: Boolean = false) {
     val dot = if (warn) GamutDestructive else ink(0.95f)
@@ -485,7 +470,6 @@ private fun SummaryRow(label: String, value: String) {
     }
 }
 
-/** The detailed what-and-what of an import. Rows with a zero are hidden, so it only shows what actually happened. */
 @Composable
 private fun ReportRows(r: ImportReport, done: Boolean) {
     val added = if (done) "added" else "to add"
@@ -515,18 +499,12 @@ private fun ReportRows(r: ImportReport, done: Boolean) {
     }
 }
 
-/**
- * The Sync row. Idle: a calm ring around a refresh icon, with a dot when changes are waiting. Syncing: the icon spins one
- * way while a comet-tail ring spins the other, and a soft light sweeps across the row. Finished: the ring closes, the
- * icon pops into a cloud-check for a moment. Failed: the badge shakes and turns red; tapping retries.
- */
 @Composable
 private fun SyncRow(status: SyncStatus, lastSynced: Long?, pending: Int, onClick: () -> Unit) {
     val syncing = status is SyncStatus.Syncing
     val failed = status is SyncStatus.Error
     val offline = status is SyncStatus.Offline
 
-    // "Just finished": Syncing -> Idle keeps the check on screen for a moment.
     var justSynced by remember { mutableStateOf(false) }
     var wasSyncing by remember { mutableStateOf(false) }
     LaunchedEffect(status) {
@@ -536,7 +514,6 @@ private fun SyncRow(status: SyncStatus, lastSynced: Long?, pending: Int, onClick
         if (finished) { delay(1600); justSynced = false }
     }
 
-    // Spin while syncing; on stop, glide to a full turn so the icon never rests tilted.
     val spin = remember { Animatable(0f) }
     LaunchedEffect(syncing) {
         if (syncing) {
@@ -547,7 +524,6 @@ private fun SyncRow(status: SyncStatus, lastSynced: Long?, pending: Int, onClick
         }
     }
 
-    // Shake on every new failure.
     val shake = remember { Animatable(0f) }
     LaunchedEffect(status) {
         if (status is SyncStatus.Error) {
@@ -634,7 +610,6 @@ private fun SyncRow(status: SyncStatus, lastSynced: Long?, pending: Int, onClick
     }
 }
 
-/** A soft band of light sweeping across the row. Only exists while syncing, so it costs nothing otherwise. */
 @Composable
 private fun SyncShimmer(modifier: Modifier) {
     val x by rememberInfiniteTransition(label = "shimmer").animateFloat(

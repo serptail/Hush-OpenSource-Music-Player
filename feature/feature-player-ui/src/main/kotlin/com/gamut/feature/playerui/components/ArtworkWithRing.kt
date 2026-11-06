@@ -75,33 +75,26 @@ import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 
-private val CoverShape = RoundedCornerShape(12.dp)   // was 30dp: squarer, closer to a real album sleeve
-private val CoverCornerRadius = 12.dp   // keep equal to CoverShape: the progress ring follows this radius
-private val MaxCoverSize = 360.dp   // upper bound only; the real size comes from the space available (the width between prev / next)
-private val RingGap = 3.5.dp     // same gap distance as before, now measured outward instead of inward
+private val CoverShape = RoundedCornerShape(12.dp)
+private val CoverCornerRadius = 12.dp
+private val MaxCoverSize = 360.dp
+private val RingGap = 3.5.dp
 private val RingStrokeWidth = 1.5.dp
-private val RingOutlineWidth = 0.5.dp   // extremely thin gray outline, per side, around the progress line
+private val RingOutlineWidth = 0.5.dp
 private val RingOutlineColor = Color(0xFF8C8C8C)
-private const val PausedCoverScale = 0.96f   // the cover settles a touch smaller while paused (set to 1f to turn off)
+private const val PausedCoverScale = 0.96f
 
-// Scrubbing visuals (shown while the progress line is being dragged). Everything here has to fit in
-// the space between the ring and the edge of its box: RingInset - (RingGap + stroke/2) ~= 13.75dp.
 private val WaveBarWidth = 2.2.dp
-private val WaveBarPitch = 3.dp          // distance between bar centers along the line (was 6dp: sparse, 'hairy')
-private val WaveStartOffset = 2.5.dp     // gap between the line's center and the base of a bar
-private val WaveMinLength = 1.dp         // quietest bar
-private val WaveMaxLength = 10.dp        // tallest bar; base + length + cap (~17dp) pokes a few dp past the box, which is fine: nothing clips it
+private val WaveBarPitch = 3.dp
+private val WaveStartOffset = 2.5.dp
+private val WaveMinLength = 1.dp
+private val WaveMaxLength = 10.dp
 private val ScrubKnobRadius = 4.dp
 private val ScrubDashHalfLength = 3.dp
 private val ScrubDashWidth = 2.dp
-private val RingClearance = 36.dp     // total (both sides) room for gap + stroke + waveform outside the cover
-private val RingInset = RingClearance / 2  // the same room, per side
+private val RingClearance = 36.dp
+private val RingInset = RingClearance / 2
 
-/**
- * Rounded-square cover with a thin progress line sitting just outside its edge.
- * Tapping the cover toggles play/pause. The icon shows briefly after a tap while
- * playing, and stays visible while paused.
- */
 @Composable
 internal fun ArtworkWithRing(
     modifier: Modifier = Modifier,
@@ -109,35 +102,27 @@ internal fun ArtworkWithRing(
     progress: () -> Float,
     isPlaying: Boolean,
     enabled: Boolean,
-    /** True while the next track is being resolved: the play / pause glyph on the cover turns into a spinner. */
     loading: Boolean = false,
     waveform: FloatArray,
     onTogglePlay: () -> Unit,
     onScrub: (Float?) -> Unit,
     onSeekFraction: (Float) -> Unit,
-    /** Fraction of the song one remote fast-forward / rewind key press moves (about 10 s). */
     seekStep: Float = 0.04f,
 ) {
-    val live = LocalFocusLive.current   // false while the player is parked or covered: the cover must not take D-pad focus
-    // Stretched + exaggerated once, so loud and quiet parts of the song look clearly different.
+    val live = LocalFocusLive.current
     val shapedWaveform = remember(waveform) { shapeWaveform(waveform) }
-    // Read at draw time (not baked into drawWithCache), so bars update when the waveform finishes decoding.
     val shapedState = rememberUpdatedState(shapedWaveform)
     var tapTrigger by remember { mutableIntStateOf(0) }
     var iconVisible by remember { mutableStateOf(true) }
-    var ringSize by remember { mutableStateOf(IntSize.Zero) } // measured size of the ring box
+    var ringSize by remember { mutableStateOf(IntSize.Zero) }
     var scrubbing by remember { mutableStateOf(false) }
-    // 0 -> 1 while the line is being dragged; drives the waveform, dash and knob.
     val scrub by animateFloatAsState(if (scrubbing) 1f else 0f, tween(180), label = "scrub")
 
-    // The gesture block below is keyed on (enabled, ringSize) only, so without these it would keep
-    // calling the first lambdas it ever saw (stale `duration`, stale `isPlaying`).
     val currentToggle by rememberUpdatedState(onTogglePlay)
     val currentSeek by rememberUpdatedState(onSeekFraction)
     val currentScrub by rememberUpdatedState(onScrub)
     val haptics = LocalHapticFeedback.current
 
-    // Settles slightly smaller while paused and lifts back when playback starts.
     val coverScale by animateFloatAsState(
         targetValue = if (enabled && !isPlaying) PausedCoverScale else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
@@ -153,23 +138,15 @@ internal fun ArtworkWithRing(
     }
     val iconAlpha by animateFloatAsState(if (iconVisible) 1f else 0f, animationSpec = tween(220), label = "icon-alpha")
 
-    // The cover art is tried in order (see coverArtCandidates); each failure moves on to the next one.
-    // YouTube thumbnails are 16:9 frames, so for them the cover takes the thumbnail's own shape instead of a square
-    // (no bars, nothing cropped). The aspect comes from the loaded image; it is 16:9 until it has loaded.
     val candidates = remember(url) { coverArtCandidates(url) }
     val isThumb = remember(url) { url?.let(::youtubeThumbCandidates) != null }
     var attempt by remember(candidates) { mutableIntStateOf(0) }
     val shownUrl = candidates.getOrNull(attempt)
-    // While the sharp version loads, show the exact image the rest of the app already has (cached, so instant).
     val placeholderUrl = if (isThumb) null else url
     var loadedAspect by remember(shownUrl) { mutableStateOf<Float?>(null) }
     val targetAspect = if (enabled && isThumb) (loadedAspect ?: (16f / 9f)).coerceIn(1f, 2f) else 1f
     val aspect by animateFloatAsState(targetAspect, tween(250), label = "cover-aspect")
 
-    // The caller decides how much width we get: the space between the prev/next
-    // icons. The ring box fills that width up to a maximum; its height follows the cover's
-    // aspect (square by default). Every inner size derives from it, so nothing depends on a
-    // fixed dp value.
     Box(modifier, contentAlignment = Alignment.Center) {
         Box(
             Modifier
@@ -189,7 +166,6 @@ internal fun ArtworkWithRing(
                 Modifier
                     .padding(RingInset)
                     .fillMaxSize()
-                    // One soft drop shadow: the same card look as Discover's album cards. No rim, no glow.
                     .shadow(elevation = 14.dp, shape = CoverShape, ambientColor = Color.Black, spotColor = Color.Black, clip = false)
                     .clip(CoverShape),
                 contentAlignment = Alignment.Center,
@@ -198,9 +174,6 @@ internal fun ArtworkWithRing(
                     if (shownUrl == null) {
                         CoverPlaceholder()
                     } else {
-                        // The whole image is shown (Fit) in a box of its own shape, so nothing is cut off.
-                        // If it still doesn't fill the box (an outlier), a heavily blurred copy of it fills
-                        // the space around it instead of bars.
                         if (isThumb) {
                             AsyncImage(
                                 model = shownUrl,
@@ -227,11 +200,10 @@ internal fun ArtworkWithRing(
                                         modifier = Modifier.fillMaxSize(),
                                     )
                                 } else {
-                                    Box(Modifier.fillMaxSize())   // empty: a light placeholder reads as a white flash on entry
+                                    Box(Modifier.fillMaxSize())
                                 }
                             },
                             error = { CoverPlaceholder() },
-                            // This URL doesn't exist / failed: try the next candidate (past the last one: placeholder).
                             onError = { if (attempt < candidates.size) attempt++ },
                             onSuccess = { state ->
                                 val size = state.painter.intrinsicSize
@@ -240,8 +212,6 @@ internal fun ArtworkWithRing(
                         )
                     }
                 }
-                // No circle behind the icon anymore, just the bare glyph (a bit larger so it
-                // still reads on top of the artwork).
                 if (enabled) {
                     Box(
                         Modifier
@@ -262,17 +232,10 @@ internal fun ArtworkWithRing(
                 }
             }
 
-            // Progress line, sitting outside the cover. It is always white, with a
-            // hairline gray outline so it stays visible against pale covers.
-            // Drawn with drawWithCache: the ring's geometry (path, measurements, paints, waveform bars) is
-            // built once per size change instead of every frame, and `progress` is only read while drawing,
-            // so a moving line redraws this layer alone and never recomposes anything.
             Box(
                 Modifier
                     .fillMaxSize()
                     .onSizeChanged { ringSize = it }
-                    // TV remote: the cover is a focus stop. OK / Enter / play-pause key toggles playback, fast-forward and
-                    // rewind keys seek. D-pad left / right stay free for moving to Previous / Next.
                     .focusRing(RoundedCornerShape(CoverCornerRadius))
                     .onKeyEvent { e ->
                         if (!enabled || e.type != KeyEventType.KeyDown) return@onKeyEvent false
@@ -297,15 +260,11 @@ internal fun ArtworkWithRing(
                         val samples = 300
                         val pts = List(samples) { measure.getPosition(total * it / samples) }
 
-                        // The line is only ~1.5dp thick, so it gets a generous touch band. The
-                        // band stops short of the cover's interior so taps on the artwork itself
-                        // still mean play/pause.
                         val coverInner = Rect(marginPx, marginPx, marginPx + coverW, marginPx + coverH)
                             .deflate(10.dp.toPx())
-                        val hitRadius = 16.dp.toPx()   // a bit tighter than before: the cover now reaches near the screen edge, where the volume gesture lives
+                        val hitRadius = 16.dp.toPx()
                         fun nearLine(p: Offset) =
                             !coverInner.contains(p) && pts.minOf { hypot(it.x - p.x, it.y - p.y) } < hitRadius
-                        // Where along the line (0..1) the finger is, from the closest sampled point.
                         fun fractionAt(p: Offset): Float {
                             var best = 0; var bestD = Float.MAX_VALUE
                             pts.forEachIndexed { i, o ->
@@ -315,12 +274,6 @@ internal fun ArtworkWithRing(
                             return (best.toFloat() / samples).coerceIn(0f, 1f)
                         }
 
-                        // detectDragGestures only reacts once the finger has moved past the touch
-                        // slop, so a plain tap on the line did nothing. Handle down/drag/up by
-                        // hand: a touch on the line grabs it immediately and follows the finger.
-                        // While held, only the preview moves; the player is asked to seek once, on
-                        // release (a seek per touch event makes the audio stutter and the line creep
-                        // away from a resting finger while the song keeps playing).
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
                             if (nearLine(down.position)) {
@@ -333,8 +286,6 @@ internal fun ArtworkWithRing(
                                     val released = drag(down.id) { change ->
                                         change.consume()
                                         val f = fractionAt(change.position)
-                                        // The line is a closed loop: crossing its start/end seam pins the
-                                        // thumb to that end instead of teleporting it to the other one.
                                         last = if (abs(f - last) > 0.5f) (if (last > 0.5f) 1f else 0f) else f
                                         currentScrub(last)
                                     }
@@ -344,7 +295,6 @@ internal fun ArtworkWithRing(
                                     currentScrub(null)
                                 }
                             } else {
-                                // This layer sits above the cover, so it also owns the cover tap.
                                 val up = waitForUpOrCancellation()
                                 if (up != null) {
                                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -355,7 +305,6 @@ internal fun ArtworkWithRing(
                         }
                     }
                     .drawWithCache {
-                        // Nothing playing: no progress line at all.
                         if (!enabled) return@drawWithCache onDrawBehind {}
                         val marginPx = RingInset.toPx()
                         val coverW = size.width - RingClearance.toPx()
@@ -367,9 +316,7 @@ internal fun ArtworkWithRing(
                         val strokePx = RingStrokeWidth.toPx()
                         val outlinePx = RingOutlineWidth.toPx()
 
-                        // Reused every frame (no per-frame allocation).
                         val filled = Path()
-                        // Gray outline underneath: same path, slightly thicker than the white line.
                         val outlinePaint = android.graphics.Paint().apply {
                             isAntiAlias = true
                             style = android.graphics.Paint.Style.STROKE
@@ -386,8 +333,6 @@ internal fun ArtworkWithRing(
                             color = android.graphics.Color.WHITE
                         }
 
-                        // Scrub visuals. Bar positions and directions never change for a given size, so they
-                        // are worked out once here. Heights are read at draw time (the waveform arrives later).
                         val barW = WaveBarWidth.toPx()
                         val startOff = WaveStartOffset.toPx()
                         val minLen = WaveMinLength.toPx()
@@ -403,7 +348,6 @@ internal fun ArtworkWithRing(
                             val tan = measure.getTangent(dist)
                             barX[i] = pos.x
                             barY[i] = pos.y
-                            // The path runs clockwise, so (ty, -tx) points away from the cover.
                             barNx[i] = tan.y
                             barNy[i] = -tan.x
                         }
@@ -411,7 +355,6 @@ internal fun ArtworkWithRing(
                         val dashWidth = ScrubDashWidth.toPx()
                         val knobRadius = ScrubKnobRadius.toPx()
                         val startPoint = measure.getPosition(0f)
-                        // Bar heights, ranked across the whole ring; redone only when a new waveform arrives.
                         var ampsFor: FloatArray? = null
                         var amps = FloatArray(barCount)
 
@@ -419,8 +362,6 @@ internal fun ArtworkWithRing(
                             val fill = progress()
                             val reveal = scrub
 
-                            // Faint full-length track (with its hairline outline), so the whole line is
-                            // visible before it fills.
                             drawPath(
                                 path = path,
                                 color = RingOutlineColor.copy(alpha = 0.45f),
@@ -442,10 +383,8 @@ internal fun ArtworkWithRing(
                                 }
                             }
 
-                            // While dragging: the track's waveform along the outside of the line, a small
-                            // dash where the track starts, and a knob at the current position.
                             if (reveal > 0.01f) {
-                                val wave = shapedState.value   // state read: redraws when the waveform arrives
+                                val wave = shapedState.value
                                 if (wave !== ampsFor) {
                                     amps = barHeights(wave, barCount)
                                     ampsFor = wave
@@ -463,8 +402,6 @@ internal fun ArtworkWithRing(
                                     )
                                 }
 
-                                // Start dash: the path begins at the top-center, where the line is horizontal,
-                                // so the dash is simply vertical.
                                 val half = dashHalfLength * reveal
                                 drawLine(
                                     color = Color.White,
@@ -474,7 +411,6 @@ internal fun ArtworkWithRing(
                                     cap = StrokeCap.Round,
                                 )
 
-                                // Knob: plain filled circle, no outline.
                                 drawCircle(
                                     color = Color.White,
                                     radius = knobRadius * reveal,
@@ -488,16 +424,6 @@ internal fun ArtworkWithRing(
     }
 }
 
-/**
- * Builds the outward progress-line path (the cover may be wider than tall). It is the cover's rectangle, grown
- * outward by [gapPx] on every side. The corner radius grows by the same
- * amount, so the curve stays concentric with the cover's own corners.
- *
- * The path is built by hand so it starts at the top-center and runs clockwise
- * (right along the top edge, then down the right side, ...). addRoundRect's
- * winding is not something to rely on, and the progress fill, seek math and
- * waveform all depend on this order.
- */
 private fun outerRingPath(coverW: Float, coverH: Float, marginPx: Float, gapPx: Float, coverRadiusPx: Float): Path {
     val left = marginPx - gapPx
     val top = marginPx - gapPx
@@ -520,11 +446,6 @@ private fun outerRingPath(coverW: Float, coverH: Float, marginPx: Float, gapPx: 
     }
 }
 
-/**
- * Shown when the track has no cover (or every candidate url failed): the app's flat placeholder with fixed player colours
- * (the player is outside CoverTheme). Opaque, so the cover's drop shadow cannot bleed through it. The note sits in the upper
- * part of the cover so it does not collide with the play / pause glyph in the middle.
- */
 @Composable
 private fun CoverPlaceholder() {
     ArtPlaceholder(

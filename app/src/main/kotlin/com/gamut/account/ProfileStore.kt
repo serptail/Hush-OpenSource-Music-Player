@@ -9,10 +9,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 
-/**
- * Device-side profile choices. The display name is stored per account (key = auth user id, or "local" when signed out),
- * so signing in as someone else never shows the previous person's name.
- */
 @Singleton
 class ProfileStore @Inject constructor(@ApplicationContext context: Context) {
     private val prefs = context.getSharedPreferences("gamut_profile", Context.MODE_PRIVATE)
@@ -20,7 +16,6 @@ class ProfileStore @Inject constructor(@ApplicationContext context: Context) {
 
     fun nameOverride(userId: String?): Flow<String?> = tick.map { prefs.getString(nameKey(userId), null) }
 
-    /** null / blank = go back to the name that comes from the Google account. */
     fun setName(userId: String?, name: String?) {
         prefs.edit().apply { if (name.isNullOrBlank()) remove(nameKey(userId)) else putString(nameKey(userId), name) }.apply()
         tick.value++

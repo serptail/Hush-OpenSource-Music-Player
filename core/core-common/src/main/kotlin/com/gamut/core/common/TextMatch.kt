@@ -2,7 +2,6 @@ package com.gamut.core.common
 
 import java.text.Normalizer
 
-/** Shared tokenization rules for catalog ranking, YouTube matching, and deduplication. */
 object TextMatch {
     private val NOISE = Regex(
         """\((official|lyrics?|audio|video|visualizer|hd|hq)[^)]*\)|\[[^]]*]|official (music )?video""",

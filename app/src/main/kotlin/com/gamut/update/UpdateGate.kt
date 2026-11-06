@@ -50,10 +50,6 @@ import com.gamut.settings.GamutDestructive
 import com.gamut.settings.GamutHeading
 import kotlinx.coroutines.delay
 
-/**
- * Wraps the whole app. Shows [content] only when this build is allowed to run; otherwise the update screen.
- * The check runs each time the app comes to the foreground (and is throttled inside the view model).
- */
 @Composable
 fun UpdateGate(vm: AppUpdateViewModel = hiltViewModel(), content: @Composable () -> Unit) {
     val ui by vm.state.collectAsState()
@@ -61,7 +57,7 @@ fun UpdateGate(vm: AppUpdateViewModel = hiltViewModel(), content: @Composable ()
     val activity = LocalContext.current as? ComponentActivity
     DisposableEffect(activity) {
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_START) vm.onStart() }
-        activity?.lifecycle?.addObserver(observer)   // replays the current state, so this also runs the first check
+        activity?.lifecycle?.addObserver(observer)
         onDispose { activity?.lifecycle?.removeObserver(observer) }
     }
 
@@ -76,7 +72,6 @@ fun UpdateGate(vm: AppUpdateViewModel = hiltViewModel(), content: @Composable ()
             Box(Modifier.fillMaxSize().background(palette.base).systemBarsPadding(), contentAlignment = Alignment.Center) {
                 val info = ui.required
                 if (info == null) {
-                    // Still checking. Only show a spinner if it takes a moment, so a fast check does not flash one.
                     var showSpinner by remember { mutableStateOf(false) }
                     LaunchedEffect(Unit) { delay(500); showSpinner = true }
                     if (showSpinner) CircularProgressIndicator(Modifier.size(28.dp), color = ink(0.6f), strokeWidth = 2.dp)
@@ -122,7 +117,6 @@ private fun UpdateRequired(ui: UpdateUiState, info: UpdateInfo, onUpdate: () -> 
             modifier = Modifier.fillMaxWidth(),
         )
 
-        // Not offered while a download or install is running: leaving then would only hide the progress.
         if (ui.phase != UpdatePhase.DOWNLOADING && ui.phase != UpdatePhase.INSTALLING) {
             Text(
                 "Skip for now",
@@ -135,7 +129,6 @@ private fun UpdateRequired(ui: UpdateUiState, info: UpdateInfo, onUpdate: () -> 
     }
 }
 
-/** The release notes in their own rounded card, under a small label. */
 @Composable
 private fun ReleaseNotes(notes: String) {
     Column(
@@ -155,7 +148,6 @@ private fun ReleaseNotes(notes: String) {
     }
 }
 
-/** A short message in a soft card (permission hint, errors). */
 @Composable
 private fun InfoBlock(text: String, color: androidx.compose.ui.graphics.Color) {
     Text(
@@ -171,7 +163,6 @@ private fun InfoBlock(text: String, color: androidx.compose.ui.graphics.Color) {
     )
 }
 
-/** Thick, fully rounded bar that glides to each new value, with the label and percentage above it. */
 @Composable
 private fun UpdateProgress(progress: Float, label: String) {
     val shown by animateFloatAsState(progress.coerceIn(0f, 1f), animationSpec = tween(250), label = "update-progress")

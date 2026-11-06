@@ -20,19 +20,15 @@ android {
         applicationId = "com.gamut"
         minSdk = 26
         targetSdk = 35
-        // CI passes these on every release (see .github/workflows/release.yml); a local build stays 1 / "1.0".
         versionCode = (project.findProperty("gamut.versionCode") as String?)?.toIntOrNull() ?: 1
         versionName = (project.findProperty("gamut.versionName") as String?) ?: "1.0"
 
-        // Where the app looks for updates: the latest GitHub release's latest.json. Blank (local builds) = no update check.
         val updateRepo = (project.findProperty("gamut.repo") as String?).orEmpty()
         val updateUrl = if (updateRepo.isBlank()) "" else "https://github.com/$updateRepo/releases/latest/download/latest.json"
         buildConfigField("String", "UPDATE_MANIFEST_URL", "\"$updateUrl\"")
 
         multiDexEnabled = true
 
-        // Local builds keep all four (emulators). CI passes -Pgamut.abis=... to ship a much smaller APK, because every
-        // required update is a full download and yt-dlp's python + ffmpeg are copied per ABI.
         ndk {
             val abis = ((project.findProperty("gamut.abis") as String?) ?: "x86,x86_64,armeabi-v7a,arm64-v8a").split(",")
             abiFilters += abis.map { it.trim() }.filter { it.isNotEmpty() }
@@ -44,7 +40,6 @@ android {
         buildConfig = true
     }
 
-    // Brand logos live in the repo-root gamut-brandkit/ folder; this makes them part of R.drawable.
     sourceSets {
         getByName("main") {
             res.srcDir("${rootDir}/gamut-brandkit/res")
@@ -57,8 +52,6 @@ android {
         }
     }
 
-    // An installed app can only be updated by an APK signed with the SAME key. CI signs every release with the keystore
-    // from its secrets; without them (a local build) the debug key is used, as before.
     val ciKeystore = System.getenv("GAMUT_KEYSTORE_FILE").orEmpty()
     signingConfigs {
         create("release") {
@@ -79,7 +72,6 @@ android {
 }
 
 dependencies {
-    // Project modules
     implementation(project(":core:core-model"))
     implementation(project(":core:core-common"))
     implementation(project(":core:core-database"))
@@ -93,7 +85,6 @@ dependencies {
     implementation(project(":feature:feature-player-ui"))
     implementation(project(":feature:feature-resolver"))
 
-    // AndroidX and Compose
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.multidex)
     implementation(libs.androidx.lifecycle.runtime)
@@ -106,34 +97,27 @@ dependencies {
 
     implementation(platform(libs.androidx.compose.bom))
 
-    // Hilt
     implementation(libs.hilt.android)
     implementation(libs.hilt.navigation.compose)
     ksp(libs.hilt.compiler)
 
-    // App updates (checks GitHub, downloads the APK)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
 
-    // WorkManager and sign-in
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.credentials)
 
-    // Supabase
     implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.postgrest)
     implementation(libs.supabase.storage)
 
-    // Core library desugaring
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
-    // Startup and baseline profiles
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.profileinstaller)
 
     implementation("com.github.hcaptcha:hcaptcha-android-sdk:5.0.1")
 
-    // Support sheet: opens Ko-fi in a Chrome Custom Tab (SupportEntryPoints.kt)
     implementation("androidx.browser:browser:1.8.0")
 
     baselineProfile(project(":baselineprofile"))

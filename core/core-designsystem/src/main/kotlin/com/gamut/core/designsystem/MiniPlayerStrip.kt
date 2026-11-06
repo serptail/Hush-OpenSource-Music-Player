@@ -41,11 +41,6 @@ import com.adamglin.phosphoricons.regular.Play
 import com.adamglin.phosphoricons.regular.SkipBack
 import com.adamglin.phosphoricons.regular.SkipForward
 
-/**
- * The now-playing strip that docks onto [GamutBottomBar] (pass it as the bar's `nowPlaying` slot). It is part of
- * the bar, not a separate floating card: no shadow, flat, but frosted glass over the list scrolling behind it (the only acrylic in the bar). A thin progress line runs
- * along its top edge in the cover's accent. Tap the strip to open the player. Icons come from Phosphor. Must be inside [CoverTheme] (uses [ink] and the accent).
- */
 @Composable
 fun MiniPlayerStrip(
     title: String,
@@ -53,25 +48,18 @@ fun MiniPlayerStrip(
     artUrl: String?,
     isPlaying: Boolean,
     progress: Float,
-    /** True while the next song is being resolved / buffered: the line shows [loadProgress] and the play button turns into a spinner. */
     isLoading: Boolean = false,
     loadProgress: Float = 0f,
     onOpen: () -> Unit,
     onTogglePlay: () -> Unit,
     onNext: () -> Unit,
-    /** Previous track (past the first seconds it restarts the current one, like everywhere else in the app). */
     onPrevious: () -> Unit = {},
-    /** Opens the Connect sheet (Bluetooth + output devices). */
     onDevicesClick: () -> Unit = {},
-    /** True when audio is routed to an external device (Bluetooth etc.): the devices icon takes the accent. */
     devicesActive: Boolean = false,
     modifier: Modifier = Modifier,
-    /** True when the strip sits at the very bottom of a screen without [GamutBottomBar]: it then also fills the system navigation area. */
     dockedToEdge: Boolean = false,
 ) {
     val accent = MaterialTheme.colorScheme.primary
-    // Wide windows (tablets, foldables, desktop mode): the nav-bar inset can be tall, and tinting all of it leaves a fat
-    // empty strip under the controls. Cap it; the gesture handle may overlap the tint, but never the buttons.
     val isWide = LocalConfiguration.current.screenWidthDp >= 600
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val bottomInset = if (isWide) navInset.coerceAtMost(16.dp) else navInset
@@ -79,12 +67,9 @@ fun MiniPlayerStrip(
     Column(
         modifier
             .fillMaxWidth()
-            // Inside GamutBottomBar the bar's own (acrylic) fill shows through; alone at the edge it needs its own tint.
-            // Standalone at the edge: flat tint. Inside GamutBottomBar: the app's one acrylic surface, frosting the list behind it.
             .then(if (dockedToEdge) Modifier.background(ink(0.05f)).padding(bottom = bottomInset) else acrylicFillStrip)
             .pressScale(onClick = onOpen, scaleDown = 0.99f),
     ) {
-        // Progress line on the top edge: faint track, accent fill.
         Box(Modifier.fillMaxWidth().height(2.dp).background(ink(0.08f))) {
             val shown = if (isLoading) loadProgress.coerceIn(0.08f, 1f) else progress.coerceIn(0f, 1f)
             val animated by animateFloatAsState(shown, tween(if (isLoading) 350 else 0), label = "mini-progress")

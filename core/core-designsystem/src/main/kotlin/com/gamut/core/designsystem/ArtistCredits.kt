@@ -43,14 +43,8 @@ import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.bold.CaretRight
 import kotlinx.coroutines.launch
 
-// One song, several artist accounts ("A, B", "A & B", "A feat. B x C"). Everywhere an artist is shown or tapped:
-//   * ONE artist  -> unchanged: a single name, tap goes straight to their page.
-//   * 2+ artists  -> a faded, overlapping stack of their portraits; tap opens ArtistPickerSheet, tap a name there.
-// The callers keep their existing "go to artist" callbacks: the picked name is handed over as track.copy(artist = name).
-
 private val SPLIT = Regex("(?i)\\s+(featuring|feat\\.?|ft\\.?|with|x|&|and)\\s+|\\s*,\\s*|\\s*/\\s*|\\s*;\\s*")
 
-// Names that contain a separator word but are ONE act. Matched case-insensitively on the whole credit.
 private val KEEP_TOGETHER = listOf(
     "tyler, the creator", "earth, wind & fire", "crosby, stills & nash", "crosby, stills, nash & young",
     "simon & garfunkel", "hall & oates", "salt-n-pepa", "florence + the machine", "years & years",
@@ -59,29 +53,18 @@ private val KEEP_TOGETHER = listOf(
     "panic! at the disco", "iron & wine", "matt and kim", "me first and the gimme gimmes",
 )
 
-/**
- * "A feat. B & C" -> [A, B, C]. Blank in -> empty list. A credit that is one act with a separator in its name
- * (see [KEEP_TOGETHER]) is returned whole, as are single names. Order is kept, duplicates (ignoring case) dropped.
- */
 fun splitArtists(credit: String): List<String> {
     val trimmed = credit.trim()
     if (trimmed.isEmpty()) return emptyList()
     if (KEEP_TOGETHER.any { it.equals(trimmed, ignoreCase = true) }) return listOf(trimmed)
-    // "(feat. X)" and "[with Y]" brackets sometimes sit in the artist field: unwrap them first.
     val unwrapped = trimmed.replace(Regex("[(\\[]"), " feat. ").replace(Regex("[)\\]]"), "")
     return unwrapped.split(SPLIT).map { it.trim() }.filter { it.isNotEmpty() }
         .distinctBy { it.lowercase() }
         .ifEmpty { listOf(trimmed) }
 }
 
-/**
- * Provided once near the root (MainActivity): turns an artist name into a verified portrait URL, or null.
- * [albumTitle] helps the verification (see AppleCatalog.artistPhoto) and may be null. Without a provider the stack
- * shows initials, which is a fine fallback, never an error.
- */
 val LocalArtistPhotoResolver = compositionLocalOf<suspend (name: String, albumTitle: String?) -> String?> { { _, _ -> null } }
 
-/** Loads one photo per name, in order, as they land (null = none / not yet). */
 @Composable
 fun rememberArtistPhotos(names: List<String>, albumTitle: String?): Map<String, String?> {
     val resolver = LocalArtistPhotoResolver.current
@@ -97,11 +80,6 @@ fun rememberArtistPhotos(names: List<String>, albumTitle: String?): Map<String, 
     return photos
 }
 
-/**
- * Overlapping round portraits, newest-behind: the first artist is in front at full strength, each next one sits
- * [overlap] further right and a step more faded. At most [maxShown] discs, then a "+N" disc. Tap target is the
- * whole stack. [onClick] null = decorative.
- */
 @Composable
 fun ArtistStack(
     names: List<String>,
@@ -122,7 +100,6 @@ fun ArtistStack(
             .size(width = width, height = size)
             .let { if (onClick != null) it.pressScale(onClick = onClick, scaleDown = 0.94f) else it },
     ) {
-        // Draw back to front so the first artist ends up on top.
         for (i in discs - 1 downTo 0) {
             val isMore = i >= shown.size
             val fade = 1f - 0.22f * i
@@ -168,10 +145,6 @@ private fun Initial(name: String, size: Dp) {
     }
 }
 
-/**
- * Bottom sheet listing every artist of a song with a portrait; tapping one closes the sheet and calls [onPick].
- * [albumTitle] is only a hint for the photo lookup.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ArtistPickerSheet(
@@ -236,10 +209,6 @@ fun ArtistPickerSheet(
     }
 }
 
-/**
- * Drop-in for "tap an artist": one artist -> [onArtist] immediately with that name; several -> opens the picker.
- * Returns the click handler plus the sheet composable to place once in the screen.
- */
 class ArtistTap internal constructor(val onClick: () -> Unit, internal val sheet: @Composable () -> Unit) {
     @Composable fun Sheet() = sheet()
 }
@@ -269,12 +238,6 @@ fun rememberArtistTap(
     }
 }
 
-/**
- * The artist line of a song, ready to drop into any row or header: for several artists a small faded stack in front
- * of the label, for one artist just the label (or, with [showSingle], the lone portrait as well). The whole line is the
- * tap target: one artist goes straight to [onArtist], several open the picker sheet (owned by this composable).
- * [label] draws the text; it receives the modifier to apply (weight / no-fill so the stack sits right next to it).
- */
 @Composable
 fun ArtistLine(
     credit: String,

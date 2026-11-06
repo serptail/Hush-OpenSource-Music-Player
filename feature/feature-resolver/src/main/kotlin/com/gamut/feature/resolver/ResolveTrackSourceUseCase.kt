@@ -33,18 +33,11 @@ class YoutubeCandidateRepositoryImpl @Inject constructor(private val source: You
 }
 
 interface AudioSourceRepository {
-    /**
-     * [forceRefresh] drops any cached stream URL first (YouTube URLs expire and are tied to the client's IP).
-     * [quality] null = whatever the user picked in Playback & Audio settings.
-     */
     suspend fun audioUrl(videoId: String, forceRefresh: Boolean = false, quality: StreamQuality? = null): Result<String>
 
-    /** Forgets every cached stream URL (Storage > Clear cache). They are simply resolved again on the next play. */
     fun clearCache() {}
 }
 
-// @Singleton: the cache and the in-flight map below only help if the tap path and the player's own next-track resolver
-// share ONE instance. Unscoped, Hilt gives every injection point its own copy (and its own empty cache).
 @Singleton
 class AudioSourceRepositoryImpl @Inject constructor(
     private val engine: AndroidYtDlpEngine,
@@ -62,7 +55,6 @@ class AudioSourceRepositoryImpl @Inject constructor(
 
     override suspend fun audioUrl(videoId: String, forceRefresh: Boolean, quality: StreamQuality?): Result<String> {
         val q = quality ?: settings.effectiveQuality()
-        // One entry per (video, quality): changing the quality setting must not hand back a URL of the old one.
         val key = "$videoId|${q.name}"
         if (forceRefresh) {
             cache.keys.removeIf { it.startsWith("$videoId|") }
@@ -86,15 +78,10 @@ class AudioSourceRepositoryImpl @Inject constructor(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    // This job is shared by every caller. If the engine throws instead of returning a failed Result, the
-                    // exception would be rethrown out of await() into the tap handler (a crash) instead of "Couldn't play".
                     Result.failure<String>(e)
                 }
             }
         }
-        // Removed when the job itself completes, not when a caller happens to finish awaiting it: a caller that was
-        // cancelled mid-way (e.g. a prefetch) used to leave a finished job in the map, and every later request for
-        // this video then got that old (possibly failed or expired) result.
         job.invokeOnCompletion { inFlight.remove(key, job) }
         return job.await()
     }
@@ -114,7 +101,6 @@ class ResolveTrackSourceUseCase @Inject constructor(
     private val scorer: CandidateScorer,
     @ApplicationScope private val appScope: CoroutineScope,
 ) {
-    /** Never swallows cancellation (runCatching would), so cancelling a tap really stops the work. */
     suspend operator fun invoke(track: Track): Result<ResolvedSource> =
         try {
             Result.success(resolveOrThrow(track))
@@ -127,7 +113,6 @@ class ResolveTrackSourceUseCase @Inject constructor(
     private suspend fun resolveOrThrow(track: Track): ResolvedSource {
         val resolutionKey = track.resolutionKey()
         sources.getLocal(resolutionKey)?.let { return it }
-        // The shared sync server is only a shortcut: a slow or unreachable server must not delay (or fail) playback.
         val remote = try {
             withTimeoutOrNull(REMOTE_LOOKUP_TIMEOUT_MS) { sources.getRemote(resolutionKey) }
         } catch (e: CancellationException) {
@@ -145,9 +130,6 @@ class ResolveTrackSourceUseCase @Inject constructor(
             return direct
         }
 
-        // yt-dlp's search can occasionally hang or get slow-walked by YouTube instead of
-        // failing outright -- a hard ceiling here means a click on a track surfaces "no
-        // verified source found" within a bounded time instead of spinning indefinitely.
         val songs = withTimeoutOrNull(SEARCH_TIMEOUT_MS) { candidates.songs(track) }
             ?: throw ResolveFailure.Timeout("songs search")
         var pool = songs

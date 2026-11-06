@@ -46,11 +46,6 @@ import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.model.Playlist
 import com.gamut.core.model.Track
 
-/**
- * The player's "more" (three dots) sheet: play next / add to queue, and add the track to a playlist
- * (an existing one, or a new one created on the spot). Pure UI: the caller decides what each action does.
- * Every action closes the sheet.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrackActionsSheet(
@@ -103,7 +98,6 @@ fun TrackActionsSheet(
                 )
             }
             item {
-                // "New playlist..." turns into the name field: crossfade, and let the sheet follow the height.
                 Box(Modifier.softResize()) {
                 Crossfade(targetState = creating, animationSpec = tween(GamutMotion.CONTENT_MS), label = "new-playlist") { isCreating ->
                 if (isCreating) {

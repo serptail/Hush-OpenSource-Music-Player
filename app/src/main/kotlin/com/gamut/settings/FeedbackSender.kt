@@ -15,12 +15,11 @@ import java.net.UnknownHostException
 import java.util.UUID
 import javax.net.ssl.SSLException
 
-/** Everything the sender needs. Text fields must already be sanitized ([FeedbackRules.sanitize]). */
 data class FeedbackPayload(
     val type: FeedbackType,
-    val rating: Int,                 // 0 = not rated
+    val rating: Int,
     val name: String,
-    val email: String,               // "" = none
+    val email: String,
     val message: String,
     val diagnostics: String?,
     val appVersion: String,
@@ -37,22 +36,9 @@ sealed interface SendResult {
     data class Failed(val reason: String) : SendResult
 }
 
-/**
- * Posts a report to Web3Forms as multipart/form-data.
- *
- * Hardening:
- *  - HTTPS only, redirects are NOT followed (a hijacked redirect can't make us re-send the report elsewhere)
- *  - connect/read timeouts, streamed body (no giant in-memory copy), response body capped
- *  - retries only when nothing could have reached the server (DNS / connection refused). A read timeout is never
- *    retried: the report may already be delivered and a retry would duplicate it
- *  - field names are constants and values travel in the body, so user text can never become a header
- */
 object FeedbackSender {
     private const val ENDPOINT = "https://api.web3forms.com/submit"
 
-    // Web3Forms access keys are designed to be public (they only allow sending to the owner's inbox). Anyone can still
-    // pull it out of the APK, which is why the client-side limits are a courtesy and the real rate limiting is
-    // Web3Forms' own. Moving it to BuildConfig keeps it out of source control.
     private const val ACCESS_KEY = "07a46e14-1d99-4668-8325-bf4080214a89"
 
     private const val CONNECT_TIMEOUT_MS = 15_000
@@ -107,14 +93,14 @@ object FeedbackSender {
                 form.field("subject", subjectFor(p))
                 form.field("from_name", p.name.ifBlank { "Gamut user" })
                 if (p.name.isNotBlank()) form.field("name", p.name)
-                if (p.email.isNotBlank()) form.field("email", p.email)   // Web3Forms uses it as Reply-To
+                if (p.email.isNotBlank()) form.field("email", p.email)
                 form.field("message", p.message)
                 form.field("type", p.type.label)
                 if (p.rating > 0) form.field("rating", "${p.rating}/5")
                 form.field("app_version", p.appVersion)
                 if (!p.diagnostics.isNullOrBlank()) form.field("diagnostics", p.diagnostics)
                 form.field("h-captcha-response", p.captchaToken)
-                form.field("botcheck", "")   // Web3Forms honeypot: must stay empty
+                form.field("botcheck", "")
                 form.finish()
             }
 
@@ -135,7 +121,6 @@ object FeedbackSender {
         }
     }
 
-    /** One line, bounded, no user markup: "Gamut · Bug · 2★ · first words…" */
     private fun subjectFor(p: FeedbackPayload): String {
         val parts = buildList {
             add("Gamut")

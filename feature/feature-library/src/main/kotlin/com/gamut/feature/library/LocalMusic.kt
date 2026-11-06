@@ -59,22 +59,13 @@ import kotlin.coroutines.resume
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * Songs that live on the phone are ordinary [Track]s whose "isrc" is `local:<MediaStore id>`. That one convention lets
- * them go through playlists, favorites, recently played and stats with no schema change.
- */
 const val LOCAL_ISRC_PREFIX = "local:"
 
 val Track.isLocal: Boolean get() = isrc.startsWith(LOCAL_ISRC_PREFIX)
 
-/**
- * Drops local songs whose file is gone. [existing] is the set of `local:` ISRCs still on the phone; null means "unknown"
- * (no permission, not loaded yet), in which case nothing is dropped. Streamed songs are never touched.
- */
 fun List<Track>.withoutMissingLocal(existing: Set<String>?): List<Track> =
     if (existing == null) this else filter { !it.isLocal || it.isrc in existing }
 
-/** The content:// URI ExoPlayer plays. Null for streamed tracks or a malformed id. */
 fun Track.localUri(): Uri? {
     if (!isLocal) return null
     val id = isrc.removePrefix(LOCAL_ISRC_PREFIX).toLongOrNull() ?: return null
@@ -85,49 +76,35 @@ private fun audioCollection(): Uri =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
     else MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
 
-/** Quick list: real songs only. Deep list: every audio file that is not a ringtone / alarm / notification sound. */
 private const val MIN_QUICK_MS = 30_000L
 private const val MIN_DEEP_MS = 5_000L
-/** The scan card animates for at least this long. */
 private const val MIN_SCAN_UI_MS = 3_500L
 internal const val UNKNOWN_ARTIST = "Unknown artist"
 
-/** Extensions the deep scan looks for on storage. (Only formats the player can decode.) */
 private val AUDIO_EXTENSIONS = setOf(
     "mp3", "m4a", "m4b", "aac", "adts", "flac", "ogg", "oga", "opus", "wav", "aif", "aiff",
     "amr", "awb", "mka", "mp2", "ac3", "ec3", "3gp", "3ga",
 )
 
-/** The permission that gates the scan: READ_MEDIA_AUDIO on Android 13+, READ_EXTERNAL_STORAGE before. */
 val LOCAL_AUDIO_PERMISSION: String =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_AUDIO
     else Manifest.permission.READ_EXTERNAL_STORAGE
 
-/** One possible match for a song, shown live in the auto-fetch sheet so the user can verify it. */
 data class MetaCandidate(val title: String, val artist: String, val album: String?, val artUrl: String?, val source: String)
 
-/** What to do with the cover when saving an edit. */
 sealed interface CoverEdit {
     object Keep : CoverEdit
     data class Url(val url: String) : CoverEdit
     data class Photo(val uri: Uri) : CoverEdit
 }
 
-/** A song found on the phone, plus what the list needs to show about the file itself. */
 data class LocalSong(val track: Track, val format: String, val sizeBytes: Long) {
-    /** The file has no real artist / album tags: its info is looked up when the user saves it somewhere. */
     val needsInfo: Boolean get() = track.artist == UNKNOWN_ARTIST || track.album.isNullOrBlank()
 }
 
 private fun Track.hasRealArt(): Boolean = albumArtUrl?.let { it.startsWith("file:") || it.startsWith("http") } == true
 
-/** Artist, album and a real cover are all there. */
 internal fun Track.isInfoComplete(): Boolean = artist != UNKNOWN_ARTIST && !album.isNullOrBlank() && hasRealArt()
-
-// ---------------------------------------------------------------------------------------------------------------
-// Song info the user has already asked for. The list overlays it, so a saved song keeps its fixed-up title / artist /
-// album / cover everywhere. Nothing is written for songs the user only plays or browses.
-// ---------------------------------------------------------------------------------------------------------------
 
 @Singleton
 class LocalMetadataStore @Inject constructor(@ApplicationContext private val context: Context) {
@@ -136,7 +113,6 @@ class LocalMetadataStore @Inject constructor(@ApplicationContext private val con
     private val map = HashMap<String, Track>()
     private var loaded = false
 
-    /** Bumps on every save, so the list re-reads and shows the fixed-up song info right away. */
     private val _version = MutableStateFlow(0)
     val version: StateFlow<Int> = _version
 
@@ -161,7 +137,6 @@ class LocalMetadataStore @Inject constructor(@ApplicationContext private val con
         }
     }
 
-    /** MediaStore ids of songs the user picked by hand with "Browse": always listed, even if the quick filter would hide them. */
     @Synchronized fun pinnedIds(): Set<Long> =
         pinPrefs.getStringSet("ids", emptySet()).orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
 
@@ -193,13 +168,6 @@ class LocalMetadataStore @Inject constructor(@ApplicationContext private val con
     }
 }
 
-// ---------------------------------------------------------------------------------------------------------------
-// Finds the song info a file is missing. Only called when the user saves a song (playlist / favorites); never on scan.
-//   1. the file's own tags and embedded cover (offline);
-//   2. if something is still missing: a lookup in the iTunes catalog, accepted only when title and length agree.
-// Only EMPTY fields are filled; tags the file already has are never overwritten.
-// ---------------------------------------------------------------------------------------------------------------
-
 @Singleton
 class LocalMetadataResolver @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -207,14 +175,12 @@ class LocalMetadataResolver @Inject constructor(
 ) {
     class Resolved(val track: Track, val found: Boolean)
 
-    /** Your own edits win; the lookup only fills fields that are still empty. */
     private fun Track.fillFrom(o: Track) = copy(
         artist = if (artist == UNKNOWN_ARTIST) o.artist else artist,
         album = if (album.isNullOrBlank()) o.album else album,
         albumArtUrl = if (hasRealArt()) albumArtUrl else o.albumArtUrl?.takeIf { o.hasRealArt() } ?: albumArtUrl,
     )
 
-    /** The song as the FILE describes it, ignoring anything typed in by hand. */
     private fun fileOriginal(track: Track): Track {
         val uri = track.localUri() ?: return track
         return runCatching {
@@ -240,7 +206,6 @@ class LocalMetadataResolver @Inject constructor(
         val stored = store.get(track.isrc)?.copy(durationMs = track.durationMs)
         if (stored != null && stored.isInfoComplete()) return@withContext Resolved(stored, true)
 
-        // Look up with what the FILE says, never with values typed in by hand.
         val file = fileOriginal(track)
         val emb = readEmbedded(track)
         var looked = file.copy(
@@ -278,7 +243,6 @@ class LocalMetadataResolver @Inject constructor(
         }
     }
 
-    /** Embedded covers can be huge: keep a 800px JPEG in private storage and hand back its stable file: URI. */
     private fun saveArt(isrc: String, bytes: ByteArray, stamp: Boolean = false): String? = runCatching {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
@@ -292,13 +256,11 @@ class LocalMetadataResolver @Inject constructor(
         Uri.fromFile(file).toString()
     }.getOrNull()
 
-    /** A photo the user picked: stored as a private 800px JPEG (a new file each time, so the old cover is not cached). */
     private fun importPhoto(isrc: String, uri: Uri): String? = runCatching {
         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@runCatching null
         saveArt(isrc, bytes, stamp = true)
     }.getOrNull()
 
-    /** Saves a manual or auto edit. Whatever the user sets here always wins over tags and online lookups. */
     suspend fun saveEdit(track: Track, title: String, artist: String, cover: CoverEdit): Track = withContext(Dispatchers.IO) {
         val current = store.get(track.isrc)
         val art = when (cover) {
@@ -315,10 +277,6 @@ class LocalMetadataResolver @Inject constructor(
         t
     }
 
-    /**
-     * Auto fetch: emits matches one by one as they are found: first the file's own tags, then catalog results for
-     * the cleaned-up title (and "Artist - Title" guesses). The sheet shows each one the moment it arrives.
-     */
     fun autoFetch(track: Track): Flow<MetaCandidate> = flow {
         val seen = HashSet<String>()
         suspend fun offer(c: MetaCandidate) {
@@ -384,7 +342,6 @@ class LocalMetadataResolver @Inject constructor(
 
     private fun norm(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
 
-    /** "01 - Song_Name (Official Video)" -> "Song Name". */
     private fun clean(raw: String): String = raw
         .replace('_', ' ')
         .replace(Regex("^\\s*\\d{1,3}\\s*[-.)]?\\s+"), "")
@@ -395,7 +352,6 @@ class LocalMetadataResolver @Inject constructor(
     private fun online(t: Track): Track? = runCatching {
         var title = clean(t.title)
         var artist: String? = t.artist.takeIf { it != UNKNOWN_ARTIST }
-        // Untagged files are often named "Artist - Title".
         if (artist == null && " - " in title) {
             val left = title.substringBefore(" - ").trim()
             val right = title.substringAfter(" - ").trim()
@@ -441,19 +397,13 @@ class LocalMetadataResolver @Inject constructor(
     }.getOrNull()
 }
 
-// ---------------------------------------------------------------------------------------------------------------
-// Scanner
-// ---------------------------------------------------------------------------------------------------------------
-
 data class DeepScanResult(val filesSeen: Int, val newlyIndexed: Int)
 
-/** Outcome of picking a single song with the Browse button. */
 sealed interface ImportResult {
     data class Added(val title: String) : ImportResult
     data class Failed(val reason: String) : ImportResult
 }
 
-/** Reads the device's audio from MediaStore and re-reads it whenever the store changes (new download, deleted file...). */
 @Singleton
 class LocalMediaScanner @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -462,7 +412,6 @@ class LocalMediaScanner @Inject constructor(
     fun hasPermission(): Boolean =
         ContextCompat.checkSelfPermission(context, LOCAL_AUDIO_PERMISSION) == PackageManager.PERMISSION_GRANTED
 
-    /** Emits the full list now and again after every MediaStore change. [deep] = include every audio file, not just songs. */
     fun observe(deep: Boolean): Flow<List<LocalSong>> = callbackFlow<Unit> {
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) { trySend(Unit) }
@@ -473,11 +422,6 @@ class LocalMediaScanner @Inject constructor(
         awaitClose { edits.cancel(); context.contentResolver.unregisterContentObserver(observer) }
     }.conflate().map { load(deep) }.flowOn(Dispatchers.IO)
 
-    /**
-     * The `local:` ISRC of EVERY audio row MediaStore still has (no quick / deep filter, so a song never looks deleted
-     * just because the list is filtered), re-read on every MediaStore change. Emits null without the permission: then
-     * nothing is known, and nothing may be removed from playlists or favorites.
-     */
     fun observeExistingIds(): Flow<Set<String>?> = callbackFlow<Unit> {
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) { trySend(Unit) }
@@ -496,7 +440,6 @@ class LocalMediaScanner @Inject constructor(
                 true
             } ?: false
         }.getOrDefault(false)
-        // A failed query must not look like "every file was deleted".
         return if (ok) out else null
     }
 
@@ -508,7 +451,6 @@ class LocalMediaScanner @Inject constructor(
         } else {
             "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= ?"
         }
-        // Songs picked by hand are always shown, whatever the filter says.
         val pinned = store.pinnedIds()
         val selection = if (pinned.isEmpty()) base else "($base) OR ${MediaStore.Audio.Media._ID} IN (${pinned.joinToString(",")})"
         val minMs = if (deep) MIN_DEEP_MS else MIN_QUICK_MS
@@ -527,7 +469,6 @@ class LocalMediaScanner @Inject constructor(
                 while (c.moveToNext()) {
                     val id = c.getLong(idCol)
                     val isrc = "$LOCAL_ISRC_PREFIX$id"
-                    // MediaStore reports "<unknown>" for untagged files.
                     val artist = c.getString(artistCol)?.takeIf { it.isNotBlank() && it != "<unknown>" } ?: UNKNOWN_ARTIST
                     val album = c.getString(albumCol)?.takeIf { it.isNotBlank() && it != "<unknown>" }
                     val name = c.getString(nameCol).orEmpty()
@@ -564,7 +505,6 @@ class LocalMediaScanner @Inject constructor(
     private fun storageRoots(): List<File> {
         val roots = LinkedHashSet<File>()
         Environment.getExternalStorageDirectory()?.let { roots += it }
-        // SD cards / USB drives: the app's own folder on each volume tells where the volume starts.
         context.getExternalFilesDirs(null).filterNotNull().forEach { dir ->
             val p = dir.absolutePath
             val i = p.indexOf("/Android/")
@@ -573,12 +513,6 @@ class LocalMediaScanner @Inject constructor(
         return roots.filter { it.exists() }
     }
 
-    /**
-     * In-depth search: walks the storage folders for every supported audio format and asks Android to index the files
-     * it had not picked up yet (best effort: some Android versions only index what the system scanner already knows).
-     * Folders with a ".nomedia" file are skipped, because the user hid them on purpose. Calls [onProgress] with the
-     * number of audio files found so far.
-     */
     suspend fun deepScan(onProgress: (Int) -> Unit): DeepScanResult = withContext(Dispatchers.IO) {
         val known = indexedPaths()
         val unindexed = ArrayList<String>()
@@ -606,14 +540,6 @@ class LocalMediaScanner @Inject constructor(
         DeepScanResult(seen, unindexed.count { it in after })
     }
 
-    // ---- Browse: import one song picked with the system file picker ----
-
-    /**
-     * Makes the picked file a normal "on this device" song and returns its title. In order of preference:
-     * 1. the pick already is a MediaStore row (chosen from the picker's Audio section): just use its id;
-     * 2. the file is on shared storage: ask Android to index it where it is (no copy);
-     * 3. anything else (Drive, Downloads provider...): copy it into Music/Gamut.
-     */
     suspend fun importFile(uri: Uri): ImportResult = withContext(Dispatchers.IO) {
         if (!hasPermission()) return@withContext ImportResult.Failed("Allow access to your music first")
         val id = runCatching { mediaStoreId(uri) ?: indexInPlace(uri) ?: copyIntoLibrary(uri) }.getOrNull()
@@ -624,11 +550,10 @@ class LocalMediaScanner @Inject constructor(
 
     private fun mediaStoreId(uri: Uri): Long? {
         if (uri.authority != "com.android.providers.media.documents") return null
-        val doc = DocumentsContract.getDocumentId(uri) // "audio:1234"
+        val doc = DocumentsContract.getDocumentId(uri)
         return if (doc.startsWith("audio:")) doc.removePrefix("audio:").toLongOrNull() else null
     }
 
-    /** "primary:Music/a.mp3" -> /storage/emulated/0/Music/a.mp3; "1A2B-3C4D:Music/a.mp3" -> /storage/1A2B-3C4D/Music/a.mp3. */
     private fun filePath(uri: Uri): String? {
         if (uri.authority != "com.android.externalstorage.documents") return null
         val doc = DocumentsContract.getDocumentId(uri)
@@ -686,7 +611,6 @@ class LocalMediaScanner @Inject constructor(
                 null
             }
         }
-        // Before Android 10: copy into the app's own music folder (no permission needed) and let the scanner index it.
         val dir = context.getExternalFilesDir(Environment.DIRECTORY_MUSIC) ?: return null
         val out = File(dir, name)
         val input = resolver.openInputStream(uri) ?: return null
@@ -712,23 +636,18 @@ class LocalMediaScanner @Inject constructor(
     }
 }
 
-/** Which local songs still exist on the phone, so favorites and playlists can drop the ones that were deleted. */
 @HiltViewModel
 class LocalAvailabilityViewModel @Inject constructor(scanner: LocalMediaScanner) : ViewModel() {
-    /** `local:` ISRCs of the audio files on the phone, or null while unknown (loading / no permission). */
     val existing: StateFlow<Set<String>?> = scanner.observeExistingIds()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 }
 
 enum class LocalSort(val label: String) { Recent("Recently added"), Title("Title"), Artist("Artist") }
 
-/** Progress / result of the in-depth search, for the scan card. */
 data class ScanUi(val running: Boolean = false, val seen: Int = 0, val message: String? = null)
 
-/** Live state of the auto-fetch sheet. */
 data class AutoFetchUi(val loading: Boolean = true, val results: List<MetaCandidate> = emptyList())
 
-/** Permission, list, scan and "look up the song info" for the "On this device" screen. */
 @HiltViewModel
 class LocalMusicViewModel @Inject constructor(
     private val scanner: LocalMediaScanner,
@@ -740,11 +659,9 @@ class LocalMusicViewModel @Inject constructor(
     private val permitted = MutableStateFlow(scanner.hasPermission())
     val hasPermission: StateFlow<Boolean> = permitted
 
-    /** Whether the permission was asked and refused (the screen then points to system settings). */
     private val _denied = MutableStateFlow(false)
     val denied: StateFlow<Boolean> = _denied
 
-    /** After an in-depth search the list keeps showing every audio format. */
     private val deep = MutableStateFlow(prefs.getBoolean("deep", false))
     val deepScanned: StateFlow<Boolean> = deep
 
@@ -758,7 +675,6 @@ class LocalMusicViewModel @Inject constructor(
     val sort: StateFlow<LocalSort> = _sort
     fun setSort(s: LocalSort) { _sort.value = s }
 
-    /** null = every format. */
     private val _format = MutableStateFlow<String?>(null)
     val format: StateFlow<String?> = _format
     fun setFormat(f: String?) { _format.value = f }
@@ -778,14 +694,12 @@ class LocalMusicViewModel @Inject constructor(
     private val _scan = MutableStateFlow(ScanUi())
     val scan: StateFlow<ScanUi> = _scan
 
-    /** The scan button: in-depth search of the whole storage, for every supported format. */
     fun deepScan() {
         if (_scan.value.running || !permitted.value) return
         _scan.value = ScanUi(running = true)
         viewModelScope.launch {
             val startedAt = System.currentTimeMillis()
             val r = runCatching { scanner.deepScan { n -> _scan.update { it.copy(seen = n) } } }.getOrNull()
-            // Keep the searching animation on screen long enough to feel like real work, even when the scan is instant.
             val remaining = MIN_SCAN_UI_MS - (System.currentTimeMillis() - startedAt)
             if (remaining > 0) kotlinx.coroutines.delay(remaining)
             deep.value = true
@@ -802,22 +716,14 @@ class LocalMusicViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Called only when the user saves a song to a playlist or favorites: fills in what the file is missing (tags,
-     * cover, album) and returns the track to save. Playing a song never calls this.
-     */
     suspend fun prepareForSave(track: Track): LocalMetadataResolver.Resolved = resolver.resolve(track)
 
-    /** The Browse button: imports the one song the user picked in the system file picker. */
     suspend fun importPicked(uri: Uri): ImportResult = scanner.importFile(uri)
-
-    // ---- Edit metadata ----
 
     private val _auto = MutableStateFlow(AutoFetchUi())
     val auto: StateFlow<AutoFetchUi> = _auto
     private var autoJob: Job? = null
 
-    /** Starts the lookup. A short, deliberate pause before the first result keeps the loading state from flashing. */
     fun startAutoFetch(track: Track) {
         autoJob?.cancel()
         _auto.value = AutoFetchUi()
@@ -828,7 +734,7 @@ class LocalMusicViewModel @Inject constructor(
                     val wait = 1_000L - (System.currentTimeMillis() - startedAt)
                     if (wait > 0) delay(wait)
                     _auto.update { it.copy(results = it.results + c) }
-                    delay(220) // results land one after another, not all at once
+                    delay(220)
                 }
             }
             val wait = 1_400L - (System.currentTimeMillis() - startedAt)
@@ -845,7 +751,6 @@ class LocalMusicViewModel @Inject constructor(
     suspend fun applyCandidate(track: Track, c: MetaCandidate): Track =
         resolver.saveEdit(track, c.title, c.artist, c.artUrl?.let { CoverEdit.Url(it) } ?: CoverEdit.Keep)
 
-    /** Call after the system permission dialog (and when the screen resumes from system settings). */
     fun refreshPermission(requestResultGranted: Boolean? = null) {
         val now = requestResultGranted ?: scanner.hasPermission()
         _denied.value = !now && requestResultGranted == false

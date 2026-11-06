@@ -5,7 +5,6 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 
-/** Provides the two new DAOs. Assumes your existing module already provides [GamutDatabase]. */
 @Module
 @InstallIn(SingletonComponent::class)
 object SyncDaoModule {

@@ -44,9 +44,6 @@ abstract class ResolverRepositoryModule {
     @Binds abstract fun bindYoutubeCandidateRepository(impl: YoutubeCandidateRepositoryImpl): YoutubeCandidateRepository
     @Binds abstract fun bindAudioSourceRepository(impl: AudioSourceRepositoryImpl): AudioSourceRepository
 
-    // Exposes AndroidYtDlpEngine to feature-search as the core-network interface, so
-    // SearchRepositoryImpl can fan out to YouTube during live search without feature-search
-    // depending on feature-resolver directly.
     @Binds abstract fun bindYoutubeMusicSearchSource(source: HybridYoutubeMusicSearchSource): YoutubeMusicSearchSource
 }
 

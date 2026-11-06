@@ -58,7 +58,6 @@ import com.adamglin.phosphoricons.bold.BluetoothConnected
 import com.adamglin.phosphoricons.bold.BluetoothSlash
 import com.adamglin.phosphoricons.bold.Devices
 
-/** One audio output the phone currently knows about. */
 data class OutputDevice(
     val id: Int,
     val name: String,
@@ -66,11 +65,6 @@ data class OutputDevice(
     val isActive: Boolean,
 )
 
-/**
- * "Connect" bottom sheet: Bluetooth status, every audio output device, and a button that opens the system
- * Bluetooth settings so the user can turn Bluetooth on / pair a new device.
- * State is read live from the system (see [rememberBluetoothEnabled] / [rememberOutputDevices]).
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConnectSheet(
@@ -91,7 +85,6 @@ fun ConnectSheet(
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
         )
 
-        // Bluetooth status panel
         Row(
             Modifier
                 .fillMaxWidth()
@@ -136,7 +129,6 @@ fun ConnectSheet(
             }
         }
 
-        // Devices
         LazyColumn(Modifier.weight(1f, fill = false), contentPadding = PaddingValues(vertical = 8.dp)) {
             items(devices, key = { it.id }) { d ->
                 Row(
@@ -167,7 +159,6 @@ fun ConnectSheet(
             }
         }
 
-        // Find Bluetooth devices -> system Bluetooth settings
         Box(
             Modifier
                 .fillMaxWidth()
@@ -196,7 +187,6 @@ fun ConnectSheet(
     }
 }
 
-/** Live Bluetooth on/off state. */
 @Composable
 fun rememberBluetoothEnabled(): Boolean {
     val context = LocalContext.current
@@ -216,14 +206,12 @@ fun rememberBluetoothEnabled(): Boolean {
     return enabled
 }
 
-/** Live list of audio outputs (speaker, wired, Bluetooth, USB, HDMI). The highest-priority one is marked active. */
 @Composable
 fun rememberOutputDevices(): List<OutputDevice> {
     val context = LocalContext.current
     val am = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     fun read(): List<OutputDevice> {
         val raw = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).filter { it.type in SHOWN_TYPES }
-        // Android routes media to Bluetooth > wired/USB > built-in speaker.
         val active = raw.minByOrNull { priority(it.type) }?.id
         return raw.sortedBy { priority(it.type) }.map {
             OutputDevice(

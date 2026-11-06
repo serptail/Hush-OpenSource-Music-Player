@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
 
-/** Google's four brand colours: blue, red, yellow, green. */
 val GoogleBorderColors = listOf(
     Color(0xFF4285F4),
     Color(0xFFEA4335),
@@ -35,23 +34,8 @@ val GoogleBorderColors = listOf(
     Color(0xFF34A853),
 )
 
-// ======================================================================================
-// Tuning
-// ======================================================================================
-
-/** Seconds for one full loop of the colours around the border. Everything else loops evenly inside this. */
 private const val PulseLoopMs = 12_000
 
-/**
- * A glowing, pulsing border around a pill (or rounded-rect) in the style of the Paper Shaders "pulsing-border"
- * (paper-design/shaders, Apache-2.0): colour spots travel around the edge while the whole thing breathes, with a soft
- * bloom outside. Written from the technique, not copied line by line.
- *
- * The shader is drawn BEHIND the content and extends past its bounds by [glow], so the content (a button) needs an
- * opaque background. Coordinates are in the content's own pixel space, so nothing needs translating.
- * Colour is picked by angle around the centre and the four colours are blended with smooth "hat" weights, which wraps
- * seamlessly. All time terms are whole multiples of the loop, so the animation restarts invisibly.
- */
 private const val PulsingBorderAgsl = """
 uniform float2 size;
 uniform float radius;
@@ -102,11 +86,6 @@ half4 main(float2 fc) {
 }
 """
 
-/**
- * Wraps [content] (give it an opaque fill and the same [cornerRadius]) in a pulsing, glowing border.
- * [active] = false dims the effect (use while busy / disabled). Below Android 13 it falls back to a static
- * multicolour sweep border.
- */
 @Composable
 fun PulsingBorderFrame(
     modifier: Modifier = Modifier,
@@ -140,7 +119,6 @@ private fun ShaderBorderFrame(
     val shader = remember { RuntimeShader(PulsingBorderAgsl) }
     val brush = remember(shader) { ShaderBrush(shader) }
 
-    // Read inside drawBehind only, so the animation redraws but never recomposes.
     val clock = rememberInfiniteTransition(label = "pulsing-border").animateFloat(
         initialValue = 0f,
         targetValue = (2 * PI).toFloat(),

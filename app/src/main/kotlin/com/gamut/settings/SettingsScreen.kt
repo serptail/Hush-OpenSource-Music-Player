@@ -38,7 +38,6 @@ import com.gamut.core.designsystem.ProfileAvatar
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 
-/** Opened from the profile circle on Discover. Flat rows under big headings; rows without a screen say "Coming soon". */
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
@@ -60,14 +59,11 @@ fun SettingsScreen(
     val name by vm.displayName.collectAsState()
     val email by vm.email.collectAsState()
     val avatar by vm.avatar.collectAsState()
-    // Opening Settings is the answer to the glow around the profile circle: once seen, it goes away.
     val supportVm: SupportViewModel = hiltViewModel()
-    // The screen is pre-composed while parked: only clear the nudge once the page is really open.
     val active = LocalPageActive.current
     LaunchedEffect(active) { if (active) { delay(600); supportVm.store.clearNudge() } }
 
     GamutPage(title = "Settings", onBack = onBack, nowPlaying = nowPlaying) {
-        // Profile header: no container, just the row.
         Row(
             Modifier.fillMaxWidth().padding(top = 8.dp).pressScale(onClick = onProfile, scaleDown = 0.985f),
             verticalAlignment = Alignment.CenterVertically,
@@ -95,7 +91,6 @@ fun SettingsScreen(
         Cell("Help & Feedback", icon = PhosphorIcons.Bold.Question, subtitle = "Report a bug or share an idea", onClick = onFeedback)
         Cell("About Gamut", icon = PhosphorIcons.Bold.Info, subtitle = "Version, license and credits", onClick = onAbout)
 
-        // Always available, never nags: a small pill at the very bottom.
         SupportRow()
     }
 }

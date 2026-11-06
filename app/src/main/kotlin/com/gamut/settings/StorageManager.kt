@@ -20,7 +20,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Everything the Storage screen shows in numbers. */
 data class StorageSnapshot(
     val downloadsBytes: Long,
     val imageCacheBytes: Long,
@@ -37,10 +36,6 @@ data class StorageSnapshot(
 
 enum class CacheTarget { IMAGES, DISCOVER, ALL }
 
-/**
- * Measures and tidies what Gamut keeps on the device. Deleting DOWNLOADS always goes through [TrackDownloadManager]
- * (index row + file + queue state), never straight to disk, so every screen and the player stay in step.
- */
 @Singleton
 class StorageManager @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -53,8 +48,6 @@ class StorageManager @Inject constructor(
     private val audioSources: AudioSourceRepository,
     private val settings: StorageSettings,
 ) {
-    // ---- measuring ----
-
     suspend fun measure(): StorageSnapshot = withContext(Dispatchers.IO) {
         val indexed = indexedPaths()
         val downloadsBytes = index.downloads.value.values.sumOf { File(it.localFilePath).takeIf { f -> f.exists() }?.length() ?: 0L }
@@ -75,7 +68,6 @@ class StorageManager @Inject constructor(
         )
     }
 
-    /** Title / artist / duration of downloaded songs (saved by the download manager when each one finished). */
     suspend fun trackInfo(isrcs: Collection<String>): Map<String, Track> = withContext(Dispatchers.IO) {
         try {
             isrcs.chunked(400).flatMap { trackDao.getByIsrcs(it) }.map { it.toDomain() }.associateBy { it.isrc }
@@ -86,9 +78,6 @@ class StorageManager @Inject constructor(
         }
     }
 
-    // ---- clearing ----
-
-    /** Clears the chosen cache and returns how many bytes that freed. */
     suspend fun clear(target: CacheTarget): Long = withContext(Dispatchers.IO) {
         val before = cacheBytes()
         if (target != CacheTarget.DISCOVER) {
@@ -103,7 +92,6 @@ class StorageManager @Inject constructor(
         (before - cacheBytes()).coerceAtLeast(0L)
     }
 
-    /** Keeps the image / temporary-file cache under the limit from settings by dropping the oldest files first. */
     suspend fun trimCacheIfNeeded() = withContext(Dispatchers.IO) {
         val limit = settings.current.cacheLimitMb * MB
         if (limit <= 0) return@withContext
@@ -116,15 +104,10 @@ class StorageManager @Inject constructor(
         }
     }
 
-    /** Removes download files no song points to (a crash between "file saved" and "row written") and returns the bytes. */
     suspend fun cleanLeftovers(): Long = withContext(Dispatchers.IO) {
         leftovers(indexedPaths()).sumOf { f -> f.length().also { f.delete() } }
     }
 
-    /**
-     * Run whenever the screen opens: forgets downloads whose file is gone (so the app stops showing them as offline)
-     * and removes leftovers. Both are no-ops on a healthy install.
-     */
     suspend fun repair() = withContext(Dispatchers.IO) {
         val missing = index.downloads.value.values.filter { !File(it.localFilePath).exists() }.map { it.isrc }
         if (missing.isNotEmpty()) downloads.remove(missing)
@@ -132,11 +115,8 @@ class StorageManager @Inject constructor(
         Unit
     }
 
-    // ---- helpers ----
-
     private fun indexedPaths() = index.downloads.value.values.map { it.localFilePath }.toSet()
 
-    /** Files in the downloads folder that no song points to. Fresh ones are skipped: they may be mid-download. */
     private fun leftovers(indexed: Set<String>): List<File> {
         val now = System.currentTimeMillis()
         return downloads.downloadsDir.listFiles().orEmpty().filter {
@@ -144,7 +124,6 @@ class StorageManager @Inject constructor(
         }
     }
 
-    /** Everything in cacheDir except Discover's own file (listed separately) and anything in [PROTECTED]. */
     private fun cacheEntries(): List<File> =
         context.cacheDir.listFiles().orEmpty().filter { it.name !in DISCOVER_FILES && it.name !in PROTECTED }
 
@@ -155,8 +134,7 @@ class StorageManager @Inject constructor(
     private companion object {
         const val MB = 1024L * 1024L
         const val LEFTOVER_MIN_AGE_MS = 5 * 60_000L
-        val DISCOVER_FILES = setOf("discover.json", "discover.json.tmp")   // DiscoverDiskCache
-        /** Folder names inside cacheDir that must survive "Clear cache" (e.g. a media3 SimpleCache directory). */
+        val DISCOVER_FILES = setOf("discover.json", "discover.json.tmp")
         val PROTECTED = emptySet<String>()
     }
 }

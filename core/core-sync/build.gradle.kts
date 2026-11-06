@@ -8,8 +8,6 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-// SUPABASE_URL / SUPABASE_ANON_KEY / GOOGLE_WEB_CLIENT_ID come from local.properties (git-ignored) or env vars (CI).
-// Forks: put your own values there. Only the PUBLIC anon key ever goes here, never service_role.
 val props = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
@@ -35,7 +33,7 @@ android {
 dependencies {
     implementation(project(":core:core-model"))
     implementation(project(":core:core-database"))
-    implementation(project(":feature:feature-library"))   // LibraryRepository (export/import)
+    implementation(project(":feature:feature-library"))
 
     implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.auth)
@@ -55,6 +53,6 @@ dependencies {
 
     implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.storage)
-    
+
     ksp(libs.hilt.compiler)
 }

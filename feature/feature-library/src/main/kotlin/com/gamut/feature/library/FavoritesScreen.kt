@@ -136,55 +136,29 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
-/** How many songs fit on the wheel at once: the centered one, two above and two below. */
 private const val VisibleSlots = 5
 
 private val WheelCoverShape = RoundedCornerShape(18.dp)
-private val WheelPillShape = WheelCoverShape   // same corner radius as the cover art
+private val WheelPillShape = WheelCoverShape
 private val PlayButtonSize = 48.dp
 private val ShufflePill = RoundedCornerShape(20.dp)
 
-// Quick-actions sheet: background and text follow the app palette (GamutSheet + ink()).
 private val SheetDestructive = Color(0xFFFF6B6B)
 
-private val SideInset = 24.dp   // wheel edge to pill
-/** On wide windows the wheel is a centered column this wide instead of stretching across the whole screen. */
+private val SideInset = 24.dp
 private val WheelMaxWidth = 640.dp
-private val PillInset = 8.dp    // pill edge to cover
+private val PillInset = 8.dp
 
-/**
- * Favorites. Songs ride on a wheel: the centered song is flat, full size, in a soft pill with a Play button.
- * The others follow a big circle (they slide right) and every row points at the circle's center, like spokes,
- * so they tilt more the further they are from the middle.
- *
- * The wheel is finite: every song appears exactly once and scrolling stops at both ends. The first song sits in
- * the center, the second goes below it, the third above, the fourth below, and so on (see [wheelOrder]).
- *
- * Long-pressing a song opens a small sheet with quick actions (play, add to playlist, download, remove).
- * The three dots in the header open the manage sheet: the whole list to reorder (hold + drag), remove (tap),
- * and download for offline. Downloaded songs show an "Available offline" badge under their title on the wheel.
- *
- * The song that is playing is marked on the wheel (accent title, animated bars, "Playing now") no matter where playback
- * was started from: it is matched by [nowPlayingIsrc], not by what was tapped here. The wheel opens centered on it, and
- * a "Now playing" chip jumps back to it after you scroll away.
- */
 @Composable
 fun FavoritesScreen(
     tracks: List<Track>,
     onBack: () -> Unit,
-    /** The picked track plus the list it was picked from (the queue). */
     onTrackSelected: (Track, List<Track>) -> Unit,
-    /** Shuffle button: play [tracks] in random order. */
     onShuffle: (List<Track>) -> Unit = {},
-    /** Quick action: take the track out of favorites. The caller must update [tracks]. */
     onRemove: (Track) -> Unit = {},
-    /** Quick action: add the track to a playlist. The row is hidden from the sheet when null. */
     onAddToPlaylist: ((Track) -> Unit)? = null,
-    /** Manage sheet: the favorites in their new order (also used to undo a removal). The caller saves it. */
     onReorder: (List<Track>) -> Unit = {},
-    /** Opens the artist page of a track (by name). For several artists the picked name arrives as track.copy(artist = name). */
     onTrackArtist: (Track) -> Unit = {},
-    /** ISRC of the track loaded in the player (from anywhere), or null. */
     nowPlayingIsrc: String? = null,
     downloads: PlaylistDownloadsViewModel,
     nowPlaying: @Composable () -> Unit = {},
@@ -192,13 +166,9 @@ fun FavoritesScreen(
     val songs = tracks
     val downloadStates by downloads.states.collectAsStateWithLifecycle()
     val batch by downloads.batch.collectAsStateWithLifecycle()
-    // Songs stored on the phone count as downloaded (no download call ever touches them), like in a playlist.
-    // Local songs never go through the downloader: [remote] is everything a download call may touch.
     val remote = remember(songs) { songs.filter { !it.isLocal } }
     val localIsrcs = remember(songs) { songs.filter { it.isLocal }.map { it.isrc }.toSet() }
-    // Rows / sheet: local songs have no download state at all (no ring, no line, no "Available offline" badge).
     val rowStates = remember(downloadStates, localIsrcs) { downloadStates - localIsrcs }
-    // Header / manage sheet: local songs count as done.
     val allStates = remember(rowStates, localIsrcs) { rowStates + localIsrcs.associateWith { DownloadState.Done } }
     val downloadUi = remember(songs, allStates) { playlistDownloadUi(songs.map { it.isrc }.distinct(), allStates) }
     val downloading = downloadUi.status == PlaylistDownloadStatus.Active
@@ -301,8 +271,6 @@ fun FavoritesScreen(
             } else if (!settled) {
                 Spacer(Modifier.weight(1f))
             } else {
-                // The wheel is its own centered column: on a tablet / TV the songs sit in the middle of the screen
-                // (the wheel's rotation pivot and pill are measured against this column, not the window).
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 SongWheel(
                     songs = songs,
@@ -340,17 +308,12 @@ fun FavoritesScreen(
     }
 }
 
-/**
- * Where song [i] (0 = first added) sits relative to the center slot:
- * 0 -> center, 1 -> +1 (below), 2 -> -1 (above), 3 -> +2, 4 -> -2, ...
- */
 private fun slotOffset(i: Int): Int = when {
     i == 0 -> 0
     i % 2 == 1 -> (i + 1) / 2
     else -> -(i / 2)
 }
 
-/** The songs in top-to-bottom order for the wheel. Each song appears exactly once. */
 private fun wheelOrder(songs: List<Track>): List<Track> =
     songs.indices.sortedBy { slotOffset(it) }.map { songs[it] }
 
@@ -378,21 +341,12 @@ private fun SongWheel(
     val haptics = LocalHapticFeedback.current
 
     BoxWithConstraints(modifier) {
-        // One slot is a fifth of the free height, so exactly five songs are on the wheel.
         val itemHeight = (maxHeight / VisibleSlots).coerceIn(84.dp, 140.dp)
-        // Half the free height as padding lets any item (even the first or last) reach the exact center.
         val pad = ((maxHeight - itemHeight) / 2).coerceAtLeast(0.dp)
-        // Opens on the playing song when it is a favorite; otherwise the first song is the one in the center.
-        // Songs above it are the 3rd, 5th, ... so there are (n - 1) / 2.
         val start = remember { if (playingIndex >= 0) playingIndex else (songs.size - 1) / 2 }
         val state = rememberLazyListState(initialFirstVisibleItemIndex = start)
         val scope = rememberCoroutineScope()
 
-        // ---- TV remote ----
-        // The wheel is ONE focus stop. Up / Down step the selected song by one and roll it to the middle with a single
-        // scroll animation; OK plays it (long OK / Menu opens its options). The rows themselves are not focus targets:
-        // geometry-based focus search on rotated, moving rows made the highlight jump and fight the scroll.
-        // At the first / last song Up / Down are not consumed, so focus leaves the wheel (header, bottom strip).
         val wheelFocus = remember { FocusRequester() }
         var wheelFocused by remember { mutableStateOf(false) }
         var target by remember { mutableIntStateOf(start.coerceIn(0, (ordered.size - 1).coerceAtLeast(0))) }
@@ -400,7 +354,6 @@ private fun SongWheel(
         val live = LocalFocusLive.current
         val remote = LocalInputModeManager.current.inputMode == InputMode.Keyboard
         val settledNow = LocalNavSettled.current
-        // Keep the selection in step with touch scrolling: when the wheel comes to rest, the centered song is the selected one.
         LaunchedEffect(state) {
             snapshotFlow {
                 val info = state.layoutInfo
@@ -408,12 +361,10 @@ private fun SongWheel(
                 info.visibleItemsInfo.minByOrNull { abs(it.offset + it.size / 2f - c) }?.key to state.isScrollInProgress
             }.collect { (key, moving) -> if (!moving && key is Int) target = key }
         }
-        // Remote: the wheel starts focused once the screen has finished sliding in.
         LaunchedEffect(settledNow, live) {
             if (settledNow && live && remote) runCatching { wheelFocus.requestFocus() }
         }
 
-        // A light tick every time a new song rolls into the center.
         LaunchedEffect(state) {
             snapshotFlow {
                 val info = state.layoutInfo
@@ -421,7 +372,6 @@ private fun SongWheel(
                 info.visibleItemsInfo.minByOrNull { abs(it.offset + it.size / 2f - c) }?.key
             }.distinctUntilChanged().drop(1).collect { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
         }
-        // "Now playing" chip: only while the playing favorite is scrolled away from the center.
         val showJump by remember(playingIndex) { derivedStateOf { playingIndex >= 0 && state.focusOf(playingIndex) < 0.5f } }
 
         LazyColumn(
@@ -436,7 +386,7 @@ private fun SongWheel(
                         Key.DirectionDown, Key.DirectionUp -> {
                             val step = if (e.key == Key.DirectionDown) 1 else -1
                             val next = target + step
-                            if (next !in 0..last) false   // edge: let focus leave the wheel
+                            if (next !in 0..last) false
                             else {
                                 if (e.type == KeyEventType.KeyDown) {
                                     target = next
@@ -483,7 +433,6 @@ private fun SongWheel(
                     playing = index == playingIndex,
                     accent = accent,
                     onClick = {
-                        // The centered song plays, any other song rolls to the center first.
                         if (state.focusOf(index) > 0.5f) onTrackSelected(song, songs)
                         else scope.launch { state.animateScrollToItem(index) }
                     },
@@ -566,16 +515,13 @@ private fun WheelRow(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onPlay: () -> Unit,
-    /** The wheel has remote focus: the centered pill gets the focus ring (it is the only visible pill). */
     ringed: Boolean,
     onArtist: (String) -> Unit,
 ) {
     val pillHeight = itemHeight - 28.dp
     val coverSize = pillHeight - PillInset * 2
-    // Queued or in progress (not done, not failed).
     val downloading = downloadState != null && downloadState != DownloadState.Done && downloadState !is DownloadState.Failed
 
-    // Tap + long press on the whole row, with the same subtle press scale as pressScale().
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val pressScale by animateFloatAsState(if (pressed) 0.98f else 1f, label = "rowPress")
@@ -584,11 +530,9 @@ private fun WheelRow(
         Modifier
             .fillMaxWidth()
             .height(itemHeight)
-            // Rotate around the cover's center, so the cover sits exactly on the circle and cover, text and
-            // pill all tilt together as one piece.
             .wheelTransform(state, index, itemHeight, pivotX = SideInset + PillInset + coverSize / 2)
             .graphicsLayer { scaleX = pressScale; scaleY = pressScale }
-            .focusProperties { canFocus = false }   // the wheel is the focus stop, not the rows
+            .focusProperties { canFocus = false }
             .combinedClickable(
                 interactionSource = interaction,
                 indication = null,
@@ -597,14 +541,12 @@ private fun WheelRow(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        FocusLive(false) {   // row buttons stay touch-only; the wheel handles the remote
-        // The soft pill: only visible on the centered song. The cover lives inside it.
+        FocusLive(false) {
         Box(
             Modifier
                 .fillMaxWidth()
                 .height(pillHeight)
                 .padding(horizontal = SideInset)
-                // Only the centered song has a pill. An off-center pill (even a faint one) swings into the centered one.
                 .graphicsLayer { alpha = state.focusOf(index) }
                 .background(ink(if (ringed) 0.12f else 0.07f), WheelPillShape)
                 .border(if (ringed) 2.dp else 1.dp, if (ringed) ink(0.9f) else ink(0.08f), WheelPillShape),
@@ -634,7 +576,6 @@ private fun WheelRow(
                         modifier = m,
                     )
                 }
-                // Under the title and artist. Skipped on very short wheels, where it would not fit inside the pill.
                 if (playing && itemHeight >= 96.dp) {
                     Text(
                         "Playing now",
@@ -656,16 +597,10 @@ private fun WheelRow(
                         )
                     }
                 }
-                // Same thin line as the playlist rows. It takes the place of the "Available offline" badge until the
-                // song is done (the playing song shows the ring below instead, so its label keeps its room).
                 if (downloading && !playing && itemHeight >= 96.dp) {
                     Box(Modifier.padding(top = 5.dp).height(2.dp)) { DownloadProgressLine(downloadState) }
                 }
             }
-            // Progress ring while the song downloads (tap cancels), like the playlist rows. Never shown for idle / done songs.
-            // Rows tilt around the cover, so the right-hand end of a neighbouring row swings into the centered pill.
-            // Everything on that end therefore fades with focus (like the play button) and only the centered row's is live.
-            // Neighbours show their progress with the thin line under the title instead.
             if (downloading) {
                 TrackDownloadButton(
                     downloadState,
@@ -676,7 +611,6 @@ private fun WheelRow(
                     modifier = Modifier.graphicsLayer { alpha = state.focusOf(index) },
                 )
             }
-            // Just the icon, no circle behind it. Tinted with the text color, so it is always visible whatever the cover palette is.
             Box(
                 Modifier
                     .size(PlayButtonSize)
@@ -692,7 +626,6 @@ private fun WheelRow(
     }
 }
 
-/** "3 hr 20 min" / "45 min". */
 private fun formatTotal(ms: Long): String {
     val minutes = (ms / 60_000).coerceAtLeast(1)
     val h = minutes / 60
@@ -700,7 +633,6 @@ private fun formatTotal(ms: Long): String {
     return if (h > 0) "$h hr $m min" else "$m min"
 }
 
-/** Small bottom sheet with quick actions for one favorite. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TrackActionsSheet(
@@ -719,7 +651,6 @@ private fun TrackActionsSheet(
     val scope = rememberCoroutineScope()
     val notifier = LocalNotifier.current
 
-    /** Slide the sheet away first, then run the action. */
     fun close(action: () -> Unit = {}) {
         scope.launch { sheetState.hide() }.invokeOnCompletion {
             onDismiss()
@@ -762,7 +693,7 @@ private fun TrackActionsSheet(
             if (!track.isLocal) when (downloadState) {
                 DownloadState.Done -> SheetAction("Remove download", PhosphorIcons.Fill.CheckCircle) { close(onRemoveDownload) }
                 null, is DownloadState.Failed -> SheetAction("Download", PhosphorIcons.Bold.ArrowCircleDown) { close(onDownload) }
-                else -> Unit   // queued / downloading
+                else -> Unit
             }
             SheetAction(
                 if (splitArtists(track.artist).size > 1) "Go to artist\u2026" else "Go to artist",
@@ -798,10 +729,6 @@ private fun SheetAction(
     }
 }
 
-/**
- * Distance of an item's middle from the viewport middle, measured in item heights
- * (0 = centered, -1 = one slot above, +2 = two slots below). Null when the item is not on screen.
- */
 private fun LazyListState.distanceFromCenter(key: Int): Float? {
     val info = layoutInfo
     val item = info.visibleItemsInfo.firstOrNull { it.key == key } ?: return null
@@ -809,21 +736,9 @@ private fun LazyListState.distanceFromCenter(key: Int): Float? {
     return (item.offset + item.size / 2f - center) / item.size
 }
 
-/** 1 when the item is dead center, falling to 0 one slot away. */
 private fun LazyListState.focusOf(key: Int): Float =
     (1f - abs(distanceFromCenter(key) ?: 9f)).coerceIn(0f, 1f)
 
-/**
- * Puts the row on a big circle whose leftmost point is the center of the screen. With y = the row's distance
- * from the middle and r = the circle radius:
- *   angle = asin(y / r)             where on the circle the row is
- *   x shift = r * (1 - cos(angle))  slides right as it goes around
- *   tilt = -angle                   the row points at the circle's center (radial, like a spoke)
- * Runs in the draw phase (graphicsLayer), so scrolling never recomposes rows.
- *
- * Tuning: [radiusFactor] smaller = tighter wheel (more tilt), bigger = flatter. The fog is the last line:
- * fully visible in the center, gone at 2.6 slots away; raise 2.6f to see further, lower it for more fog.
- */
 private fun Modifier.wheelTransform(
     state: LazyListState,
     key: Int,

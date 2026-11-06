@@ -42,16 +42,6 @@ import com.gamut.core.model.Track
 
 private enum class RecentTab(val label: String) { RECENT("Recent"), STATS("Statistics") }
 
-/**
- * Two tabs. Recent: songs you opened lately, newest first, plain rows split by lines, tap = play it again.
- * Statistics: how much and what you played (see [StatsTab]).
- *
- * Built to be cheap while the screen is sliding in:
- *  - No Crossfade / extra fade of its own: the NavHost already fades the whole screen once. The tab switch is a plain
- *    swap (the pills animate, the Statistics numbers and bars animate themselves), and only one tab is composed at a time.
- *  - Rows never fade in (that would make an alpha layer per row); they only glide when the order changes.
- *  - Row click lambdas are remembered, so scrolling and recomposition do not allocate new ones per row.
- */
 @Composable
 fun RecentlyPlayedScreen(
     tracks: List<Track>,
@@ -60,9 +50,7 @@ fun RecentlyPlayedScreen(
     nowPlaying: @Composable () -> Unit,
     statsViewModel: StatsViewModel = hiltViewModel(),
 ) {
-    // One row per song. A repeated ISRC would be a duplicate LazyColumn key and crash the list.
     val rows = remember(tracks) { tracks.distinctBy { it.isrc } }
-    // MainActivity rebuilds its callbacks on recomposition; always call the latest one without re-creating row lambdas.
     val select by rememberUpdatedState(onTrackSelected)
     val pick = remember { { track: Track, list: List<Track> -> select(track, list) } }
     var tab by rememberSaveable { mutableStateOf(RecentTab.RECENT) }
@@ -112,8 +100,6 @@ private fun RecentList(rows: List<Track>, onPick: (Track, List<Track>) -> Unit) 
                 contentType = { _, _ -> "recent-row" },
             ) { index, track ->
                 val onClick = remember(track, rows) { { onPick(track, rows) } }
-                // A newly played song slides to the top and the rest make room (foundation 1.7+).
-                // fade specs = null: rows appearing for the first time are NOT faded (no alpha layer per row).
                 Column(
                     Modifier.animateItem(
                         fadeInSpec = null,

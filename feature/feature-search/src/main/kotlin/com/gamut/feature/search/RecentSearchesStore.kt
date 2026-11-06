@@ -2,11 +2,6 @@ package com.gamut.feature.search
 
 import android.content.Context
 
-/**
- * Last few searches, newest first, in SharedPreferences. A plain class (no DI) so the screen can create it from a
- * Context. Only queries the user acted on are stored (a result was opened, or the keyboard's Search key was pressed),
- * so half-typed words never end up here.
- */
 class RecentSearchesStore(context: Context) {
     private val prefs = context.getSharedPreferences("recent_searches", Context.MODE_PRIVATE)
 

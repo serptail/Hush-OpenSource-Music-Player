@@ -49,9 +49,6 @@ import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-// ==================== PLAY / PAUSE BUTTON ====================
-
-/** The big white round play / pause button. Shows a spinner while the next track is being resolved. */
 @Composable
 internal fun PlayPauseButton(
     isPlaying: Boolean,
@@ -81,12 +78,6 @@ internal fun PlayPauseButton(
     }
 }
 
-// ==================== LINEAR SEEK BAR ====================
-
-/**
- * Thin progress bar with a knob, used by the lyrics panel. Same contract as the cover ring: while a finger is down
- * only [onScrub] is called (so the bar and time label follow it); the real seek ([onSeek]) happens once, on release.
- */
 @Composable
 internal fun SeekBar(
     progress: () -> Float,
@@ -137,9 +128,6 @@ internal fun SeekBar(
     )
 }
 
-// ==================== COVER TINT (gradient behind the lyrics card / panel) ====================
-
-/** Two colors taken from the cover: a deep one for the top of a gradient and a lighter one for the bottom. */
 @Immutable
 internal data class CoverTint(val top: Color, val bottom: Color) {
     companion object {
@@ -149,7 +137,6 @@ internal data class CoverTint(val top: Color, val bottom: Color) {
 
 private val tintCache = HashMap<String, CoverTint>()
 
-/** The cover's dominant hue as a [CoverTint]; animates when the track changes. Grey covers give a neutral grey. */
 @Composable
 internal fun rememberCoverTint(url: String?): CoverTint {
     val context = LocalContext.current
@@ -162,7 +149,6 @@ internal fun rememberCoverTint(url: String?): CoverTint {
         tintCache[url]?.let { tint = it; return@LaunchedEffect }
         val found = withContext(Dispatchers.IO) {
             runCatching {
-                // Same request as the accent / backdrop, so Coil answers from its memory cache.
                 val request = ImageRequest.Builder(context).data(url).allowHardware(false).build()
                 val result = context.imageLoader.execute(request)
                 (result as? SuccessResult)?.drawable?.toBitmapOrNull()?.let(::tintFromBitmap)
@@ -176,10 +162,6 @@ internal fun rememberCoverTint(url: String?): CoverTint {
     return CoverTint(top, bottom)
 }
 
-/**
- * Circular mean of the hues of the vivid pixels (weighted by saturation^2 * value, so greys and near-blacks barely
- * count). Returns a deep top color and a lighter bottom color of that hue, or [CoverTint.Neutral] for a grey cover.
- */
 private fun tintFromBitmap(bitmap: Bitmap): CoverTint {
     val size = 32
     val sample = Bitmap.createScaledBitmap(bitmap, size, size, true)
@@ -200,7 +182,7 @@ private fun tintFromBitmap(bitmap: Bitmap): CoverTint {
         sat += s * w
         weight += w
     }
-    if (weight < 20f) return CoverTint.Neutral   // effectively a grey / monochrome cover
+    if (weight < 20f) return CoverTint.Neutral
     var hue = Math.toDegrees(atan2(hy.toDouble(), hx.toDouble())).toFloat()
     if (hue < 0f) hue += 360f
     val s = (sat / weight).coerceIn(0.35f, 0.8f)

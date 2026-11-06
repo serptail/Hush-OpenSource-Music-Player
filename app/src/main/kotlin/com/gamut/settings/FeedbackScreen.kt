@@ -62,7 +62,6 @@ import kotlin.math.sin
 
 private val StarLabels = listOf("Poor", "Not great", "It\u2019s okay", "Good", "Love it")
 
-/** Settings > Help & Feedback. Report a bug, send feedback or an idea; optional stars and diagnostics. */
 @Composable
 fun FeedbackScreen(
     onBack: () -> Unit,
@@ -77,11 +76,8 @@ fun FeedbackScreen(
     val activity = LocalContext.current.findActivity()
     var showDiagnostics by remember { mutableStateOf(false) }
 
-    // Signed-in users get their email filled in; they can still change or clear it.
-    // (No name is sent unless the user types one, and there is no name field any more.)
     LaunchedEffect(accEmail) { accEmail?.let { vm.prefill("", it) } }
 
-    // The page is a persistent layer, so it is still composed after sending: thank the user, then slide away.
     LaunchedEffect(ui.status) {
         if (ui.status == FeedbackStatus.SENT) {
             notifier.success("Thanks! Your report was sent")
@@ -94,15 +90,12 @@ fun FeedbackScreen(
     val canSend = !sending && ui.message.isNotBlank()
 
     GamutPage(title = "Help & Feedback", onBack = onBack, nowPlaying = nowPlaying) {
-
-        // ---- type -------------------------------------------------------------------------------------------------
         SegmentedControl(
             options = FeedbackType.entries.map { Choice(it, it.label) },
             selected = ui.type,
             onSelect = vm::setType,
         )
 
-        // ---- message ----------------------------------------------------------------------------------------------
         Spacer(Modifier.height(24.dp))
         MessageField(
             value = ui.message,
@@ -115,11 +108,9 @@ fun FeedbackScreen(
             words = ui.words,
         )
 
-        // ---- rating (centered) ------------------------------------------------------------------------------------
         Spacer(Modifier.height(28.dp))
         StarRating(rating = ui.rating, onChange = vm::setRating)
 
-        // ---- email ------------------------------------------------------------------------------------------------
         Spacer(Modifier.height(28.dp))
         GamutField(ui.email, vm::setEmail, "Email for a reply (optional)")
         if (ui.emailError) {
@@ -130,7 +121,6 @@ fun FeedbackScreen(
             )
         }
 
-        // ---- diagnostics ------------------------------------------------------------------------------------------
         Spacer(Modifier.height(20.dp))
         SwitchCell(
             title = "Attach diagnostics",
@@ -142,7 +132,6 @@ fun FeedbackScreen(
             Cell("Preview what\u2019s sent", subtitle = null, onClick = { showDiagnostics = true })
         }
 
-        // ---- send -------------------------------------------------------------------------------------------------
         Column(Modifier.softResize()) {
             if (ui.error != null) {
                 Text(
@@ -157,14 +146,11 @@ fun FeedbackScreen(
             onClick = { if (canSend && activity != null) { focus.clearFocus(); vm.send { activity.solveHCaptcha() } } },
             modifier = Modifier.fillMaxWidth().alpha(if (canSend) 1f else 0.45f),
         )
-        // Room for the keyboard, so the text field can scroll above it.
         Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.ime))
     }
 
     if (showDiagnostics) DiagnosticsDialog(vm) { showDiagnostics = false }
 }
-
-// ---- pieces -----------------------------------------------------------------------------------------------------
 
 @Composable
 private fun Hint(text: String, modifier: Modifier = Modifier, align: TextAlign = TextAlign.Start) {
@@ -188,7 +174,6 @@ private fun MessageField(value: String, onChange: (String) -> Unit, placeholder:
             modifier = Modifier.fillMaxWidth(),
         )
     }
-    // Only appears once there is something to count.
     if (words > 0) {
         Text(
             "$words / ${FeedbackRules.MAX_WORDS}",
@@ -200,7 +185,6 @@ private fun MessageField(value: String, onChange: (String) -> Unit, placeholder:
     }
 }
 
-/** Five centered stars with a centered caption. Tapping the current rating clears it. */
 @Composable
 private fun StarRating(rating: Int, onChange: (Int) -> Unit) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -230,7 +214,6 @@ private fun Star(filled: Boolean, onClick: () -> Unit, description: String) {
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(34.dp)) {
-            // Centered on the star's visual middle (a 5-point star sits slightly low in its bounding box).
             val c = Offset(size.width / 2f, size.height / 2f + size.height * 0.03f)
             val path = Path()
             val outer = size.minDimension / 2f
@@ -249,7 +232,6 @@ private fun Star(filled: Boolean, onClick: () -> Unit, description: String) {
     }
 }
 
-/** Shows the exact diagnostics text, built the same way as the one that gets sent. */
 @Composable
 private fun DiagnosticsDialog(vm: FeedbackViewModel, onDismiss: () -> Unit) {
     val text by produceState("Collecting\u2026") { value = vm.diagnosticsPreview() }

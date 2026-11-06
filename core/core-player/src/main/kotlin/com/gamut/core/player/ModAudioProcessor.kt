@@ -12,27 +12,18 @@ import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.roundToInt
 
-/**
- * The "space" and "texture" half of the Mods. Chain: tape wobble -> bass shelf -> stereo reverb (Freeverb: 8
- * parallel combs + 4 allpasses per channel, with pre-delay and damping) -> low-pass -> vinyl (light bit-crush,
- * crackle + hiss). Works on 16-bit PCM only; any other format is passed through untouched. Costs nothing while
- * every knob is neutral.
- *
- * The knobs are @Volatile: written from the UI thread, read by the playback thread. This runs BEFORE ExoPlayer's
- * speed/pitch stage, so times and cutoffs set here are scaled by it; Media3MusicPlayer.applyMod compensates.
- */
 @UnstableApi
 internal class ModAudioProcessor : BaseAudioProcessor() {
-    @Volatile var reverbMix = 0f          // 0..1   wet amount
-    @Volatile var reverbDecaySec = 3f     // approx. RT60 of the tail
-    @Volatile var reverbPreDelayMs = 20f  // 0..180
-    @Volatile var reverbDamping = 0.5f    // 0..1   how fast the highs die in the tail
-    @Volatile var lowPassHz = 20_000f     // >= 19 000 = off
-    @Volatile var vinyl = 0f              // 0..1   crackle + hiss + a touch of bit-crush
-    @Volatile var bassDb = 0f             // low shelf @ 120 Hz
-    @Volatile var wobbleCents = 0f        // tape wow/flutter depth
-    @Volatile var mono = false            // fold both channels into one (Playback & Audio settings)
-    @Volatile var balance = 0f            // -1 = left .. +1 = right
+    @Volatile var reverbMix = 0f
+    @Volatile var reverbDecaySec = 3f
+    @Volatile var reverbPreDelayMs = 20f
+    @Volatile var reverbDamping = 0.5f
+    @Volatile var lowPassHz = 20_000f
+    @Volatile var vinyl = 0f
+    @Volatile var bassDb = 0f
+    @Volatile var wobbleCents = 0f
+    @Volatile var mono = false
+    @Volatile var balance = 0f
 
     private var channels = 2
     private var rate = 44100
@@ -67,7 +58,7 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
 
     override fun onConfigure(inputAudioFormat: AudioFormat): AudioFormat {
         if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT || inputAudioFormat.channelCount !in 1..2) {
-            return AudioFormat.NOT_SET   // inactive: ExoPlayer skips this processor for formats we can't handle
+            return AudioFormat.NOT_SET
         }
         channels = inputAudioFormat.channelCount
         rate = inputAudioFormat.sampleRate
@@ -75,7 +66,7 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
         return inputAudioFormat
     }
 
-    override fun onFlush() { clearState() }      // a seek / track change must not drag the old tail along
+    override fun onFlush() { clearState() }
     override fun onReset() { clearState() }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
@@ -107,14 +98,12 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
         }
         dirty = true
 
-        // Comb feedback from the wanted decay: RT60 = 3 * T / -log10(g), T = average comb length (~31.7 ms).
         val feedback = 10.0.pow(-3.0 * COMB_AVG_SEC / reverbDecaySec.coerceIn(0.2f, 12f)).toFloat().coerceIn(0.3f, 0.985f)
-        val damp = 0.05f + 0.4f * reverbDamping.coerceIn(0f, 1f)   // 0.5 -> 0.25, the classic Freeverb value
+        val damp = 0.05f + 0.4f * reverbDamping.coerceIn(0f, 1f)
         val preSamples = (reverbPreDelayMs.coerceIn(0f, 180f) * rate / 1000f).toInt().coerceIn(0, preBuf.size - 1)
         val bassA = (1.0 - exp(-2.0 * PI * 120.0 / rate)).toFloat()
         val bassGain = 10f.pow(bass / 20f) - 1f
-        // Sine delay modulation of depth D samples at f Hz bends pitch by D * 2 * PI * f / rate; solve for D.
-        val cents = 0.000578f * wob   // ~ (2^(cents/1200) - 1)
+        val cents = 0.000578f * wob
         val wowD = cents * rate / (2f * PI.toFloat() * WOW_HZ)
         val fluD = 0.25f * cents * rate / (2f * PI.toFloat() * FLUTTER_HZ)
         val wowInc = 2f * PI.toFloat() * WOW_HZ / rate
@@ -122,9 +111,9 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
         val wobBase = 0.01f * rate
         val dry = 1f - 0.5f * mix
         val wet = mix * 5f
-        val hpA = (2.0 * PI * 150.0 / rate).toFloat().coerceAtMost(1f)   // keep lows out of the reverb (no mud)
+        val hpA = (2.0 * PI * 150.0 / rate).toFloat().coerceAtMost(1f)
         val lpA = (1.0 - exp(-2.0 * PI * cutoffHz / rate)).toFloat()
-        val q = 2f.pow(15f - 3f * vin)                                     // 16 -> 13 bits
+        val q = 2f.pow(15f - 3f * vin)
         val popP = vin * 0.00007f
         val hiss = 0.004f * vin
 
@@ -202,7 +191,6 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
             if (doVinyl) {
                 l = (l * q).roundToInt() / q
                 r = (r * q).roundToInt() / q
-                // vinyl: a soft hiss plus the odd short pop
                 val noise = (nextRandom() * 2f - 1f) * hiss
                 if (nextRandom() < popP) popEnv = (if (nextRandom() > 0.5f) 1f else -1f) * (0.03f + 0.12f * nextRandom())
                 val crackle = noise + popEnv
@@ -253,11 +241,11 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
     }
 
     private companion object {
-        val COMB = intArrayOf(1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617)   // Freeverb tunings @ 44.1 kHz
+        val COMB = intArrayOf(1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617)
         val ALLPASS = intArrayOf(556, 441, 341, 225)
-        const val SPREAD = 23        // right channel is a little longer: that's what makes it wide
-        const val COMB_AVG_SEC = 0.0317f   // mean comb delay (~1400 samples @ 44.1 kHz)
-        const val WOW_HZ = 0.6f            // slow speed drift
-        const val FLUTTER_HZ = 7f          // fast speed flutter (a quarter of the wow depth)
+        const val SPREAD = 23
+        const val COMB_AVG_SEC = 0.0317f
+        const val WOW_HZ = 0.6f
+        const val FLUTTER_HZ = 7f
     }
 }

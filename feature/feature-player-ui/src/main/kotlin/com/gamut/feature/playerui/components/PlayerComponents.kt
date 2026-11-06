@@ -114,10 +114,6 @@ internal fun ArtworkPlaceholder() {
 
 internal fun formatTime(milliseconds: Long): String = "%d:%02d".format(milliseconds / 60_000, (milliseconds / 1_000) % 60)
 
-/**
- * Elapsed / total time. Digits are tabular so the label doesn't jitter as they change, and it only
- * recomposes when the displayed second changes (not every frame).
- */
 @Composable
 internal fun TimeRow(position: () -> Long, durationMs: Long) {
     val elapsedSecond by remember(position) { derivedStateOf { position() / 1_000 } }
@@ -135,7 +131,6 @@ internal fun Modifier.tapTarget(onClick: () -> Unit): Modifier {
     return this.focusRing().clickable(interactionSource = interaction, indication = null, onClick = onClick)
 }
 
-/** Spring-bounce press feedback — scales down on press, springs back on release. */
 internal fun Modifier.bounceTap(onClick: () -> Unit, scaleDown: Float = 0.88f): Modifier = composed {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -144,7 +139,7 @@ internal fun Modifier.bounceTap(onClick: () -> Unit, scaleDown: Float = 0.88f): 
     val scale by animateFloatAsState(
         targetValue = when {
             pressed -> scaleDown
-            hovered -> 1.08f   // mouse / stylus lift; touch never hovers
+            hovered -> 1.08f
             else -> 1f
         },
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
@@ -156,10 +151,6 @@ internal fun Modifier.bounceTap(onClick: () -> Unit, scaleDown: Float = 0.88f): 
     }
 }
 
-/**
- * An icon with a soft drop shadow: a blurred, dark copy sits just below the real one.
- * Kept subtle on purpose. [size] is the glyph size; put any padding / click handling in [modifier].
- */
 @Composable
 internal fun DepthIcon(
     imageVector: ImageVector,
@@ -183,12 +174,6 @@ internal fun DepthIcon(
     }
 }
 
-/**
- * Fades content out between two y positions (in px): fully visible above [start], completely gone
- * at and below [end]. The curve drops quickly right after [start] so the fade reads as strong /
- * deep instead of a lazy linear ramp. Does nothing while [hasSecondLine] is false (e.g. a song
- * with a single lyric line, or before the lines have been measured).
- */
 internal fun Modifier.fadeOutBetween(
     start: () -> Float,
     end: () -> Float,
@@ -215,7 +200,6 @@ internal fun Modifier.fadeOutBetween(
         )
     }
 
-/** Fades the top and bottom edges of a scrolling list into the card. */
 internal fun Modifier.fadingEdges(fade: Float = 0.12f): Modifier = this
     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
     .drawWithContent {
@@ -231,15 +215,10 @@ internal fun Modifier.fadingEdges(fade: Float = 0.12f): Modifier = this
         )
     }
 
-private const val BounceSpeedDpPerSecond = 26f  // how fast an overlong title glides
-private const val BounceRestStartMs = 2400L   // pause before the first glide, and each time it is back at the start
-private const val BounceRestEndMs = 1700L     // pause once the end of the title is showing
+private const val BounceSpeedDpPerSecond = 26f
+private const val BounceRestStartMs = 2400L
+private const val BounceRestEndMs = 1700L
 
-/**
- * One-line text. If it is too long for its box it rests a moment, glides to the far end so everything gets shown,
- * rests again, glides back to the start, and repeats.
- * Text that fits stays still.
- */
 @Composable
 internal fun BouncingText(text: String, style: TextStyle, color: Color, modifier: Modifier = Modifier) {
     val density = LocalDensity.current
@@ -248,15 +227,14 @@ internal fun BouncingText(text: String, style: TextStyle, color: Color, modifier
     val overflowPx = (textWidth - boxWidth).coerceAtLeast(0)
     val offset = remember { Animatable(0f) }
 
-    // Restarts from the beginning whenever the text (new track) or the amount it overflows changes.
     LaunchedEffect(text, overflowPx) {
         offset.snapTo(0f)
         if (overflowPx <= 0) return@LaunchedEffect
         val travelMs = (overflowPx / density.density / BounceSpeedDpPerSecond * 1000f).toInt().coerceAtLeast(400)
         while (true) {
-            delay(BounceRestStartMs)   // rest at the start so the title can be read
+            delay(BounceRestStartMs)
             offset.animateTo(overflowPx.toFloat(), tween(travelMs, easing = FastOutSlowInEasing))
-            delay(BounceRestEndMs)     // rest at the end, too: no more instant ping-pong
+            delay(BounceRestEndMs)
             offset.animateTo(0f, tween(travelMs, easing = FastOutSlowInEasing))
         }
     }
@@ -270,7 +248,6 @@ internal fun BouncingText(text: String, style: TextStyle, color: Color, modifier
             softWrap = false,
             overflow = androidx.compose.ui.text.style.TextOverflow.Clip,
             modifier = Modifier
-                // Let the text lay out at its full width (the box above clips it), and report that width.
                 .wrapContentWidth(Alignment.Start, unbounded = true)
                 .onSizeChanged { textWidth = it.width }
                 .graphicsLayer { translationX = -offset.value },
@@ -278,17 +255,11 @@ internal fun BouncingText(text: String, style: TextStyle, color: Color, modifier
     }
 }
 
-/**
- * The "no song yet" / loading screen: one small black record turning in the exact middle of the flat background,
- * with a thin progress bar under it while a track is loading ([progress] null = no bar). The bar shows real
- * progress (see MusicPlayer.loadProgress), animated smoothly between updates.
- */
 @Composable
 internal fun LoadingVinyl(progress: Float?, modifier: Modifier = Modifier) {
     Box(modifier.size(104.dp), contentAlignment = Alignment.Center) {
         VinylDisc(Modifier.fillMaxSize())
         if (progress != null) {
-            // Hangs below the record, so the record itself stays dead center.
             LoadingBar(progress, Modifier.align(Alignment.BottomCenter).offset(y = 29.dp).width(72.dp))
         }
     }
@@ -312,7 +283,6 @@ private fun LoadingBar(progress: Float, modifier: Modifier = Modifier) {
     }
 }
 
-/** A thin arc that grows and shrinks while it circles, over a faint track. Replaces the stock Material spinner. */
 @Composable
 internal fun PlayerSpinner(modifier: Modifier = Modifier, color: Color = Color.White, strokeWidth: Dp = 2.dp) {
     val transition = rememberInfiniteTransition(label = "player-spinner")
@@ -344,26 +314,23 @@ private fun VinylDisc(modifier: Modifier = Modifier) {
     val angle by spin.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(durationMillis = 2400, easing = LinearEasing)),   // one turn per 2.4s
+        animationSpec = infiniteRepeatable(tween(durationMillis = 2400, easing = LinearEasing)),
         label = "vinyl-angle",
     )
     val black = Color(0xFF050506)
     Canvas(
         modifier
-            // Rotation lives on the layer: the record is drawn once and only turned each frame.
             .graphicsLayer { rotationZ = angle },
     ) {
         val c = center
         val r = size.minDimension / 2f
         val labelR = r * 0.35f
 
-        // Body: near-black, a hair lighter toward the middle so the edge still reads on the dark screen.
         drawCircle(
             brush = Brush.radialGradient(listOf(Color(0xFF16161A), black), center = c, radius = r),
             radius = r,
             center = c,
         )
-        // Fine grooves, from just outside the label to just inside the rim.
         val groove = 0.6.dp.toPx()
         var g = labelR + r * 0.12f
         var i = 0
@@ -372,7 +339,6 @@ private fun VinylDisc(modifier: Modifier = Modifier) {
             g += 2.5.dp.toPx()
             i++
         }
-        // Two opposite light glints raking across the grooves.
         drawCircle(
             brush = Brush.sweepGradient(
                 0.00f to Color.Transparent,
@@ -387,10 +353,8 @@ private fun VinylDisc(modifier: Modifier = Modifier) {
             radius = r * 0.97f,
             center = c,
         )
-        // Raised lip + rim.
         drawCircle(Color.White.copy(alpha = 0.05f), radius = r * 0.965f, center = c, style = Stroke(1.dp.toPx()))
         drawCircle(Color.White.copy(alpha = 0.14f), radius = r - 0.5.dp.toPx(), center = c, style = Stroke(1.dp.toPx()))
-        // Blank white label, a faint hairline from the spindle hole to its edge, and the hole itself.
         drawCircle(
             brush = Brush.radialGradient(listOf(Color(0xFFF4F4F4), Color(0xFFDADADA)), center = c, radius = labelR),
             radius = labelR,
@@ -401,7 +365,6 @@ private fun VinylDisc(modifier: Modifier = Modifier) {
     }
 }
 
-/** Height of bar [index] of [count] (0..1): the loudest waveform sample that falls in its slice. */
 internal fun waveformAt(wave: FloatArray, index: Int, count: Int): Float {
     if (wave.isEmpty()) return 0f
     val from = (index.toLong() * wave.size / count).toInt().coerceIn(0, wave.lastIndex)
@@ -411,17 +374,11 @@ internal fun waveformAt(wave: FloatArray, index: Int, count: Int): Float {
     return m.coerceIn(0f, 1f)
 }
 
-/**
- * Heights (0..1) for [count] bars. Each bar takes the loudest sample of its slice, the row is smoothed so neighbours
- * flow into each other (a song's loudness is continuous: phrases swell and fall, they don't flicker bar to bar), and
- * then stretched between the 8th and 97th percentile so quiet parts sit low and loud parts high. The old version
- * RANKED the bars, which spreads them evenly over 0..1 and is, by construction, random-looking noise.
- */
 internal fun barHeights(wave: FloatArray, count: Int): FloatArray {
     if (wave.isEmpty() || count <= 0) return FloatArray(maxOf(count, 0))
     var row = FloatArray(count) { waveformAt(wave, it, count) }
     if (count < 5) return row
-    repeat(2) {   // two passes of a 1-2-1 kernel ~ a gentle gaussian, 5 bars wide
+    repeat(2) {
         val next = FloatArray(count)
         for (i in 0 until count) {
             val l = row[(i - 1).coerceAtLeast(0)]
@@ -437,10 +394,6 @@ internal fun barHeights(wave: FloatArray, count: Int): FloatArray {
     return FloatArray(count) { ((row[it] - lo) / range).coerceIn(0f, 1f) }
 }
 
-/**
- * Where the player registers the audio URL of the song it is about to play, so the waveform can be built from the
- * very same audio. Call [register] right before `player.play(track, audioUrl)`.
- */
 object WaveformSource {
     private val urls = java.util.concurrent.ConcurrentHashMap<String, String>()
 
@@ -448,22 +401,15 @@ object WaveformSource {
 
     @Volatile internal var appContext: android.content.Context? = null
 
-    /** Call once at startup (MainActivity.onCreate), before the first [register]. */
     fun init(context: android.content.Context) {
         appContext = context.applicationContext
     }
 
     private val recent = java.util.ArrayDeque<String>()
 
-    /**
-     * Call right before `player.play(track, audioUrl)`, and also wherever the queue resolves the NEXT song's URL.
-     * [audioUrl] may be an https URL, an absolute file path, file:// or content:// (offline / downloaded songs).
-     */
     fun register(track: Track, audioUrl: String) {
         val key = keyOf(track)
         urls[key] = audioUrl
-        // Keep this song and the one before it: the queue can register the next song while the current one is still
-        // being measured, and cancelling the current one left its ring flat. Anything older is dropped.
         val stale = synchronized(recent) {
             recent.remove(key)
             recent.addLast(key)
@@ -473,34 +419,25 @@ object WaveformSource {
         waveformEntry(track)
     }
 
-    /**
-     * Where the audio of a track can be found when nobody called [register]: the player screen points this at
-     * `MusicPlayer.sourceUrlFor`, so the current song, the queued next one and offline files are all found.
-     */
     @Volatile internal var provider: ((Track) -> String?)? = null
 
     internal fun urlFor(track: Track): String? = urls[keyOf(track)] ?: provider?.invoke(track)
 }
 
-/** Number of samples in a track's envelope. More than the ring has bars, so every bar gets real data. */
 private const val EnvelopeSamples = 480
 
 private const val WaveformTag = "Waveform"
 
-/** Audio servers often refuse default Android user agents, so ask like a browser would. */
 private const val WaveformUserAgent =
     "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
 
-/** The audio is fetched in pieces this big: streaming it through MediaExtractor was throttled to a crawl. */
 private const val DownloadChunk = 1_048_576
 private const val MaxDownload = 48L * 1_048_576
 
-/** Decoded envelopes, so reopening the player (or coming back to a song) is instant. */
 private val waveformCache = object : LinkedHashMap<String, FloatArray>(16, 0.75f, true) {
     override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, FloatArray>?) = size > 24
 }
 
-/** One song's envelope while it is being measured: [data] fills in progressively and the UI just reads it. */
 private class WaveformEntry {
     val data = mutableStateOf(FloatArray(0))
     @Volatile var job: Job? = null
@@ -510,10 +447,6 @@ private val NoWaveform = FloatArray(0)
 private val waveformScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 private val waveformEntries = java.util.concurrent.ConcurrentHashMap<String, WaveformEntry>()
 
-/**
- * The (possibly still filling) envelope of [track]. The measuring starts once per song, no matter how many times
- * this is called or whether any screen is looking: [WaveformSource.register] calls it at song launch.
- */
 private fun waveformEntry(track: Track): WaveformEntry {
     val key = WaveformSource.keyOf(track)
     synchronized(waveformCache) { waveformCache[key] }?.let { cached ->
@@ -522,16 +455,13 @@ private fun waveformEntry(track: Track): WaveformEntry {
     var created: WaveformEntry? = null
     val entry = waveformEntries.computeIfAbsent(key) { k ->
         WaveformEntry().also { e ->
-            // LAZY + start() after the entry is in the map: a job that ends instantly can no longer remove an entry
-            // that was not inserted yet (which left a dead entry behind and the ring flat for good).
             e.job = waveformScope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
                 try {
-                    // Let playback start and settle first: this work must never compete with the stream's first seconds.
                     delay(WaveformStartDelayMs)
                     val real = loadWaveform(track) { partial -> e.data.value = partial }
                     if (real != null && real.isNotEmpty()) e.data.value = real
                 } finally {
-                    waveformEntries.remove(k, e)   // done, failed or cancelled: the cache (or a retry) takes over
+                    waveformEntries.remove(k, e)
                 }
             }
             created = e
@@ -541,12 +471,10 @@ private fun waveformEntry(track: Track): WaveformEntry {
     return entry
 }
 
-private const val WaveformStartDelayMs = 400L   // was 2.5 s: the ring is only shown while scrubbing, the download is cheap
+private const val WaveformStartDelayMs = 400L
 
-/** One measurement at a time: the queue can register the next song early, and two downloads + decodes at once stutter playback. */
 private val waveformGate = kotlinx.coroutines.sync.Semaphore(1)
 
-/** Runs [block] on a background-priority thread and puts the thread's priority back (pool threads are shared). */
 private inline fun <T> lowPriority(block: () -> T): T {
     val old = android.os.Process.getThreadPriority(android.os.Process.myTid())
     android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
@@ -559,7 +487,6 @@ private inline fun <T> lowPriority(block: () -> T): T {
 
 private class LocalAudio(val file: java.io.File, val temp: Boolean)
 
-/** The audio as a local file when [source] is a path / file:// / content:// (offline songs); null for network URLs. */
 private fun asLocalAudio(source: String): LocalAudio? {
     fun existing(path: String?): java.io.File? = path?.let { java.io.File(it) }?.takeIf { it.isFile && it.length() > 0 }
     return when {
@@ -577,15 +504,9 @@ private fun asLocalAudio(source: String): LocalAudio? {
     }
 }
 
-/**
- * Real loudness envelope of [track] (0..1 per sample, evenly spaced over the whole audio). Downloads the audio, then
- * measures the loudness at [EnvelopeSamples] points of it (see [sampleEnvelope]). Null when the audio URL is unknown
- * or cannot be decoded (the ring then shows flat minimum ticks).
- */
 private suspend fun loadWaveform(track: Track, onPartial: (FloatArray) -> Unit): FloatArray? {
     val key = WaveformSource.keyOf(track)
     synchronized(waveformCache) { waveformCache[key] }?.let { return it }
-    // The URL is registered right before playback starts (or when the queue resolves it); wait up to 20 s for it.
     var url = WaveformSource.urlFor(track)
     var tries = 0
     while (url == null && tries < 40) {
@@ -604,7 +525,6 @@ private suspend fun loadWaveform(track: Track, onPartial: (FloatArray) -> Unit):
             lowPriority {
                 val local = asLocalAudio(source)
                 if (local != null) {
-                    // Offline / downloaded song: measure the file directly, no network at all.
                     try { sampleEnvelope(local.file.path) } finally { if (local.temp) local.file.delete() }
                 } else {
                     val job = currentCoroutineContext()[Job]
@@ -633,7 +553,6 @@ private suspend fun loadWaveform(track: Track, onPartial: (FloatArray) -> Unit):
 
 private const val DownloadParallel = 4
 
-/** One ranged request: (HTTP code, bytes). Null on failure. */
 private fun fetchChunk(url: String, start: Long, chunked: Boolean): Pair<Int, ByteArray>? {
     val end = start + DownloadChunk - 1
     val connection = java.net.URL(if (chunked) "$url&range=$start-$end" else url).openConnection() as java.net.HttpURLConnection
@@ -643,7 +562,7 @@ private fun fetchChunk(url: String, start: Long, chunked: Boolean): Pair<Int, By
         connection.setRequestProperty("User-Agent", WaveformUserAgent)
         if (!chunked) connection.setRequestProperty("Range", "bytes=$start-$end")
         val code = connection.responseCode
-        if (code == 416) return code to ByteArray(0)   // asked past the end
+        if (code == 416) return code to ByteArray(0)
         if (code !in 200..299) {
             Log.w(WaveformTag, "Download failed: HTTP $code")
             return null
@@ -657,11 +576,6 @@ private fun fetchChunk(url: String, start: Long, chunked: Boolean): Pair<Int, By
     }
 }
 
-/**
- * Downloads the audio into a temp file. The first chunk goes alone (it shows whether the server honours ranges at
- * all); the rest comes [DownloadParallel] chunks at a time, which is several times faster than one after another
- * (YouTube throttles each request, not the connection). Returns null on failure; the caller deletes the file.
- */
 private fun downloadAudio(url: String, stillActive: () -> Boolean): java.io.File? {
     val file = java.io.File.createTempFile("waveform", ".audio")
     var ok = false
@@ -672,7 +586,6 @@ private fun downloadAudio(url: String, stillActive: () -> Boolean): java.io.File
             val first = fetchChunk(url, 0L, chunked) ?: return null
             out.write(first.second)
             var start = first.second.size.toLong()
-            // A server that ignores Range (200, not 206) already sent the whole file; a short chunk is the last one.
             var more = first.second.size >= DownloadChunk && (chunked || first.first == 206)
             while (more && start < MaxDownload) {
                 if (!stillActive()) return null
@@ -700,11 +613,6 @@ private fun downloadAudio(url: String, stillActive: () -> Boolean): java.io.File
     }
 }
 
-/**
- * Measures the loudness of the audio file at [path] with Amplituda (FFmpeg, native code: roughly a second for a
- * 3-minute song) and boils its samples down to [EnvelopeSamples] points (0..1 each). Blocking: call off the main thread.
- * Returns null when the audio cannot be read.
- */
 private fun sampleEnvelope(path: String): FloatArray? {
     val context = WaveformSource.appContext
     if (context == null) {
@@ -725,10 +633,6 @@ private fun sampleEnvelope(path: String): FloatArray? {
     return levelsToEnvelope(levels, EnvelopeSamples - 1)
 }
 
-/**
- * Turns the raw per-tick RMS levels into 0..1 loudness values, in dB so quiet parts are not squashed next to loud ones.
- * A tick that got no frame (rare) takes the value before it; ticks after [upTo] stay at 0 (not measured yet).
- */
 private fun levelsToEnvelope(levels: FloatArray, upTo: Int): FloatArray {
     var carry = 0f
     return FloatArray(levels.size) { i ->
@@ -742,20 +646,11 @@ private fun levelsToEnvelope(levels: FloatArray, upTo: Int): FloatArray {
     }
 }
 
-/**
- * Makes differences visible: stretches the samples so the quiet parts sit near 0 and the loud parts near 1
- * (using the 5th and 98th percentile, so one outlier cannot flatten everything else), then raises them to a power
- * so peaks (high notes / loud vocals) stand tall while everything else stays lower.
- */
 internal fun shapeWaveform(wave: FloatArray): FloatArray {
     if (wave.isEmpty()) return wave
-    // While the song is still being decoded the tail is 0 (not measured yet). Only the measured part is used for
-    // scaling, otherwise those zeros would drag the scale around with every update and the bars would jump.
     val measured = wave.indexOfLast { it > 0f } + 1
     if (measured < 8) return FloatArray(wave.size)
-    // Loudness drifts slowly through a song, so on its own it gives bars of near-equal height. Mix in the local
-    // contrast (each sample minus the average of its neighbours) so beats and loud phrases stand out.
-    val r = 12   // neighbourhood: this many samples either side
+    val r = 12
     val prefix = DoubleArray(measured + 1).also { for (i in 0 until measured) it[i + 1] = it[i] + wave[i] }
     val mixed = FloatArray(measured) { i ->
         val a = (i - r).coerceAtLeast(0)
@@ -770,16 +665,10 @@ internal fun shapeWaveform(wave: FloatArray): FloatArray {
     return FloatArray(wave.size) { if (it < measured) ((mixed[it] - lo) / range).coerceIn(0f, 1f).pow(1.3f) else 0f }
 }
 
-/**
- * The song's envelope. Empty until measuring has produced something (the ring then shows flat minimum ticks instead
- * of made-up ones); it fills in from the start, and is usually complete before the player screen is even opened.
- */
 @Composable
 internal fun rememberWaveform(track: Track?): FloatArray {
     val key = track?.let(WaveformSource::keyOf)
     var entry by remember(key) { mutableStateOf(track?.let { waveformEntry(it) }) }
-    // A measurement that ended with nothing (URL registered late, network blip) is retried a few times, with growing
-    // pauses, while this song is on screen. Before, the ring stayed flat until the player screen was reopened.
     LaunchedEffect(key) {
         val t = track ?: return@LaunchedEffect
         repeat(4) { attempt ->
@@ -792,15 +681,9 @@ internal fun rememberWaveform(track: Track?): FloatArray {
     return entry?.data?.value ?: NoWaveform
 }
 
-// ==================== COVER ACCENT ====================
-
 private val DefaultAccent = Color.White
 private val accentCache = HashMap<String, Color>()
 
-/**
- * The most prominent *colorful* hue in the cover art, tuned to be readable on the dark glass
- * background. Falls back to white for grey / monochrome covers. Animates when the track changes.
- */
 @Composable
 internal fun rememberCoverAccent(url: String?): Color {
     val context = LocalContext.current
@@ -824,17 +707,10 @@ internal fun rememberCoverAccent(url: String?): Color {
     return animated
 }
 
-/**
- * Buckets the (downscaled) image into 12 hue sectors, weighting each pixel by saturation * value
- * so vivid pixels dominate and greys / near-blacks are ignored. The winning sector's average hue
- * is returned with saturation clamped and brightness lifted, so it always reads on a dark background.
- */
 private fun accentFromBitmap(bitmap: Bitmap): Color? = accentsFromBitmap(bitmap).first
 
-/** The cover's second colour (e.g. the gold on a pink cover), or null when the cover really has only one hue. */
 private fun subAccentFromBitmap(bitmap: Bitmap): Color? = accentsFromBitmap(bitmap).second
 
-/** (main accent, sub accent). The sub accent is the strongest hue at least ~45 degrees away from the main one. */
 private fun accentsFromBitmap(bitmap: Bitmap): Pair<Color?, Color?> {
     val size = 40
     val sample = Bitmap.createScaledBitmap(bitmap, size, size, true)
@@ -860,7 +736,7 @@ private fun accentsFromBitmap(bitmap: Bitmap): Pair<Color?, Color?> {
     }
     var best = 0
     for (i in 1 until bins) if (weight[i] > weight[best]) best = i
-    if (count[best] < 12 || weight[best] <= 0f) return null to null // effectively a grey cover
+    if (count[best] < 12 || weight[best] <= 0f) return null to null
     val hue = sumH[best] / weight[best]
     val sat = (sumS[best] / weight[best]).coerceIn(0.5f, 0.85f)
     val main = Color(android.graphics.Color.HSVToColor(floatArrayOf(hue, sat, 0.96f)))
@@ -870,29 +746,20 @@ private fun accentsFromBitmap(bitmap: Bitmap): Pair<Color?, Color?> {
 
 private fun hueDistance(a: Float, b: Float): Float = kotlin.math.abs(a - b).let { if (it > 180f) 360f - it else it }
 
-/**
- * The cover's second colour: the hue FAMILY that contrasts most with the main one.
- *
- * Hues are first grouped into families, so pink / dark pink / maroon / magenta count as ONE colour instead of competing
- * with each other (that is why the first version kept answering "pink" on a pink cover). Every family other than the
- * dominant one is then scored by contrast, not by size: how far its hue is from the main hue, how vivid it is, and only
- * the square root of how much of the cover it covers, so a small but striking colour (a pink dress on a blue sky, the
- * gold lettering on a magenta cover) beats a bigger, duller one. Null when nothing distinct and visible is left.
- */
 private fun subAccentFor(bitmap: Bitmap): Color? {
     val size = 64
     val sample = Bitmap.createScaledBitmap(bitmap, size, size, true)
-    val fine = 36                      // 10 degree bins
+    val fine = 36
     val binW = FloatArray(fine)
     val binN = IntArray(fine)
-    val binS = FloatArray(fine)        // weighted sums, for the family averages
+    val binS = FloatArray(fine)
     val binV = FloatArray(fine)
     val hsv = FloatArray(3)
     var total = 0f
     var pixels = 0
     for (x in 0 until size) for (y in 0 until size) {
         android.graphics.Color.colorToHSV(sample[x, y], hsv)
-        if (hsv[1] < 0.22f || hsv[2] < 0.30f) continue   // greys, near-blacks and washed-out pixels carry no colour
+        if (hsv[1] < 0.22f || hsv[2] < 0.30f) continue
         val w = hsv[1] * hsv[2]
         val bin = ((hsv[0] / 360f) * fine).toInt().coerceIn(0, fine - 1)
         binW[bin] += w; binN[bin]++; binS[bin] += hsv[1] * w; binV[bin] += hsv[2] * w
@@ -900,7 +767,6 @@ private fun subAccentFor(bitmap: Bitmap): Color? {
     }
     if (pixels < 20 || total <= 0f) return null
 
-    // Group bins into families: heaviest bin first, it takes every unclaimed bin within 30 degrees of it.
     val claimed = BooleanArray(fine)
     class Family(val weight: Float, val count: Int, val hue: Float, val sat: Float, val value: Float)
     val families = ArrayList<Family>()
@@ -919,16 +785,14 @@ private fun subAccentFor(bitmap: Bitmap): Color? {
         families.add(Family(w, n, hue, s / w, v / w))
     }
 
-    // The reference is the family that covers the most of the cover (the sky, the curtains), NOT the main accent: the
-    // accent only looks at strongly saturated pixels, so on a pale-sky cover it was the small pink dress itself.
     val dominant = families.maxByOrNull { it.weight } ?: return null
     var best: Family? = null
     var bestScore = 0f
     for (f in families) {
         if (f === dominant) continue
         val distance = hueDistance(f.hue, dominant.hue)
-        if (distance < 35f) continue                              // too close to the dominant colour to read as different
-        if (f.weight < total * 0.02f || f.count < pixels * 0.012f) continue   // a few stray pixels, not a colour on the cover
+        if (distance < 35f) continue
+        if (f.weight < total * 0.02f || f.count < pixels * 0.012f) continue
         val score = kotlin.math.sqrt(f.weight / total) * f.sat * (0.6f + 0.4f * f.value) * (minOf(distance, 110f) / 110f)
         if (score > bestScore) { bestScore = score; best = f }
     }
@@ -938,10 +802,6 @@ private fun subAccentFor(bitmap: Bitmap): Color? {
 
 private val subAccentCache = HashMap<String, Color?>()
 
-/**
- * The cover's second colour (the gold on a pink cover), for things that should not use the main accent. Falls back to
- * [fallback] when the cover has no distinct second hue. Animates when the track changes.
- */
 @Composable
 internal fun rememberCoverSubAccent(url: String?, fallback: Color): Color {
     val context = LocalContext.current
@@ -963,31 +823,16 @@ internal fun rememberCoverSubAccent(url: String?, fallback: Color): Color {
     return animated
 }
 
-/**
- * The URLs to try for the cover, best first. The hi-res / bar-free variant comes first; the exact URL the rest of
- * the app already loaded (so it is in the image cache and always works) is the last resort. A transformed URL that
- * the provider doesn't actually serve then costs one failed request, never a missing cover.
- */
 internal fun coverArtCandidates(raw: String?): List<String> {
     if (raw.isNullOrBlank()) return emptyList()
     youtubeThumbCandidates(raw)?.let { return it + raw }
     return listOfNotNull(squareArtUrl(raw), raw).distinct()
 }
 
-/**
- * Art for the blurred backdrop and the accent color. The same 200px URL MainActivity and the mini player already
- * use (the shared squareArtUrl), so it is in the image cache and shows instantly, and the accent matches the app's.
- */
 internal fun backdropArtUrl(url: String?): String? = squareArtUrl(url, 200)
-
 
 private val YouTubeThumb = Regex("""^(https?://[^/]*(?:ytimg\.com|img\.youtube\.com))/vi(?:_webp)?/([^/]+)/""")
 
-/**
- * YouTube thumbnails are 16:9 frames. The default `hqdefault` one is a 4:3 image with black bars
- * baked in above and below, and for "Topic" art tracks the real cover is the centered square of the
- * frame. These are the bar-free 16:9 variants, best quality first; null if [url] is not a YouTube thumbnail.
- */
 internal fun youtubeThumbCandidates(url: String): List<String>? {
     val m = YouTubeThumb.find(url) ?: return null
     val base = m.groupValues[1]

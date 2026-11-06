@@ -11,10 +11,8 @@ import kotlinx.coroutines.flow.Flow
 interface TrackDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(track: TrackEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertAll(tracks: List<TrackEntity>)
-    /** Used when pulling from the server: never overwrite a richer local row. */
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertIgnore(tracks: List<TrackEntity>)
     @Query("SELECT * FROM tracks WHERE isrc = :isrc") suspend fun get(isrc: String): TrackEntity?
-    /** Used by the Storage screen to show title / artist for downloaded songs. Callers pass at most a few hundred ids. */
     @Query("SELECT * FROM tracks WHERE isrc IN (:isrcs)") suspend fun getByIsrcs(isrcs: List<String>): List<TrackEntity>
     @Query("SELECT * FROM tracks ORDER BY title") fun observeAll(): Flow<List<TrackEntity>>
     @Query("DELETE FROM tracks WHERE isrc = :isrc") suspend fun delete(isrc: String)
@@ -41,11 +39,9 @@ interface PlaylistDao {
     suspend fun updateMeta(id: Long, name: String, tags: String)
     @Query("UPDATE playlists SET remoteId = :remoteId WHERE id = :id")
     suspend fun setRemoteId(id: Long, remoteId: String)
-    /** Account switch: server ids belong to the previous account and must not be pushed to the new one. */
     @Query("UPDATE playlists SET remoteId = NULL") suspend fun clearRemoteIds()
 }
 
-// An abstract class (not an interface) so it can hold the @Transaction method below.
 @Dao
 abstract class PlaylistTrackDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) abstract suspend fun upsert(ref: PlaylistTrackCrossRef)
@@ -56,7 +52,6 @@ abstract class PlaylistTrackDao {
     @Query("SELECT EXISTS(SELECT 1 FROM playlisttrackcrossref WHERE playlistId = :playlistId AND isrc = :isrc)") abstract suspend fun contains(playlistId: Long, isrc: String): Boolean
     @Query("DELETE FROM playlisttrackcrossref WHERE playlistId = :playlistId") abstract suspend fun clear(playlistId: Long)
 
-    /** Rewrites the playlist's songs in exactly this order (positions 0..n-1), atomically, so observers see one change. */
     @Transaction
     open suspend fun replaceAll(playlistId: Long, isrcs: List<String>) {
         clear(playlistId)
@@ -89,7 +84,6 @@ abstract class FavoriteDao {
     @Query("SELECT isrc FROM favorites") abstract fun observeIsrcs(): Flow<List<String>>
     @Query("SELECT t.* FROM tracks t INNER JOIN favorites f ON t.isrc = f.isrc ORDER BY f.addedAtEpochMs DESC") abstract fun observeTracks(): Flow<List<TrackEntity>>
 
-    /** Puts the favorites in exactly this order (first = shown first) using descending timestamps. */
     @Transaction
     open suspend fun setOrder(isrcs: List<String>) {
         val base = System.currentTimeMillis()

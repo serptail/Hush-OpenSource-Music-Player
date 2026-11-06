@@ -25,14 +25,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage   // Coil 2: import coil.compose.AsyncImage
+import coil.compose.AsyncImage
 
-/**
- * Profile picture. [image] (a File or URL from AvatarRepository) wins when present; otherwise the generated avatar:
- * first letter on a color derived from [seed], or [guestIcon] on a neutral shape when [seed] is null.
- * [shape] lets Profile use a rounded square while Discover / Settings keep the circle.
- * [invertedGuest]: the guest look flips to a light disc with the icon cut out of it (like the Shazam button).
- */
 @Composable
 fun ProfileAvatar(
     name: String?,

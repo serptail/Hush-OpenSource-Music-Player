@@ -10,30 +10,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/**
- * The equalizer as the rest of the app (the in-player sheet) knows it, now backed by the sound engine.
- *
- * It used to drive Android's built-in audio effects on ExoPlayer's audio session. Those are gone: the EQ is a 10-band
- * parametric of 64-bit biquads inside [SoundEngineProcessor], configured through [SoundSettings]. This class keeps the
- * old shape (levels in millibels, "surround" 0..1000) so the callers did not have to change:
- *  - band levels map to the ten band gains;
- *  - "surround" (virtualizer) maps to stereo width, 100%..200%;
- *  - the old bass boost has no counterpart (the low bands do that job), so it reports as unsupported.
- */
 class EqualizerController private constructor(context: Context) {
-
     data class State(
         val available: Boolean = false,
         val enabled: Boolean = false,
         val preset: String = FLAT,
         val bandFrequenciesHz: List<Int> = emptyList(),
-        val bandLevelsMb: List<Int> = emptyList(),   // millibels: 100 = 1 dB
+        val bandLevelsMb: List<Int> = emptyList(),
         val minLevelMb: Int = -1200,
         val maxLevelMb: Int = 1200,
         val bassBoostSupported: Boolean = false,
-        val bassBoost: Int = 0,                      // 0..1000
+        val bassBoost: Int = 0,
         val virtualizerSupported: Boolean = false,
-        val virtualizer: Int = 0,                    // 0..1000
+        val virtualizer: Int = 0,
     )
 
     private val sound = SoundSettings.get(context)
@@ -46,7 +35,6 @@ class EqualizerController private constructor(context: Context) {
         }
     }
 
-    /** Nothing to attach any more: the engine is part of the player's own audio chain. Kept so old callers compile. */
     @Suppress("UNUSED_PARAMETER")
     fun attach(audioSessionId: Int) = Unit
 
@@ -61,10 +49,8 @@ class EqualizerController private constructor(context: Context) {
 
     fun setVirtualizer(strength: Int) = sound.setWidth(100 + strength.coerceIn(0, 1000) / 10)
 
-    /** Back to flat and no widening. Leaves the on/off switch alone. */
     fun reset() = sound.resetEqualizer()
 
-    /** Nothing to free any more. */
     fun release() = Unit
 
     private fun SoundSettings.State.toLegacy() = State(

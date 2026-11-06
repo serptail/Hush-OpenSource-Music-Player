@@ -93,19 +93,11 @@ private val PillShape = RoundedCornerShape(50)
 private val PanelShape = RoundedCornerShape(14.dp)
 private const val MAX_NAME_LENGTH = 60
 
-/**
- * "New playlist": a full screen on the app's background. It lives as a persistent slide layer (see SlideLayer in
- * MainActivity): composed once while the app is idle and slid in with the rest of the strip, never composed during the
- * motion. [active] is false while it is parked or sliding away. A cover you pick yourself (a plus button), a big name
- * field, tags, and what to start the playlist with.
- */
 @Composable
 fun CreatePlaylistScreen(
     viewModel: LibraryViewModel,
-    /** The song waiting to be added to a playlist (the last one picked), or null. */
     selectedTrack: Track?,
     onBack: () -> Unit,
-    /** False while parked off-screen / closing: the status bar and the keyboard are left alone. */
     active: Boolean = true,
 ) {
     val playlists by viewModel.playlists.collectAsStateWithLifecycle()
@@ -113,17 +105,13 @@ fun CreatePlaylistScreen(
     val notifier = LocalNotifier.current
     val focus = LocalFocusManager.current
     val palette = LocalCoverPalette.current
-    // Same icon colour as Discover / Library (it was hard-coded light, which flipped the icons on open), and only while on screen.
     if (active) TransparentStatusBar(darkIcons = palette.isLight)
-    // The layer is never disposed: a focused name field would keep the keyboard open behind the page that is leaving.
     LaunchedEffect(active) { if (!active) focus.clearFocus() }
 
-    // Like Spotify: a ready-made name that is fully selected, so typing replaces it and Create works right away.
     val defaultName = remember { "My playlist #${playlists.size + 1}" }
     var name by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(defaultName, TextRange(0, defaultName.length)))
     }
-    // The cover is ONLY what the user picks. Songs imported from Liked songs / the picked song never set it.
     var coverUri by rememberSaveable { mutableStateOf<String?>(null) }
     val pickCover = rememberCoverPicker { coverUri = it }
     val tags: SnapshotStateList<String> = rememberSaveable(
@@ -132,7 +120,6 @@ fun CreatePlaylistScreen(
     var addPicked by rememberSaveable { mutableStateOf(false) }
     var copyLiked by rememberSaveable { mutableStateOf(false) }
 
-    // What the new playlist starts with, in order.
     val chosen: List<Track> = remember(addPicked, copyLiked, selectedTrack, favorites) {
         val base = if (copyLiked) favorites else emptyList()
         val picked = selectedTrack.takeIf { addPicked }
@@ -164,13 +151,10 @@ fun CreatePlaylistScreen(
                 Text("New playlist", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(start = 8.dp))
             }
 
-            // Phone: one centered column (max 560dp). Wide window (tablet / TV): the cover and name on the left,
-            // tags and what to start with on the right, each side scrolling on its own.
             val wide = isWideLayout()
             val leftContent: @Composable () -> Unit = {
                 Spacer(Modifier.height(20.dp))
                 CoverPreview(coverUri, onPick = pickCover, onClear = { coverUri = null })
-                // Only shown once something is added; the slot grows smoothly instead of the name field jumping.
                 Box(Modifier.fillMaxWidth().softResize(), contentAlignment = Alignment.Center) {
                     if (chosen.isNotEmpty()) {
                         Text(
@@ -187,7 +171,6 @@ fun CreatePlaylistScreen(
                     onChange = { if (it.text.length <= MAX_NAME_LENGTH) name = it },
                     onDone = { focus.clearFocus() },
                 )
-
             }
             val rightContent: @Composable () -> Unit = {
                 Text(
@@ -260,7 +243,6 @@ fun CreatePlaylistScreen(
                 }
             }
 
-            // The button warms up when a name is typed instead of snapping from grey to solid.
             val buttonBg by animateColorAsState(if (canCreate) ink() else ink(0.12f), tween(180), label = "create-bg")
             val buttonText by animateColorAsState(if (canCreate) palette.base else ink(0.3f), tween(180), label = "create-text")
             Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp), contentAlignment = Alignment.Center) {
@@ -284,16 +266,11 @@ fun CreatePlaylistScreen(
     }
 }
 
-/**
- * The cover the user picked, or a flat plus button. Tapping always opens the picker and the pick always wins;
- * the small X on a picked cover clears it again.
- */
 @Composable
 private fun CoverPreview(url: String?, onPick: () -> Unit, onClear: () -> Unit) {
     Box(Modifier.size(168.dp)) {
         Crossfade(targetState = url, animationSpec = tween(220), label = "playlist-preview") { u ->
             if (u.isNullOrBlank()) {
-                // Flat on purpose: a translucent fill drawn over a shadow shows up as a dark box.
                 Box(
                     Modifier.fillMaxSize().pressScale(onClick = onPick).clip(PreviewShape).background(ink(0.07f)),
                     contentAlignment = Alignment.Center,
@@ -331,8 +308,6 @@ private fun CoverPreview(url: String?, onPick: () -> Unit, onClear: () -> Unit) 
 private fun NameField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit, onDone: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val style = MaterialTheme.typography.headlineLarge
-    // TV remote: the field must not grab focus (and pop the keyboard) when the page opens. With a remote it is a button
-    // first; OK arms it, and only then does it take focus and show the keyboard.
     val remote = LocalInputModeManager.current.inputMode == InputMode.Keyboard
     val live = LocalFocusLive.current
     val fieldFocus = remember { FocusRequester() }
@@ -375,7 +350,6 @@ private fun NameField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit,
     }
 }
 
-/** A whole-row toggle: plain icon (no box behind it), two lines of text, a flat switch. */
 @Composable
 private fun OptionRow(icon: ImageVector, title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(

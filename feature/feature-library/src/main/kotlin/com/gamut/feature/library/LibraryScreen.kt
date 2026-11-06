@@ -89,39 +89,23 @@ private val TextSecondary: Color
 private val PanelShape = RoundedCornerShape(12.dp)
 private val ButtonShape = RoundedCornerShape(8.dp)
 
-/** An artist the user follows. Feed these in from wherever follows are stored. */
 data class LibraryArtist(val id: String, val name: String, val imageUrl: String? = null)
 
 private enum class LibraryFilter(val label: String) { Playlists("Playlists"), Artists("Artists"), Offline("Offline") }
 
-/**
- * Library: Liked songs, your playlists and the artists you follow.
- * Two filter pills (Playlists / Artists) sit under the title; tapping the active one shows everything again.
- * The top-right icon switches between a list and a 3-column grid.
- * Tapping a playlist calls [onOpenPlaylist] (navigation lives in the NavHost); Liked songs passes the id "liked".
- */
 @Composable
 fun LibraryScreen(
     viewModel: LibraryViewModel,
-    /** The track picked in search that is waiting to be added to a playlist, or null. */
     selectedTrack: Track?,
     onOpenPlaylist: (String) -> Unit,
-    /** The "+" button: opens the New playlist screen (navigation lives in the NavHost). */
     onCreatePlaylist: () -> Unit,
-    /** Height of the shared bottom bar + mini player strip (owned by HomeTabs in MainActivity). */
     barHeight: androidx.compose.ui.unit.Dp,
-    /** Artists the user follows (from FollowViewModel). When empty, the Artists section shows its empty card. */
     artists: List<LibraryArtist> = emptyList(),
-    /** True while the follows are still being read from the database, so the empty card doesn't flash for a moment. */
     artistsLoading: Boolean = false,
     onOpenArtist: (String) -> Unit = {},
-    /** Artists whose round covers fill the empty Artists card (popular, recently played...). Placeholders show when empty. */
     suggestedArtists: List<LibraryArtist> = emptyList(),
-    /** Empty-state buttons that need the search tab (e.g. "Find artists"). */
     onOpenSearch: () -> Unit = {},
-    /** The "On this device" row: opens the screen with the songs stored on the phone. */
     onOpenLocal: () -> Unit = {},
-    /** Offline tab: the tapped downloaded song plus the list it came from (the queue). */
     onPlayTrack: (Track, List<Track>) -> Unit = { _, _ -> },
 ) {
     val downloaded by viewModel.downloadedTracks.collectAsStateWithLifecycle()
@@ -131,11 +115,9 @@ fun LibraryScreen(
     val notifier = LocalNotifier.current
 
     val palette = LocalCoverPalette.current
-    // Status bar icons are set by HomeTabs (only while this layer is visible).
 
     var filter by rememberSaveable { mutableStateOf<LibraryFilter?>(null) }
     var isGrid by rememberSaveable { mutableStateOf(false) }
-    // Playlists the waiting track was added to in this visit: their button turns into a check.
     val addedTo = remember(selectedTrack?.isrc) { mutableStateListOf<Long>() }
 
     CoverTheme(palette) {
@@ -144,13 +126,10 @@ fun LibraryScreen(
         val showOffline = filter == LibraryFilter.Offline
         val fullSpan: LazyGridItemSpanScope.() -> GridItemSpan = { GridItemSpan(maxLineSpan) }
 
-        // Phones: one column (list) or 3 columns (grid), as before. Wide windows: the grid fills the width, with as many
-        // columns as fit, instead of a narrow centered column.
         val wide = isWideLayout()
         val gutter = if (wide) 16.dp else adaptiveGutter()
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = barHeight)) {
-                // No horizontal padding here: the grid spans the full width so the tiles' soft shadows are not clipped at its edge.
                 Column(Modifier.weight(1f).fillMaxWidth()) {
                     Row(Modifier.fillMaxWidth().padding(start = 24.dp + gutter, end = 24.dp + gutter, top = 22.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -164,7 +143,6 @@ fun LibraryScreen(
                         }
                     }
 
-                    // Filter bubbles, above the canvas.
                     Row(
                         Modifier.fillMaxWidth().padding(start = 24.dp + gutter, end = 24.dp + gutter, top = 14.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -174,7 +152,6 @@ fun LibraryScreen(
                             FilterPill(f.label, selected = filter == f) { filter = if (filter == f) null else f }
                         }
                         Spacer(Modifier.weight(1f))
-                        // Grid / list toggle, at the end of the filter row.
                         Box(Modifier.size(36.dp).pressScale(onClick = { isGrid = !isGrid }), contentAlignment = Alignment.Center) {
                             Icon(
                                 if (isGrid) PhosphorIcons.Bold.Rows else PhosphorIcons.Bold.SquaresFour,
@@ -185,7 +162,6 @@ fun LibraryScreen(
                         }
                     }
 
-                    // A track is waiting to be added: say so, right under the filter pills.
                     if (selectedTrack != null) ReadyToAddCard(selectedTrack, Modifier.padding(horizontal = 24.dp + gutter).padding(top = 12.dp))
 
                     LazyVerticalGrid(
@@ -271,7 +247,6 @@ fun LibraryScreen(
                                 }
                             }
                             items(userPlaylists, key = { "v-${it.id}" }, contentType = { "playlist" }) { playlist ->
-                                // A cover the user picked always wins over the art of the last song.
                                 val cover = playlist.coverUri ?: playlistInfo[playlist.id]?.coverUrl
                                 val offline = playlistInfo[playlist.id]?.offline == true
                                 val added = playlist.id in addedTo
@@ -287,19 +262,16 @@ fun LibraryScreen(
                                     }
                                 }
                                 if (isGrid) {
-                                    // No room for an "Add" button in a tile: while a track is waiting, a tap adds it.
                                     GridCell(playlist.name, addOrOpen, offline = offline) { TileCover(cover, PhosphorIcons.Bold.MusicNoteSimple) }
                                 } else {
                                     LibraryRow(
                                         title = playlist.name,
-                                        // Tags replace the song count: the count only shows once you are inside the playlist.
                                         meta = if (playlist.tags.isEmpty()) null else ({ TagRow(playlist.tags) }),
                                         onClick = { onOpenPlaylist(playlist.id.toString()) },
                                         cover = { RowCover(cover, PhosphorIcons.Bold.MusicNoteSimple) },
                                         offline = offline,
                                         trailing = {
                                             if (selectedTrack != null) {
-                                                // plus-circle -> check-circle once the track is in this playlist
                                                 Box(
                                                     Modifier.size(44.dp).then(if (added) Modifier else Modifier.pressScale(onClick = { addOrOpen() })),
                                                     contentAlignment = Alignment.Center,
@@ -350,7 +322,6 @@ fun LibraryScreen(
                             }
                         }
                     }
-
                 }
             }
         }
@@ -371,7 +342,6 @@ private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
     )
 }
 
-/** Grid cell: square cover (round for artists) with the title underneath. */
 @Composable
 private fun GridCell(title: String, onClick: () -> Unit, circle: Boolean = false, offline: Boolean = false, cover: @Composable () -> Unit) {
     Column(
@@ -402,7 +372,6 @@ private fun TileCover(coverUrl: String?, icon: ImageVector, circle: Boolean = fa
                 Modifier.fillMaxWidth().aspectRatio(1f).then(if (circle) Modifier.clip(shape) else Modifier.softCover()),
             )
         } else {
-            // Same blank, opaque fill (and shadow) as a cover without art on the Favorites screen.
             Box(
                 Modifier.fillMaxWidth().aspectRatio(1f).then(if (circle) Modifier.clip(shape) else Modifier.softCover()).background(flatCoverFill()),
                 contentAlignment = Alignment.Center,
@@ -413,7 +382,6 @@ private fun TileCover(coverUrl: String?, icon: ImageVector, circle: Boolean = fa
     }
 }
 
-/** The "Ready to add" banner at the top of the Library while a track from search waits for a playlist. */
 @Composable
 private fun ReadyToAddCard(track: Track, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(16.dp)
@@ -453,11 +421,6 @@ private fun ChevronIcon() {
     Icon(PhosphorIcons.Bold.CaretRight, null, tint = ink(0.45f), modifier = Modifier.size(18.dp))
 }
 
-/**
- * The cover slot of a Library row: the cover of the last song added when there is one, otherwise the icon on a flat,
- * OPAQUE square (flatCoverFill). It must be opaque: softCover's drop shadow would show through a translucent fill as a
- * dark inner box.
- */
 @Composable
 private fun RowCover(coverUrl: String?, icon: ImageVector, circle: Boolean = false) {
     if (!coverUrl.isNullOrBlank()) {
@@ -466,7 +429,6 @@ private fun RowCover(coverUrl: String?, icon: ImageVector, circle: Boolean = fal
             Modifier.size(58.dp).then(if (circle) Modifier.clip(CircleShape) else Modifier.softCover()),
         )
     } else {
-        // A flat square (round for artists) instead of a bare icon, like a cover without art on Favorites.
         Box(
             Modifier.size(58.dp).then(if (circle) Modifier.clip(CircleShape) else Modifier.softCover()).background(flatCoverFill()),
             contentAlignment = Alignment.Center,
@@ -476,10 +438,6 @@ private fun RowCover(coverUrl: String?, icon: ImageVector, circle: Boolean = fal
     }
 }
 
-/**
- * A playlist's tags as small pills under its name: up to [MAX_TAGS_SHOWN], then a "+N". Blank and duplicate tags are
- * skipped. Long tags shrink with an ellipsis rather than pushing the row wider.
- */
 @Composable
 private fun TagRow(tags: List<String>) {
     val clean = remember(tags) { tags.map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() } }
@@ -513,14 +471,12 @@ private fun TagPill(text: String, modifier: Modifier = Modifier) {
 
 private const val MAX_TAGS_SHOWN = 3
 
-/** Flat list row: cover, title, optional [meta] line (the tags), trailing chevron (or a custom trailing action). */
 @Composable
 private fun LibraryRow(
     title: String,
     onClick: () -> Unit,
     cover: @Composable () -> Unit,
     meta: (@Composable () -> Unit)? = null,
-    /** Every song downloaded: "Available offline" goes under the name and tags. */
     offline: Boolean = false,
     trailing: @Composable () -> Unit = { ChevronIcon() },
 ) {

@@ -38,32 +38,10 @@ import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 
-/* -------------------------------------------------------------------------- */
-/*  Acrylic design system                                                      */
-/*                                                                             */
-/*  Usage                                                                      */
-/*                                                                             */
-/*    AcrylicHost(Modifier.fillMaxSize()) {                                    */
-/*        AlbumGrid(Modifier.acrylicSource())          // what gets blurred     */
-/*        AcrylicPill(Modifier.align(BottomCenter)) {  // frosted glass        */
-/*            ...                                                              */
-/*        }                                                                    */
-/*    }                                                                        */
-/*                                                                             */
-/*  Glass surfaces find the shared HazeState through a CompositionLocal, so    */
-/*  nothing needs to be threaded through your component tree.                  */
-/*  Requires API 31+ for real blur; older devices get a denser fallback tint.  */
-/* -------------------------------------------------------------------------- */
-
-/** Provides the shared [HazeState] to every acrylic surface below it. */
 val LocalAcrylicState = staticCompositionLocalOf<HazeState?> { null }
 
 private var noHazeWarned = false
 
-/**
- * Root container for acrylic. Place the blurred content (marked with [acrylicSource])
- * and the glass surfaces as descendants. The source must be drawn *beneath* the glass.
- */
 @Composable
 fun AcrylicHost(
     modifier: Modifier = Modifier,
@@ -75,22 +53,12 @@ fun AcrylicHost(
     }
 }
 
-/**
- * Marks this layer as the content acrylic surfaces blur. Give the app-wide flowing background a negative
- * [zIndex] so it always sits beneath the content sources (rows, covers) in the blur.
- */
 @Composable
 fun Modifier.acrylicSource(state: HazeState? = LocalAcrylicState.current, zIndex: Float = 0f): Modifier =
     if (state == null) this else hazeSource(state, zIndex = zIndex)
 
-/* ------------------------------- Materials -------------------------------- */
-
 enum class AcrylicTone { Dark, Light }
 
-/**
- * A "material" is a recipe: how much blur, how dense the tint, how much grain,
- * and how bright the edge lighting is. Pick by how much separation the surface needs.
- */
 @Immutable
 data class AcrylicMaterial(
     val blurRadius: Dp,
@@ -102,26 +70,19 @@ data class AcrylicMaterial(
 )
 
 object AcrylicMaterials {
-    /** Soft blur that fades out along one edge (status bar / bottom bar scrims). Used with [AcrylicScrim]. */
     val Scrim = AcrylicMaterial(22.dp, 0.28f, 0f, 0f, 0f, 0.40f)
 
-    /** Barest frost: soft blur, whisper of tint, no sheen, no outline. Default for small floating buttons. */
     val UltraThin = AcrylicMaterial(14.dp, 0.10f, 0.015f, 0f, 0f, 0.40f)
 
-    /** Barely-there glass for floating controls over rich imagery. */
     val Thin = AcrylicMaterial(16.dp, 0.14f, 0.025f, 0.10f, 0.40f, 0.55f)
 
-    /** Default. Balanced for bars, chips, and buttons. */
     val Regular = AcrylicMaterial(28.dp, 0.24f, 0.03f, 0.12f, 0.50f, 0.70f)
 
-    /** Dense glass for sheets and cards that carry body text. */
     val Thick = AcrylicMaterial(40.dp, 0.38f, 0.035f, 0.14f, 0.55f, 0.82f)
 
-    /** Near-opaque frost: maximum legibility. */
     val Ultra = AcrylicMaterial(56.dp, 0.55f, 0.04f, 0.16f, 0.60f, 0.92f)
 }
 
-/** The material as the user's Glass settings change it. Off = no blur at all, a dense flat tint instead. */
 private fun AcrylicMaterial.adapted(s: AppearanceSettings): AcrylicMaterial = copy(
     blurRadius = blurRadius * s.glassDensity.blurScale,
     tintAlpha = (tintAlpha * s.glassDensity.tintScale).coerceAtMost(0.95f),
@@ -133,10 +94,6 @@ private val LightBase = Color(0xFFF4F6FA)
 
 private fun AcrylicTone.base(): Color = if (this == AcrylicTone.Dark) DarkBase else LightBase
 
-/**
- * Glass tint color: follows the cover's base color (animated in step with [FlowingBackground]) so the glass
- * is colored by the adaptive background instead of painting a fixed navy over it.
- */
 @Composable
 private fun rememberGlassBase(): Color {
     val target = LocalCoverPalette.current.base
@@ -144,12 +101,6 @@ private fun rememberGlassBase(): Color {
     return animated
 }
 
-/* -------------------------------- Surface --------------------------------- */
-
-/**
- * The core primitive: backdrop blur + tint + grain + soft top-light + hairline rim.
- * Every other acrylic component is built on this.
- */
 @Composable
 fun AcrylicSurface(
     modifier: Modifier = Modifier,
@@ -159,12 +110,10 @@ fun AcrylicSurface(
     hazeState: HazeState? = LocalAcrylicState.current,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    // Appearance > Glass: density scales blur and tint; "off" skips the blur and draws only the dense flat tint.
     val appearance = LocalAppearance.current
     val material = material.adapted(appearance)
     val hazeState = if (appearance.glass) hazeState else null
     if (hazeState == null && appearance.glass) {
-        // Without a HazeState there is nothing to blur: only the dense fallback tint is drawn.
         SideEffect {
             if (!noHazeWarned) {
                 noHazeWarned = true
@@ -176,7 +125,6 @@ fun AcrylicSurface(
     val style = remember(material, base) { material.hazeStyle(base) }
     val highlight = Color.White
     val sheen = remember(material, tone) {
-        // Soft light falling from the top-left; fades out so it never reads as a gradient fill.
         Brush.linearGradient(
             0.00f to highlight.copy(alpha = material.sheenAlpha),
             0.45f to highlight.copy(alpha = material.sheenAlpha * 0.15f),
@@ -184,7 +132,6 @@ fun AcrylicSurface(
         )
     }
     val rim = remember(material, tone) {
-        // Light catches the top-left edge, drops off, then a faint return at the bottom-right.
         val a = material.rimAlpha
         val rimColor = Color.White
         Brush.linearGradient(
@@ -208,9 +155,6 @@ fun AcrylicSurface(
     )
 }
 
-/* ------------------------------- Components ------------------------------- */
-
-/** Circular glass button. Drop-in replacement for the previous version. */
 @Composable
 fun AcrylicCircleButton(
     onClick: () -> Unit,
@@ -231,10 +175,6 @@ fun AcrylicCircleButton(
     )
 }
 
-/**
- * Full-width capsule bar (the Apple Music style transport bar). Blur once on the
- * container and keep the controls inside flat and transparent.
- */
 @Composable
 fun AcrylicPill(
     modifier: Modifier = Modifier,
@@ -261,7 +201,6 @@ fun AcrylicPill(
     }
 }
 
-/** Rounded-rectangle glass panel for cards, sheets, and popovers. */
 @Composable
 fun AcrylicCard(
     modifier: Modifier = Modifier,
@@ -280,8 +219,6 @@ fun AcrylicCard(
 }
 
 private fun AcrylicMaterial.hazeStyle(base: Color) = HazeStyle(
-    // Must be opaque: the blur of the rows is partly see-through, so without a solid backing the sharp rows show
-    // straight through the glass. [base] is the cover's base color, so it matches the flowing background.
     backgroundColor = base,
     tints = listOf(HazeTint(base.copy(alpha = tintAlpha))),
     blurRadius = blurRadius,
@@ -289,12 +226,6 @@ private fun AcrylicMaterial.hazeStyle(base: Color) = HazeStyle(
     fallbackTint = HazeTint(base.copy(alpha = fallbackAlpha)),
 )
 
-/**
- * Acrylic as a plain background modifier, for full-bleed strips (bottom bar, floating header) that
- * don't need a shape, rim or sheen. [intensity] is read while drawing (0..1), so it can follow scroll
- * state without recomposing: a header can be clear at rest and frost up as content slides under it.
- * Without a HazeState it falls back to a flat tint.
- */
 @Composable
 fun Modifier.acrylicFill(
     material: AcrylicMaterial = AcrylicMaterials.Regular,
@@ -315,11 +246,6 @@ fun Modifier.acrylicFill(
 
 enum class AcrylicEdge { Top, Bottom }
 
-/**
- * A strip of blur that is strongest at one edge of the screen and fades to nothing toward the middle
- * (progressive blur). Use it instead of a dark gradient scrim behind status-bar icons or under a bar.
- * Needs content marked with [acrylicSource] behind it (a sibling, not a parent).
- */
 @Composable
 fun AcrylicScrim(
     modifier: Modifier = Modifier,

@@ -35,13 +35,10 @@ import kotlinx.coroutines.withContext
 
 data class BackupFile(val path: String, val modifiedMs: Long)
 
-/** What the "Import complete" pop-up shows: the full report of what was added, already there and skipped. */
 data class ImportSummary(val report: ImportReport, val replaced: Boolean)
 
-/** A restore waiting for the user's OK. [preview] is a dry run: nothing has been changed yet. */
 data class RestorePrompt(val file: BackupFile, val preview: ImportReport)
 
-/** One-shot result for the app's toast pill (screens forward it to LocalNotifier). Replaces the old message dialogs. */
 sealed interface Notice {
     val text: String
     data class Success(override val text: String) : Notice
@@ -65,12 +62,10 @@ class AccountViewModel @Inject constructor(
     val email: StateFlow<String?> = userId.map { auth.currentEmail() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), auth.currentEmail())
 
-    /** The name the user chose here, else the Google account's name, else the e-mail prefix, else "Guest". */
     val displayName: StateFlow<String> = userId
         .flatMapLatest { uid -> store.nameOverride(uid).map { it ?: auth.defaultDisplayName() ?: "Guest" } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), auth.defaultDisplayName() ?: "Guest")
 
-    /** Only what the user typed themselves ("" = none), for the name field. */
     val customName: StateFlow<String> = userId
         .flatMapLatest { uid -> store.nameOverride(uid).map { it.orEmpty() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
@@ -92,14 +87,12 @@ class AccountViewModel @Inject constructor(
     val restorePrompt: StateFlow<RestorePrompt?> = _restorePrompt
     fun cancelRestore() { _restorePrompt.value = null }
 
-    /** Only one import / restore at a time: a double tap can never start a second one. */
     private val busy = AtomicBoolean(false)
 
     val autoBackup = store.autoBackup
     private val _backups = MutableStateFlow<List<BackupFile>>(emptyList())
     val backups: StateFlow<List<BackupFile>> = _backups
 
-    /** File (local), URL (remote) or null. Feed it to ProfileAvatar(image = ...). */
     val avatar: StateFlow<Any?> = userId.flatMapLatest { avatars.model(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
@@ -124,7 +117,6 @@ class AccountViewModel @Inject constructor(
         val uid = auth.currentUserId()
         store.setName(uid, clean)
         _events.tryEmit(Notice.Success(if (clean == null) "Using your Google name" else "Name saved"))
-        // Best effort: also keep it on the account so a second device shows it. Offline = local name only.
         if (uid != null && clean != null) viewModelScope.launch { auth.updateDisplayName(clean) }
     }
 
@@ -148,13 +140,12 @@ class AccountViewModel @Inject constructor(
         auth.deleteAccount()
             .onSuccess {
                 if (clearLocal) { cleaner.clear(); avatars.clearLocal(); AutoBackup.deleteAll(appContext); store.setName(uid, null); refreshBackups() }
-                else sync.forgetOwner()      // the kept library no longer belongs to any account
+                else sync.forgetOwner()
                 _events.tryEmit(Notice.Success("Account deleted"))
             }
             .onFailure { _events.tryEmit(Notice.Error("Couldn\u2019t delete account")) }
     }
 
-    /** Runs in [appScope], not viewModelScope: leaving the screen mid-export must not cancel it and leave a 0-byte file. */
     fun export(resolver: ContentResolver, uri: Uri, password: String) {
         appScope.launch {
             runCatching {
@@ -162,17 +153,12 @@ class AccountViewModel @Inject constructor(
                 (resolver.openOutputStream(uri, "wt") ?: error("No output stream")).use { it.write(bytes) }
             }.onSuccess { _events.tryEmit(Notice.Success("Backup exported")) }
                 .onFailure {
-                    runCatching { android.provider.DocumentsContract.deleteDocument(resolver, uri) }   // no 0 B leftovers
+                    runCatching { android.provider.DocumentsContract.deleteDocument(resolver, uri) }
                     _events.tryEmit(Notice.Error("Export failed"))
                 }
         }
     }
 
-    /**
-     * [replace] = remove current favorites/playlists/artists first; otherwise the file is merged in. The exporter validates
-     * the file and password BEFORE touching anything, and puts everything back if the import fails halfway.
-     * Runs in [appScope] so leaving the screen cannot cancel it halfway.
-     */
     fun import(resolver: ContentResolver, uri: Uri, password: String, replace: Boolean) {
         if (!busy.compareAndSet(false, true)) return
         appScope.launch {
@@ -198,8 +184,6 @@ class AccountViewModel @Inject constructor(
         else -> "Import failed"
     }
 
-    // ---- offline (on-device) backups ----
-
     fun setAutoBackup(enabled: Boolean) {
         store.setAutoBackup(enabled)
         AutoBackup.apply(appContext, enabled)
@@ -214,7 +198,6 @@ class AccountViewModel @Inject constructor(
             .onFailure { _events.tryEmit(Notice.Error("Backup failed")) }
     }
 
-    /** Step 1 of a restore: read the backup and compute what it would add. Nothing is changed until [confirmRestore]. */
     fun requestRestore(file: BackupFile) {
         if (!busy.compareAndSet(false, true)) return
         appScope.launch {
@@ -233,10 +216,9 @@ class AccountViewModel @Inject constructor(
         }
     }
 
-    /** Step 2, after the user pressed Restore. Import is a merge, so restoring never deletes anything you have now. */
     fun confirmRestore() {
         val prompt = _restorePrompt.value ?: return
-        _restorePrompt.value = null                       // a second tap finds nothing left to confirm
+        _restorePrompt.value = null
         if (!busy.compareAndSet(false, true)) return
         appScope.launch {
             try {

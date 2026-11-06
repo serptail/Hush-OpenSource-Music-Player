@@ -11,27 +11,19 @@ import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Everything you might want to tune lives here. */
 object SupportConfig {
-    /** The one place the Ko-fi link is defined. */
     const val KOFI_URL = "https://ko-fi.com/serptail"
 
-    const val QUIET_DAYS = 3                                  // nothing at all in the first days of use
-    val SHEET_GAP_DAYS = longArrayOf(7, 30, 90)               // wait before sheet #1 (from first launch), #2, #3 (from the previous sheet)
+    const val QUIET_DAYS = 3
+    val SHEET_GAP_DAYS = longArrayOf(7, 30, 90)
     const val MAX_SHEETS = 3
-    const val COLD_START_QUIET_MS = 20_000L                   // after the loading screen, stay quiet this long
-    const val PLAYLIST_MILESTONE = 10                         // songs in one playlist
-    val PLAY_MILESTONES = intArrayOf(100, 300, 1000)          // songs played
+    const val COLD_START_QUIET_MS = 20_000L
+    const val PLAYLIST_MILESTONE = 10
+    val PLAY_MILESTONES = intArrayOf(100, 300, 1000)
 }
 
-/** The "good moments" that can ask for the sheet. */
 enum class SupportTrigger { FirstDownload, PlaylistMilestone, PlayMilestone }
 
-/**
- * All support-sheet state, kept on the phone (SharedPreferences): no network, no account.
- * Moments call [recordDownloadSuccess] / [recordPlay] / [recordPlaylistSize]; they only leave a *pending* request.
- * The host (SupportSheetHost) decides when it is actually a good time to show it.
- */
 @Singleton
 class SupportStore @Inject constructor(@ApplicationContext context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("support", Context.MODE_PRIVATE)
@@ -41,18 +33,14 @@ class SupportStore @Inject constructor(@ApplicationContext context: Context) {
     }
 
     private val _nudge = MutableStateFlow(prefs.getBoolean(K_NUDGE, false))
-    /** True after a sheet was dismissed: the profile circle gets a heart badge, the Support row pulses once. */
     val nudge: StateFlow<Boolean> = _nudge.asStateFlow()
 
     private val _pending = MutableStateFlow(readPending())
-    /** A good moment happened and the sheet has not been shown for it yet. */
     val pending: StateFlow<SupportTrigger?> = _pending.asStateFlow()
 
     val plays: Int get() = prefs.getInt(K_PLAYS, 0)
     private val shownCount: Int get() = prefs.getInt(K_SHOWN, 0)
     private val dismissedForever: Boolean get() = prefs.getBoolean(K_FOREVER, false)
-
-    // ---- moments -------------------------------------------------------------------------------------------------
 
     fun recordDownloadSuccess() {
         if (prefs.getBoolean(K_DOWNLOAD_DONE, false)) return
@@ -78,9 +66,6 @@ class SupportStore @Inject constructor(@ApplicationContext context: Context) {
         _pending.value = trigger
     }
 
-    // ---- rules ---------------------------------------------------------------------------------------------------
-
-    /** The timing rules. (The "not while playing / player open / loading / cold start" rules live in MainActivity.) */
     fun canShowNow(): Boolean {
         if (dismissedForever) return false
         val count = shownCount
@@ -92,21 +77,15 @@ class SupportStore @Inject constructor(@ApplicationContext context: Context) {
         return now - anchor >= days(SupportConfig.SHEET_GAP_DAYS[count.coerceAtMost(SupportConfig.SHEET_GAP_DAYS.lastIndex)])
     }
 
-    // ---- what the person did -------------------------------------------------------------------------------------
-
-    /** The sheet appeared. Counts as one of the three, even if the app is killed with it open. */
     fun onSheetShown() {
         prefs.edit().putInt(K_SHOWN, shownCount + 1).putLong(K_LAST_SHOWN, System.currentTimeMillis()).remove(K_PENDING).apply()
         _pending.value = null
     }
 
-    /** Swipe, scrim tap, back, or "Maybe later": ask again much later, and point at Settings. */
     fun onLater() = setNudge(!dismissedForever)
 
-    /** "Buy me a coffee": they went to Ko-fi, no badge needed. */
     fun onSupported() = setNudge(false)
 
-    /** "I already did / don't ask again": never show anything proactive again. Settings and About stay. */
     fun onNeverAgain() {
         prefs.edit().putBoolean(K_FOREVER, true).remove(K_PENDING).apply()
         _pending.value = null
@@ -136,6 +115,5 @@ class SupportStore @Inject constructor(@ApplicationContext context: Context) {
     }
 }
 
-/** Gives composables (Settings, About, the host in MainActivity) the same singleton store, the way the rest of the app does. */
 @HiltViewModel
 class SupportViewModel @Inject constructor(val store: SupportStore) : ViewModel()

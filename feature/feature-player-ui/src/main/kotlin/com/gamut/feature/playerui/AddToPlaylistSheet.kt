@@ -39,7 +39,6 @@ import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.bold.Check
 import com.adamglin.phosphoricons.bold.MusicNote
 
-/** What the picker needs to know about a playlist. [coverUrl] is its picked cover, or the art of its last song. */
 data class PlaylistPickerItem(
     val id: String,
     val name: String,
@@ -47,11 +46,6 @@ data class PlaylistPickerItem(
     val trackCount: Int? = null,
 )
 
-/**
- * "Add to playlist" sheet. Shows the user's playlists with their covers. Tapping one calls [onPick] and puts a check
- * on it; the sheet stays open so the song can go into several playlists. Playlists in [alreadyIn] (the ones that
- * already hold this song) show the check from the start, and tapping a checked one calls [onRemove] to undo it.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AddToPlaylistSheet(
@@ -90,7 +84,6 @@ internal fun AddToPlaylistSheet(
                         .padding(horizontal = 24.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // The note icon sits underneath: it is what you see while the cover loads or when there is none.
                     Box(
                         Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(ink(0.07f)),
                         contentAlignment = Alignment.Center,

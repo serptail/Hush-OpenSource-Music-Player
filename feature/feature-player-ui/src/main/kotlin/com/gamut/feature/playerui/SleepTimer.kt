@@ -29,10 +29,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/**
- * Pauses playback after a delay. App-scoped on purpose: closing the player screen must not cancel it.
- * [endsAt] is an [SystemClock.elapsedRealtime] timestamp, or null when no timer is running.
- */
 object SleepTimer {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var job: Job? = null

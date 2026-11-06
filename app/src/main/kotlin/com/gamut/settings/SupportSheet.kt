@@ -77,11 +77,6 @@ import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.sin
 
-/**
- * Lives once in GamutApp. Shows the support sheet when a good moment is pending AND it is a quiet time ([safeMoment],
- * decided by MainActivity) AND the timing rules allow it.
- * Wrap the call in CoverTheme(palette), like the other sheets.
- */
 @Composable
 fun SupportSheetHost(vm: SupportViewModel, safeMoment: Boolean) {
     val store = vm.store
@@ -92,7 +87,7 @@ fun SupportSheetHost(vm: SupportViewModel, safeMoment: Boolean) {
     LaunchedEffect(pending, safeMoment) {
         val trigger = pending ?: return@LaunchedEffect
         if (shown != null || !safeMoment || !store.canShowNow()) return@LaunchedEffect
-        delay(1_500)   // let the good moment land first; if it stops being quiet meanwhile, this effect restarts and cancels
+        delay(1_500)
         playsAtShow = store.plays
         store.onSheetShown()
         shown = trigger
@@ -124,9 +119,8 @@ private fun SupportSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
-    LaunchedEffect(Unit) { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }   // one light tick
+    LaunchedEffect(Unit) { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
 
-    // Whatever the person does, exactly one outcome is recorded, then the sheet slides away.
     var handled by remember { mutableStateOf(false) }
     fun resolve(action: () -> Unit) { if (!handled) { handled = true; action() } }
     fun leave(action: () -> Unit) {
@@ -135,12 +129,10 @@ private fun SupportSheet(
     }
 
     ModalBottomSheet(
-        onDismissRequest = { resolve(onLater); onGone() },   // swipe, scrim tap, back: counts as "later"
+        onDismissRequest = { resolve(onLater); onGone() },
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
-        // Adaptive: the sheet spans the window, the content stays a readable column (centered on tablets / unfolded foldables)
-        // and scrolls if a short window (landscape phone) cannot fit it.
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
         Column(
             Modifier
@@ -170,7 +162,6 @@ private fun SupportSheet(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Fixed white on coral: readable in light AND dark (the theme's primary is white in dark mode).
                 Icon(PhosphorIcons.Bold.Heart, null, tint = Color.White, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(10.dp))
                 Text("Buy me a coffee", style = MaterialTheme.typography.titleMedium, color = Color.White)
@@ -189,7 +180,6 @@ private fun SupportSheet(
     }
 }
 
-/** Built from the person's own numbers where there are some: it says what they got, and why we ask. */
 private fun headline(trigger: SupportTrigger, plays: Int): String = when {
     plays >= 20 -> "You\u2019ve played ${"%,d".format(plays)} songs on Gamut."
     trigger == SupportTrigger.FirstDownload -> "Your first song is saved for offline."
@@ -197,13 +187,9 @@ private fun headline(trigger: SupportTrigger, plays: Int): String = when {
     else -> "Enjoying Gamut?"
 }
 
-// ---- The coffee cup --------------------------------------------------------------------------------------------------
-
-/** Cup, saucer, three wisps of steam, and a heart that beats once per loop. Pops in with a small bounce. */
 @Composable
 internal fun CoffeeCup(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    // "Remove animations" in the system settings (or battery saver) sets this to 0: then the cup is a still picture.
     val animate = remember { Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f }
 
     val cup = KoFiCup
@@ -237,7 +223,6 @@ internal fun CoffeeCup(modifier: Modifier = Modifier) {
         val bodyT = h * 0.46f; val bodyB = h * 0.84f
         val bw = bodyR - bodyL; val bh = bodyB - bodyT
 
-        // Steam: each wisp rises, sways and fades, offset by a third of the loop.
         val xs = floatArrayOf(0.26f, 0.5f, 0.74f)
         for (i in 0..2) {
             val p = (phase + i / 3f) % 1f
@@ -255,7 +240,6 @@ internal fun CoffeeCup(modifier: Modifier = Modifier) {
             drawPath(path, steam.copy(alpha = steam.alpha * a), style = Stroke(line, cap = StrokeCap.Round, join = StrokeJoin.Round))
         }
 
-        // Handle (right half of a ring), then the body over its ends.
         val hr = bh * 0.30f
         val hc = Offset(bodyR - line * 0.3f, bodyT + bh * 0.42f)
         drawArc(cup, startAngle = -90f, sweepAngle = 180f, useCenter = false, topLeft = Offset(hc.x - hr, hc.y - hr), size = Size(hr * 2, hr * 2), style = Stroke(line * 1.8f, cap = StrokeCap.Round))
@@ -269,12 +253,10 @@ internal fun CoffeeCup(modifier: Modifier = Modifier) {
         }
         drawPath(body, cup)
 
-        // Heart on the cup: one beat at the start of every loop.
         val beat = if (phase < 0.18f) sin(PI * phase / 0.18f).toFloat() else 0f
         val s = bw * 0.11f * (1f + 0.22f * beat)
         drawPath(Path().apply { addHeart(bodyL + bw / 2f, bodyT + bh * 0.46f, s) }, heart)
 
-        // Saucer.
         drawRoundRect(saucer, topLeft = Offset(bodyL - bw * 0.14f, bodyB + 1.5.dp.toPx()), size = Size(bw * 1.28f, 4.dp.toPx()), cornerRadius = CornerRadius(2.dp.toPx()))
     }
 }

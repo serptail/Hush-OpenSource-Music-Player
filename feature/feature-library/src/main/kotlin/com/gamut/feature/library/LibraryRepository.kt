@@ -41,7 +41,6 @@ interface LibraryRepository {
     fun observeFavorites(): Flow<List<Track>>
     suspend fun toggleFavorite(track: Track)
     suspend fun setFavoriteOrder(tracks: List<Track>)
-    /** Idempotent add (used by JSON import). Keeps the existing favorite if there already is one. */
     suspend fun addFavorite(track: Track, addedAtEpochMs: Long)
 }
 
@@ -52,10 +51,7 @@ class LibraryRepositoryImpl @Inject constructor(
     private val favorites: FavoriteDao,
     private val pending: PendingSyncDao,
 ) : LibraryRepository {
-
-    /** Local-first: the local write has already happened; this only records that the server needs to hear about it. */
     private suspend fun mark(type: String, key: String, payload: String? = null) {
-        // A song that only exists on this phone ("local:<id>") means nothing to the server: never queue it for sync.
         if (key.contains(LOCAL_ISRC_PREFIX)) return
         pending.put(PendingSyncEntity(type = type, itemKey = key, payload = payload, createdAtEpochMs = System.currentTimeMillis()))
     }
@@ -91,7 +87,6 @@ class LibraryRepositoryImpl @Inject constructor(
         val before = this.tracks.isrcsFor(playlistId)
         val after = tracks.map { it.isrc }.distinct()
         this.tracks.replaceAll(playlistId, after)
-        // Merge-friendly: only record what changed (removed songs, new songs, moved songs), never "the whole playlist".
         (before - after.toSet()).forEach { mark(SyncTypes.PLS, "$playlistId|$it", null) }
         after.forEachIndexed { index, isrc ->
             if (before.getOrNull(index) != isrc) mark(SyncTypes.PLS, "$playlistId|$isrc", index.toString())

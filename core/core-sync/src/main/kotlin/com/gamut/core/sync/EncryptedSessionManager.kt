@@ -11,7 +11,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-/** Access + refresh tokens live in Android-Keystore-backed encrypted preferences, not plain SharedPreferences. */
 class EncryptedSessionManager(private val context: Context) : SessionManager {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -22,10 +21,6 @@ class EncryptedSessionManager(private val context: Context) : SessionManager {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
     )
 
-    /**
-     * A restored phone / changed lock screen can leave the file unreadable (the Keystore key is gone), which would make
-     * every sign-in fail. The tokens are worthless then anyway, so start a fresh file: the user just signs in again.
-     */
     private val prefs: SharedPreferences by lazy {
         try { open() } catch (e: Exception) {
             context.deleteSharedPreferences(FILE)

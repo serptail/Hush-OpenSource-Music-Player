@@ -26,21 +26,9 @@ import kotlinx.coroutines.flow.StateFlow
 
 @HiltViewModel
 class SourceNoticeViewModel @Inject constructor(health: PlaybackHealth) : ViewModel() {
-    /** True while every playback source keeps failing (see [PlaybackHealth]). */
     val failing: StateFlow<Boolean> = health.failing
 }
 
-/**
- * Shown only while playback keeps failing. Updates are handled by [UpdateGate], which blocks the app behind the update
- * screen when a release is out. This banner covers the time before that (source broken, no fix released yet) and gives the
- * user a button that asks the gate to look for a fix right now.
- *
- * Place it once near the top of the main scaffold. Pass the SAME AppUpdateViewModel the UpdateGate uses (it is activity
- * scoped there; inside a NavHost, hiltViewModel() would create a second one):
- *
- *   val updates = hiltViewModel<AppUpdateViewModel>(LocalContext.current as ComponentActivity)
- *   SourceNoticeBanner(onCheckForUpdate = updates::recheckNow)
- */
 @Composable
 fun SourceNoticeBanner(
     onCheckForUpdate: () -> Unit,

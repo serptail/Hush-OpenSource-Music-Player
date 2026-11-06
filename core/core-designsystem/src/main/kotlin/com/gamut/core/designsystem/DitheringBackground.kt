@@ -12,37 +12,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
 
-// ======================================================================================
-// Tuning. Everything you are likely to want to change is here.
-// ======================================================================================
-
-/** Size of one dither cell in dp. 1.5 = fine, 3 = chunky retro, 6 = very coarse. */
 private const val DitheringCellDp = 2f
 
-/** How visible the dots are. 0 = a smooth gradient with no dots (fully blurred), 1 = hard dots. */
 private const val DitheringCrispness = 0.3f
 
-/** Overall color amount (0..1). Lower keeps more of the screen on the calm base color so text stays readable. */
 private const val DitheringAmount = 0.7f
 
-/** Animation speed multiplier on top of the shared clock. */
 private const val DitheringSpeed = 0.5f
 
-/** Where the color starts to appear (0..1). Higher = more of the screen stays the plain base color. */
 private const val DitheringBias = 0.30f
 
-/** Size of the folds in the underlying field. Higher = more, smaller shapes. */
 private const val DitheringScale = 1.6f
 
-/**
- * Ordered dithering over the whole screen, in the style of the Paper Shaders "dithering" shader
- * (paper-design/shaders, Apache-2.0): a continuous flowing field is compared against a Bayer 4x4 threshold
- * matrix, so tone becomes dot density. Instead of two colors it uses four levels, built from the cover:
- * base, then the three accents. Written from the technique, not copied line by line.
- *
- * [strength] scales the field, so a lower intensity (and the light-mode damping) leaves fewer lit pixels and the
- * base stays calm.
- */
 private const val DitheringAgsl = """
 uniform float2 resolution;
 uniform float time;

@@ -59,22 +59,12 @@ import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 
-/** Ko-fi's coral. The one "support" color: button, corona, flowing border. */
 internal val KoFiCoral = Color(0xFFFF5E5B)
 
-/** Lighter pink that the coral gradients start from, so the pink reads as soft instead of flat red. */
 internal val KoFiPink = Color(0xFFFF8FA3)
 
-/** The coffee cup: coral pulled toward pink. */
 internal val KoFiCup = Color(0xFFFF7A9B)
 
-// ---- Opening Ko-fi ---------------------------------------------------------------------------------------------------
-
-/**
- * 1) Chrome Custom Tab, 90% height where the browser supports partial tabs (full screen otherwise).
- * 2) Plain browser intent.
- * 3) Copy the link and tell the person.
- */
 fun openKoFi(context: Context, dark: Boolean, toolbarColor: Int, onCopied: () -> Unit) {
     val uri = Uri.parse(SupportConfig.KOFI_URL)
 
@@ -103,7 +93,6 @@ fun openKoFi(context: Context, dark: Boolean, toolbarColor: Int, onCopied: () ->
     onCopied()
 }
 
-/** [openKoFi] wired to the current theme and the app's toast pill. */
 @Composable
 fun rememberOpenKoFi(): () -> Unit {
     val context = LocalContext.current
@@ -115,12 +104,6 @@ fun rememberOpenKoFi(): () -> Unit {
     }
 }
 
-// ---- The permanent pill (Settings + About) ---------------------------------------------------------------------------
-
-/**
- * "Support Gamut": a small pill centred at the bottom of Settings and About. A thin coral / pink gradient flows around
- * its edge (paused while the page is parked off-screen). Always available, never nags.
- */
 @Composable
 fun SupportRow() {
     val open = rememberOpenKoFi()
@@ -142,10 +125,6 @@ fun SupportRow() {
     }
 }
 
-/**
- * A thin pill outline filled with a coral / pink / peach gradient that slowly turns around it. Only the brush turns
- * (via the shader's matrix), never the shape. The angle is read in the draw phase, so nothing recomposes.
- */
 @Composable
 private fun Modifier.flowingBorder(width: Dp = 1.5.dp): Modifier {
     val live = LocalPageActive.current
@@ -179,16 +158,8 @@ private fun Modifier.flowingBorder(width: Dp = 1.5.dp): Modifier {
     }
 }
 
-// ---- The corona on the profile circle --------------------------------------------------------------------------------
-
-/** Provided by MainActivity from [SupportStore.nudge]. */
 val LocalSupportNudge = compositionLocalOf { false }
 
-/**
- * Put this on the box around the profile circle that opens Settings. While the nudge is on, a soft coral-to-pink glow
- * fades in around the avatar, with a thin gradient ring that breathes slowly. Not strong on purpose. Nothing is drawn
- * (and no animation runs) otherwise. [avatarSize] is the avatar's diameter; it is centred in the box.
- */
 @Composable
 fun Modifier.supportNudgeCorona(avatarSize: Dp = 34.dp): Modifier {
     val active = LocalSupportNudge.current
@@ -197,7 +168,6 @@ fun Modifier.supportNudgeCorona(avatarSize: Dp = 34.dp): Modifier {
         animationSpec = tween(700, easing = FastOutSlowInEasing),
         label = "support-corona",
     )
-    // Read only in the draw phase below, so the slow breathing never recomposes the screen that hosts this.
     val breathe: State<Float> = if (active) {
         rememberInfiniteTransition(label = "corona").animateFloat(
             initialValue = 0.6f, targetValue = 1f,
@@ -216,7 +186,6 @@ fun Modifier.supportNudgeCorona(avatarSize: Dp = 34.dp): Modifier {
         val c = center
         val r = avatarSize.toPx() / 2f
         val outer = r + 10.dp.toPx()
-        // Glow behind the avatar (the avatar covers its middle).
         drawCircle(
             brush = Brush.radialGradient(
                 0f to KoFiCoral.copy(alpha = 0.38f * a * b),
@@ -228,7 +197,6 @@ fun Modifier.supportNudgeCorona(avatarSize: Dp = 34.dp): Modifier {
             radius = outer, center = c,
         )
         drawContent()
-        // Thin ring just outside the avatar.
         drawCircle(
             brush = Brush.sweepGradient(
                 listOf(KoFiCoral, KoFiPink, Color(0xFFFFB38A), KoFiPink, KoFiCoral),
@@ -241,7 +209,6 @@ fun Modifier.supportNudgeCorona(avatarSize: Dp = 34.dp): Modifier {
     }
 }
 
-/** A heart centred on (cx, cy); [s] is roughly a third of its width. */
 internal fun Path.addHeart(cx: Float, cy: Float, s: Float) {
     moveTo(cx, cy + s * 0.95f)
     cubicTo(cx - s * 1.7f, cy - s * 0.15f, cx - s * 0.95f, cy - s * 1.25f, cx, cy - s * 0.4f)

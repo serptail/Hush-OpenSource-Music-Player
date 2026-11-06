@@ -25,13 +25,11 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 
-/** [artist] is the artist signal for this query (set from the second emission on); the UI uses it to gate the artist card. */
 data class SearchResult(val tracks: List<Track>, val isFinal: Boolean, val artist: ArtistSignal? = null)
 
 interface SearchRepository {
     fun search(query: String): Flow<SearchResult>
 
-    /** Forgets cached query results (Storage > Clear cache). */
     fun clearCache() {}
 }
 
@@ -40,10 +38,6 @@ class SearchRepositoryImpl @Inject constructor(
     private val deezerApi: DeezerApi,
     private val youtubeSource: YoutubeMusicSearchSource,
 ) : SearchRepository {
-
-    // Process-lifetime cache of query -> final ranked tracks. iTunes has no per-key ETag/
-    // cache-control worth respecting, and its own soft rate limit (~20 req/min/IP) means a
-    // user backspacing to a query they already typed should never re-hit the network.
     private val resultCache = ConcurrentHashMap<String, CachedResult>()
 
     override fun clearCache() { resultCache.clear() }
@@ -51,11 +45,6 @@ class SearchRepositoryImpl @Inject constructor(
     private val itunesRateGate = Mutex()
     private val itunesRequestTimes = ArrayDeque<Long>()
 
-    /**
-     * Emission 1: iTunes + Deezer songs, ranked (fast, never waits for YouTube).
-     * Emission 2: same songs plus the [ArtistSignal] (so the UI can decide whether the artist card is deserved).
-     * Emission 3 (final): everything, with YouTube finds and, only for a confidently identified artist, their top songs.
-     */
     override fun search(query: String): Flow<SearchResult> = channelFlow {
         val trimmed = query.trim()
         if (trimmed.isEmpty()) {
@@ -83,15 +72,14 @@ class SearchRepositoryImpl @Inject constructor(
         }
 
         val itunes = itunesDeferred.await()
-        val deezer = deezerDeferred.await() // capped at DEEZER_TIMEOUT_MS
+        val deezer = deezerDeferred.await()
         val first = assemble(trimmed, itunes, deezer, emptyList(), boostArtist = false, youtube = emptyList())
         send(SearchResult(first, isFinal = false))
 
-        val artist = artistDeferred.await() // capped at DEEZER_TIMEOUT_MS
+        val artist = artistDeferred.await()
         val signal = ArtistSignal(TextMatch.norm(trimmed), artist?.name, artist?.fanCount)
         send(SearchResult(first, isFinal = false, artist = signal))
 
-        // Only a confidently identified artist gets their songs mixed in (never replaces the results any more).
         val confidence = artist?.let { SearchRanking.artistConfidence(trimmed, it.name, it.fanCount, first) } ?: 0.0
         val boost = artist != null && confidence >= SearchRanking.ARTIST_BOOST_THRESHOLD
         val artistTracks = if (boost) topTracks(artist!!.id) else emptyList()
@@ -112,12 +100,9 @@ class SearchRepositoryImpl @Inject constructor(
         } ?: return emptyList()
 
         if (!response.isSuccessful) {
-            // 403 = soft rate limit tripped; treat as "no results this round" rather than
-            // surfacing a scary error for something that self-resolves in under a minute.
             return emptyList()
         }
 
-        // iTunes' own order is kept (it is a useful relevance prior); SearchRanking does the real ranking.
         return response.body()?.results.orEmpty()
             .asSequence()
             .filter { it.isPlayableSong() }
@@ -147,7 +132,6 @@ class SearchRepositoryImpl @Inject constructor(
         runCatching { deezerApi.searchTracks(query, limit = SEARCH_LIMIT).data }.getOrDefault(emptyList())
     }.orEmpty()
 
-    /** Best Deezer artist for the query by name match, ties broken by fan count. No popularity decision here. */
     private suspend fun lookupArtist(query: String): DeezerArtistDto? = withTimeoutOrNull(DEEZER_TIMEOUT_MS) {
         runCatching {
             deezerApi.searchArtists(query, limit = 5).data
@@ -167,10 +151,6 @@ class SearchRepositoryImpl @Inject constructor(
         }.getOrDefault(emptyList())
     }.orEmpty()
 
-    /**
-     * entity=song mostly filters this already, but iTunes occasionally leaks music videos
-     * or results missing the fields we need -- drop anything we can't render/resolve cleanly.
-     */
     private fun ItunesTrackDto.isPlayableSong(): Boolean {
         if (trackId == null || trackName.isNullOrBlank() || artistName.isNullOrBlank()) return false
         if (kind != null && kind != "song") return false
@@ -179,12 +159,6 @@ class SearchRepositoryImpl @Inject constructor(
 
     private fun Track.key() = TextMatch.norm(title) + "|" + TextMatch.primaryArtist(artist)
 
-    /**
-     * Pools iTunes, Deezer, the (optional) boosted artist's songs and YouTube finds into [Candidate]s and ranks them:
-     *  - iTunes stays canonical (album metadata, free high-res art); Deezer only adds popularity to a song iTunes
-     *    already has, or contributes songs iTunes did not return
-     *  - a YouTube find close to an existing catalog song is dropped, otherwise it competes with a small penalty
-     */
     private fun assemble(
         query: String,
         itunes: List<Track>,
@@ -277,9 +251,6 @@ class SearchRepositoryImpl @Inject constructor(
     }
 
     private companion object {
-        // 4s was too tight -- on slower networks (notably Android emulators, where cold-start
-        // DNS/TLS handshakes routinely run 5-8s) a perfectly healthy iTunes response was being
-        // cancelled by this timeout before it ever arrived, surfacing as "0 results".
         const val ITUNES_TIMEOUT_MS = 8_000L
         const val SEARCH_LIMIT = 25
         const val YOUTUBE_BUDGET_MS = 5_000L
@@ -290,13 +261,11 @@ class SearchRepositoryImpl @Inject constructor(
         const val YOUTUBE_PENALTY = 10.0
         const val ITUNES_MAX_REQUESTS = 15
         const val ITUNES_WINDOW_MS = 60_000L
-        const val CACHE_TTL_MS = 10 * 60 * 1_000L // 10 min: iTunes catalog changes rarely
+        const val CACHE_TTL_MS = 10 * 60 * 1_000L
     }
 }
 
 private fun ItunesTrackDto.toDomain(): Track {
-    // "itunes:" prefix keeps isrc globally unique against youtube: and any real ISRCs that
-    // show up elsewhere in the app; trackId is stable and permanent per Apple's catalog.
     val stableIsrc = "itunes:$trackId"
     return Track(
         isrc = stableIsrc,
@@ -322,7 +291,6 @@ private fun DeezerTrackDto.toDomain(): Track = Track(
     source = TrackSource.ITUNES,
 )
 
-/** Rewrites iTunes' 100x100 thumbnail path segment to request a larger size, no extra request. */
 private fun String.upscaleArtwork(size: Int = 600): String =
     replace(Regex("/\\d+x\\d+bb\\."), "/${size}x${size}bb.")
 

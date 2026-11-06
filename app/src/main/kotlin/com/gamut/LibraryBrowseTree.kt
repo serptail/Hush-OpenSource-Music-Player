@@ -20,14 +20,6 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * The car's view of the library.
- *
- * Media ids (opaque to the service, parsed only here):
- *   folders: root, fav, pl, pl|<playlistId>, recent, dl
- *   songs:   fav|<isrc>, pl|<playlistId>|<isrc>, recent|<isrc>, dl|<isrc>, search|<urlencoded query>|<isrc>
- * A song id always names the list it came from, so tapping it can rebuild that whole list as the queue.
- */
 @Singleton
 class LibraryBrowseTree @Inject constructor(
     private val library: LibraryRepository,
@@ -36,8 +28,6 @@ class LibraryBrowseTree @Inject constructor(
     private val trackDao: TrackDao,
     private val searchRepository: SearchRepository,
 ) : BrowseTreeProvider {
-
-    // Remote results are not in the database, so a tapped search result is rebuilt from this small cache.
     private val searchCache = LinkedHashMap<String, List<Track>>()
 
     override suspend fun children(parentId: String): List<BrowseEntry> = when {
@@ -96,8 +86,6 @@ class LibraryBrowseTree @Inject constructor(
         return if (tracks.isEmpty()) null else BrowseQueue(tracks, 0)
     }
 
-    // ---- data ----
-
     private fun topLevel(): List<BrowseEntry> = listOf(
         BrowseEntry.Folder(FAV, "Favorites"),
         BrowseEntry.Folder(PL, "Playlists"),
@@ -113,7 +101,6 @@ class LibraryBrowseTree @Inject constructor(
     private suspend fun recentTracks(): List<Track> =
         recents.observeTracks(RECENT_LIMIT).first().map { it.toDomain() }
 
-    // If DownloadEntity has a status column, filter to completed ones here (not visible in the files I have).
     private suspend fun downloadedTracks(): List<Track> {
         val isrcs = downloads.observeAll().first().map { it.isrc }
         if (isrcs.isEmpty()) return emptyList()
@@ -121,10 +108,6 @@ class LibraryBrowseTree @Inject constructor(
         return isrcs.mapNotNull { byIsrc[it]?.toDomain() }
     }
 
-    /**
-     * Library matches first, then the online catalog (the fast first emission of SearchRepository: iTunes + Deezer).
-     * Blank query = "play something": recents, else favorites.
-     */
     private suspend fun searchTracks(query: String): List<Track> {
         val q = query.trim()
         if (q.isEmpty()) return recentTracks().ifEmpty { favorites() }.take(SEARCH_LIMIT)

@@ -7,10 +7,8 @@ import kotlinx.coroutines.flow.asStateFlow
 
 enum class BandType { LOW_SHELF, PEAK, HIGH_SHELF }
 
-/** One band of the parametric equalizer. [q]: the width of a peak, the steepness of a shelf (lower = wider / gentler). */
 data class EqBand(val type: BandType, val freqHz: Float, val gainDb: Float, val q: Float)
 
-/** Headphone crossfeed: lets a little of each channel's lows reach the other ear, like speakers do. */
 enum class Crossfeed(val label: String, val hint: String, val amount: Float) {
     OFF("Off", "The recording as it is", 0f),
     LIGHT("Light", "A gentle touch, keeps a wide stage", 0.12f),
@@ -34,15 +32,7 @@ internal fun defaultBands(gains: FloatArray? = null): List<EqBand> = List(Defaul
     )
 }
 
-/**
- * App-wide sound-engine preferences: the 10-band parametric EQ, automatic headroom, soft limiter, dither, crossfeed and
- * stereo width. Saved to SharedPreferences. [Media3MusicPlayer] observes [state] and feeds it to its
- * [SoundEngineProcessor]s; the Playback & Audio screen edits it.
- *
- * A singleton ([get]) rather than injected, like the equalizer before it: the in-player sheet also reaches it.
- */
 class SoundSettings private constructor(context: Context) {
-
     data class State(
         val eqEnabled: Boolean = false,
         val preset: String = FLAT,
@@ -51,7 +41,6 @@ class SoundSettings private constructor(context: Context) {
         val limiter: Boolean = true,
         val dither: Boolean = true,
         val crossfeed: Crossfeed = Crossfeed.OFF,
-        /** 0..200. 100 = as recorded. */
         val widthPercent: Int = 100,
     )
 
@@ -78,7 +67,6 @@ class SoundSettings private constructor(context: Context) {
     fun setBandQ(index: Int, q: Float) =
         edit { s -> s.withBand(index) { it.copy(q = q.coerceIn(0.2f, 10f)) } }
 
-    /** A preset sets the 10 gains and puts every band back on its default frequency and width. */
     fun applyPreset(name: String) {
         val gains = PRESETS[name] ?: return
         edit { it.copy(preset = name, bands = defaultBands(gains)) }
@@ -90,10 +78,8 @@ class SoundSettings private constructor(context: Context) {
     fun setCrossfeed(level: Crossfeed) = edit { it.copy(crossfeed = level) }
     fun setWidth(percent: Int) = edit { it.copy(widthPercent = percent.coerceIn(0, 200)) }
 
-    /** EQ bands back to flat and the widening off. Leaves the EQ on/off switch and the quality options alone. */
     fun resetEqualizer() = edit { it.copy(preset = FLAT, bands = defaultBands(), widthPercent = 100) }
 
-    /** Everything back to the defaults. */
     fun reset() = edit { State() }
 
     private fun State.withBand(index: Int, change: (EqBand) -> EqBand): State {
@@ -150,7 +136,6 @@ class SoundSettings private constructor(context: Context) {
         private const val K_XFEED = "crossfeed"
         private const val K_WIDTH = "width"
 
-        /** Gains in dB for the ten default bands (60 Hz ... 14 kHz). */
         private val PRESETS: Map<String, FloatArray> = linkedMapOf(
             FLAT to floatArrayOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f),
             "Bass Booster" to floatArrayOf(6f, 5f, 3f, 1f, 0f, 0f, 0f, 0f, 0f, 0f),
@@ -177,7 +162,6 @@ class SoundSettings private constructor(context: Context) {
     }
 }
 
-/** What the audio thread needs, from the saved settings. The EQ only counts while it is switched on. */
 fun SoundSettings.State.toParams() = SoundParams(
     bands = if (eqEnabled) bands else emptyList(),
     autoHeadroom = autoHeadroom,

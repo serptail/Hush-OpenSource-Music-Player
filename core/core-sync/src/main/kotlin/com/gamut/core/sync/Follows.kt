@@ -17,17 +17,14 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** Local source of truth for followed artists. Every change also marks the item dirty so SyncEngine pushes it. */
 @Singleton
 class FollowRepository @Inject constructor(
     private val dao: FollowDao,
     private val pending: PendingSyncDao,
 ) {
-    /** artist keys ("deezer:123") the user follows. */
     val followedKeys: Flow<Set<String>> = dao.observeKeys().map { it.toSet() }
     fun observeAll(): Flow<List<FollowEntity>> = dao.observeAll()
 
-    /** Backup import: follows the artist if not followed yet (keeps the existing row otherwise). True if added. */
     suspend fun importFollow(artistKey: String, name: String, imageUrl: String?, followedAt: Long): Boolean {
         if (dao.isFollowing(artistKey)) return false
         dao.add(FollowEntity(artistKey, name, imageUrl, followedAt))
@@ -35,7 +32,6 @@ class FollowRepository @Inject constructor(
         return true
     }
 
-    /** Follows or unfollows. Returns true when the artist is followed afterwards. */
     suspend fun toggle(artistKey: String, name: String, imageUrl: String?): Boolean {
         val now = System.currentTimeMillis()
         val wasFollowing = dao.isFollowing(artistKey)
@@ -50,7 +46,6 @@ class FollowViewModel @Inject constructor(private val repository: FollowReposito
     val followedKeys: StateFlow<Set<String>> =
         repository.followedKeys.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
 
-    /** Every followed artist, for the Library. null until the database has answered (so the screen can wait, not flash "no artists"). */
     val artists: StateFlow<List<FollowEntity>?> =
         repository.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 

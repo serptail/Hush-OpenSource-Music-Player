@@ -79,18 +79,15 @@ interface DeezerApi {
         @Query("index") index: Int = 0,
     ): DeezerAlbumResponse
 
-    /** Artists Deezer considers related to this one (same listeners and scene: collaborators, rivals, peers). */
     @GET("artist/{artistId}/related")
     suspend fun relatedArtists(@Path("artistId") artistId: Long, @Query("limit") limit: Int = 20): DeezerArtistSearchResponse
 
     @GET("artist/{artistId}")
     suspend fun artist(@Path("artistId") artistId: Long): DeezerArtistDto
 
-    /** Artist photo lookup: own DTO so it carries fan count + picture urls. */
     @GET("search/artist")
     suspend fun searchArtistPhotos(@Query("q") query: String, @Query("limit") limit: Int = 10): DeezerPhotoSearchResponse
 
-    /** Album titles only; used to verify that a Deezer artist is the same person as the Apple artist. */
     @GET("artist/{artistId}/albums")
     suspend fun artistAlbumTitles(@Path("artistId") artistId: Long, @Query("limit") limit: Int = 100): DeezerTitleResponse
 

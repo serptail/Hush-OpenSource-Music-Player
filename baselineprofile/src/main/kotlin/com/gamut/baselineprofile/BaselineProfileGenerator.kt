@@ -9,10 +9,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Records the code paths of a normal launch (loading screen, Discover, scrolling, Settings and its sub-pages) so release
- * builds ship them pre-compiled instead of JIT-compiling them on first use. Needs network, because Discover loads from Apple.
- */
 @RunWith(AndroidJUnit4::class)
 class BaselineProfileGenerator {
     @get:Rule
@@ -22,7 +18,6 @@ class BaselineProfileGenerator {
     fun startupAndDiscover() = rule.collect(packageName = "com.gamut", includeInStartupProfile = true) {
         pressHome()
         startActivityAndWait()
-        // Loading screen ends once the charts are in; Discover is then a scrollable list.
         device.wait(Until.hasObject(By.scrollable(true)), 20_000)
         device.waitForIdle()
         device.findObject(By.scrollable(true))?.let { list ->
@@ -33,10 +28,8 @@ class BaselineProfileGenerator {
             device.waitForIdle()
         }
 
-        // Let the idle pre-composition of the Settings pages and the player finish (it runs until ~5 s after loading).
         Thread.sleep(6_000)
 
-        // Settings -> Playback & Audio -> back -> back.
         if (device.wait(Until.hasObject(By.desc("Profile")), 5_000)) {
             device.findObject(By.desc("Profile")).click()
             device.wait(Until.hasObject(By.text("Playback & Audio")), 5_000)

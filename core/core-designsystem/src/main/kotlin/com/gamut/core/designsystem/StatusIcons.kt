@@ -7,15 +7,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.dp
 
-/**
- * The status icons, from your SVGs. Each SVG came as a black and a white copy of the same path, so every icon here is
- * ONE vector tinted at the call site: [ink] gives white on dark covers and near-black on light ones, which is exactly
- * that pair.
- *
- *  - [SuccessTick]: check in a filled circle
- *  - [ErrorTick]:   cross in a filled circle   (errors / failures)
- *  - [AlertTick]:   "!" in a filled circle      (warnings / info)
- */
 val SuccessTick: ImageVector by lazy {
     ImageVector.Builder("SuccessTick", 24.dp, 24.dp, 24f, 24f).addPath(
         pathData = PathParser().parsePathString(
@@ -25,8 +16,6 @@ val SuccessTick: ImageVector by lazy {
     ).build()
 }
 
-// The two below are 512 viewBox SVGs whose artwork sits in a group translated by (42.666667, 42.666667) and filled
-// even-odd (that is what cuts the symbol out of the circle). Tiny "e-14" exponents are written as 0.
 val ErrorTick: ImageVector by lazy {
     ImageVector.Builder("ErrorTick", 24.dp, 24.dp, 512f, 512f)
         .addGroup(translationX = 42.666667f, translationY = 42.666667f)

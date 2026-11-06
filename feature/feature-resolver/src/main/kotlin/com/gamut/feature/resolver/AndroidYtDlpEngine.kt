@@ -24,8 +24,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-// --- music.youtube.com flat-playlist JSON shape -----------------------------------------
-
 @Serializable
 private data class YtMusicSearchResultJson(val entries: List<YtMusicEntryJson> = emptyList())
 
@@ -38,8 +36,6 @@ private data class YtMusicEntryJson(
     val duration: Double? = null,
     @SerialName("view_count") val viewCount: Long? = null,
 )
-
-// --- plain ytsearch flat-playlist JSON shape (broad fallback) ---------------------------
 
 @Serializable
 private data class SearchResultJson(val entries: List<SearchEntryJson> = emptyList())
@@ -59,35 +55,23 @@ class AndroidYtDlpEngine @Inject constructor(
     @ApplicationContext private val context: Context,
     private val updater: YtDlpUpdater,
 ) : YoutubeMusicSearchSource {
-
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     @Volatile private var initialized = false
     private val streamScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val streamCache = ConcurrentHashMap<String, CachedUrl>()
     private val streamInFlight = ConcurrentHashMap<String, Deferred<Result<String>>>()
 
-    /**
-     * Scoped to YouTube Music's own "Songs" catalog. --flat-playlist search rarely triggers
-     * YouTube's bot check the way a full video-page fetch does, but we still pin a client
-     * type for consistency and because YouTube tightens this without warning.
-     */
     override suspend fun searchSongs(query: String): List<YoutubeCandidate> = withContext(Dispatchers.IO) {
         ensureReady()
         val encoded = URLEncoder.encode(query, "UTF-8")
         val filtered = searchMusicUrl("https://music.youtube.com/search?q=$encoded$SONGS_FILTER", true)
         if (filtered.isNotEmpty()) return@withContext filtered
 
-        // The Songs filter is controlled by YouTube and can change independently of yt-dlp.
-        // Keep the older unfiltered Music URL as a compatibility path, then use ytsearch as
-        // the final fallback. The shared repository applies strict ID/title/artist filtering.
         val musicUrl = searchMusicUrl("https://music.youtube.com/search?q=$encoded", false)
         if (musicUrl.isNotEmpty()) return@withContext musicUrl
         val broad = searchBroad(query)
         if (broad.isNotEmpty()) return@withContext broad
 
-        // An installed yt-dlp binary can be stale even when initialization succeeds. After an entirely empty
-        // search, update it (rate limited, see YtDlpUpdater) and, only if a newer build really arrived, repeat the
-        // complete fallback chain.
         if (!updater.recover()) return@withContext broad
         val retryFiltered = searchMusicUrl("https://music.youtube.com/search?q=$encoded$SONGS_FILTER", true)
         if (retryFiltered.isNotEmpty()) return@withContext retryFiltered
@@ -147,23 +131,11 @@ class AndroidYtDlpEngine @Inject constructor(
         return searchBroad(query)
     }
 
-    /**
-     * The step that was actually failing in your log: getInfo() does a FULL video-page
-     * fetch (not --flat-playlist), which is exactly what triggers YouTube's "Sign in to
-     * confirm you're not a bot" / 429 response on the default "web" client. ios/android
-     * historically don't require a PO token for this, so we pin those first.
-     *
-     * A 12s overall timeout also means a stuck/blocked resolution fails fast with a clear
-     * error instead of leaving the UI hanging indefinitely.
-     */
-    /** Drops the cached stream URL for [videoId], so the next [audioUrl] resolves a fresh one. */
     fun forget(videoId: String) { streamCache.keys.removeIf { it.startsWith("$videoId|") } }
 
-    /** Drops every cached stream URL. */
     fun forgetAll() { streamCache.clear() }
 
     suspend fun audioUrl(videoId: String, quality: StreamQuality = StreamQuality.NORMAL): Result<String> {
-        // Cached per (video, quality), so switching the quality setting never returns a URL of the previous one.
         val key = "$videoId|${quality.name}"
         streamCache[key]?.takeIf { it.expiresAtMs > System.currentTimeMillis() }?.let {
             return Result.success(it.url)
@@ -191,9 +163,6 @@ class AndroidYtDlpEngine @Inject constructor(
             withTimeoutOrNull(AUDIO_RESOLVE_TIMEOUT_MS) { resolveAudioUrl(videoId, quality) }
                 ?: error("Timed out resolving a playable source for this track")
         }.recoverCatching { error ->
-            // YouTube changes its bot-check/signature scheme often enough that a stale yt-dlp build is frequently
-            // the actual cause: update now (rate limited, and shared with any other caller that failed at the same
-            // time) and retry once if a newer build really arrived, before surfacing failure to the user.
             if (updater.recover()) {
                 withTimeoutOrNull(AUDIO_RESOLVE_TIMEOUT_MS) { resolveAudioUrl(videoId, quality) }
                     ?: throw error
@@ -205,11 +174,6 @@ class AndroidYtDlpEngine @Inject constructor(
 
     private fun resolveAudioUrl(videoId: String, quality: StreamQuality): String {
         val request = YoutubeDLRequest("https://www.youtube.com/watch?v=$videoId")
-            // Prefer a genuine audio-only stream (m4a first, since ExoPlayer decodes it
-            // natively without extra container demuxing); only fall through to a muxed
-            // video+audio "best" as a last resort if YouTube truly offers no audio-only
-            // format for this video, rather than "best" winning by default and silently
-            // pulling down (and decoding) a video track we never render.
             .addOption("-f", formatFor(quality))
             .addOption("--no-playlist")
             .addOption("--no-warnings")
@@ -219,7 +183,6 @@ class AndroidYtDlpEngine @Inject constructor(
             ?: error("yt-dlp returned no playable audio URL")
     }
 
-    /** m4a stays first at Data saver / Normal (cheap to decode); High takes the best bitrate of any codec (Opus). */
     private fun formatFor(quality: StreamQuality): String = when (quality) {
         StreamQuality.LOW -> "worstaudio[ext=m4a]/worstaudio/bestaudio/best"
         StreamQuality.NORMAL -> "bestaudio[ext=m4a]/bestaudio/best"
@@ -265,7 +228,6 @@ class AndroidYtDlpEngine @Inject constructor(
         }
     }
 
-    /** Startup: bring yt-dlp up to date if the last check is old. The background job keeps it fresh after that. */
     suspend fun warmUp() = withContext(Dispatchers.IO) {
         ensureReady()
         updater.updateIfDue()
@@ -283,9 +245,6 @@ class AndroidYtDlpEngine @Inject constructor(
         const val STREAM_EXPIRY_SAFETY_MS = 120_000L
         const val DEFAULT_STREAM_TTL_MS = 20 * 60_000L
         const val MAX_STREAM_CACHE_ENTRIES = 200
-        // ios/android clients generally don't demand a PO token the way "web" now does;
-        // web_safari is kept as a third option since it occasionally succeeds when the
-        // other two are rate-limited independently by YouTube.
         const val CLIENT_ARGS = "youtube:player_client=ios,android,web_safari"
     }
 }

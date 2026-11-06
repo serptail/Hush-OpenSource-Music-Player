@@ -34,12 +34,10 @@ import com.gamut.core.designsystem.pressScale
 
 private val TagShape = RoundedCornerShape(50)
 
-/** Quick tags offered under the chosen ones. Tapping adds the tag; the playlist name is never touched. */
 internal val SuggestedTags = listOf("Road trip", "Chill", "Workout", "Focus", "Late night", "Throwbacks", "Party", "Study")
 internal const val MAX_TAGS = 5
 internal const val MAX_TAG_LENGTH = 20
 
-/** Chosen tags (with an X), a small "Add tag" field for your own, and the suggestions that are not used yet. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TagsEditor(tags: List<String>, onChange: (List<String>) -> Unit, modifier: Modifier = Modifier) {
@@ -82,7 +80,6 @@ internal fun TagsEditor(tags: List<String>, onChange: (List<String>) -> Unit, mo
     }
 }
 
-/** A tag pill. [removable] pills are the chosen ones (solid, with an X); the others are quiet suggestions. */
 @Composable
 internal fun TagChip(label: String, removable: Boolean, onClick: () -> Unit) {
     Row(
@@ -97,7 +94,6 @@ internal fun TagChip(label: String, removable: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** Read-only tags, centered (the playlist header). */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TagsRow(tags: List<String>, modifier: Modifier = Modifier) {

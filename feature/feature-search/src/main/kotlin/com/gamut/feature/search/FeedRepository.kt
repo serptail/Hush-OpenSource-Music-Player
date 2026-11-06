@@ -21,26 +21,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * Result of one "load more" step of the endless feed. [consumed] are the plan entries that were tried (including ones that
- * came back empty, so they are not tried again); [exhausted] means the plan has nothing left; [failed] means this step
- * found nothing but the plan is not over (offline, rate limited): the UI offers a retry instead of "all caught up".
- */
 data class MoreFeed(val section: FeedSection?, val consumed: List<String>, val exhausted: Boolean) {
     val failed: Boolean get() = section == null && !exhausted
 }
 
-/**
- * Everything on Discover that is not a chart: today's quick picks, new releases, community charts, "because you follow ...",
- * and an endless run of genre sections that is loaded one section at a time while the user scrolls.
- *
- * Sources: Deezer's keyless chart / editorial / artist endpoints (see [DeezerChartsApi]) plus what is already on the device
- * (followed artists and play history, only to pick whose music to show). Nothing here is ever required: every loader fails
- * quietly into "no section", so the charts and the rest of Discover never wait for or depend on the feed.
- *
- * Ordering is deterministic per day ([seed]), so the feed does not reshuffle while it is being used, but it is different
- * tomorrow and after a pull-to-refresh ([clearCache] bumps the seed).
- */
 @Singleton
 class FeedRepository @Inject constructor(
     private val api: DeezerChartsApi,
@@ -62,17 +46,11 @@ class FeedRepository @Inject constructor(
     @Volatile private var tasteCache: List<Taste>? = null
     private val deezerArtistIds = ConcurrentHashMap<String, Long>()
 
-    /**
-     * Deezer's per-genre artist and album charts often ignore the genre and answer with the worldwide chart. These keep the
-     * worldwide ids and remember when a genre chart turned out to be a copy of it, so those rows are skipped instead of
-     * showing the same cards under "Top in Jazz", "Top in Latin" and so on.
-     */
     @Volatile private var globalArtistIds: Set<Any?>? = null
     @Volatile private var globalAlbumIds: Set<Any?>? = null
     @Volatile private var artistGenreChartIgnoresGenre = false
     @Volatile private var albumGenreChartIgnoresGenre = false
 
-    /** A new seed (new genre order, new quick picks) and a fresh look at what the user plays. Pull-to-refresh calls this. */
     fun clearCache() {
         nonce.incrementAndGet()
         tasteCache = null
@@ -82,14 +60,6 @@ class FeedRepository @Inject constructor(
 
     fun seed(): Long = LocalDate.now().toEpochDay() * 31 + nonce.get()
 
-    // ---------------------------------------------------------------------------------------------------------------
-    // Quick picks: no network, built from the chart items Discover already has
-    // ---------------------------------------------------------------------------------------------------------------
-
-    /**
-     * Eight songs from below the top 3 (the hero and the first chart rows already cover those), shuffled by the daily seed.
-     * Same songs all day, a different eight tomorrow.
-     */
     fun quickPicks(chart: List<DiscoverItem>, seed: Long): FeedSection? {
         val pool = chart.filter { it.track != null }.distinctBy { it.id }.drop(3).take(QUICK_PICK_POOL)
         if (pool.size < 4) return null
@@ -100,14 +70,6 @@ class FeedRepository @Inject constructor(
         )
     }
 
-    // ---------------------------------------------------------------------------------------------------------------
-    // Head: the sections loaded right after the charts (a handful of requests, all in parallel)
-    // ---------------------------------------------------------------------------------------------------------------
-
-    /**
-     * Loads the head sections in parallel and calls [onSection] as each one lands (so the page fills in progressively).
-     * [knownArtistKeys] are artists Discover already shows in "Artists to know"; they are left out of the Hot artists row.
-     */
     suspend fun head(knownArtistKeys: Set<String>, onSection: suspend (FeedSection) -> Unit) {
         coroutineScope {
             launch { releases().forEach { onSection(it) } }
@@ -124,7 +86,6 @@ class FeedRepository @Inject constructor(
         }
     }
 
-    /** One big "New album" card plus a row of the other new releases. Newest first, never future-dated. */
     private suspend fun releases(): List<FeedSection> {
         val today = LocalDate.now().toString()
         val albums = load { api.newReleases(0, 40).data }
@@ -172,11 +133,6 @@ class FeedRepository @Inject constructor(
         )
     }
 
-    // ---------------------------------------------------------------------------------------------------------------
-    // Personal: who the user follows / plays most decides whose music is shown. Nothing leaves the device.
-    // ---------------------------------------------------------------------------------------------------------------
-
-    /** Followed artists first (newest follow first), then the most played artists of the recent history. */
     private suspend fun taste(): List<Taste> {
         tasteCache?.let { return it }
         val result = try {
@@ -200,13 +156,12 @@ class FeedRepository @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            return emptyList() // not cached: the next call tries again
+            return emptyList()
         }
         tasteCache = result
         return result
     }
 
-    /** The Deezer id of exactly this artist (name must match; the biggest account wins), or null. Never a namesake. */
     private suspend fun deezerArtistId(name: String, attempts: Int): Long? {
         val key = artistKey(name)
         deezerArtistIds[key]?.let { return it }
@@ -241,15 +196,6 @@ class FeedRepository @Inject constructor(
         )
     }
 
-    // ---------------------------------------------------------------------------------------------------------------
-    // The endless part: one section per call, in a plan that is fixed for the day
-    // ---------------------------------------------------------------------------------------------------------------
-
-    /**
-     * Loads the next section of the plan that is not in [consumed]. Entries that come back empty are skipped (and reported
-     * as consumed); after [MAX_SKIPS] misses in one call it gives up with [MoreFeed.failed] so an offline phone is not
-     * walked through the whole plan. [order] is the sort position for the new section (after everything already shown).
-     */
     suspend fun more(consumed: Set<String>, order: Int): MoreFeed {
         val pending = plan(seed(), taste()).filter { it.id !in consumed }
         val tried = ArrayList<String>()
@@ -262,11 +208,6 @@ class FeedRepository @Inject constructor(
         return MoreFeed(null, tried, exhausted = true)
     }
 
-    /**
-     * Genres in a daily shuffled order. Every genre gets a songs section (alternating rails / carousel for rhythm), every
-     * second one also an albums row, every third an artists row. The user's own taste (beyond the one already in the head)
-     * is spliced in every few sections so the feed keeps coming back to them.
-     */
     private fun plan(seed: Long, taste: List<Taste>): List<Spec> {
         val out = ArrayList<Spec>()
         GENRES.shuffled(Random(seed)).forEachIndexed { i, g ->
@@ -339,7 +280,6 @@ class FeedRepository @Inject constructor(
         }
     }
 
-    /** True when most of [ids] are also in [global]: the "genre" chart is really the worldwide one. An unknown [global] proves nothing. */
     private fun isCopyOf(ids: List<Any?>, global: Set<Any?>?): Boolean =
         global != null && global.isNotEmpty() && ids.isNotEmpty() && ids.count { it in global } * 10 >= ids.size * 6
 
@@ -351,10 +291,6 @@ class FeedRepository @Inject constructor(
         globalAlbumIds ?: load(attempts = 1) { api.chartAlbums(0, 30).data }.map { it.id }.toSet()
             .takeIf { it.isNotEmpty() }?.also { globalAlbumIds = it }
 
-    // ---------------------------------------------------------------------------------------------------------------
-    // Albums opened from the feed (Deezer ids)
-    // ---------------------------------------------------------------------------------------------------------------
-
     suspend fun album(item: DiscoverItem): AlbumDetails? {
         val id = item.id.removePrefix(DEEZER_ALBUM_PREFIX).toLongOrNull() ?: return null
         val rows = load(attempts = 2) { api.albumTracks(id, 100).data }
@@ -363,14 +299,6 @@ class FeedRepository @Inject constructor(
         return AlbumDetails(item.id, item.title, item.subtitle.ifBlank { tracks.first().artist }, item.imageUrl.ifBlank { null }, tracks)
     }
 
-    // ---------------------------------------------------------------------------------------------------------------
-    // Helpers
-    // ---------------------------------------------------------------------------------------------------------------
-
-    /**
-     * A list request with a timeout and [attempts] tries. A timeout, an exception or an empty answer all count as a miss
-     * (Deezer reports quota errors as 200 + an error body, which decodes to an empty list). Never throws except cancellation.
-     */
     private suspend fun <T> load(attempts: Int = 2, block: suspend () -> List<T>): List<T> {
         repeat(attempts) { n ->
             val rows = withTimeoutOrNull(if (n == 0) FIRST_TRY_MS else RETRY_MS) {
@@ -420,7 +348,6 @@ class FeedRepository @Inject constructor(
     )
 
     companion object {
-        /** Items of the feed's albums carry this id prefix; [DiscoverRepository.album] hands them to [FeedRepository.album]. */
         const val DEEZER_ALBUM_PREFIX = "deezer-album:"
 
         private const val QUICK_PICK_POOL = 60
@@ -429,18 +356,13 @@ class FeedRepository @Inject constructor(
         private const val CAROUSEL_COUNT = 20
         private const val RECENT_SCAN = 60
         private const val MAX_TASTE = 6
-        private const val HEAD_TASTE = 1 // the first taste artist is in the head, the rest are spliced into the endless part
+        private const val HEAD_TASTE = 1
         private const val MAX_SKIPS = 3
         private const val FIRST_TRY_MS = 9_000L
         private const val RETRY_MS = 6_000L
 
-        /** Same split as the Billboard normaliser: "A feat. B", "A & B", "A, B" -> "A". */
         private val LEAD_SPLIT = Regex("(?i)\\s+(featuring|feat\\.?|ft\\.?|with|x|&|and)\\s+|,|/")
 
-        /**
-         * Deezer genre ids. An id that returns nothing is simply skipped, so this list is safe to edit: add a row to add a
-         * genre to the feed, remove one to drop it.
-         */
         private val GENRES = listOf(
             Genre(132, "Pop"),
             Genre(116, "Rap & Hip-Hop"),

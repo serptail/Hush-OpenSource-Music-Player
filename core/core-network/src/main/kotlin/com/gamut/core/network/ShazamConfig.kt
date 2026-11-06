@@ -14,20 +14,13 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-/**
- * Everything about the Shazam request that Shazam might change on its side. The built-in values are the defaults;
- * [ShazamConfigStore] can replace them from a small JSON file, so a broken header or URL is fixed by editing that file
- * on GitHub instead of shipping a new app. Fields missing from the file keep their built-in value.
- */
 data class ShazamConfig(
-    /** Full URL with `{uuid1}` and `{uuid2}` where a fresh random id goes. Must be https and on shazam.com. */
     val endpoint: String = DEFAULT_ENDPOINT,
     val platform: String = "IPHONE",
     val appVersion: String = "14.1.0",
     val userAgent: String = "Dalvik/2.1.0 (Linux; U; Android 13; Pixel 6 Build/TQ3A.230901.001)",
     val timezone: String = "Europe/Paris",
     val language: String = "en-US",
-    /** Extra request headers, applied last (so they can also override the ones above). */
     val headers: Map<String, String> = emptyMap(),
 ) {
     companion object {
@@ -35,7 +28,6 @@ data class ShazamConfig(
             "?sync=true&webv3=true&sampling=true&connected=&shazamapiversion=v3&sharehub=true" +
             "&hubv5minorversion=v5.1&hidelb=true&video=v3"
 
-        /** Null when [text] is not usable (not JSON, or an endpoint that is not a Shazam https address). */
         fun parse(text: String): ShazamConfig? = try {
             val json = JSONObject(text)
             val d = ShazamConfig()
@@ -43,7 +35,6 @@ data class ShazamConfig(
                 if (json.isNull(name)) fallback else json.optString(name).takeIf { it.isNotBlank() } ?: fallback
 
             val endpoint = field("endpoint", d.endpoint)
-            // The audio fingerprint goes to this address, so a config file must never be able to point it elsewhere.
             if (!isShazamUrl(endpoint)) {
                 Log.w(TAG, "config ignored: endpoint is not an https shazam.com address")
                 null
@@ -80,15 +71,8 @@ data class ShazamConfig(
 
 private const val TAG = "ShazamConfig"
 
-/**
- * Keeps the [ShazamConfig] current. [current] is instant (last good file from disk, else the built-in defaults).
- * The file is looked up in the background at most every [CHECK_INTERVAL_MS]; [refreshNow] is for when Shazam just
- * refused a request, which is often a change on their side. Failed lookups are rate limited and survive restarts.
- * A missing or broken file is never an error: the app simply keeps what it has.
- */
 @Singleton
 class ShazamConfigStore @Inject constructor(app: Application) {
-
     private val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val lock = Mutex()
 
@@ -97,13 +81,11 @@ class ShazamConfigStore @Inject constructor(app: Application) {
 
     fun current(): ShazamConfig = config
 
-    /** Looks for a newer file when the last successful lookup is old. Cheap no-op otherwise. */
     suspend fun refreshIfDue() {
         if (System.currentTimeMillis() - prefs.getLong(K_FETCHED, 0L) < CHECK_INTERVAL_MS) return
         fetch(RETRY_GAP_MS)
     }
 
-    /** Shazam refused a request: look now (rate limited). True = the config changed, so a retry is worthwhile. */
     suspend fun refreshNow(): Boolean = fetch(RECOVER_GAP_MS)
 
     private suspend fun fetch(minGapMs: Long): Boolean = lock.withLock {
@@ -134,7 +116,6 @@ class ShazamConfigStore @Inject constructor(app: Application) {
     }
 
     private companion object {
-        /** The file to edit when Shazam changes something. Lives in the public releases repo; the file name is shazam-config.json. */
         const val CONFIG_URL = "https://raw.githubusercontent.com/serptail/test-releases/main/shazam-config.json"
         const val PREFS = "shazam_config"
         const val K_JSON = "json"

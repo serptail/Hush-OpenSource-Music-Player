@@ -8,14 +8,13 @@ android {
     namespace = "com.gamut.baselineprofile"
     compileSdk = 35
     defaultConfig {
-        minSdk = 28   // baseline profiles are generated on API 28+
+        minSdk = 28
         targetSdk = 35
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     targetProjectPath = ":app"
 }
 
-// Run ":app:generateBaselineProfile" with a phone or emulator (API 28+, NOT rooted-emulator-only) connected.
 baselineProfile {
     useConnectedDevices = true
 }

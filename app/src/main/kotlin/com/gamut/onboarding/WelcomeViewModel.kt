@@ -30,12 +30,6 @@ class WelcomeViewModel @Inject constructor(
     private val store: OnboardingStore,
     private val profile: ProfileStore,
 ) : ViewModel() {
-
-    /**
-     * Ready  = the app: user chose local mode, or is signed in (also covers a fork with no Supabase project).
-     * Welcome = signed out and never chose local mode.
-     * Loading = Supabase is still restoring the saved session (a few ms), so a signed-in user never sees Welcome flash.
-     */
     val gate: StateFlow<Gate> = combine(store.localMode, auth.authState) { local, signedIn ->
         android.util.Log.d("GamutGate", "local=$local signedIn=$signedIn")
         when {
@@ -53,9 +47,7 @@ class WelcomeViewModel @Inject constructor(
     val ui: StateFlow<WelcomeUi> = _ui
 
     init {
-        // Automatic backups only while nothing is syncing to the cloud (signed-in accounts are backed up by sync),
-        // and only if the "Daily backup on this device" switch in Profile is on.
-        viewModelScope.launch(Dispatchers.IO) {   // WorkManager's first use does disk work: keep it off the main thread
+        viewModelScope.launch(Dispatchers.IO) {
             combine(store.localMode, auth.authState, profile.autoBackup) { local, signedIn, enabled -> enabled && (local || !SyncConfig.enabled) && signedIn != true }
                 .distinctUntilChanged()
                 .collect { if (it) AutoBackup.schedule(appContext) else AutoBackup.cancel(appContext) }
@@ -64,13 +56,12 @@ class WelcomeViewModel @Inject constructor(
 
     fun continueLocally() = store.chooseLocal()
 
-    /** [activityContext] must be an Activity: Credential Manager shows its sheet on top of it. */
     fun signIn(activityContext: Context) {
         if (_ui.value.busy) return
         viewModelScope.launch {
             _ui.value = WelcomeUi(busy = true)
             auth.signInWithGoogle(activityContext).fold(
-                onSuccess = { _ui.value = WelcomeUi() },   // authState flips to true and the gate opens the app
+                onSuccess = { _ui.value = WelcomeUi() },
                 onFailure = {
                     _ui.value = WelcomeUi(
                         error = if (it is GetCredentialCancellationException) null

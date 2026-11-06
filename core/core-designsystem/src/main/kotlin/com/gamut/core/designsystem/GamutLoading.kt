@@ -30,11 +30,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/**
- * Lives as long as the app process does (unlike Compose state, which dies whenever the screen leaves composition or the
- * activity is recreated). Once the loading screen has finished, coming back to the app (a new activity in the same
- * process, a gate that briefly swaps the content, a notification tap) must not play it again.
- */
 object GamutBoot {
     @Volatile var finished: Boolean = false
 }
@@ -44,18 +39,12 @@ fun GamutLogo(modifier: Modifier = Modifier, size: Dp = 28.dp) {
     Image(painterResource(R.drawable.gamut_logo), contentDescription = "Gamut", modifier = modifier.size(size))
 }
 
-/**
- * An empty screen with only the Gamut mark: its outline is there from the start and the mark itself fills in, left to
- * right, as loading progresses. Fills to ~90% over [minDurationMs]; completes and calls [onFinished] once the time has
- * passed AND [dataReady].
- */
 @Composable
 fun GamutLoadingScreen(
     dataReady: Boolean,
     onFinished: () -> Unit,
     minDurationMs: Int = 3000,
 ) {
-    // Follows Appearance: light / dark / system, or the fixed colour preset. Nothing is playing yet, so the solid palette.
     val palette = appNeutralPalette()
 
     val progress = remember { Animatable(0f) }
@@ -71,7 +60,6 @@ fun GamutLoadingScreen(
         }
     }
 
-    // Entrance: the outline pops in.
     val logoScale = remember { Animatable(0.9f) }
     val logoAlpha = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
@@ -80,13 +68,11 @@ fun GamutLoadingScreen(
     }
 
     Box(
-        Modifier.fillMaxSize().background(palette.base).pointerInput(Unit) {}, // swallow touches
+        Modifier.fillMaxSize().background(palette.base).pointerInput(Unit) {},
         contentAlignment = Alignment.Center,
     ) {
-        // Black mark on a light background, white on a dark one (follows the Appearance palette).
         val outline = if (palette.isLight) R.drawable.ic_gamut_mark_black_outline else R.drawable.ic_gamut_mark_white_outline
         val filled = if (palette.isLight) R.drawable.ic_gamut_mark_black else R.drawable.ic_gamut_mark_white
-        // Both layers share the same box, so the filled mark sits exactly inside its outline.
         Box(
             Modifier
                 .width(100.dp)
@@ -101,7 +87,6 @@ fun GamutLoadingScreen(
             Image(
                 painterResource(filled),
                 contentDescription = null,
-                // Only the left [progress] part of the filled mark is drawn.
                 modifier = Modifier.fillMaxSize().drawWithContent {
                     clipRect(right = size.width * progress.value) { this@drawWithContent.drawContent() }
                 },

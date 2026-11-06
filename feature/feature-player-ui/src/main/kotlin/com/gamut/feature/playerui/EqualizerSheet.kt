@@ -54,9 +54,8 @@ import com.gamut.core.player.EqualizerController
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private const val StepMb = 50   // band sliders snap to 0.5 dB
+private const val StepMb = 50
 
-/** The equalizer: enable/disable, presets, one vertical line per band (all ten always fit), bass boost and surround. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun EqualizerSheet(controller: EqualizerController, accent: Color, onDismiss: () -> Unit) {
@@ -117,7 +116,6 @@ internal fun EqualizerSheet(controller: EqualizerController, accent: Color, onDi
             }
 
             Spacer(Modifier.height(20.dp))
-            // The ten bands share the card's width equally (weight), so none can be pushed off the edge.
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -159,7 +157,6 @@ internal fun EqualizerSheet(controller: EqualizerController, accent: Color, onDi
     }
 }
 
-/** Plain outlined pill that says what tapping it will do: "Disable" while on, "Enable" while off. */
 @Composable
 private fun EnableButton(enabled: Boolean, accent: Color, onClick: () -> Unit) {
     val shape = RoundedCornerShape(50)
@@ -195,7 +192,6 @@ private fun PresetChip(text: String, selected: Boolean, accent: Color, onClick: 
     )
 }
 
-/** One vertical band: drag (or tap) anywhere on it. A line grows from the 0 dB line toward the thumb. */
 @Composable
 private fun BandSlider(
     levelMb: Int,
@@ -210,7 +206,6 @@ private fun BandSlider(
     val onChangeNow by rememberUpdatedState(onChange)
     val trackC = ink(0.16f); val zeroC = ink(0.14f); val dotC = ink()
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        // Unbounded width: "+10.5" must never wrap or clip inside a ~30dp band.
         Text(
             dbLabel(levelMb),
             color = if (levelMb != 0) accent else ink(0.45f),
@@ -248,7 +243,6 @@ private fun BandSlider(
             val stroke = 3.dp.toPx()
             val zeroY = yFor(0)
             val y = yFor(levelMb)
-            // 0 dB reference: runs edge to edge, so neighbouring bands join into one continuous line across the card.
             drawLine(zeroC, Offset(0f, zeroY), Offset(size.width, zeroY), 1.dp.toPx())
             drawLine(trackC, Offset(x, top), Offset(x, bottom), stroke, StrokeCap.Round)
             drawLine(accent, Offset(x, zeroY), Offset(x, y), stroke, StrokeCap.Round)
@@ -275,7 +269,6 @@ private fun EffectSlider(title: String, value: Int, accent: Color, enabled: Bool
     }
 }
 
-/** Horizontal slider: thicker track, accent fill, white dot with a soft halo. Tap or drag anywhere on it. */
 @Composable
 private fun LineSlider(value: Int, max: Int, accent: Color, enabled: Boolean, onChange: (Int) -> Unit) {
     val onChangeNow by rememberUpdatedState(onChange)

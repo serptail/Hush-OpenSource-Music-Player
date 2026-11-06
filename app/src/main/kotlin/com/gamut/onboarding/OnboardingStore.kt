@@ -7,10 +7,6 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-/**
- * Remembers that the user picked "Continue locally". Read synchronously (SharedPreferences) so a returning local
- * user never sees a loading flash before the app opens.
- */
 @Singleton
 class OnboardingStore @Inject constructor(@ApplicationContext context: Context) {
     private val prefs = context.getSharedPreferences("gamut_onboarding", Context.MODE_PRIVATE)

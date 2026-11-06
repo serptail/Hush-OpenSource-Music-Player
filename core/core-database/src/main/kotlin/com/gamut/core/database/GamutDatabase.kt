@@ -70,7 +70,6 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
     }
 }
 
-/** Sync: playlists.remoteId, the pending queue and the sync cursors. Register it next to the others. */
 val MIGRATION_5_6 = object : Migration(5, 6) {
     override fun migrate(database: SupportSQLiteDatabase) {
         database.execSQL("ALTER TABLE playlists ADD COLUMN remoteId TEXT")
@@ -83,14 +82,12 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
-/** Recently played history. Register it next to the others. */
 val MIGRATION_6_7 = object : Migration(6, 7) {
     override fun migrate(database: SupportSQLiteDatabase) {
         database.execSQL("CREATE TABLE IF NOT EXISTS recently_played (isrc TEXT NOT NULL, playedAtEpochMs INTEGER NOT NULL, PRIMARY KEY(isrc))")
     }
 }
 
-/** Followed artists. Register it next to the others. */
 val MIGRATION_7_8 = object : Migration(7, 8) {
     override fun migrate(database: SupportSQLiteDatabase) {
         database.execSQL(

@@ -21,10 +21,6 @@ import androidx.compose.ui.unit.dp
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 
-/**
- * Segmented control: one pill with equal-width options, the selected one highlighted.
- * Generic over the value type, so it works for enums (theme mode, levels) alike.
- */
 @Composable
 fun <T> GamutSegmented(
     options: List<Pair<T, String>>,

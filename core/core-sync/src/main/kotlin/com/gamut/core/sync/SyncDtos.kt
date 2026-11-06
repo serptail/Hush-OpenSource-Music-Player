@@ -5,13 +5,11 @@ import com.gamut.core.model.TrackSource
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-// ---- resolve-metadata ----
 @Serializable data class ResolveItem(val provider: String, @SerialName("provider_id") val providerId: String)
 @Serializable data class ResolveRequest(val items: List<ResolveItem>)
 @Serializable data class SongRef(val id: String, val provider: String, @SerialName("provider_song_id") val providerSongId: String)
 @Serializable data class ResolveResponse(val songs: List<SongRef> = emptyList())
 
-// ---- push rows ----
 @Serializable
 data class FavoriteRow(
     @SerialName("user_id") val userId: String,
@@ -38,7 +36,6 @@ data class PlaylistSongRow(
     @SerialName("deleted_at") val deletedAt: String? = null,
 )
 
-// ---- pull rows ----
 @Serializable data class ArtistNameDto(val name: String? = null)
 @Serializable data class AlbumTitleDto(val title: String? = null)
 
@@ -80,7 +77,6 @@ data class PlaylistSongPull(
     val songs: SongDto? = null,
 )
 
-// ---- artist follows ----
 @Serializable
 data class FollowRow(
     @SerialName("user_id") val userId: String,
@@ -103,7 +99,6 @@ data class FollowPull(
     @SerialName("deleted_at") val deletedAt: String? = null,
 )
 
-/** Lightweight playlist listing used to adopt same-named server playlists on first sign-in. */
 @Serializable
 data class RemotePlaylistRef(
     val id: String,
@@ -130,7 +125,6 @@ internal fun SongDto.toTrack(): Track {
     )
 }
 
-/** "itunes:123" -> ("itunes", "123"). Null for anything the server cannot resolve (e.g. a bare MusicBrainz ISRC). */
 internal fun parseIsrc(isrc: String): Pair<String, String>? {
     val provider = isrc.substringBefore(':', "")
     val id = isrc.substringAfter(':', "")
@@ -138,5 +132,4 @@ internal fun parseIsrc(isrc: String): Pair<String, String>? {
 }
 private val PROVIDERS = setOf("deezer", "itunes", "apple", "youtube")
 
-/** "deezer:123" -> ("deezer", "123"). Same shape and validation as a song key. */
 internal fun parseArtistKey(key: String): Pair<String, String>? = parseIsrc(key)

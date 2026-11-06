@@ -32,10 +32,6 @@ import com.adamglin.phosphoricons.bold.UserCircle
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.ink
 
-/**
- * The three-dots menu on the player. Rows that open another sheet / screen close this one first (the caller does
- * that in its lambda); the two toggles (lyrics, favorite) are meant to stay open so the new state is visible.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PlayerOptionsSheet(
