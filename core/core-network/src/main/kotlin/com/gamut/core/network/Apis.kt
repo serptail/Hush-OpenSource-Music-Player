@@ -104,15 +104,25 @@ interface AppleChartsApi {
 }
 
 interface YoutubeMusicApi {
-    @POST("search") suspend fun search(@Body request: YoutubeSearchRequest): YoutubeSearchResponse
+    @POST("search")
+    suspend fun search(@Body request: YoutubeSearchRequest): YoutubeSearchResponse
 }
 
 interface ResolverSyncApi {
-    @GET("resolve/{isrc}") suspend fun get(@Path("isrc") isrc: String): Response<ResolvedSourceDto>
-    @POST("resolve") suspend fun save(@Body source: ResolvedSourceDto): Response<Unit>
-    @GET("charts/{name}") suspend fun chart(@Path("name") name: String, @Query("limit") limit: Int = 50): Response<BillboardChartDto>
-    @GET("youtube/search") suspend fun searchYoutube(@Query("query") query: String): YoutubeSearchResponse
-    @GET("youtube/stream/{videoId}") suspend fun youtubeStream(@Path("videoId") videoId: String): Response<AudioStreamDto>
+    @GET("resolve/{isrc}")
+    suspend fun get(@Path("isrc") isrc: String): Response<ResolvedSourceDto>
+
+    @POST("resolve")
+    suspend fun save(@Body source: ResolvedSourceDto): Response<Unit>
+
+    @GET("charts/{name}")
+    suspend fun chart(@Path("name") name: String, @Query("limit") limit: Int = 50): Response<BillboardChartDto>
+
+    @GET("youtube/search")
+    suspend fun searchYoutube(@Query("query") query: String): YoutubeSearchResponse
+
+    @GET("youtube/stream/{videoId}")
+    suspend fun youtubeStream(@Path("videoId") videoId: String): Response<AudioStreamDto>
 }
 
 interface BillboardApi {

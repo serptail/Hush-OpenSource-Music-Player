@@ -144,16 +144,24 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri?.let { vm.export(context.contentResolver, it, exportPassword) }
-        exportPassword = ""; exportConfirm = ""
+        exportPassword = ""
+        exportConfirm = ""
     }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) { importPassword = ""; importReplace = false; pendingImport = uri }
+        if (uri != null) {
+            importPassword = ""
+            importReplace = false
+            pendingImport = uri
+        }
     }
     val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let { vm.setAvatar(context.contentResolver, it) }
     }
     val pickPhoto = { photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
-    val openEditName = { draft = customName; editName = true }
+    val openEditName = {
+        draft = customName
+        editName = true
+    }
 
     GamutPage(title = "", onBack = onBack, nowPlaying = nowPlaying) {
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -162,12 +170,20 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
             }
             Column(Modifier.weight(1f).padding(start = 18.dp)) {
                 Text(
-                    name, style = GamutHeading, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    name,
+                    style = GamutHeading,
+                    color = ink(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.pressScale(onClick = openEditName, scaleDown = 0.98f),
                 )
                 Text(
-                    email ?: "Using Gamut locally", style = MaterialTheme.typography.bodyMedium, color = ink(0.55f),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp),
+                    email ?: "Using Gamut locally",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink(0.55f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
                 )
                 Row(
                     Modifier.padding(top = 10.dp).clip(RoundedCornerShape(50)).background(ink(0.08f)).padding(horizontal = 10.dp, vertical = 5.dp),
@@ -175,11 +191,16 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
                 ) {
                     Icon(
                         if (userId != null) PhosphorIcons.Bold.CloudCheck else PhosphorIcons.Bold.CloudSlash,
-                        null, tint = ink(0.7f), modifier = Modifier.size(15.dp),
+                        null,
+                        tint = ink(0.7f),
+                        modifier = Modifier.size(15.dp),
                     )
                     Text(
                         if (userId != null) "Signed in" else "Local only",
-                        style = MaterialTheme.typography.bodyMedium, color = ink(0.7f), maxLines = 1, modifier = Modifier.padding(start = 6.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ink(0.7f),
+                        maxLines = 1,
+                        modifier = Modifier.padding(start = 6.dp),
                     )
                 }
             }
@@ -200,7 +221,9 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
             SoftCard {
                 if (userId == null) {
                     IconRow(
-                        icon = null, painter = painterResource(R.drawable.ic_google), title = "Continue with Google",
+                        icon = null,
+                        painter = painterResource(R.drawable.ic_google),
+                        title = "Continue with Google",
                         subtitle = "Sync and back up your library across devices.",
                         onClick = { vm.signIn(context) },
                     )
@@ -213,19 +236,30 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
         SoftHeader("Backup")
         SoftCard {
             IconRow(
-                PhosphorIcons.Bold.ArrowSquareDown, "Export", subtitle = "Save to a file",
-                onClick = { exportPassword = ""; exportConfirm = ""; exportMismatch = false; exportDialog = true },
+                PhosphorIcons.Bold.ArrowSquareDown,
+                "Export",
+                subtitle = "Save to a file",
+                onClick = {
+                    exportPassword = ""
+                    exportConfirm = ""
+                    exportMismatch = false
+                    exportDialog = true
+                },
             )
             IconDivider()
             IconRow(
-                PhosphorIcons.Bold.ArrowSquareUp, "Import", subtitle = "Merge or replace",
+                PhosphorIcons.Bold.ArrowSquareUp,
+                "Import",
+                subtitle = "Merge or replace",
                 onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
             )
             IconDivider()
             IconRow(PhosphorIcons.Bold.FloppyDisk, "Back up now", subtitle = "On this device", onClick = vm::backupNow)
             IconDivider()
             IconRow(
-                PhosphorIcons.Bold.CalendarCheck, "Daily backup", subtitle = "Last 10 days, offline",
+                PhosphorIcons.Bold.CalendarCheck,
+                "Daily backup",
+                subtitle = "Last 10 days, offline",
                 onClick = { vm.setAutoBackup(!autoBackup) },
                 trailing = { PillSwitch(autoBackup) },
             )
@@ -239,7 +273,8 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
                     IconRow(
                         PhosphorIcons.Bold.ClockClockwise,
                         DateUtils.formatDateTime(context, b.modifiedMs, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_ABBREV_MONTH),
-                        subtitle = "Tap to restore", onClick = { vm.requestRestore(b) },
+                        subtitle = "Tap to restore",
+                        onClick = { vm.requestRestore(b) },
                     )
                 }
             }
@@ -249,13 +284,23 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
             SoftHeader("Account")
             SoftCard {
                 IconRow(
-                    PhosphorIcons.Bold.Plugs, "Disconnect Google",
-                    onClick = { allDevices = false; clearLocal = false; disconnect = true },
+                    PhosphorIcons.Bold.Plugs,
+                    "Disconnect Google",
+                    onClick = {
+                        allDevices = false
+                        clearLocal = false
+                        disconnect = true
+                    },
                 )
                 IconDivider()
                 IconRow(
-                    PhosphorIcons.Bold.Trash, "Delete account", destructive = true,
-                    onClick = { clearLocal = false; delete = true },
+                    PhosphorIcons.Bold.Trash,
+                    "Delete account",
+                    destructive = true,
+                    onClick = {
+                        clearLocal = false
+                        delete = true
+                    },
                 )
             }
         }
@@ -276,16 +321,26 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
                 }
             },
         ) {
-            GamutField(value = exportPassword, onChange = { exportPassword = it; exportMismatch = false }, placeholder = "Password (optional)", password = true)
+            GamutField(value = exportPassword, onChange = {
+                exportPassword = it
+                exportMismatch = false
+            }, placeholder = "Password (optional)", password = true)
             if (exportPassword.isNotEmpty()) {
                 GamutField(
-                    value = exportConfirm, onChange = { exportConfirm = it; exportMismatch = false }, placeholder = "Repeat password",
-                    password = true, modifier = Modifier.padding(top = 8.dp),
+                    value = exportConfirm,
+                    onChange = {
+                        exportConfirm = it
+                        exportMismatch = false
+                    },
+                    placeholder = "Repeat password",
+                    password = true,
+                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
             Text(
                 if (exportMismatch) "Passwords don\u2019t match." else "A password encrypts the file. You\u2019ll need the same one to import it.",
-                style = MaterialTheme.typography.bodyMedium, color = if (exportMismatch) GamutDestructive else ink(0.5f),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (exportMismatch) GamutDestructive else ink(0.5f),
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
@@ -297,7 +352,10 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
             body = "Enter the password if the file is encrypted, then choose how to bring it in.",
             confirmLabel = if (importReplace) "Replace & import" else "Import",
             destructive = importReplace,
-            onDismiss = { pendingImport = null; importPassword = "" },
+            onDismiss = {
+                pendingImport = null
+                importPassword = ""
+            },
             onConfirm = {
                 pendingImport = null
                 vm.import(context.contentResolver, uri, importPassword, importReplace)
@@ -316,7 +374,9 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
         GamutDialog(
             title = "Restore this backup?",
             body = "Backup from " + DateUtils.formatDateTime(
-                context, p.file.modifiedMs, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_ABBREV_MONTH,
+                context,
+                p.file.modifiedMs,
+                DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_ABBREV_MONTH,
             ) + ". It only adds what is missing; nothing you have now is removed.",
             confirmLabel = "Restore",
             onDismiss = vm::cancelRestore,
@@ -348,12 +408,17 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
             title = "Display name",
             confirmLabel = "Save",
             onDismiss = { editName = false },
-            onConfirm = { editName = false; vm.setName(draft) },
+            onConfirm = {
+                editName = false
+                vm.setName(draft)
+            },
         ) {
             GamutField(value = draft, onChange = { draft = it.take(40) }, placeholder = "Your Google name")
             Text(
                 "Leave empty to use the name from your Google account.",
-                style = MaterialTheme.typography.bodyMedium, color = ink(0.5f), modifier = Modifier.padding(top = 8.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = ink(0.5f),
+                modifier = Modifier.padding(top = 8.dp),
             )
         }
     }
@@ -364,14 +429,19 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
             confirmLabel = "Disconnect",
             destructive = clearLocal,
             onDismiss = { disconnect = false },
-            onConfirm = { disconnect = false; vm.signOut(allDevices, clearLocal) },
+            onConfirm = {
+                disconnect = false
+                vm.signOut(allDevices, clearLocal)
+            },
         ) {
             GamutCheck(allDevices, "Also sign out of other devices", { allDevices = it })
             GamutCheck(clearLocal, "Clear library on this device", { clearLocal = it }, warn = true)
             if (clearLocal && pending > 0) {
                 Text(
                     "$pending change(s) haven\u2019t synced and will be lost.",
-                    style = MaterialTheme.typography.bodyMedium, color = GamutDestructive, modifier = Modifier.padding(top = 6.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = GamutDestructive,
+                    modifier = Modifier.padding(top = 6.dp),
                 )
             }
         }
@@ -383,7 +453,10 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
             confirmLabel = "Delete",
             destructive = true,
             onDismiss = { delete = false },
-            onConfirm = { delete = false; vm.deleteAccount(clearLocal) },
+            onConfirm = {
+                delete = false
+                vm.deleteAccount(clearLocal)
+            },
         ) {
             GamutCheck(clearLocal, "Also clear data on this device", { clearLocal = it }, warn = true)
         }
@@ -417,8 +490,12 @@ private fun IconRow(
             Text(title, style = MaterialTheme.typography.titleMedium, color = tone, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (subtitle != null) {
                 Text(
-                    subtitle, style = MaterialTheme.typography.bodyMedium, color = subtitleColor ?: ink(0.55f),
-                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp),
+                    subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = subtitleColor ?: ink(0.55f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
                 )
             }
         }
@@ -487,11 +564,16 @@ private fun ReportRows(r: ImportReport, done: Boolean) {
     if (already > 0) SummaryRow("Already in your library", "$already")
     if (r.totalSkipped > 0) SummaryRow("Skipped (can\u2019t be restored)", "${r.totalSkipped}")
     if (r.duplicatesInFile > 0) SummaryRow("Duplicates in file ignored", "${r.duplicatesInFile}")
-    if (done) r.playlists.take(6).forEach { p ->
-        Text(
-            "${p.name} \u00B7 ${if (p.created) "new" else "merged"} \u00B7 +${p.songsAdded}",
-            style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), maxLines = 1, overflow = TextOverflow.Ellipsis,
-        )
+    if (done) {
+        r.playlists.take(6).forEach { p ->
+            Text(
+                "${p.name} \u00B7 ${if (p.created) "new" else "merged"} \u00B7 +${p.songsAdded}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = ink(0.55f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
     if (done && r.playlists.size > 6) Text("and ${r.playlists.size - 6} more playlists", style = MaterialTheme.typography.bodyMedium, color = ink(0.55f))
     r.warnings.take(3).forEach {
@@ -511,7 +593,10 @@ private fun SyncRow(status: SyncStatus, lastSynced: Long?, pending: Int, onClick
         val finished = wasSyncing && status is SyncStatus.Idle
         wasSyncing = syncing
         justSynced = finished
-        if (finished) { delay(1600); justSynced = false }
+        if (finished) {
+            delay(1600)
+            justSynced = false
+        }
     }
 
     val spin = remember { Animatable(0f) }
@@ -527,14 +612,19 @@ private fun SyncRow(status: SyncStatus, lastSynced: Long?, pending: Int, onClick
     val shake = remember { Animatable(0f) }
     LaunchedEffect(status) {
         if (status is SyncStatus.Error) {
-            repeat(3) { shake.animateTo(9f, tween(55)); shake.animateTo(-9f, tween(55)) }
+            repeat(3) {
+                shake.animateTo(9f, tween(55))
+                shake.animateTo(-9f, tween(55))
+            }
             shake.animateTo(0f, tween(55))
         }
     }
 
     val done by animateFloatAsState(if (justSynced) 1f else 0f, tween(450), label = "done")
     val pop by animateFloatAsState(
-        if (justSynced) 1.2f else 1f, spring(dampingRatio = 0.35f, stiffness = Spring.StiffnessMedium), label = "pop",
+        if (justSynced) 1.2f else 1f,
+        spring(dampingRatio = 0.35f, stiffness = Spring.StiffnessMedium),
+        label = "pop",
     )
 
     val accent = if (failed) GamutDestructive else ink(0.9f)
@@ -548,9 +638,12 @@ private fun SyncRow(status: SyncStatus, lastSynced: Long?, pending: Int, onClick
     }
     val subtitle = when (status) {
         is SyncStatus.Error -> status.message
+
         SyncStatus.Offline ->
             if (pending > 0) "Offline \u00B7 $pending waiting, will sync when you\u2019re back" else "Offline \u00B7 will sync when you\u2019re back"
+
         SyncStatus.Syncing -> if (pending > 0) "$pending waiting" else "Keeping your library up to date"
+
         SyncStatus.Idle -> (lastSynced?.let { "Last synced ${DateUtils.getRelativeTimeSpanString(it)}" } ?: "Not synced yet") +
             if (pending > 0) " \u00B7 $pending waiting" else ""
     }
@@ -558,7 +651,12 @@ private fun SyncRow(status: SyncStatus, lastSynced: Long?, pending: Int, onClick
     val haptic = LocalHapticFeedback.current
     Box(
         Modifier.fillMaxWidth()
-            .pressScale(onClick = { if (!syncing) { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onClick() } }, scaleDown = 0.99f),
+            .pressScale(onClick = {
+                if (!syncing) {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onClick()
+                }
+            }, scaleDown = 0.99f),
     ) {
         if (syncing) SyncShimmer(Modifier.matchParentSize())
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -571,7 +669,12 @@ private fun SyncRow(status: SyncStatus, lastSynced: Long?, pending: Int, onClick
                         rotate(-spin.value * 1.5f) {
                             drawArc(
                                 Brush.sweepGradient(colorStops = arrayOf(0f to Color.Transparent, 0.75f to accent, 1f to accent)),
-                                0f, 270f, useCenter = false, topLeft = Offset(inset, inset), size = box, style = stroke,
+                                0f,
+                                270f,
+                                useCenter = false,
+                                topLeft = Offset(inset, inset),
+                                size = box,
+                                style = stroke,
                             )
                         }
                     } else if (done > 0f) {
@@ -580,8 +683,13 @@ private fun SyncRow(status: SyncStatus, lastSynced: Long?, pending: Int, onClick
                 }
                 Crossfade(targetState = justSynced, label = "icon") { checked ->
                     Icon(
-                        when { checked -> PhosphorIcons.Bold.CloudCheck; offline -> PhosphorIcons.Bold.CloudSlash; else -> PhosphorIcons.Bold.ArrowsClockwise },
-                        null, tint = if (failed) GamutDestructive else ink(if (offline) 0.5f else 0.85f),
+                        when {
+                            checked -> PhosphorIcons.Bold.CloudCheck
+                            offline -> PhosphorIcons.Bold.CloudSlash
+                            else -> PhosphorIcons.Bold.ArrowsClockwise
+                        },
+                        null,
+                        tint = if (failed) GamutDestructive else ink(if (offline) 0.5f else 0.85f),
                         modifier = Modifier.size(24.dp).graphicsLayer {
                             rotationZ = if (checked) 0f else spin.value
                             scaleX = if (checked) pop else 1f
@@ -597,13 +705,20 @@ private fun SyncRow(status: SyncStatus, lastSynced: Long?, pending: Int, onClick
             Column(Modifier.weight(1f)) {
                 Crossfade(targetState = title, label = "title") {
                     Text(
-                        it, style = MaterialTheme.typography.titleMedium, color = if (failed) GamutDestructive else ink(),
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        it,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (failed) GamutDestructive else ink(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 Text(
-                    subtitle, style = MaterialTheme.typography.bodyMedium, color = if (failed) GamutDestructive else ink(0.55f),
-                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp),
+                    subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (failed) GamutDestructive else ink(0.55f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
                 )
             }
         }
@@ -613,15 +728,18 @@ private fun SyncRow(status: SyncStatus, lastSynced: Long?, pending: Int, onClick
 @Composable
 private fun SyncShimmer(modifier: Modifier) {
     val x by rememberInfiniteTransition(label = "shimmer").animateFloat(
-        initialValue = -0.3f, targetValue = 1.3f,
-        animationSpec = infiniteRepeatable(tween(1600, easing = LinearEasing)), label = "x",
+        initialValue = -0.3f,
+        targetValue = 1.3f,
+        animationSpec = infiniteRepeatable(tween(1600, easing = LinearEasing)),
+        label = "x",
     )
     val tint = ink(0.10f)
     Canvas(modifier) {
         drawRect(
             Brush.horizontalGradient(
                 listOf(Color.Transparent, tint, Color.Transparent),
-                startX = size.width * (x - 0.3f), endX = size.width * (x + 0.3f),
+                startX = size.width * (x - 0.3f),
+                endX = size.width * (x + 0.3f),
             ),
         )
     }

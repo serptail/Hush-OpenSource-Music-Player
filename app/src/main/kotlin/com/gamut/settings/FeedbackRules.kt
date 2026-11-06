@@ -55,8 +55,7 @@ object FeedbackRules {
         return s
     }
 
-    fun isValidEmail(s: String): Boolean =
-        s.length <= MAX_EMAIL && s.none { it.isWhitespace() } && Patterns.EMAIL_ADDRESS.matcher(s).matches()
+    fun isValidEmail(s: String): Boolean = s.length <= MAX_EMAIL && s.none { it.isWhitespace() } && Patterns.EMAIL_ADDRESS.matcher(s).matches()
 
     fun checkMessage(message: String): MessageProblem? {
         val words = wordCount(message)
@@ -105,8 +104,7 @@ class SubmissionGuard(context: Context) {
         prefs.edit().putString("times", times).putString("fp", fingerprint).putLong("fp_at", now).apply()
     }
 
-    private fun recentTimes(now: Long): List<Long> =
-        prefs.getString("times", "").orEmpty().split(",").mapNotNull { it.toLongOrNull() }.filter { now - it in 0 until DAY_MS }
+    private fun recentTimes(now: Long): List<Long> = prefs.getString("times", "").orEmpty().split(",").mapNotNull { it.toLongOrNull() }.filter { now - it in 0 until DAY_MS }
 
     private companion object {
         const val COOLDOWN_MS = 60_000L

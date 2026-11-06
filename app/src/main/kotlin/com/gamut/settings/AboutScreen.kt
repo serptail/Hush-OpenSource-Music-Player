@@ -41,8 +41,8 @@ import com.adamglin.phosphoricons.bold.Scales
 import com.adamglin.phosphoricons.bold.User
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNotifier
-import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.R as DesignR
+import com.gamut.core.designsystem.ink
 
 private const val REPO_URL = "https://github.com/serptail/Hush-Open-Source-Music-App"
 private const val REPO_LABEL = "github.com/serptail/Hush-Open-Source-Music-App"
@@ -87,8 +87,11 @@ fun AboutScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            val logo = if (LocalCoverPalette.current.isLight) DesignR.drawable.ic_gamut_stacked_color_darktext
-            else DesignR.drawable.ic_gamut_stacked_color_lighttext
+            val logo = if (LocalCoverPalette.current.isLight) {
+                DesignR.drawable.ic_gamut_stacked_color_darktext
+            } else {
+                DesignR.drawable.ic_gamut_stacked_color_lighttext
+            }
             Box {
                 Image(
                     painter = painterResource(logo),
@@ -106,38 +109,57 @@ fun AboutScreen(
 
             Text(
                 "A free, open-source music player.",
-                style = MaterialTheme.typography.bodyMedium, color = ink(0.7f),
-                textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = ink(0.7f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 8.dp),
             )
         }
 
         GroupLabel("Project")
         Cell(
-            "Website", icon = PhosphorIcons.Bold.Globe, subtitle = REPO_LABEL,
-            onClick = { open(REPO_URL) }, trailing = external,
+            "Website",
+            icon = PhosphorIcons.Bold.Globe,
+            subtitle = REPO_LABEL,
+            onClick = { open(REPO_URL) },
+            trailing = external,
         )
         Cell(
-            "Source code", icon = PhosphorIcons.Bold.GithubLogo, subtitle = "Browse, fork and contribute on GitHub",
-            onClick = { open(REPO_URL) }, trailing = external,
+            "Source code",
+            icon = PhosphorIcons.Bold.GithubLogo,
+            subtitle = "Browse, fork and contribute on GitHub",
+            onClick = { open(REPO_URL) },
+            trailing = external,
         )
 
         GroupLabel("Credits")
         Cell(
-            "Developer", icon = PhosphorIcons.Bold.User, subtitle = AUTHOR_NAME,
-            onClick = { open(AUTHOR_URL) }, trailing = external,
+            "Developer",
+            icon = PhosphorIcons.Bold.User,
+            subtitle = AUTHOR_NAME,
+            onClick = { open(AUTHOR_URL) },
+            trailing = external,
         )
         Cell(
-            "Logo", icon = PhosphorIcons.Bold.PaintBrush, subtitle = "Designed by $LOGO_AUTHOR_NAME",
-            onClick = { open(LOGO_AUTHOR_URL) }, trailing = external,
+            "Logo",
+            icon = PhosphorIcons.Bold.PaintBrush,
+            subtitle = "Designed by $LOGO_AUTHOR_NAME",
+            onClick = { open(LOGO_AUTHOR_URL) },
+            trailing = external,
         )
 
         GroupLabel("Legal")
         Cell(
-            "Open source license", icon = PhosphorIcons.Bold.Scales, subtitle = "Read the license on GitHub",
-            onClick = { open(LICENSE_URL) }, trailing = external,
+            "Open source license",
+            icon = PhosphorIcons.Bold.Scales,
+            subtitle = "Read the license on GitHub",
+            onClick = { open(LICENSE_URL) },
+            trailing = external,
         )
         Cell(
-            "Open source libraries", icon = PhosphorIcons.Bold.Code, subtitle = "What Gamut is built on",
+            "Open source libraries",
+            icon = PhosphorIcons.Bold.Code,
+            subtitle = "What Gamut is built on",
             onClick = { showLibraries = true },
         )
 

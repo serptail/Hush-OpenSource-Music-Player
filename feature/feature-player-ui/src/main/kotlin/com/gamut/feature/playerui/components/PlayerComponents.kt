@@ -1,7 +1,11 @@
 package com.gamut.feature.playerui.components
 
 import android.graphics.Bitmap
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.os.Build
+import android.util.Log
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -21,8 +25,6 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -52,7 +54,6 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import com.gamut.core.designsystem.focusRing
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
@@ -66,9 +67,11 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -83,23 +86,20 @@ import coil.request.SuccessResult
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.bold.MusicNote
+import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
+import java.nio.ByteOrder
 import kotlin.math.pow
 import kotlin.time.Duration.Companion.milliseconds
-import android.media.MediaCodec
-import android.util.Log
-import android.media.MediaExtractor
-import android.media.MediaFormat
-import java.nio.ByteOrder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -440,6 +440,7 @@ private val waveformCache = object : LinkedHashMap<String, FloatArray>(16, 0.75f
 
 private class WaveformEntry {
     val data = mutableStateOf(FloatArray(0))
+
     @Volatile var job: Job? = null
 }
 
@@ -491,15 +492,23 @@ private fun asLocalAudio(source: String): LocalAudio? {
     fun existing(path: String?): java.io.File? = path?.let { java.io.File(it) }?.takeIf { it.isFile && it.length() > 0 }
     return when {
         source.startsWith("/") -> existing(source)?.let { LocalAudio(it, false) }
+
         source.startsWith("file:") -> existing(android.net.Uri.parse(source).path)?.let { LocalAudio(it, false) }
+
         source.startsWith("content:") -> {
             val ctx = WaveformSource.appContext ?: return null
             val tmp = java.io.File.createTempFile("waveform", ".audio")
             val ok = runCatching {
                 ctx.contentResolver.openInputStream(android.net.Uri.parse(source))?.use { input -> tmp.outputStream().use { out -> input.copyTo(out) } }
             }.isSuccess && tmp.length() > 0
-            if (ok) LocalAudio(tmp, true) else { tmp.delete(); null }
+            if (ok) {
+                LocalAudio(tmp, true)
+            } else {
+                tmp.delete()
+                null
+            }
         }
+
         else -> null
     }
 }
@@ -525,11 +534,23 @@ private suspend fun loadWaveform(track: Track, onPartial: (FloatArray) -> Unit):
             lowPriority {
                 val local = asLocalAudio(source)
                 if (local != null) {
-                    try { sampleEnvelope(local.file.path) } finally { if (local.temp) local.file.delete() }
+                    try {
+                        sampleEnvelope(local.file.path)
+                    } finally {
+                        if (local.temp) local.file.delete()
+                    }
                 } else {
                     val job = currentCoroutineContext()[Job]
                     val file = downloadAudio(source) { job?.isActive != false }
-                    if (file == null) null else try { sampleEnvelope(file.path) } finally { file.delete() }
+                    if (file == null) {
+                        null
+                    } else {
+                        try {
+                            sampleEnvelope(file.path)
+                        } finally {
+                            file.delete()
+                        }
+                    }
                 }
             }
         }
@@ -541,12 +562,15 @@ private suspend fun loadWaveform(track: Track, onPartial: (FloatArray) -> Unit):
     } finally {
         waveformGate.release()
     }
-    if (result == null) Log.w(WaveformTag, "No waveform for \"${track.title}\"")
-    else Log.i(
-        WaveformTag,
-        "Waveform ready for \"${track.title}\" in ${System.currentTimeMillis() - startedAt} ms " +
-            "(min ${result.min()}, max ${result.max()})",
-    )
+    if (result == null) {
+        Log.w(WaveformTag, "No waveform for \"${track.title}\"")
+    } else {
+        Log.i(
+            WaveformTag,
+            "Waveform ready for \"${track.title}\" in ${System.currentTimeMillis() - startedAt} ms " +
+                "(min ${result.min()}, max ${result.max()})",
+        )
+    }
     if (result != null) synchronized(waveformCache) { waveformCache[key] = result }
     return result
 }
@@ -595,7 +619,10 @@ private fun downloadAudio(url: String, stillActive: () -> Boolean): java.io.File
                 }
                 var done = false
                 for (f in wave) {
-                    if (done) { f.cancel(true); continue }
+                    if (done) {
+                        f.cancel(true)
+                        continue
+                    }
                     val r = f.get() ?: return null
                     out.write(r.second)
                     start += r.second.size
@@ -621,7 +648,10 @@ private fun sampleEnvelope(path: String): FloatArray? {
     }
     val amps: List<Int> = com.linc.amplituda.Amplituda(context).processAudio(path).get()?.amplitudesAsList() ?: emptyList()
     val peak = amps.maxOrNull() ?: 0
-    if (peak <= 0) { Log.w(WaveformTag, "Amplituda returned no audio (${amps.size} samples)"); return null }
+    if (peak <= 0) {
+        Log.w(WaveformTag, "Amplituda returned no audio (${amps.size} samples)")
+        return null
+    }
     val n = amps.size
     val levels = FloatArray(EnvelopeSamples) { b ->
         val from = (b.toLong() * n / EnvelopeSamples).toInt().coerceIn(0, n - 1)
@@ -757,13 +787,19 @@ private fun subAccentFor(bitmap: Bitmap): Color? {
     val hsv = FloatArray(3)
     var total = 0f
     var pixels = 0
-    for (x in 0 until size) for (y in 0 until size) {
-        android.graphics.Color.colorToHSV(sample[x, y], hsv)
-        if (hsv[1] < 0.22f || hsv[2] < 0.30f) continue
-        val w = hsv[1] * hsv[2]
-        val bin = ((hsv[0] / 360f) * fine).toInt().coerceIn(0, fine - 1)
-        binW[bin] += w; binN[bin]++; binS[bin] += hsv[1] * w; binV[bin] += hsv[2] * w
-        total += w; pixels++
+    for (x in 0 until size) {
+        for (y in 0 until size) {
+            android.graphics.Color.colorToHSV(sample[x, y], hsv)
+            if (hsv[1] < 0.22f || hsv[2] < 0.30f) continue
+            val w = hsv[1] * hsv[2]
+            val bin = ((hsv[0] / 360f) * fine).toInt().coerceIn(0, fine - 1)
+            binW[bin] += w
+            binN[bin]++
+            binS[bin] += hsv[1] * w
+            binV[bin] += hsv[2] * w
+            total += w
+            pixels++
+        }
     }
     if (pixels < 20 || total <= 0f) return null
 
@@ -773,13 +809,22 @@ private fun subAccentFor(bitmap: Bitmap): Color? {
     for (seed in (0 until fine).sortedByDescending { binW[it] }) {
         if (binW[seed] <= 0f || claimed[seed]) continue
         val seedHue = seed * 10f + 5f
-        var w = 0f; var n = 0; var s = 0f; var v = 0f; var cx = 0f; var cy = 0f
+        var w = 0f
+        var n = 0
+        var s = 0f
+        var v = 0f
+        var cx = 0f
+        var cy = 0f
         for (j in 0 until fine) {
             if (claimed[j] || binW[j] <= 0f || hueDistance(seedHue, j * 10f + 5f) > 30f) continue
             claimed[j] = true
             val rad = Math.toRadians((j * 10f + 5f).toDouble())
-            w += binW[j]; n += binN[j]; s += binS[j]; v += binV[j]
-            cx += binW[j] * kotlin.math.cos(rad).toFloat(); cy += binW[j] * kotlin.math.sin(rad).toFloat()
+            w += binW[j]
+            n += binN[j]
+            s += binS[j]
+            v += binV[j]
+            cx += binW[j] * kotlin.math.cos(rad).toFloat()
+            cy += binW[j] * kotlin.math.sin(rad).toFloat()
         }
         val hue = ((Math.toDegrees(kotlin.math.atan2(cy.toDouble(), cx.toDouble())).toFloat()) + 360f) % 360f
         families.add(Family(w, n, hue, s / w, v / w))
@@ -794,7 +839,10 @@ private fun subAccentFor(bitmap: Bitmap): Color? {
         if (distance < 35f) continue
         if (f.weight < total * 0.02f || f.count < pixels * 0.012f) continue
         val score = kotlin.math.sqrt(f.weight / total) * f.sat * (0.6f + 0.4f * f.value) * (minOf(distance, 110f) / 110f)
-        if (score > bestScore) { bestScore = score; best = f }
+        if (score > bestScore) {
+            bestScore = score
+            best = f
+        }
     }
     val pick = best ?: return null
     return Color(android.graphics.Color.HSVToColor(floatArrayOf(pick.hue, (pick.sat * 1.15f).coerceIn(0.55f, 0.92f), 1f)))
@@ -807,8 +855,14 @@ internal fun rememberCoverSubAccent(url: String?, fallback: Color): Color {
     val context = LocalContext.current
     var sub by remember { mutableStateOf<Color?>(url?.let { subAccentCache[it] }) }
     LaunchedEffect(url) {
-        if (url.isNullOrBlank()) { sub = null; return@LaunchedEffect }
-        if (subAccentCache.containsKey(url)) { sub = subAccentCache[url]; return@LaunchedEffect }
+        if (url.isNullOrBlank()) {
+            sub = null
+            return@LaunchedEffect
+        }
+        if (subAccentCache.containsKey(url)) {
+            sub = subAccentCache[url]
+            return@LaunchedEffect
+        }
         sub = withContext(Dispatchers.IO) {
             runCatching {
                 val request = ImageRequest.Builder(context).data(url).allowHardware(false).build()

@@ -49,7 +49,10 @@ fun GamutLoadingScreen(
 
     val progress = remember { Animatable(0f) }
     var minTimePassed by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { delay(minDurationMs.toLong()); minTimePassed = true }
+    LaunchedEffect(Unit) {
+        delay(minDurationMs.toLong())
+        minTimePassed = true
+    }
     LaunchedEffect(Unit) { progress.animateTo(0.9f, tween(minDurationMs, easing = FastOutSlowInEasing)) }
     LaunchedEffect(dataReady, minTimePassed) {
         if (dataReady && minTimePassed) {

@@ -14,39 +14,39 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.FloatState
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.graphics.get
 import androidx.core.graphics.scale
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.sin
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 data class CoverPalette(
     val primary: Color,
@@ -137,7 +137,7 @@ fun rememberCoverPalette(url: String?, forceLight: Boolean? = null): CoverPalett
         val key = "$url|$forceLight"
         palette = paletteCache[key]
             ?: withContext(Dispatchers.IO) { loadPalette(context, url, forceLight) }?.also { paletteCache[key] = it }
-                    ?: neutral
+            ?: neutral
     }
     return palette
 }
@@ -203,7 +203,9 @@ internal fun paletteFromPixels(pixels: IntArray, forceLight: Boolean? = null): C
 
     val accent = if (accents.isNotEmpty()) {
         oklch(if (isLight) 0.52 else 0.82, first.c.coerceIn(0.06, 0.16), first.h)
-    } else onBase
+    } else {
+        onBase
+    }
 
     return CoverPalette(
         primary = first.toColor(),
@@ -217,7 +219,9 @@ internal fun paletteFromPixels(pixels: IntArray, forceLight: Boolean? = null): C
 }
 
 private fun labDist(x: Cluster, y: Cluster): Double {
-    val dl = x.l - y.l; val da = x.a - y.a; val db = x.b - y.b
+    val dl = x.l - y.l
+    val da = x.a - y.a
+    val db = x.b - y.b
     return Math.sqrt(dl * dl + da * da + db * db)
 }
 
@@ -244,7 +248,10 @@ private fun pickAccents(clusters: List<Cluster>, total: Int, minFraction: Double
                     score *= 0.1 + 0.9 * t * t
                 }
             }
-            if (score > bestScore) { bestScore = score; best = c }
+            if (score > bestScore) {
+                bestScore = score
+                best = c
+            }
         }
         if (best == null || bestScore <= 0.0) break
         chosen += best
@@ -261,7 +268,9 @@ private fun quantize(lab: Array<DoubleArray>, k: Int): List<Cluster> {
         return seed / 2147483648.0
     }
     fun dist2(p: DoubleArray, q: DoubleArray): Double {
-        val a = p[0] - q[0]; val b = p[1] - q[1]; val c = p[2] - q[2]
+        val a = p[0] - q[0]
+        val b = p[1] - q[1]
+        val c = p[2] - q[2]
         return a * a + b * b + c * c
     }
 
@@ -271,22 +280,35 @@ private fun quantize(lab: Array<DoubleArray>, k: Int): List<Cluster> {
     while (centers.size < k) {
         val last = centers.last()
         var sum = 0.0
-        for (i in 0 until n) { d2[i] = minOf(d2[i], dist2(lab[i], last)); sum += d2[i] }
+        for (i in 0 until n) {
+            d2[i] = minOf(d2[i], dist2(lab[i], last))
+            sum += d2[i]
+        }
         if (sum <= 1e-9) break
         val target = rnd() * sum
         var acc = 0.0
         var pick = n - 1
-        for (i in 0 until n) { acc += d2[i]; if (acc >= target) { pick = i; break } }
+        for (i in 0 until n) {
+            acc += d2[i]
+            if (acc >= target) {
+                pick = i
+                break
+            }
+        }
         centers += lab[pick].copyOf()
     }
 
     val assign = IntArray(n)
     fun assignAll() {
         for (i in 0 until n) {
-            var bestC = 0; var bestD = Double.MAX_VALUE
+            var bestC = 0
+            var bestD = Double.MAX_VALUE
             for (c in centers.indices) {
                 val d = dist2(lab[i], centers[c])
-                if (d < bestD) { bestD = d; bestC = c }
+                if (d < bestD) {
+                    bestD = d
+                    bestC = c
+                }
             }
             assign[i] = bestC
         }
@@ -296,11 +318,18 @@ private fun quantize(lab: Array<DoubleArray>, k: Int): List<Cluster> {
         val sums = Array(centers.size) { DoubleArray(4) }
         for (i in 0 until n) {
             val s = sums[assign[i]]
-            s[0] += lab[i][0]; s[1] += lab[i][1]; s[2] += lab[i][2]; s[3] += 1.0
+            s[0] += lab[i][0]
+            s[1] += lab[i][1]
+            s[2] += lab[i][2]
+            s[3] += 1.0
         }
         for (c in centers.indices) {
             val s = sums[c]
-            if (s[3] > 0.0) { centers[c][0] = s[0] / s[3]; centers[c][1] = s[1] / s[3]; centers[c][2] = s[2] / s[3] }
+            if (s[3] > 0.0) {
+                centers[c][0] = s[0] / s[3]
+                centers[c][1] = s[1] / s[3]
+                centers[c][2] = s[2] / s[3]
+            }
         }
     }
     assignAll()
@@ -316,7 +345,8 @@ private fun quantize(lab: Array<DoubleArray>, k: Int): List<Cluster> {
         search@ for (i in list.indices) {
             for (j in i + 1 until list.size) {
                 if (labDist(list[i], list[j]) < MergeDistance) {
-                    val x = list[i]; val y = list[j]
+                    val x = list[i]
+                    val y = list[j]
                     val t = x.count + y.count
                     list[i] = Cluster(
                         t,
@@ -373,7 +403,8 @@ private fun inGamut(lightness: Double, chroma: Double, hue: Double): Boolean {
 }
 
 private fun maxChroma(lightness: Double, hue: Double): Double {
-    var lo = 0.0; var hi = 0.4
+    var lo = 0.0
+    var hi = 0.4
     repeat(14) {
         val mid = (lo + hi) / 2
         if (inGamut(lightness, mid, hue)) lo = mid else hi = mid
@@ -400,9 +431,12 @@ private const val FlowFrameInterval = 0.030f
 private const val BlobScale = 0.33f
 
 private class Blob(
-    val cx: Float, val cy: Float,
-    val ax: Float, val ay: Float,
-    val fx: Float, val fy: Float,
+    val cx: Float,
+    val cy: Float,
+    val ax: Float,
+    val ay: Float,
+    val fx: Float,
+    val fy: Float,
     val phase: Float,
     val radius: Float,
     val stretch: Float,
@@ -431,7 +465,8 @@ fun FlowingBackground(
     val tertiary by animateColorAsState(palette.tertiary, tween(1400), label = "flow-tertiary")
     val strength by animateFloatAsState(
         (if (palette.isLight) LightStrength else 1f) * settings.flowIntensity.flowStrength,
-        tween(1400), label = "flow-strength",
+        tween(1400),
+        label = "flow-strength",
     )
     val fullStrength by animateFloatAsState(settings.flowIntensity.flowStrength, tween(1400), label = "flow-strength-full")
     val flow by animateFloatAsState(if (palette.flows) 1f else 0f, tween(1400), label = "flow-amount")
@@ -450,10 +485,13 @@ fun FlowingBackground(
         when (settings.flowStyle) {
             FlowStyle.Mercury ->
                 MercuryBackground(base, primary, secondary, tertiary, fullStrength * flow, palette.isLight, clock, modifier)
+
             FlowStyle.Metaballs ->
                 MetaballsBackground(base, primary, secondary, tertiary, fullStrength * flow, palette.isLight, clock, modifier)
+
             FlowStyle.Dithering ->
                 DitheringBackground(base, primary, secondary, tertiary, strength * flow, palette.isLight, clock, modifier)
+
             FlowStyle.Flow ->
                 MeshBackground(base, primary, secondary, tertiary, strength * flow, clock, modifier)
         }
@@ -565,7 +603,10 @@ half4 main(float2 fragCoord) {
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
 private fun MeshBackground(
-    base: Color, c1: Color, c2: Color, c3: Color,
+    base: Color,
+    c1: Color,
+    c2: Color,
+    c3: Color,
     strength: Float,
     clock: FloatState,
     modifier: Modifier,
@@ -593,7 +634,10 @@ private fun MeshBackground(
 
 @Composable
 private fun BlobBackground(
-    base: Color, primary: Color, secondary: Color, tertiary: Color,
+    base: Color,
+    primary: Color,
+    secondary: Color,
+    tertiary: Color,
     strength: Float,
     clock: FloatState,
     modifier: Modifier,

@@ -18,9 +18,9 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
@@ -40,7 +40,9 @@ fun ProfileAvatar(
 ) {
     if (image != null) {
         AsyncImage(
-            model = image, contentDescription = null, contentScale = ContentScale.Crop,
+            model = image,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
             modifier = modifier.size(size).clip(shape).background(ink(0.1f)),
         )
         return
@@ -52,7 +54,9 @@ fun ProfileAvatar(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                guestIcon, null, tint = Color.Black,
+                guestIcon,
+                null,
+                tint = Color.Black,
                 modifier = Modifier.size(size * 0.55f).drawWithContent {
                     drawIntoCanvas { canvas ->
                         canvas.saveLayer(Rect(0f, 0f, this.size.width, this.size.height), Paint().apply { blendMode = BlendMode.DstOut })

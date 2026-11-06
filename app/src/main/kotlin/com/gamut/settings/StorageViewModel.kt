@@ -69,21 +69,32 @@ class StorageViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, DownloadStats())
 
     val snapshot: StateFlow<StorageSnapshot?> = combine(
-        index.downloads, refresh, downloads.batch.map { it.total == 0 }.distinctUntilChanged(),
+        index.downloads,
+        refresh,
+        downloads.batch.map { it.total == 0 }.distinctUntilChanged(),
     ) { _, _, _ -> }
         .debounce(150)
         .mapLatest { manager.measure() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     init {
-        viewModelScope.launch(Dispatchers.IO) { delay(5_000); manager.trimCacheIfNeeded() }
+        viewModelScope.launch(Dispatchers.IO) {
+            delay(5_000)
+            manager.trimCacheIfNeeded()
+        }
     }
 
     fun onOpened() {
-        viewModelScope.launch { manager.repair(); manager.trimCacheIfNeeded(); refresh.value++ }
+        viewModelScope.launch {
+            manager.repair()
+            manager.trimCacheIfNeeded()
+            refresh.value++
+        }
     }
 
-    fun refreshNow() { refresh.value++ }
+    fun refreshNow() {
+        refresh.value++
+    }
 
     fun delete(isrcs: Collection<String>) {
         val ids = isrcs.toList()
@@ -99,11 +110,19 @@ class StorageViewModel @Inject constructor(
     }
 
     fun clear(target: CacheTarget, onDone: (Long) -> Unit) {
-        viewModelScope.launch { val freed = manager.clear(target); refresh.value++; onDone(freed) }
+        viewModelScope.launch {
+            val freed = manager.clear(target)
+            refresh.value++
+            onDone(freed)
+        }
     }
 
     fun cleanLeftovers(onDone: (Long) -> Unit) {
-        viewModelScope.launch { val freed = manager.cleanLeftovers(); refresh.value++; onDone(freed) }
+        viewModelScope.launch {
+            val freed = manager.cleanLeftovers()
+            refresh.value++
+            onDone(freed)
+        }
     }
 
     private suspend fun buildSongs(rows: Map<String, DownloadEntity>): List<DownloadedSong> {
@@ -130,9 +149,14 @@ class StorageViewModel @Inject constructor(
         val bytes = list.sumOf { it.bytes }
         val playtime = list.sumOf { if (it.durationMs > 0) it.durationMs else it.bytes * 1_000L / 18_000L }
         return DownloadStats(
-            count = list.size, bytes = bytes, playtimeMs = playtime, averageBytes = bytes / list.size,
-            largest = list.maxByOrNull { it.bytes }, newestMs = list.maxOf { it.addedMs },
-            opus = list.count { it.format == "Opus" }, aac = list.count { it.format == "AAC" },
+            count = list.size,
+            bytes = bytes,
+            playtimeMs = playtime,
+            averageBytes = bytes / list.size,
+            largest = list.maxByOrNull { it.bytes },
+            newestMs = list.maxOf { it.addedMs },
+            opus = list.count { it.format == "Opus" },
+            aac = list.count { it.format == "AAC" },
         )
     }
 }

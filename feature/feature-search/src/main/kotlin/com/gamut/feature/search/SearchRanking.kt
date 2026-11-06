@@ -76,11 +76,9 @@ internal object SearchRanking {
         return artistConfidence(query, hitName, fans, tracks) >= ARTIST_SHOW_THRESHOLD
     }
 
-    fun trackPopularity(rank: Long): Double =
-        ((log10(rank.coerceAtLeast(1).toDouble()) - 3.0) / 3.0).coerceIn(0.0, 1.0)
+    fun trackPopularity(rank: Long): Double = ((log10(rank.coerceAtLeast(1).toDouble()) - 3.0) / 3.0).coerceIn(0.0, 1.0)
 
-    fun viewsPopularity(views: Long): Double =
-        ((log10(views.coerceAtLeast(1).toDouble()) - 4.0) / 4.0).coerceIn(0.0, 1.0)
+    fun viewsPopularity(views: Long): Double = ((log10(views.coerceAtLeast(1).toDouble()) - 4.0) / 4.0).coerceIn(0.0, 1.0)
 
     private fun tokenCoverage(queryTokens: List<String>, haystack: Set<String>): Double {
         if (queryTokens.isEmpty()) return 0.0

@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
@@ -30,17 +31,9 @@ import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.focusable
-import androidx.compose.ui.focus.focusProperties
-import com.gamut.core.designsystem.LocalFocusLive
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
-import com.gamut.core.designsystem.focusRing
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -54,6 +47,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
@@ -65,10 +63,12 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import com.adamglin.PhosphorIcons
-import com.gamut.core.designsystem.ArtPlaceholder
 import com.adamglin.phosphoricons.Regular
 import com.adamglin.phosphoricons.regular.Pause
 import com.adamglin.phosphoricons.regular.Play
+import com.gamut.core.designsystem.ArtPlaceholder
+import com.gamut.core.designsystem.LocalFocusLive
+import com.gamut.core.designsystem.focusRing
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.roundToInt
@@ -159,7 +159,10 @@ internal fun ArtworkWithRing(
                     val placeable = measurable.measure(Constraints.fixed(w, h))
                     layout(w, h) { placeable.place(0, 0) }
                 }
-                .graphicsLayer { scaleX = coverScale; scaleY = coverScale },
+                .graphicsLayer {
+                    scaleX = coverScale
+                    scaleY = coverScale
+                },
             contentAlignment = Alignment.Center,
         ) {
             Box(
@@ -181,7 +184,10 @@ internal fun ArtworkWithRing(
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .graphicsLayer { scaleX = 1.3f; scaleY = 1.3f }
+                                    .graphicsLayer {
+                                        scaleX = 1.3f
+                                        scaleY = 1.3f
+                                    }
                                     .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(28.dp) else Modifier),
                             )
                             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
@@ -240,9 +246,22 @@ internal fun ArtworkWithRing(
                     .onKeyEvent { e ->
                         if (!enabled || e.type != KeyEventType.KeyDown) return@onKeyEvent false
                         when (e.key) {
-                            Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.MediaPlayPause -> { currentToggle(); tapTrigger++; true }
-                            Key.MediaFastForward, Key.MediaStepForward -> { currentSeek((progress() + seekStep).coerceIn(0f, 1f)); true }
-                            Key.MediaRewind, Key.MediaStepBackward -> { currentSeek((progress() - seekStep).coerceIn(0f, 1f)); true }
+                            Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.MediaPlayPause -> {
+                                currentToggle()
+                                tapTrigger++
+                                true
+                            }
+
+                            Key.MediaFastForward, Key.MediaStepForward -> {
+                                currentSeek((progress() + seekStep).coerceIn(0f, 1f))
+                                true
+                            }
+
+                            Key.MediaRewind, Key.MediaStepBackward -> {
+                                currentSeek((progress() - seekStep).coerceIn(0f, 1f))
+                                true
+                            }
+
                             else -> false
                         }
                     }
@@ -263,13 +282,16 @@ internal fun ArtworkWithRing(
                         val coverInner = Rect(marginPx, marginPx, marginPx + coverW, marginPx + coverH)
                             .deflate(10.dp.toPx())
                         val hitRadius = 16.dp.toPx()
-                        fun nearLine(p: Offset) =
-                            !coverInner.contains(p) && pts.minOf { hypot(it.x - p.x, it.y - p.y) } < hitRadius
+                        fun nearLine(p: Offset) = !coverInner.contains(p) && pts.minOf { hypot(it.x - p.x, it.y - p.y) } < hitRadius
                         fun fractionAt(p: Offset): Float {
-                            var best = 0; var bestD = Float.MAX_VALUE
+                            var best = 0
+                            var bestD = Float.MAX_VALUE
                             pts.forEachIndexed { i, o ->
                                 val d = hypot(o.x - p.x, o.y - p.y)
-                                if (d < bestD) { bestD = d; best = i }
+                                if (d < bestD) {
+                                    bestD = d
+                                    best = i
+                                }
                             }
                             return (best.toFloat() / samples).coerceIn(0f, 1f)
                         }

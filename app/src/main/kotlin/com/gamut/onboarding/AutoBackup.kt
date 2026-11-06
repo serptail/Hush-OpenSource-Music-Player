@@ -52,11 +52,10 @@ object AutoBackup {
         withContext(Dispatchers.IO) { backupDir(context).listFiles()?.forEach { it.delete() } }
     }
 
-    fun list(context: Context): List<BackupFile> =
-        backupDir(context).listFiles { f -> f.isFile && f.name.startsWith(PREFIX) && f.name.endsWith(EXT) }
-            ?.sortedByDescending { it.name }
-            ?.map { BackupFile(it, it.name, it.lastModified(), it.length()) }
-            .orEmpty()
+    fun list(context: Context): List<BackupFile> = backupDir(context).listFiles { f -> f.isFile && f.name.startsWith(PREFIX) && f.name.endsWith(EXT) }
+        ?.sortedByDescending { it.name }
+        ?.map { BackupFile(it, it.name, it.lastModified(), it.length()) }
+        .orEmpty()
 
     suspend fun write(context: Context, exporter: DataExporter): File? = writeLock.withLock {
         val bytes = exporter.exportOrNull(password = null) ?: return@withLock null
@@ -66,7 +65,11 @@ object AutoBackup {
             val target = File(dir, "$PREFIX$day$EXT")
             val tmp = File(dir, "$PREFIX$day.tmp")
             try {
-                tmp.outputStream().use { it.write(bytes); it.flush(); it.fd.sync() }
+                tmp.outputStream().use {
+                    it.write(bytes)
+                    it.flush()
+                    it.fd.sync()
+                }
                 if (tmp.length() != bytes.size.toLong()) throw IOException("Backup was not written completely")
                 if (!tmp.renameTo(target)) {
                     target.delete()
@@ -85,7 +88,9 @@ object AutoBackup {
 class AutoBackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     @EntryPoint
     @InstallIn(SingletonComponent::class)
-    interface Deps { fun exporter(): DataExporter }
+    interface Deps {
+        fun exporter(): DataExporter
+    }
 
     override suspend fun doWork(): Result = try {
         val exporter = EntryPointAccessors.fromApplication(applicationContext, Deps::class.java).exporter()

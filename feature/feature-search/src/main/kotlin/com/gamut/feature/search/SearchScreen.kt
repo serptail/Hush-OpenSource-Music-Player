@@ -36,9 +36,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.unit.IntOffset
-import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -74,13 +71,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.input.InputMode
-import androidx.compose.ui.platform.LocalInputModeManager
-import com.gamut.core.designsystem.focusRing
-import com.adamglin.phosphoricons.bold.ArrowClockwise
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
@@ -88,14 +81,17 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -104,12 +100,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.fill.CheckCircle
+import com.adamglin.phosphoricons.Fill
+import com.adamglin.phosphoricons.bold.ArrowClockwise
 import com.adamglin.phosphoricons.bold.ArrowRight
 import com.adamglin.phosphoricons.bold.ClockCounterClockwise
 import com.adamglin.phosphoricons.bold.DotsThreeVertical
@@ -119,10 +116,11 @@ import com.adamglin.phosphoricons.bold.Play
 import com.adamglin.phosphoricons.bold.PlusCircle
 import com.adamglin.phosphoricons.bold.User
 import com.adamglin.phosphoricons.bold.X
-import com.gamut.core.designsystem.adaptiveGutter
-import com.gamut.core.designsystem.isWideLayout
+import com.adamglin.phosphoricons.fill.CheckCircle
 import com.gamut.core.designsystem.AcrylicHost
 import com.gamut.core.designsystem.ArtImage
+import com.gamut.core.designsystem.ArtistLine
+import com.gamut.core.designsystem.ArtistPickerSheet
 import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.GamutBottomBarTabsHeight
 import com.gamut.core.designsystem.LocalAcrylicState
@@ -130,29 +128,34 @@ import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.ProfileAvatar
 import com.gamut.core.designsystem.ShareSheet
-import com.gamut.core.designsystem.ArtistLine
-import com.gamut.core.designsystem.ArtistPickerSheet
-import com.gamut.core.designsystem.rememberArtistTap
-import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.designsystem.TrackRowSkeleton
 import com.gamut.core.designsystem.acrylicSource
+import com.gamut.core.designsystem.adaptiveGutter
+import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.glass
 import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.isWideLayout
 import com.gamut.core.designsystem.pressScale
+import com.gamut.core.designsystem.rememberArtistTap
+import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
 import com.gamut.core.model.TrackSource
 import dev.chrisbanes.haze.HazeState
 import java.util.Locale
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 internal val TextPrimary: Color
-    @Composable @ReadOnlyComposable get() = ink()
+    @Composable @ReadOnlyComposable
+    get() = ink()
 internal val TextSecondary: Color
-    @Composable @ReadOnlyComposable get() = ink(0.6f)
+    @Composable @ReadOnlyComposable
+    get() = ink(0.6f)
 internal val TextTertiary: Color
-    @Composable @ReadOnlyComposable get() = ink(0.4f)
+    @Composable @ReadOnlyComposable
+    get() = ink(0.4f)
 
 private val PanelShape = RoundedCornerShape(16.dp)
 internal val CardShapeLarge = RoundedCornerShape(22.dp)
@@ -214,7 +217,10 @@ fun SearchScreen(
         val recents = remember { RecentSearchesStore(context.applicationContext) }
         var recentList by remember { mutableStateOf(recents.all()) }
         var fieldFocused by remember { mutableStateOf(false) }
-        val saveRecent: (String) -> Unit = { q -> recents.add(q); recentList = recents.all() }
+        val saveRecent: (String) -> Unit = { q ->
+            recents.add(q)
+            recentList = recents.all()
+        }
         val showingRecents = showingDiscover && fieldFocused && recentList.isNotEmpty()
 
         LaunchedEffect(focusSearchTick) {
@@ -343,9 +349,12 @@ fun SearchScreen(
                                 onToggleFavorite(track)
                                 if (!isFav) savedTrack = track
                             },
-                            onTrackSelected = { picked -> saveRecent(state.query); onTrackSelected(picked, visibleTracks) },
+                            onTrackSelected = { picked ->
+                                saveRecent(state.query)
+                                onTrackSelected(picked, visibleTracks)
+                            },
                         )
-                }
+                    }
                 }
                 Column(Modifier.fillMaxSize()) {
                     header(Modifier.padding(horizontal = gutter + 24.dp))
@@ -381,7 +390,10 @@ fun SearchScreen(
                                 discoverChartItems(
                                     state = discover,
                                     selectedTab = discoverTab,
-                                    onSelectTab = { discoverTab = it; chartExpanded = false },
+                                    onSelectTab = {
+                                        discoverTab = it
+                                        chartExpanded = false
+                                    },
                                     onTrackClick = onTrackSelected,
                                     onMoreClick = { actionsTrack = it },
                                     nowPlayingIsrc = nowPlayingIsrc,
@@ -413,20 +425,29 @@ fun SearchScreen(
                                             "Clear",
                                             style = MaterialTheme.typography.labelLarge,
                                             color = TextSecondary,
-                                            modifier = Modifier.pressScale(onClick = { recents.clear(); recentList = emptyList() }, scaleDown = 0.92f).padding(4.dp),
+                                            modifier = Modifier.pressScale(onClick = {
+                                                recents.clear()
+                                                recentList = emptyList()
+                                            }, scaleDown = 0.92f).padding(4.dp),
                                         )
                                     }
                                 }
                                 items(recentList, key = { "recent-$it" }) { q ->
                                     Box(Modifier.padding(horizontal = 16.dp)) {
-                                        RecentRow(q, onClick = { viewModel.updateQuery(q) }, onRemove = { recents.remove(q); recentList = recents.all() })
+                                        RecentRow(q, onClick = { viewModel.updateQuery(q) }, onRemove = {
+                                            recents.remove(q)
+                                            recentList = recents.all()
+                                        })
                                     }
                                 }
                             } else if (showingDiscover) {
                                 discoverItems(
                                     state = discover,
                                     selectedTab = discoverTab,
-                                    onSelectTab = { discoverTab = it; chartExpanded = false },
+                                    onSelectTab = {
+                                        discoverTab = it
+                                        chartExpanded = false
+                                    },
                                     onTrackClick = onTrackSelected,
                                     onMoreClick = { actionsTrack = it },
                                     nowPlayingIsrc = nowPlayingIsrc,
@@ -451,7 +472,10 @@ fun SearchScreen(
                                         ) {
                                             Column(Modifier.padding(horizontal = 16.dp)) {
                                                 SectionLabel("Top result", Modifier.padding(horizontal = 8.dp))
-                                                ArtistHit(hit) { id -> saveRecent(state.query); onArtistSelected(id) }
+                                                ArtistHit(hit) { id ->
+                                                    saveRecent(state.query)
+                                                    onArtistSelected(id)
+                                                }
                                             }
                                         }
                                     }
@@ -496,7 +520,9 @@ fun SearchScreen(
                                     loadingEmpty -> items(8, key = { "skeleton-$it" }) {
                                         TrackRowSkeleton(Modifier.padding(horizontal = 24.dp))
                                     }
+
                                     noResults -> item(key = "empty") { NoResults(state.query) }
+
                                     else -> if (wide) {
                                         itemsIndexed(visibleTracks.chunked(2), key = { i, pair -> "${pair.first().isrc}#$i" }) { _, pair ->
                                             Row(Modifier.fillMaxWidth()) {
@@ -521,9 +547,15 @@ fun SearchScreen(
                 track = t,
                 isFavorite = t.isrc in favoriteIsrcs,
                 onDismiss = { actionsTrack = null },
-                onShare = { actionsTrack = null; shareTrack = t },
+                onShare = {
+                    actionsTrack = null
+                    shareTrack = t
+                },
                 onToggleFavorite = { onToggleFavorite(t) },
-                onAddToPlaylist = { actionsTrack = null; pickerTrack = t },
+                onAddToPlaylist = {
+                    actionsTrack = null
+                    pickerTrack = t
+                },
                 onGoToArtist = {
                     actionsTrack = null
                     if (splitArtists(t.artist).size > 1) artistPickTrack = t else onTrackArtist(t)
@@ -581,7 +613,10 @@ private fun SearchField(
     val live = com.gamut.core.designsystem.LocalFocusLive.current
     LaunchedEffect(armTick) { if (armTick > 0) editing = true }
     LaunchedEffect(editing) {
-        if (editing) { runCatching { focusRequester.requestFocus() }; keyboard?.show() }
+        if (editing) {
+            runCatching { focusRequester.requestFocus() }
+            keyboard?.show()
+        }
     }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Row(
@@ -607,12 +642,19 @@ private fun SearchField(
                     .weight(1f)
                     .focusProperties { canFocus = (!remote || editing) && live }
                     .focusRequester(focusRequester)
-                    .onFocusChanged { focused = it.isFocused; if (!it.isFocused) editing = false; onFocusChange(it.isFocused) },
+                    .onFocusChanged {
+                        focused = it.isFocused
+                        if (!it.isFocused) editing = false
+                        onFocusChange(it.isFocused)
+                    },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = TextPrimary),
                 cursorBrush = SolidColor(accent),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { keyboard?.hide(); onSubmit() }),
+                keyboardActions = KeyboardActions(onSearch = {
+                    keyboard?.hide()
+                    onSubmit()
+                }),
                 decorationBox = { inner ->
                     Box(contentAlignment = Alignment.CenterStart) {
                         if (query.isEmpty()) {
@@ -646,7 +688,10 @@ private fun SearchField(
                 softWrap = false,
                 modifier = Modifier
                     .padding(start = 16.dp)
-                    .pressScale(onClick = { onQueryChange(""); focusManager.clearFocus() }, scaleDown = 0.94f),
+                    .pressScale(onClick = {
+                        onQueryChange("")
+                        focusManager.clearFocus()
+                    }, scaleDown = 0.94f),
             )
         }
     }
@@ -764,7 +809,9 @@ private fun highlight(text: String, query: String, match: Color): AnnotatedStrin
                 val start = k
                 while (k < text.length && hit[k]) k++
                 addStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = match), start, k)
-            } else k++
+            } else {
+                k++
+            }
         }
     }
 }
@@ -779,8 +826,8 @@ private val YouTubeGlyph: ImageVector by lazy {
     ).addPath(
         pathData = PathParser().parsePathString(
             "M24.325 8.309s-2.655-.334-8.357-.334c-5.517 0-8.294.334-8.294.334A2.675 2.675 0 0 0 5 10.984v10.034" +
-                    "a2.675 2.675 0 0 0 2.674 2.676s2.582.332 8.294.332c5.709 0 8.357-.332 8.357-.332A2.673 2.673 0 0 0 27 21.018" +
-                    "V10.982a2.673 2.673 0 0 0-2.675-2.673zM13.061 19.975V12.03L20.195 16l-7.134 3.975z",
+                "a2.675 2.675 0 0 0 2.674 2.676s2.582.332 8.294.332c5.709 0 8.357-.332 8.357-.332A2.673 2.673 0 0 0 27 21.018" +
+                "V10.982a2.673 2.673 0 0 0-2.675-2.673zM13.061 19.975V12.03L20.195 16l-7.134 3.975z",
         ).toNodes(),
         fill = SolidColor(Color.Black),
     ).build()
@@ -806,13 +853,24 @@ internal fun InteractiveSurface(
         label = "surface-scale",
     )
     val tint by animateColorAsState(
-        targetValue = ink(if (pressed) 0.10f else if (hovered) 0.06f else 0f),
+        targetValue = ink(
+            if (pressed) {
+                0.10f
+            } else if (hovered) {
+                0.06f
+            } else {
+                0f
+            },
+        ),
         animationSpec = tween(140),
         label = "surface-tint",
     )
     Row(
         Modifier
-            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .then(modifier)
             .clip(shape)
             .background(tint)
@@ -922,8 +980,11 @@ private fun TrackResultRow(
                 if (track.source == TrackSource.YOUTUBE) {
                     Icon(YouTubeGlyph, "From YouTube", tint = ink(0.6f), modifier = Modifier.padding(end = 4.dp).size(18.dp))
                 }
-                val subtitle = if (isResolving) "Checking a verified source\u2026"
-                else listOfNotNull(track.artist, track.album?.takeIf { it.isNotBlank() }).joinToString(" \u00B7 ")
+                val subtitle = if (isResolving) {
+                    "Checking a verified source\u2026"
+                } else {
+                    listOfNotNull(track.artist, track.album?.takeIf { it.isNotBlank() }).joinToString(" \u00B7 ")
+                }
                 Text(
                     subtitle,
                     style = MaterialTheme.typography.bodyMedium,

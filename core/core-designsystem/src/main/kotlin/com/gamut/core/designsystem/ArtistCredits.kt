@@ -7,12 +7,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -191,7 +191,9 @@ fun ArtistPickerSheet(
                         Box(Modifier.size(48.dp).clip(CircleShape).border(1.dp, ink(0.12f), CircleShape)) {
                             if (url != null) {
                                 ArtImage(url = url, modifier = Modifier.size(48.dp), contentDescription = name, fallback = { Initial(name, 48.dp) })
-                            } else Initial(name, 48.dp)
+                            } else {
+                                Initial(name, 48.dp)
+                            }
                         }
                         Text(
                             name,

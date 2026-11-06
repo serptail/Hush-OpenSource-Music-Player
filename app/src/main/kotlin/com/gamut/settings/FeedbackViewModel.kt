@@ -7,6 +7,7 @@ import com.gamut.core.player.PlaybackSettings
 import com.gamut.core.player.SoundSettings
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,7 +15,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import javax.inject.Inject
 
 enum class FeedbackStatus { IDLE, SENDING, SENT }
 
@@ -139,6 +139,7 @@ class FeedbackViewModel @Inject constructor(
                     telemetry.breadcrumb("feedback", "sent ${u.type.label}")
                     _ui.update { FeedbackUi(name = it.name, email = it.email, status = FeedbackStatus.SENT) }
                 }
+
                 else -> {
                     telemetry.breadcrumb("feedback", "send failed: ${r.javaClass.simpleName}")
                     _ui.update { it.copy(status = FeedbackStatus.IDLE, error = failureText(r)) }

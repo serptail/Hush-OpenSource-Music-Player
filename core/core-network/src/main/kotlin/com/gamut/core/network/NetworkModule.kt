@@ -44,8 +44,7 @@ object NetworkModule {
     @Provides
     @Singleton
     @Named("catalog-cache")
-    fun catalogCache(@ApplicationContext context: Context): Cache =
-        Cache(File(context.cacheDir, "http-catalog"), 20L * 1024 * 1024)
+    fun catalogCache(@ApplicationContext context: Context): Cache = Cache(File(context.cacheDir, "http-catalog"), 20L * 1024 * 1024)
 
     @Provides
     @Singleton
@@ -86,48 +85,39 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun musicBrainzApi(@Named("musicbrainz") client: OkHttpClient): MusicBrainzApi =
-        retrofit("https://musicbrainz.org/ws/2/", client).create(MusicBrainzApi::class.java)
+    fun musicBrainzApi(@Named("musicbrainz") client: OkHttpClient): MusicBrainzApi = retrofit("https://musicbrainz.org/ws/2/", client).create(MusicBrainzApi::class.java)
 
     @Provides
     @Singleton
-    fun coverArtApi(@Named("coverart") client: OkHttpClient): CoverArtApi =
-        retrofit("https://coverartarchive.org/", client).create(CoverArtApi::class.java)
+    fun coverArtApi(@Named("coverart") client: OkHttpClient): CoverArtApi = retrofit("https://coverartarchive.org/", client).create(CoverArtApi::class.java)
 
     @Provides
     @Singleton
-    fun itunesApi(@Named("itunes") client: OkHttpClient): ItunesApi =
-        retrofit("https://itunes.apple.com/", client).create(ItunesApi::class.java)
+    fun itunesApi(@Named("itunes") client: OkHttpClient): ItunesApi = retrofit("https://itunes.apple.com/", client).create(ItunesApi::class.java)
 
     @Provides
     @Singleton
-    fun deezerApi(@Named("deezer") client: OkHttpClient): DeezerApi =
-        retrofit("https://api.deezer.com/", client).create(DeezerApi::class.java)
+    fun deezerApi(@Named("deezer") client: OkHttpClient): DeezerApi = retrofit("https://api.deezer.com/", client).create(DeezerApi::class.java)
 
     @Provides
     @Singleton
-    fun deezerChartsApi(@Named("deezer") client: OkHttpClient): DeezerChartsApi =
-        retrofit("https://api.deezer.com/", client).create(DeezerChartsApi::class.java)
+    fun deezerChartsApi(@Named("deezer") client: OkHttpClient): DeezerChartsApi = retrofit("https://api.deezer.com/", client).create(DeezerChartsApi::class.java)
 
     @Provides
     @Singleton
-    fun appleChartsApi(@Named("apple") client: OkHttpClient): AppleChartsApi =
-        retrofit("https://rss.marketingtools.apple.com/api/v2/us/", client).create(AppleChartsApi::class.java)
+    fun appleChartsApi(@Named("apple") client: OkHttpClient): AppleChartsApi = retrofit("https://rss.marketingtools.apple.com/api/v2/us/", client).create(AppleChartsApi::class.java)
 
     @Provides
     @Singleton
-    fun billboardApi(@Named("billboard") client: OkHttpClient): BillboardApi =
-        retrofit("https://raw.githubusercontent.com/", client).create(BillboardApi::class.java)
+    fun billboardApi(@Named("billboard") client: OkHttpClient): BillboardApi = retrofit("https://raw.githubusercontent.com/", client).create(BillboardApi::class.java)
 
     @Provides
     @Singleton
-    fun youtubeApi(@Named("youtube") client: OkHttpClient): YoutubeMusicApi =
-        retrofit("https://music.youtube.com/", client).create(YoutubeMusicApi::class.java)
+    fun youtubeApi(@Named("youtube") client: OkHttpClient): YoutubeMusicApi = retrofit("https://music.youtube.com/", client).create(YoutubeMusicApi::class.java)
 
     @Provides
     @Singleton
-    fun resolverSyncApi(@Named("sync") client: OkHttpClient): ResolverSyncApi =
-        retrofit(BuildConfig.SYNC_BASE_URL, client).create(ResolverSyncApi::class.java)
+    fun resolverSyncApi(@Named("sync") client: OkHttpClient): ResolverSyncApi = retrofit(BuildConfig.SYNC_BASE_URL, client).create(ResolverSyncApi::class.java)
 
     private fun retrofit(baseUrl: String, client: OkHttpClient) = Retrofit.Builder()
         .baseUrl(baseUrl)

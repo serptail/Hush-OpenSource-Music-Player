@@ -79,8 +79,11 @@ class ShazamClient @Inject constructor(private val configs: ShazamConfigStore) {
 
             when (val code = connection.responseCode) {
                 200 -> Sent(parse(connection.inputStream.bufferedReader().use { it.readText() }))
+
                 204 -> Sent(ShazamResult.NoMatch)
+
                 429 -> Sent(ShazamResult.Failure("Too many tries, wait a moment and try again"))
+
                 else -> {
                     val snippet = connection.errorStream?.bufferedReader()?.use { it.readText().take(200) }.orEmpty()
                     Log.w(TAG, "Shazam answered HTTP $code: $snippet")
@@ -180,11 +183,9 @@ class ShazamClient @Inject constructor(private val configs: ShazamConfigStore) {
         return null
     }
 
-    private fun norm(text: String): String =
-        text.replace(BRACKETS, "").filter { it.isLetterOrDigit() }.lowercase()
+    private fun norm(text: String): String = text.replace(BRACKETS, "").filter { it.isLetterOrDigit() }.lowercase()
 
-    private fun JSONObject.str(name: String): String? =
-        if (isNull(name)) null else optString(name).takeIf { it.isNotBlank() }
+    private fun JSONObject.str(name: String): String? = if (isNull(name)) null else optString(name).takeIf { it.isNotBlank() }
 
     private companion object {
         const val CONNECT_TIMEOUT_MS = 8_000

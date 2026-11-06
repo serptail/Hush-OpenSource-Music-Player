@@ -105,17 +105,20 @@ class Media3MusicPlayer @Inject constructor(
         val mod = ModAudioProcessor()
         val engine = SoundEngineProcessor()
         val renderers = object : DefaultRenderersFactory(context) {
-            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
-                DefaultAudioSink.Builder(context)
-                    .setEnableFloatOutput(enableFloatOutput)
-                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                    .setAudioProcessors(arrayOf<AudioProcessor>(mod, engine))
-                    .build()
+            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink = DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                .setAudioProcessors(arrayOf<AudioProcessor>(mod, engine))
+                .build()
         }
         val exo = ExoPlayer.Builder(context, renderers)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(DataSource.Factory {
-                SchemeRoutingDataSource(local = DefaultDataSource.Factory(context).createDataSource(), remote = cacheFactory.createDataSource())
-            }))
+            .setMediaSourceFactory(
+                DefaultMediaSourceFactory(
+                    DataSource.Factory {
+                        SchemeRoutingDataSource(local = DefaultDataSource.Factory(context).createDataSource(), remote = cacheFactory.createDataSource())
+                    },
+                ),
+            )
             .setLoadControl(
                 DefaultLoadControl.Builder()
                     .setBufferDurationsMs(30_000, 90_000, BUFFER_FOR_PLAYBACK_MS, 3_000)
@@ -155,7 +158,9 @@ class Media3MusicPlayer @Inject constructor(
         }
     }
 
-    override fun warmUp() { player.playbackState }
+    override fun warmUp() {
+        player.playbackState
+    }
 
     internal val sessionPlayer: ExoPlayer get() = player
 
@@ -190,8 +195,7 @@ class Media3MusicPlayer @Inject constructor(
             return builder.build()
         }
 
-        override fun isCommandAvailable(command: Int): Boolean =
-            command in queueCommands || super.isCommandAvailable(command)
+        override fun isCommandAvailable(command: Int): Boolean = command in queueCommands || super.isCommandAvailable(command)
 
         override fun hasNextMediaItem(): Boolean = true
         override fun hasPreviousMediaItem(): Boolean = true
@@ -244,11 +248,21 @@ class Media3MusicPlayer @Inject constructor(
     private var resolver: TrackSourceResolver? = null
 
     private var transitioning = false
-        set(value) { field = value; updateTransitionLock(value); updateAwaiting() }
+        set(value) {
+            field = value
+            updateTransitionLock(value)
+            updateAwaiting()
+        }
 
     private val transitionLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Gamut:transition").apply { setReferenceCounted(false) }
     private fun updateTransitionLock(on: Boolean) {
-        runCatching { if (on) transitionLock.acquire(TRANSITION_LOCK_MS) else if (transitionLock.isHeld) transitionLock.release() }
+        runCatching {
+            if (on) {
+                transitionLock.acquire(TRANSITION_LOCK_MS)
+            } else if (transitionLock.isHeld) {
+                transitionLock.release()
+            }
+        }
     }
 
     internal val keepForeground: Boolean get() = transitioning || loadJob?.isActive == true
@@ -309,19 +323,25 @@ class Media3MusicPlayer @Inject constructor(
                         schedulePrefetch(PREFETCH_DELAY_MS)
                     }
                 }
-                state.value = if (isPlaying) PlaybackState.Playing(player.currentPosition, track)
-                else PlaybackState.Paused(player.currentPosition, track)
+                state.value = if (isPlaying) {
+                    PlaybackState.Playing(player.currentPosition, track)
+                } else {
+                    PlaybackState.Paused(player.currentPosition, track)
+                }
                 if (isPlaying) transitioning = false
                 updateAwaiting()
             }
 
-            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) { if (slot === activeSlot) updateAwaiting() }
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (slot === activeSlot) updateAwaiting()
+            }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (slot !== activeSlot) return
                 updateAwaiting()
                 when (playbackState) {
                     Player.STATE_ENDED -> onTrackEnded()
+
                     Player.STATE_READY -> {
                         learnDuration()
                         publishStreamDuration()
@@ -351,8 +371,11 @@ class Media3MusicPlayer @Inject constructor(
                     currentTrack = track
                     loadedIsrc = track.isrc
                     publishQueue()
-                    state.value = if (player.isPlaying) PlaybackState.Playing(player.currentPosition, track)
-                    else PlaybackState.Paused(player.currentPosition, track)
+                    state.value = if (player.isPlaying) {
+                        PlaybackState.Playing(player.currentPosition, track)
+                    } else {
+                        PlaybackState.Paused(player.currentPosition, track)
+                    }
                 }
                 streamDuration.value = 0L
                 learnDuration()
@@ -492,14 +515,18 @@ class Media3MusicPlayer @Inject constructor(
         if (loadedIsrc == track.isrc) resumePlayer() else loadAtPos(pos)
     }
 
-    override fun seekTo(positionMs: Long) { if (!transitioning) player.seekTo(positionMs) }
+    override fun seekTo(positionMs: Long) {
+        if (!transitioning) player.seekTo(positionMs)
+    }
 
     override fun skipNext() {
         val target = nextPos() ?: return
         val track = trackAt(target) ?: return
         if (crossfadeActive() && !transitioning && player.isPlaying && target == peekNextPos() &&
             armedIsrc == track.isrc && standbyReady() && beginCrossfade(minOf(crossfadeMs, MANUAL_CROSSFADE_MS))
-        ) return
+        ) {
+            return
+        }
         val preloaded = !transitioning &&
             target == peekNextPos() &&
             player.currentMediaItem?.mediaId == currentTrack?.isrc &&
@@ -526,7 +553,11 @@ class Media3MusicPlayer @Inject constructor(
             return
         }
         val previous = prevPos()
-        if (previous != null) loadAtPos(previous) else if (!transitioning) player.seekTo(0L)
+        if (previous != null) {
+            loadAtPos(previous)
+        } else if (!transitioning) {
+            player.seekTo(0L)
+        }
     }
 
     override fun setQueue(tracks: List<Track>, startIndex: Int) {
@@ -573,7 +604,9 @@ class Media3MusicPlayer @Inject constructor(
         queueChanged()
     }
 
-    override fun setSourceResolver(resolver: TrackSourceResolver?) { this.resolver = resolver }
+    override fun setSourceResolver(resolver: TrackSourceResolver?) {
+        this.resolver = resolver
+    }
 
     private fun trackAt(p: Int): Track? = order.getOrNull(p)?.let { items.getOrNull(it) }
 
@@ -704,7 +737,10 @@ class Media3MusicPlayer @Inject constructor(
 
     private fun recover(track: Track, resumeAtMs: Long): Boolean {
         if (resolver == null) return false
-        if (recoveringIsrc != track.isrc) { recoveringIsrc = track.isrc; recoveries = 0 }
+        if (recoveringIsrc != track.isrc) {
+            recoveringIsrc = track.isrc
+            recoveries = 0
+        }
         if (recoveries >= MAX_RECOVERIES) return false
         recoveries++
         if (trackAt(pos)?.isrc != track.isrc) {
@@ -769,7 +805,9 @@ class Media3MusicPlayer @Inject constructor(
         val exo = player
         if (!crossfadeActive() || track == null || transitioning || crossfading() || !exo.isPlaying ||
             exo.currentMediaItem?.mediaId != track.isrc
-        ) return WATCH_IDLE_MS
+        ) {
+            return WATCH_IDLE_MS
+        }
         val duration = exo.duration
         if (duration == C.TIME_UNSET || duration <= 0L) return WATCH_IDLE_MS
         val nextPos = peekNextPos() ?: return WATCH_IDLE_MS
@@ -813,7 +851,12 @@ class Media3MusicPlayer @Inject constructor(
         armedIsrc = null
         armedPos = -1
         armTried = null
-        standbySlot?.exo?.let { runCatching { it.stop(); it.clearMediaItems() } }
+        standbySlot?.exo?.let {
+            runCatching {
+                it.stop()
+                it.clearMediaItems()
+            }
+        }
     }
 
     private fun beginCrossfade(fadeMs: Int): Boolean {
@@ -1062,7 +1105,10 @@ class Media3MusicPlayer @Inject constructor(
                 if (track != null && !transitioning && state.value !is PlaybackState.Loading &&
                     player.isPlaying && player.currentMediaItem?.mediaId == track.isrc
                 ) {
-                    if (streamDuration.value == 0L) { learnDuration(); publishStreamDuration() }
+                    if (streamDuration.value == 0L) {
+                        learnDuration()
+                        publishStreamDuration()
+                    }
                     state.value = PlaybackState.Playing(player.currentPosition, track)
                 }
                 delay(if (powerManager.isInteractive) 500L else 2_000L)

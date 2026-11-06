@@ -30,6 +30,7 @@ class SoundParams(
 @UnstableApi
 internal class SoundEngineProcessor : BaseAudioProcessor() {
     @Volatile var params: SoundParams = SoundParams()
+
     @Volatile var pitchRatio = 1f
 
     private var channels = 2
@@ -98,8 +99,14 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
         return AudioFormat(rate, channels, C.ENCODING_PCM_16BIT)
     }
 
-    override fun onFlush() { clearState(); running = false }
-    override fun onReset() { clearState(); running = false }
+    override fun onFlush() {
+        clearState()
+        running = false
+    }
+    override fun onReset() {
+        clearState()
+        running = false
+    }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
         val inFrameBytes = (if (floatInput) 4 else 2) * channels
@@ -112,7 +119,10 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
 
         if (neutral) {
             val out = replaceOutputBuffer(inputBuffer.remaining())
-            if (running) { clearState(); running = false }
+            if (running) {
+                clearState()
+                running = false
+            }
             out.put(inputBuffer)
             out.flip()
             return
@@ -226,7 +236,15 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
 
     private fun quantize(x: Double, dither: Double): Short {
         val v = floor(x * 32768.0 + dither + 0.5)
-        return (if (v > 32767.0) 32767.0 else if (v < -32768.0) -32768.0 else v).toInt().toShort()
+        return (
+            if (v > 32767.0) {
+                32767.0
+            } else if (v < -32768.0) {
+                -32768.0
+            } else {
+                v
+            }
+            ).toInt().toShort()
     }
 
     private fun rand(): Double {
@@ -246,7 +264,12 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
             val f = band?.freqHz?.toDouble()?.times(scale) ?: 0.0
             if (band != null && abs(band.gainDb) >= 0.01f && f < nyq * 0.95) {
                 design(i, band, f)
-                if (!on[i]) { z1l[i] = 0.0; z2l[i] = 0.0; z1r[i] = 0.0; z2r[i] = 0.0 }
+                if (!on[i]) {
+                    z1l[i] = 0.0
+                    z2l[i] = 0.0
+                    z1r[i] = 0.0
+                    z2r[i] = 0.0
+                }
                 on[i] = true
                 order[eqBands++] = i
             } else {
@@ -287,26 +310,43 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
         val alpha = sin(w0) / (2.0 * q)
         val c: DoubleArray = when (band.type) {
             BandType.PEAK -> doubleArrayOf(
-                1.0 + alpha * a, -2.0 * cw, 1.0 - alpha * a,
-                1.0 + alpha / a, -2.0 * cw, 1.0 - alpha / a,
+                1.0 + alpha * a,
+                -2.0 * cw,
+                1.0 - alpha * a,
+                1.0 + alpha / a,
+                -2.0 * cw,
+                1.0 - alpha / a,
             )
+
             BandType.LOW_SHELF -> {
                 val s = 2.0 * sqrt(a) * alpha
                 doubleArrayOf(
-                    a * ((a + 1.0) - (a - 1.0) * cw + s), 2.0 * a * ((a - 1.0) - (a + 1.0) * cw), a * ((a + 1.0) - (a - 1.0) * cw - s),
-                    (a + 1.0) + (a - 1.0) * cw + s, -2.0 * ((a - 1.0) + (a + 1.0) * cw), (a + 1.0) + (a - 1.0) * cw - s,
+                    a * ((a + 1.0) - (a - 1.0) * cw + s),
+                    2.0 * a * ((a - 1.0) - (a + 1.0) * cw),
+                    a * ((a + 1.0) - (a - 1.0) * cw - s),
+                    (a + 1.0) + (a - 1.0) * cw + s,
+                    -2.0 * ((a - 1.0) + (a + 1.0) * cw),
+                    (a + 1.0) + (a - 1.0) * cw - s,
                 )
             }
+
             BandType.HIGH_SHELF -> {
                 val s = 2.0 * sqrt(a) * alpha
                 doubleArrayOf(
-                    a * ((a + 1.0) + (a - 1.0) * cw + s), -2.0 * a * ((a - 1.0) + (a + 1.0) * cw), a * ((a + 1.0) + (a - 1.0) * cw - s),
-                    (a + 1.0) - (a - 1.0) * cw + s, 2.0 * ((a - 1.0) - (a + 1.0) * cw), (a + 1.0) - (a - 1.0) * cw - s,
+                    a * ((a + 1.0) + (a - 1.0) * cw + s),
+                    -2.0 * a * ((a - 1.0) + (a + 1.0) * cw),
+                    a * ((a + 1.0) + (a - 1.0) * cw - s),
+                    (a + 1.0) - (a - 1.0) * cw + s,
+                    2.0 * ((a - 1.0) - (a + 1.0) * cw),
+                    (a + 1.0) - (a - 1.0) * cw - s,
                 )
             }
         }
-        b0[i] = c[0] / c[3]; b1[i] = c[1] / c[3]; b2[i] = c[2] / c[3]
-        a1[i] = c[4] / c[3]; a2[i] = c[5] / c[3]
+        b0[i] = c[0] / c[3]
+        b1[i] = c[1] / c[3]
+        b2[i] = c[2] / c[3]
+        a1[i] = c[4] / c[3]
+        a2[i] = c[5] / c[3]
     }
 
     private fun peakResponseDb(): Double {
@@ -347,10 +387,21 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
     }
 
     private fun clearState() {
-        z1l.fill(0.0); z2l.fill(0.0); z1r.fill(0.0); z2r.fill(0.0)
-        laL.fill(0.0); laR.fill(0.0); pk.fill(0.0)
-        xdL.fill(0.0); xdR.fill(0.0)
-        lw = 0; xw = 0; winMax = 0.0; gain = 1.0; lpL = 0.0; lpR = 0.0
+        z1l.fill(0.0)
+        z2l.fill(0.0)
+        z1r.fill(0.0)
+        z2r.fill(0.0)
+        laL.fill(0.0)
+        laR.fill(0.0)
+        pk.fill(0.0)
+        xdL.fill(0.0)
+        xdR.fill(0.0)
+        lw = 0
+        xw = 0
+        winMax = 0.0
+        gain = 1.0
+        lpL = 0.0
+        lpR = 0.0
     }
 
     private fun flushDenormals() {

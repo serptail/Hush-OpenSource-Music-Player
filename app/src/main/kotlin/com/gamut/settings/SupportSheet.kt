@@ -4,23 +4,17 @@ import android.provider.Settings
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import com.gamut.core.designsystem.AdaptiveLayout
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,8 +23,11 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -54,6 +51,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -70,12 +69,13 @@ import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.bold.Heart
+import com.gamut.core.designsystem.AdaptiveLayout
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.sin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun SupportSheetHost(vm: SupportViewModel, safeMoment: Boolean) {
@@ -98,7 +98,10 @@ fun SupportSheetHost(vm: SupportViewModel, safeMoment: Boolean) {
         SupportSheet(
             trigger = trigger,
             plays = playsAtShow,
-            onBuy = { store.onSupported(); open() },
+            onBuy = {
+                store.onSupported()
+                open()
+            },
             onLater = { store.onLater() },
             onNever = { store.onNeverAgain() },
             onGone = { shown = null },
@@ -122,60 +125,71 @@ private fun SupportSheet(
     LaunchedEffect(Unit) { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
 
     var handled by remember { mutableStateOf(false) }
-    fun resolve(action: () -> Unit) { if (!handled) { handled = true; action() } }
+    fun resolve(action: () -> Unit) {
+        if (!handled) {
+            handled = true
+            action()
+        }
+    }
     fun leave(action: () -> Unit) {
         resolve(action)
         scope.launch { sheetState.hide() }.invokeOnCompletion { onGone() }
     }
 
     ModalBottomSheet(
-        onDismissRequest = { resolve(onLater); onGone() },
+        onDismissRequest = {
+            resolve(onLater)
+            onGone()
+        },
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-        Column(
-            Modifier
-                .widthIn(max = minOf(AdaptiveLayout.SheetContentMaxWidth, 520.dp))
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .navigationBarsPadding()
-                .padding(start = 24.dp, end = 24.dp, bottom = 20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            CoffeeCup()
-            Spacer(Modifier.height(8.dp))
-            Text(headline(trigger, plays), style = MaterialTheme.typography.titleLarge, color = ink(), textAlign = TextAlign.Center)
-            Spacer(Modifier.height(10.dp))
-            Text(
-                "Gamut will always be free and open source. Every bit of support helps us keep improving it.",
-                style = MaterialTheme.typography.bodyMedium, color = ink(0.7f), textAlign = TextAlign.Center,
-            )
-            Spacer(Modifier.height(24.dp))
-            Row(
+            Column(
                 Modifier
-                    .fillMaxWidth().height(56.dp)
-                    .pressScale(onClick = { leave(onBuy) }, scaleDown = 0.97f)
-                    .clip(CircleShape)
-                    .background(Brush.horizontalGradient(listOf(KoFiPink, KoFiCoral)))
-                    .semantics { role = Role.Button },
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
+                    .widthIn(max = minOf(AdaptiveLayout.SheetContentMaxWidth, 520.dp))
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .navigationBarsPadding()
+                    .padding(start = 24.dp, end = 24.dp, bottom = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Icon(PhosphorIcons.Bold.Heart, null, tint = Color.White, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(10.dp))
-                Text("Buy me a coffee", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                CoffeeCup()
+                Spacer(Modifier.height(8.dp))
+                Text(headline(trigger, plays), style = MaterialTheme.typography.titleLarge, color = ink(), textAlign = TextAlign.Center)
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "Gamut will always be free and open source. Every bit of support helps us keep improving it.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink(0.7f),
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(24.dp))
+                Row(
+                    Modifier
+                        .fillMaxWidth().height(56.dp)
+                        .pressScale(onClick = { leave(onBuy) }, scaleDown = 0.97f)
+                        .clip(CircleShape)
+                        .background(Brush.horizontalGradient(listOf(KoFiPink, KoFiCoral)))
+                        .semantics { role = Role.Button },
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(PhosphorIcons.Bold.Heart, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text("Buy me a coffee", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                }
+                Spacer(Modifier.height(6.dp))
+                TextButton(onClick = { leave(onLater) }, colors = ButtonDefaults.textButtonColors(contentColor = ink(0.7f))) {
+                    Text("Maybe later")
+                }
+                Text(
+                    "I already did / don\u2019t ask again",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ink(0.45f),
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { leave(onNever) }.padding(horizontal = 12.dp, vertical = 10.dp),
+                )
             }
-            Spacer(Modifier.height(6.dp))
-            TextButton(onClick = { leave(onLater) }, colors = ButtonDefaults.textButtonColors(contentColor = ink(0.7f))) {
-                Text("Maybe later")
-            }
-            Text(
-                "I already did / don\u2019t ask again",
-                style = MaterialTheme.typography.bodySmall, color = ink(0.45f),
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { leave(onNever) }.padding(horizontal = 12.dp, vertical = 10.dp),
-            )
-        }
         }
     }
 }
@@ -199,10 +213,14 @@ internal fun CoffeeCup(modifier: Modifier = Modifier) {
 
     val phaseState: State<Float> = if (animate) {
         rememberInfiniteTransition(label = "cup").animateFloat(
-            initialValue = 0f, targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(3200, easing = LinearEasing)), label = "steam",
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(3200, easing = LinearEasing)),
+            label = "steam",
         )
-    } else remember { mutableStateOf(0.3f) }
+    } else {
+        remember { mutableStateOf(0.3f) }
+    }
 
     val pop = remember { Animatable(if (animate) 0.6f else 1f) }
     LaunchedEffect(Unit) { if (animate) pop.animateTo(1f, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow)) }
@@ -219,9 +237,12 @@ internal fun CoffeeCup(modifier: Modifier = Modifier) {
         val phase = phaseState.value
         val line = 3.dp.toPx()
 
-        val bodyL = w * 0.23f; val bodyR = w * 0.73f
-        val bodyT = h * 0.46f; val bodyB = h * 0.84f
-        val bw = bodyR - bodyL; val bh = bodyB - bodyT
+        val bodyL = w * 0.23f
+        val bodyR = w * 0.73f
+        val bodyT = h * 0.46f
+        val bodyB = h * 0.84f
+        val bw = bodyR - bodyL
+        val bh = bodyB - bodyT
 
         val xs = floatArrayOf(0.26f, 0.5f, 0.74f)
         for (i in 0..2) {
@@ -245,7 +266,8 @@ internal fun CoffeeCup(modifier: Modifier = Modifier) {
         drawArc(cup, startAngle = -90f, sweepAngle = 180f, useCenter = false, topLeft = Offset(hc.x - hr, hc.y - hr), size = Size(hr * 2, hr * 2), style = Stroke(line * 1.8f, cap = StrokeCap.Round))
 
         val body = Path().apply {
-            moveTo(bodyL, bodyT); lineTo(bodyR, bodyT)
+            moveTo(bodyL, bodyT)
+            lineTo(bodyR, bodyT)
             cubicTo(bodyR, bodyT + bh * 0.9f, bodyR - bw * 0.12f, bodyB, bodyR - bw * 0.28f, bodyB)
             lineTo(bodyL + bw * 0.28f, bodyB)
             cubicTo(bodyL + bw * 0.12f, bodyB, bodyL, bodyT + bh * 0.9f, bodyL, bodyT)

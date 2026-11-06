@@ -1,5 +1,6 @@
 package com.gamut.feature.playerui
 
+import android.util.Log
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -68,11 +69,10 @@ import com.gamut.feature.playerui.components.tapTarget
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
-import java.net.UnknownHostException
 import java.net.URLEncoder
+import java.net.UnknownHostException
 import java.util.Collections
 import kotlin.coroutines.cancellation.CancellationException
-import android.util.Log
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
@@ -153,7 +153,10 @@ object LyricsRepository {
                 LyricsState.NotAvailable("No lyrics found for this track")
             } else {
                 Log.i(TAG, "\"${track.title}\": ${if (found.isSynced) "synced" else "PLAIN (not synced)"}, ${found.lines.size} lines (looked up with ${seconds}s)")
-                LyricsState.Loaded(found.lines, found.isSynced).also { cache[key] = it; cachedSeconds[key] = seconds }
+                LyricsState.Loaded(found.lines, found.isSynced).also {
+                    cache[key] = it
+                    cachedSeconds[key] = seconds
+                }
             }
         } catch (e: CancellationException) {
             throw e
@@ -193,9 +196,12 @@ object LyricsRepository {
             return try {
                 httpGetRetrying(url)
             } catch (e: UnknownHostException) {
-                failed = true; offline = true; null
+                failed = true
+                offline = true
+                null
             } catch (e: IOException) {
-                failed = true; null
+                failed = true
+                null
             }
         }
 
@@ -345,6 +351,7 @@ object LyricsRepository {
                         words.add(last.copy(text = last.text.trimEnd() + " "))
                     }
                 }
+
                 else -> words.add(LyricsWord(start, end.coerceAtLeast(start + 1), segment.trimStart()))
             }
         }
@@ -366,10 +373,9 @@ object LyricsRepository {
         }
     }
 
-    private fun parsePlainLyrics(plainText: String): List<LyricsLine> =
-        plainText.lines()
-            .filter { it.isNotBlank() }
-            .map { LyricsLine(timestampMs = 0L, text = it.trim()) }
+    private fun parsePlainLyrics(plainText: String): List<LyricsLine> = plainText.lines()
+        .filter { it.isNotBlank() }
+        .map { LyricsLine(timestampMs = 0L, text = it.trim()) }
 }
 
 private val LyricsTitleHeight = 36.dp
@@ -445,6 +451,7 @@ fun LyricsSection(
                                 is LyricsState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                     PlayerSpinner(Modifier.size(26.dp), Color.White.copy(alpha = 0.75f))
                                 }
+
                                 is LyricsState.Loaded -> {
                                     if (lyricsState.lines.isEmpty()) {
                                         LyricsEmptyState("No timed lyrics available")
@@ -458,7 +465,9 @@ fun LyricsSection(
                                         )
                                     }
                                 }
+
                                 is LyricsState.NotAvailable -> LyricsEmptyState("${lyricsState.reason}\nTap to retry", onRetry)
+
                                 is LyricsState.Error -> LyricsEmptyState("${lyricsState.message}\nRetrying\u2026 tap to retry now", onRetry)
                             }
                         }
@@ -476,6 +485,7 @@ private fun LyricsPreview(lyricsState: LyricsState) {
         is LyricsState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             PlayerSpinner(Modifier.size(22.dp), Color.White.copy(alpha = 0.75f))
         }
+
         is LyricsState.Loaded -> {
             if (lyricsState.lines.isEmpty()) {
                 LyricsPreviewMessage("No timed lyrics available")
@@ -524,7 +534,9 @@ private fun LyricsPreview(lyricsState: LyricsState) {
                 }
             }
         }
+
         is LyricsState.NotAvailable -> LyricsPreviewMessage(lyricsState.reason)
+
         is LyricsState.Error -> LyricsPreviewMessage("Error: ${lyricsState.message}")
     }
 }
@@ -691,7 +703,11 @@ private fun LyricLine(
     Text(
         text = text,
         style = style,
-        modifier = Modifier.fillMaxWidth().graphicsLayer { alpha = lineAlpha; scaleX = lineScale; scaleY = lineScale },
+        modifier = Modifier.fillMaxWidth().graphicsLayer {
+            alpha = lineAlpha
+            scaleX = lineScale
+            scaleY = lineScale
+        },
     )
 }
 

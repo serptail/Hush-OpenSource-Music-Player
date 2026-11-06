@@ -10,8 +10,7 @@ import javax.inject.Inject
 class CandidateScorer @Inject constructor() {
     data class Scored(val candidate: YoutubeCandidate, val score: Double)
 
-    fun rank(candidates: List<YoutubeCandidate>, track: Track): List<Scored> =
-        candidates.map { Scored(it, score(it, track)) }.sortedByDescending { it.score }
+    fun rank(candidates: List<YoutubeCandidate>, track: Track): List<Scored> = candidates.map { Scored(it, score(it, track)) }.sortedByDescending { it.score }
 
     companion object {
         const val ACCEPT = 0.60
@@ -40,7 +39,12 @@ class CandidateScorer @Inject constructor() {
         if (((candidateTitle intersect TextMatch.DERIVATIVE) - (title + artist)).isNotEmpty()) score -= 0.40
         if (candidate.durationMs > 0L && track.durationMs > 0L) {
             val seconds = kotlin.math.abs(candidate.durationMs - track.durationMs) / 1_000
-            score += when { seconds <= 3 -> 0.20; seconds <= 8 -> 0.05; seconds > 20 -> -0.50; else -> -0.15 }
+            score += when {
+                seconds <= 3 -> 0.20
+                seconds <= 8 -> 0.05
+                seconds > 20 -> -0.50
+                else -> -0.15
+            }
         }
         return score + kotlin.math.ln((candidate.viewCount + 1).toDouble()) / 1_000_000.0
     }

@@ -5,8 +5,7 @@ import android.content.Context
 class RecentSearchesStore(context: Context) {
     private val prefs = context.getSharedPreferences("recent_searches", Context.MODE_PRIVATE)
 
-    fun all(): List<String> =
-        prefs.getString(KEY, "").orEmpty().split('\n').filter { it.isNotBlank() }
+    fun all(): List<String> = prefs.getString(KEY, "").orEmpty().split('\n').filter { it.isNotBlank() }
 
     fun add(query: String) {
         val q = query.trim()

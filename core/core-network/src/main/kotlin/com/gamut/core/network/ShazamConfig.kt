@@ -31,8 +31,7 @@ data class ShazamConfig(
         fun parse(text: String): ShazamConfig? = try {
             val json = JSONObject(text)
             val d = ShazamConfig()
-            fun field(name: String, fallback: String): String =
-                if (json.isNull(name)) fallback else json.optString(name).takeIf { it.isNotBlank() } ?: fallback
+            fun field(name: String, fallback: String): String = if (json.isNull(name)) fallback else json.optString(name).takeIf { it.isNotBlank() } ?: fallback
 
             val endpoint = field("endpoint", d.endpoint)
             if (!isShazamUrl(endpoint)) {

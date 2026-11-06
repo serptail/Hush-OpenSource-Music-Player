@@ -79,7 +79,9 @@ class StatsViewModel @Inject constructor(private val store: PlayStatsStore) : Vi
 
     fun record(track: Track) = store.record(track)
 
-    fun select(p: StatsPeriod) { period.value = p }
+    fun select(p: StatsPeriod) {
+        period.value = p
+    }
     fun reset() = store.clear()
 }
 
@@ -101,9 +103,14 @@ internal fun StatsTab(vm: StatsViewModel) {
         if (summary.totalPlays == 0) {
             item(key = "empty", contentType = "empty") {
                 Text(
-                    if (period == StatsPeriod.ALL) "Play a few songs and your listening stats will show up here."
-                    else "Nothing played in this period yet.",
-                    style = MaterialTheme.typography.bodyLarge, color = ink(0.5f), textAlign = TextAlign.Center,
+                    if (period == StatsPeriod.ALL) {
+                        "Play a few songs and your listening stats will show up here."
+                    } else {
+                        "Nothing played in this period yet."
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = ink(0.5f),
+                    textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 64.dp),
                 )
             }
@@ -144,7 +151,8 @@ internal fun StatsTab(vm: StatsViewModel) {
                     item(key = "songs-more", contentType = "more") {
                         Text(
                             if (showAllSongs) "Show less" else "Show more",
-                            style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(top = 4.dp)
                                 .pressScale(onClick = { showAllSongs = !showAllSongs }, scaleDown = 0.96f)
                                 .padding(vertical = 8.dp),
@@ -156,7 +164,8 @@ internal fun StatsTab(vm: StatsViewModel) {
             item(key = "reset", contentType = "reset") {
                 Text(
                     "Reset statistics",
-                    style = MaterialTheme.typography.bodyMedium, color = ink(0.4f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink(0.4f),
                     modifier = Modifier.padding(top = 28.dp)
                         .pressScale(onClick = { confirmReset = true }, scaleDown = 0.96f)
                         .padding(vertical = 8.dp),
@@ -173,7 +182,12 @@ internal fun StatsTab(vm: StatsViewModel) {
             confirmLabel = "Reset",
             destructive = true,
             onDismiss = { confirmReset = false },
-            onConfirm = { confirmReset = false; showAllSongs = false; showAllArtists = false; vm.reset() },
+            onConfirm = {
+                confirmReset = false
+                showAllSongs = false
+                showAllArtists = false
+                vm.reset()
+            },
         ) { }
     }
 }
@@ -221,7 +235,8 @@ private fun Figure(value: Int, label: String, modifier: Modifier = Modifier) {
         Text(
             NumberFormat.getIntegerInstance().format(shown),
             style = MaterialTheme.typography.headlineMedium.copy(fontFeatureSettings = "tnum"),
-            color = ink(), maxLines = 1,
+            color = ink(),
+            maxLines = 1,
         )
         Text(label, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 2.dp))
     }
@@ -230,7 +245,9 @@ private fun Figure(value: Int, label: String, modifier: Modifier = Modifier) {
 @Composable
 private fun SectionTitle(text: String) {
     Text(
-        text, style = MaterialTheme.typography.titleMedium, color = ink(0.55f),
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        color = ink(0.55f),
         modifier = Modifier.padding(top = 30.dp, bottom = 4.dp),
     )
 }
@@ -249,7 +266,8 @@ private fun RankRow(
             rank.toString(),
             style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
             color = if (rank == 1) MaterialTheme.colorScheme.primary else ink(0.4f),
-            maxLines = 1, modifier = Modifier.width(22.dp),
+            maxLines = 1,
+            modifier = Modifier.width(22.dp),
         )
         leading()
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
@@ -262,7 +280,9 @@ private fun RankRow(
         Text(
             NumberFormat.getIntegerInstance().format(plays),
             style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
-            color = ink(0.85f), maxLines = 1, modifier = Modifier.padding(start = 14.dp),
+            color = ink(0.85f),
+            maxLines = 1,
+            modifier = Modifier.padding(start = 14.dp),
         )
     }
 }
@@ -276,7 +296,10 @@ private fun ShareBar(fraction: Float, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().height(3.dp).clip(CircleShape).background(ink(0.08f))) {
         Box(
             Modifier.fillMaxSize()
-                .graphicsLayer { scaleX = progress.value; transformOrigin = TransformOrigin(0f, 0.5f) }
+                .graphicsLayer {
+                    scaleX = progress.value
+                    transformOrigin = TransformOrigin(0f, 0.5f)
+                }
                 .background(accent.copy(alpha = 0.8f), CircleShape),
         )
     }
@@ -304,7 +327,9 @@ private fun ArtistGrid(artists: List<RankedArtist>, expanded: Boolean, onToggle:
 @Composable
 private fun MoreToggle(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Text(
-        label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary,
+        label,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
         modifier = modifier.pressScale(onClick = onClick, scaleDown = 0.96f).padding(horizontal = 16.dp, vertical = 8.dp),
     )
 }
@@ -325,7 +350,9 @@ private fun ArtistCell(artist: RankedArtist, modifier: Modifier = Modifier) {
             Text(artist.name, style = MaterialTheme.typography.bodyLarge, color = ink(), maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
                 if (artist.plays == 1) "1 play" else "${NumberFormat.getIntegerInstance().format(artist.plays)} plays",
-                style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 2.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = ink(0.55f),
+                modifier = Modifier.padding(top = 2.dp),
             )
         }
     }
@@ -367,5 +394,4 @@ private fun rememberArtistPhoto(name: String, album: String?): String? {
     return url
 }
 
-private fun leadArtist(name: String): String? =
-    name.split(" & ", " feat. ", " ft. ", " x ").first().trim().takeIf { it.isNotEmpty() && !it.equals(name.trim(), ignoreCase = true) }
+private fun leadArtist(name: String): String? = name.split(" & ", " feat. ", " ft. ", " x ").first().trim().takeIf { it.isNotEmpty() && !it.equals(name.trim(), ignoreCase = true) }

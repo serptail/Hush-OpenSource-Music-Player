@@ -5,7 +5,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import com.gamut.core.designsystem.GamutMotion
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -35,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.gamut.core.designsystem.ArtImage
+import com.gamut.core.designsystem.GamutMotion
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.squareArtUrl

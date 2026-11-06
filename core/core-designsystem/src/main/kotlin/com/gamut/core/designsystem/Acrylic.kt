@@ -7,12 +7,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -54,8 +54,7 @@ fun AcrylicHost(
 }
 
 @Composable
-fun Modifier.acrylicSource(state: HazeState? = LocalAcrylicState.current, zIndex: Float = 0f): Modifier =
-    if (state == null) this else hazeSource(state, zIndex = zIndex)
+fun Modifier.acrylicSource(state: HazeState? = LocalAcrylicState.current, zIndex: Float = 0f): Modifier = if (state == null) this else hazeSource(state, zIndex = zIndex)
 
 enum class AcrylicTone { Dark, Light }
 
@@ -145,8 +144,11 @@ fun AcrylicSurface(
         modifier = modifier
             .clip(shape)
             .then(
-                if (hazeState != null) Modifier.hazeEffect(state = hazeState, style = style)
-                else Modifier.background(base.copy(alpha = material.fallbackAlpha))
+                if (hazeState != null) {
+                    Modifier.hazeEffect(state = hazeState, style = style)
+                } else {
+                    Modifier.background(base.copy(alpha = material.fallbackAlpha))
+                },
             )
             .then(if (material.sheenAlpha > 0f) Modifier.background(sheen) else Modifier)
             .then(if (material.rimAlpha > 0f) Modifier.border(0.75.dp, rim, shape) else Modifier),
@@ -275,8 +277,11 @@ fun AcrylicScrim(
         } else {
             modifier.background(
                 Brush.verticalGradient(
-                    if (top) listOf(base.copy(alpha = material.fallbackAlpha), Color.Transparent)
-                    else listOf(Color.Transparent, base.copy(alpha = material.fallbackAlpha)),
+                    if (top) {
+                        listOf(base.copy(alpha = material.fallbackAlpha), Color.Transparent)
+                    } else {
+                        listOf(Color.Transparent, base.copy(alpha = material.fallbackAlpha))
+                    },
                 ),
             )
         },

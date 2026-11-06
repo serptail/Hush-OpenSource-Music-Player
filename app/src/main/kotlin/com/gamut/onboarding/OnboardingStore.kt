@@ -18,5 +18,7 @@ class OnboardingStore @Inject constructor(@ApplicationContext context: Context) 
         _localMode.value = true
     }
 
-    private companion object { const val KEY_LOCAL = "local_mode" }
+    private companion object {
+        const val KEY_LOCAL = "local_mode"
+    }
 }

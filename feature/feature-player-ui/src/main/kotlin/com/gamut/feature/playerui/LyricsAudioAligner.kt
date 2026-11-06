@@ -23,11 +23,14 @@ internal object LyricsAudioAligner {
                 if (env[k] >= floor) {
                     var e = k
                     while (e < b && env[e] >= floor) e++
-                    val s = (k * dt).toLong(); val en = (e * dt).toLong()
+                    val s = (k * dt).toLong()
+                    val en = (e * dt).toLong()
                     val last = runs.lastOrNull()
                     if (last != null && s - last[1] < MIN_GAP_MS) last[1] = en else runs.add(longArrayOf(s, en))
                     k = e
-                } else k++
+                } else {
+                    k++
+                }
             }
             if (runs.size < 2) return@mapIndexed line
 

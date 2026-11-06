@@ -7,4 +7,6 @@ import dagger.hilt.components.SingletonComponent
 
 @Module
 @InstallIn(SingletonComponent::class)
-abstract class PlayerModule { @Binds abstract fun bindMusicPlayer(player: Media3MusicPlayer): MusicPlayer }
+abstract class PlayerModule {
+    @Binds abstract fun bindMusicPlayer(player: Media3MusicPlayer): MusicPlayer
+}

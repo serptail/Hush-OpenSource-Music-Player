@@ -29,7 +29,13 @@ object SupabaseModule {
         supabaseUrl = BuildConfig.SUPABASE_URL.ifBlank { "https://unconfigured.invalid" },
         supabaseKey = BuildConfig.SUPABASE_ANON_KEY.ifBlank { "unconfigured" },
     ) {
-        defaultSerializer = KotlinXSerializer(Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = true })
+        defaultSerializer = KotlinXSerializer(
+            Json {
+                ignoreUnknownKeys = true
+                encodeDefaults = true
+                explicitNulls = true
+            },
+        )
         install(Auth) { sessionManager = EncryptedSessionManager(context) }
         install(Postgrest)
         install(Functions)

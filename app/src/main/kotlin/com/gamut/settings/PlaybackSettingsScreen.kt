@@ -27,8 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import com.gamut.core.designsystem.ink
-import com.gamut.core.designsystem.softResize
 import com.gamut.core.designsystem.pressScale
+import com.gamut.core.designsystem.softResize
 import com.gamut.core.player.BandType
 import com.gamut.core.player.Crossfeed
 import com.gamut.core.player.EqBand
@@ -61,11 +61,9 @@ private val FadeChoices = listOf(
     Choice(1_000, "Long", "1 second"),
 )
 
-private fun hzLabel(hz: Int) =
-    if (hz >= 1_000) String.format(Locale.US, "%.1f kHz", hz / 1_000f).replace(".0 ", " ") else "$hz Hz"
+private fun hzLabel(hz: Int) = if (hz >= 1_000) String.format(Locale.US, "%.1f kHz", hz / 1_000f).replace(".0 ", " ") else "$hz Hz"
 
-private fun hzShort(hz: Int) =
-    if (hz >= 1_000) String.format(Locale.US, "%.1fk", hz / 1_000f).replace(".0k", "k") else "$hz"
+private fun hzShort(hz: Int) = if (hz >= 1_000) String.format(Locale.US, "%.1fk", hz / 1_000f).replace(".0k", "k") else "$hz"
 
 private fun dbLabel(mb: Int) = String.format(Locale.US, "%+.1f dB", mb / 100f)
 
@@ -205,7 +203,8 @@ fun PlaybackSettingsScreen(
                 val band = activeBand?.let { snd.bands.getOrNull(it) }
                 Text(
                     if (band != null) "${hzLabel(band.freqHz.roundToInt())}  ·  ${dbLabel((band.gainDb * 100).roundToInt())}" else snd.preset,
-                    style = MaterialTheme.typography.bodyMedium, color = ink(0.6f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink(0.6f),
                     modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
                 )
                 EqCurve(snd.bands, SoundSettings.MAX_GAIN_DB, snd.eqEnabled, LnMinHz, LnMaxHz)
@@ -252,7 +251,9 @@ fun PlaybackSettingsScreen(
                 Text("Headphone crossfeed", style = MaterialTheme.typography.titleMedium, color = ink())
                 Text(
                     "Lets a little of the lows cross over between ears, like speakers do.",
-                    style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 2.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink(0.55f),
+                    modifier = Modifier.padding(top = 2.dp),
                 )
                 Spacer(Modifier.height(12.dp))
                 SegmentedControl(Crossfeed.entries.map { Choice(it, it.label, it.hint) }, snd.crossfeed, sound::setCrossfeed)
@@ -310,6 +311,7 @@ fun PlaybackSettingsScreen(
             onDismiss = { dialog = null },
             note = "Applies from the next track you play. Downloads have their own quality setting in Storage & Downloads.",
         )
+
         PlaybackDialog.PRESET -> GamutChoiceDialog(
             title = "Equalizer preset",
             choices = buildList {
@@ -320,7 +322,9 @@ fun PlaybackSettingsScreen(
             onSelect = sound::applyPreset,
             onDismiss = { dialog = null },
         )
+
         PlaybackDialog.BANDS -> BandEditorDialog(snd.bands, sound) { dialog = null }
+
         PlaybackDialog.RESET -> GamutDialog(
             title = "Reset audio settings?",
             body = "Streaming, playback, output and sound-quality options go back to their defaults, and the equalizer returns to Flat.",
@@ -333,6 +337,7 @@ fun PlaybackSettingsScreen(
                 dialog = null
             },
         )
+
         null -> Unit
     }
 }

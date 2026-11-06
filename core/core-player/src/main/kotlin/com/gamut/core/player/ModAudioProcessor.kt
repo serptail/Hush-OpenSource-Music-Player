@@ -9,20 +9,29 @@ import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.log10
 import kotlin.math.pow
-import kotlin.math.sin
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 @UnstableApi
 internal class ModAudioProcessor : BaseAudioProcessor() {
     @Volatile var reverbMix = 0f
+
     @Volatile var reverbDecaySec = 3f
+
     @Volatile var reverbPreDelayMs = 20f
+
     @Volatile var reverbDamping = 0.5f
+
     @Volatile var lowPassHz = 20_000f
+
     @Volatile var vinyl = 0f
+
     @Volatile var bassDb = 0f
+
     @Volatile var wobbleCents = 0f
+
     @Volatile var mono = false
+
     @Volatile var balance = 0f
 
     private var channels = 2
@@ -51,8 +60,10 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
     private var bsR = 0f
 
     private var hpLow = 0f
-    private var lp1L = 0f; private var lp2L = 0f
-    private var lp1R = 0f; private var lp2R = 0f
+    private var lp1L = 0f
+    private var lp2L = 0f
+    private var lp1R = 0f
+    private var lp2R = 0f
     private var popEnv = 0f
     private var seed = 0x2F6E2B1
 
@@ -66,8 +77,12 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
         return inputAudioFormat
     }
 
-    override fun onFlush() { clearState() }
-    override fun onReset() { clearState() }
+    override fun onFlush() {
+        clearState()
+    }
+    override fun onReset() {
+        clearState()
+    }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
         val frameBytes = 2 * channels
@@ -91,7 +106,10 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
         val gainL = if (bal > 0f) 1f - bal else 1f
         val gainR = if (bal < 0f) 1f + bal else 1f
         if (!doReverb && !doLp && !doVinyl && !doBass && !doWobble && !doMono && !doBalance) {
-            if (dirty) { clearState(); dirty = false }
+            if (dirty) {
+                clearState()
+                dirty = false
+            }
             out.put(inputBuffer)
             out.flip()
             return
@@ -122,7 +140,8 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
             var r = if (channels == 2) inputBuffer.getShort() / 32768f else l
 
             if (doWobble) {
-                wobL[wobPos] = l; wobR[wobPos] = r
+                wobL[wobPos] = l
+                wobR[wobPos] = r
                 val d = wobBase + wowD * sin(wowPh) + fluD * sin(fluPh)
                 var rp = wobPos - d
                 if (rp < 0f) rp += wobL.size
@@ -132,13 +151,17 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
                 l = wobL[i0] * (1f - fr) + wobL[i1] * fr
                 r = wobR[i0] * (1f - fr) + wobR[i1] * fr
                 wobPos = if (wobPos + 1 == wobL.size) 0 else wobPos + 1
-                wowPh += wowInc; if (wowPh > 6.2831855f) wowPh -= 6.2831855f
-                fluPh += fluInc; if (fluPh > 6.2831855f) fluPh -= 6.2831855f
+                wowPh += wowInc
+                if (wowPh > 6.2831855f) wowPh -= 6.2831855f
+                fluPh += fluInc
+                if (fluPh > 6.2831855f) fluPh -= 6.2831855f
             }
 
             if (doBass) {
-                bsL += bassA * (l - bsL); l += bassGain * bsL
-                bsR += bassA * (r - bsR); r += bassGain * bsR
+                bsL += bassA * (l - bsL)
+                l += bassGain * bsL
+                bsR += bassA * (r - bsR)
+                r += bassGain * bsR
             }
 
             if (doReverb) {
@@ -150,14 +173,16 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
                 var wl = 0f
                 var wr = 0f
                 for (i in combL.indices) {
-                    val bl = combL[i]; val pl = combPosL[i]
+                    val bl = combL[i]
+                    val pl = combPosL[i]
                     val yl = bl[pl]
                     combStoreL[i] = yl * (1f - damp) + combStoreL[i] * damp
                     bl[pl] = x + combStoreL[i] * feedback
                     combPosL[i] = if (pl + 1 == bl.size) 0 else pl + 1
                     wl += yl
 
-                    val br = combR[i]; val pr = combPosR[i]
+                    val br = combR[i]
+                    val pr = combPosR[i]
                     val yr = br[pr]
                     combStoreR[i] = yr * (1f - damp) + combStoreR[i] * damp
                     br[pr] = x + combStoreR[i] * feedback
@@ -165,14 +190,16 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
                     wr += yr
                 }
                 for (i in apL.indices) {
-                    val bl = apL[i]; val pl = apPosL[i]
+                    val bl = apL[i]
+                    val pl = apPosL[i]
                     val ol = bl[pl]
                     val inL = wl
                     wl = -inL + ol
                     bl[pl] = inL + ol * 0.5f
                     apPosL[i] = if (pl + 1 == bl.size) 0 else pl + 1
 
-                    val br = apR[i]; val pr = apPosR[i]
+                    val br = apR[i]
+                    val pr = apPosR[i]
                     val or = br[pr]
                     val inR = wr
                     wr = -inR + or
@@ -184,8 +211,12 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
             }
 
             if (doLp) {
-                lp1L += lpA * (l - lp1L); lp2L += lpA * (lp1L - lp2L); l = lp2L
-                lp1R += lpA * (r - lp1R); lp2R += lpA * (lp1R - lp2R); r = lp2R
+                lp1L += lpA * (l - lp1L)
+                lp2L += lpA * (lp1L - lp2L)
+                l = lp2L
+                lp1R += lpA * (r - lp1R)
+                lp2R += lpA * (lp1R - lp2R)
+                r = lp2R
             }
 
             if (doVinyl) {
@@ -199,8 +230,15 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
                 r += crackle
             }
 
-            if (doMono) { val m = (l + r) * 0.5f; l = m; r = m }
-            if (doBalance) { l *= gainL; r *= gainR }
+            if (doMono) {
+                val m = (l + r) * 0.5f
+                l = m
+                r = m
+            }
+            if (doBalance) {
+                l *= gainL
+                r *= gainR
+            }
 
             out.putShort((l.coerceIn(-1f, 1f) * 32767f).toInt().toShort())
             if (channels == 2) out.putShort((r.coerceIn(-1f, 1f) * 32767f).toInt().toShort())
@@ -222,22 +260,44 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
         combR = Array(COMB.size) { FloatArray(size(COMB[it] + SPREAD)) }
         apL = Array(ALLPASS.size) { FloatArray(size(ALLPASS[it])) }
         apR = Array(ALLPASS.size) { FloatArray(size(ALLPASS[it] + SPREAD)) }
-        combPosL = IntArray(COMB.size); combPosR = IntArray(COMB.size)
-        combStoreL = FloatArray(COMB.size); combStoreR = FloatArray(COMB.size)
-        apPosL = IntArray(ALLPASS.size); apPosR = IntArray(ALLPASS.size)
+        combPosL = IntArray(COMB.size)
+        combPosR = IntArray(COMB.size)
+        combStoreL = FloatArray(COMB.size)
+        combStoreR = FloatArray(COMB.size)
+        apPosL = IntArray(ALLPASS.size)
+        apPosR = IntArray(ALLPASS.size)
         preBuf = FloatArray((rate * 0.2f).toInt())
-        wobL = FloatArray((rate * 0.05f).toInt()); wobR = FloatArray(wobL.size)
+        wobL = FloatArray((rate * 0.05f).toInt())
+        wobR = FloatArray(wobL.size)
         clearState()
     }
 
     private fun clearState() {
-        combL.forEach { it.fill(0f) }; combR.forEach { it.fill(0f) }
-        apL.forEach { it.fill(0f) }; apR.forEach { it.fill(0f) }
-        combPosL.fill(0); combPosR.fill(0); apPosL.fill(0); apPosR.fill(0)
-        combStoreL.fill(0f); combStoreR.fill(0f)
-        preBuf.fill(0f); wobL.fill(0f); wobR.fill(0f)
-        prePos = 0; wobPos = 0; wowPh = 0f; fluPh = 0f; bsL = 0f; bsR = 0f
-        hpLow = 0f; lp1L = 0f; lp2L = 0f; lp1R = 0f; lp2R = 0f; popEnv = 0f
+        combL.forEach { it.fill(0f) }
+        combR.forEach { it.fill(0f) }
+        apL.forEach { it.fill(0f) }
+        apR.forEach { it.fill(0f) }
+        combPosL.fill(0)
+        combPosR.fill(0)
+        apPosL.fill(0)
+        apPosR.fill(0)
+        combStoreL.fill(0f)
+        combStoreR.fill(0f)
+        preBuf.fill(0f)
+        wobL.fill(0f)
+        wobR.fill(0f)
+        prePos = 0
+        wobPos = 0
+        wowPh = 0f
+        fluPh = 0f
+        bsL = 0f
+        bsR = 0f
+        hpLow = 0f
+        lp1L = 0f
+        lp2L = 0f
+        lp1R = 0f
+        lp2R = 0f
+        popEnv = 0f
     }
 
     private companion object {

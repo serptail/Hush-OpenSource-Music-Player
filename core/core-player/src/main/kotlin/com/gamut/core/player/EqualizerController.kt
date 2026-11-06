@@ -75,9 +75,8 @@ class EqualizerController private constructor(context: Context) {
 
         @Volatile private var instance: EqualizerController? = null
 
-        fun get(context: Context): EqualizerController =
-            instance ?: synchronized(this) {
-                instance ?: EqualizerController(context.applicationContext).also { instance = it }
-            }
+        fun get(context: Context): EqualizerController = instance ?: synchronized(this) {
+            instance ?: EqualizerController(context.applicationContext).also { instance = it }
+        }
     }
 }

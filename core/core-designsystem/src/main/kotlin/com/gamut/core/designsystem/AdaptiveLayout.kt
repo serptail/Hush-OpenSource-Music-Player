@@ -23,5 +23,4 @@ fun adaptiveGutter(maxWidth: Dp = AdaptiveLayout.ContentMaxWidth): Dp {
 }
 
 @Composable
-fun isWideLayout(): Boolean =
-    LocalConfiguration.current.screenWidthDp.dp >= AdaptiveLayout.WideBreakpoint
+fun isWideLayout(): Boolean = LocalConfiguration.current.screenWidthDp.dp >= AdaptiveLayout.WideBreakpoint

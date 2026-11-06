@@ -43,13 +43,13 @@ fun GamutSheet(
     ) {
         CoverTheme(palette) {
             CompositionLocalProvider(LocalFocusLive provides true) {
-            if (centerContent) {
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Column(Modifier.widthIn(max = AdaptiveLayout.SheetContentMaxWidth).fillMaxWidth()) { content() }
+                if (centerContent) {
+                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(Modifier.widthIn(max = AdaptiveLayout.SheetContentMaxWidth).fillMaxWidth()) { content() }
+                    }
+                } else {
+                    content()
                 }
-            } else {
-                content()
-            }
             }
         }
     }

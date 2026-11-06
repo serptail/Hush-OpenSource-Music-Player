@@ -38,7 +38,10 @@ fun main() {
 private fun attempt(label: String, block: () -> Boolean): Boolean {
     repeat(2) { n ->
         try {
-            if (block()) { println("ok    $label"); return true }
+            if (block()) {
+                println("ok    $label")
+                return true
+            }
             println("fail  $label (try ${n + 1})")
         } catch (e: Exception) {
             println("fail  $label (try ${n + 1}): ${e.javaClass.simpleName}: ${e.message?.take(160)}")

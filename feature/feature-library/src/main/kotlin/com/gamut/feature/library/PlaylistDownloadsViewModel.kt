@@ -24,5 +24,7 @@ class PlaylistDownloadsViewModel @Inject constructor(
 
     fun download(tracks: List<Track>, label: String? = null) = manager.download(tracks, label)
     fun cancel(isrcs: Collection<String>) = manager.cancel(isrcs)
-    fun remove(isrcs: Collection<String>) { viewModelScope.launch(NonCancellable) { manager.remove(isrcs) } }
+    fun remove(isrcs: Collection<String>) {
+        viewModelScope.launch(NonCancellable) { manager.remove(isrcs) }
+    }
 }

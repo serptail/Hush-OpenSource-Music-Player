@@ -31,11 +31,12 @@ object TextSimilarity {
                     previous[j] + if (leftChar == rightChar) 0 else 1,
                 )
             }
-            val swap = previous; previous = current; current = swap
+            val swap = previous
+            previous = current
+            current = swap
         }
         return 1.0 - previous[right.length].toDouble() / max(left.length, right.length)
     }
 
-    fun similarityNormalized(left: String, right: String): Double =
-        similarity(normalize(left), normalize(right))
+    fun similarityNormalized(left: String, right: String): Double = similarity(normalize(left), normalize(right))
 }

@@ -41,7 +41,10 @@ class DiscoverDiskCache @Inject constructor(@ApplicationContext context: Context
     }
 
     suspend fun clear() = withContext(Dispatchers.IO) {
-        runCatching { file.delete(); File(file.parentFile, "discover.json.tmp").delete() }
+        runCatching {
+            file.delete()
+            File(file.parentFile, "discover.json.tmp").delete()
+        }
     }
 
     suspend fun write(state: DiscoverState) = withContext(Dispatchers.IO) {
@@ -51,10 +54,15 @@ class DiscoverDiskCache @Inject constructor(@ApplicationContext context: Context
                 .put("albums", JSONArray(state.albums.map { it.toJson() }))
                 .put("artists", JSONArray(state.artists.map { it.toJson() }))
                 .put("feed", JSONArray(state.feed.map { it.toJson() }))
-                .put("tabs", JSONArray(state.tabs.map { tab ->
-                    JSONObject().put("label", tab.label).put("title", tab.title)
-                        .put("items", JSONArray(tab.items.map { it.toJson() }))
-                }))
+                .put(
+                    "tabs",
+                    JSONArray(
+                        state.tabs.map { tab ->
+                            JSONObject().put("label", tab.label).put("title", tab.title)
+                                .put("items", JSONArray(tab.items.map { it.toJson() }))
+                        },
+                    ),
+                )
             val tmp = File(file.parentFile, file.name + ".tmp")
             tmp.writeText(root.toString())
             tmp.renameTo(file)
@@ -70,8 +78,12 @@ class DiscoverDiskCache @Inject constructor(@ApplicationContext context: Context
         val kind = runCatching { FeedKind.valueOf(getString("kind")) }.getOrNull() ?: return null
         val slot = runCatching { FeedSlot.valueOf(getString("slot")) }.getOrNull() ?: return null
         return FeedSection(
-            id = getString("id"), kind = kind, slot = slot, order = optInt("order"),
-            title = getString("title"), subtitle = str("subtitle"),
+            id = getString("id"),
+            kind = kind,
+            slot = slot,
+            order = optInt("order"),
+            title = getString("title"),
+            subtitle = str("subtitle"),
             items = getJSONArray("items").objects().map { it.toItem() },
         )
     }
@@ -120,5 +132,7 @@ class DiscoverDiskCache @Inject constructor(@ApplicationContext context: Context
 
     private fun JSONArray.objects(): List<JSONObject> = List(length()) { getJSONObject(it) }
 
-    private companion object { const val VERSION = 4 }
+    private companion object {
+        const val VERSION = 4
+    }
 }

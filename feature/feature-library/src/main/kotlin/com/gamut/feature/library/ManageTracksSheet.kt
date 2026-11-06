@@ -1,17 +1,7 @@
 package com.gamut.feature.library
 
-import com.gamut.core.designsystem.focusRing
-import androidx.compose.foundation.focusable
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
-import com.gamut.core.designsystem.GamutSheet
-import com.gamut.core.designsystem.LocalCoverPalette
-import com.gamut.core.designsystem.ink
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
@@ -52,9 +42,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalConfiguration
@@ -64,15 +60,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.fill.Archive
-import com.adamglin.phosphoricons.fill.CheckCircle
+import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.BoxArrowDown
 import com.adamglin.phosphoricons.bold.DotsSixVertical
 import com.adamglin.phosphoricons.bold.Trash
 import com.adamglin.phosphoricons.bold.TrashSimple
+import com.adamglin.phosphoricons.fill.Archive
+import com.adamglin.phosphoricons.fill.CheckCircle
 import com.gamut.core.designsystem.CoverPalette
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.focusRing
+import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.model.Track
 import com.gamut.feature.resolver.DownloadState
@@ -203,47 +203,51 @@ internal fun ManageTracksSheet(
                 modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 2.dp, bottom = 14.dp),
             )
 
-            if (isrcs.isNotEmpty()) Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(ink(0.07f))
-                    .pressScale(onClick = onDownloadClick, scaleDown = 0.98f)
-                    .padding(start = 18.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        when (downloadUi.status) {
-                            PlaylistDownloadStatus.Idle -> "Download all"
-                            PlaylistDownloadStatus.Active -> "Downloading ${minOf(downloadUi.done + 1, downloadUi.total)} of ${downloadUi.total}"
-                            PlaylistDownloadStatus.Done -> "Available offline"
-                        },
-                        style = MaterialTheme.typography.titleMedium,
-                        color = ink(),
-                    )
-                    Text(
-                        when (downloadUi.status) {
-                            PlaylistDownloadStatus.Idle ->
-                                if (downloadedCount > 0) "$downloadedCount of ${isrcs.size} available offline" else "${songsLabel(isrcs.size)} for offline listening"
-                            PlaylistDownloadStatus.Active -> "Tap to stop"
-                            PlaylistDownloadStatus.Done -> "All ${songsLabel(isrcs.size)} are downloaded"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ManageTextSecondary,
+            if (isrcs.isNotEmpty()) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(ink(0.07f))
+                        .pressScale(onClick = onDownloadClick, scaleDown = 0.98f)
+                        .padding(start = 18.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            when (downloadUi.status) {
+                                PlaylistDownloadStatus.Idle -> "Download all"
+                                PlaylistDownloadStatus.Active -> "Downloading ${minOf(downloadUi.done + 1, downloadUi.total)} of ${downloadUi.total}"
+                                PlaylistDownloadStatus.Done -> "Available offline"
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                            color = ink(),
+                        )
+                        Text(
+                            when (downloadUi.status) {
+                                PlaylistDownloadStatus.Idle ->
+                                    if (downloadedCount > 0) "$downloadedCount of ${isrcs.size} available offline" else "${songsLabel(isrcs.size)} for offline listening"
+
+                                PlaylistDownloadStatus.Active -> "Tap to stop"
+
+                                PlaylistDownloadStatus.Done -> "All ${songsLabel(isrcs.size)} are downloaded"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ManageTextSecondary,
+                        )
+                    }
+                    DownloadButton(
+                        downloadUi,
+                        onClick = onDownloadClick,
+                        size = 40.dp,
+                        glyphSize = 22.dp,
+                        tint = ink(0.85f),
+                        accent = ink(),
+                        idleIcon = PhosphorIcons.Bold.BoxArrowDown,
+                        doneIcon = PhosphorIcons.Fill.Archive,
                     )
                 }
-                DownloadButton(
-                    downloadUi,
-                    onClick = onDownloadClick,
-                    size = 40.dp,
-                    glyphSize = 22.dp,
-                    tint = ink(0.85f),
-                    accent = ink(),
-                    idleIcon = PhosphorIcons.Bold.BoxArrowDown,
-                    doneIcon = PhosphorIcons.Fill.Archive,
-                )
             }
             if (downloadedCount > 0 && downloadUi.status != PlaylistDownloadStatus.Active) {
                 Row(
@@ -354,7 +358,10 @@ internal fun ManageTracksSheet(
 
     if (confirmRemoveDownloads) {
         ConfirmRemoveDialog(
-            onConfirm = { confirmRemoveDownloads = false; onRemoveDownloads() },
+            onConfirm = {
+                confirmRemoveDownloads = false
+                onRemoveDownloads()
+            },
             onDismiss = { confirmRemoveDownloads = false },
         )
     }
@@ -385,26 +392,43 @@ private fun ManageRow(
         modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 2.dp)
-            .graphicsLayer { val s = if (dragging) 1.03f else 1f; scaleX = s; scaleY = s }
+            .graphicsLayer {
+                val s = if (dragging) 1.03f else 1f
+                scaleX = s
+                scaleY = s
+            }
             .shadow(if (dragging) 10.dp else 0.dp, shape)
             .background(if (dragging || grabbed) androidx.compose.ui.graphics.lerp(LocalCoverPalette.current.base, ink(), 0.12f) else Color.Transparent, shape)
             .focusRing(shape)
-            .onFocusChanged { if (!it.isFocused && grabbed) { grabbed = false; doneNow() } }
+            .onFocusChanged {
+                if (!it.isFocused && grabbed) {
+                    grabbed = false
+                    doneNow()
+                }
+            }
             .onKeyEvent { e ->
                 when (e.key) {
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
                         if (e.type == KeyEventType.KeyUp) {
-                            if (grabbed) { grabbed = false; doneNow() } else grabbed = true
+                            if (grabbed) {
+                                grabbed = false
+                                doneNow()
+                            } else {
+                                grabbed = true
+                            }
                         }
                         true
                     }
+
                     Key.DirectionUp, Key.DirectionDown -> {
-                        if (!grabbed) false
-                        else {
+                        if (!grabbed) {
+                            false
+                        } else {
                             if (e.type == KeyEventType.KeyDown) moveNow(if (e.key == Key.DirectionUp) -1 else 1)
                             true
                         }
                     }
+
                     else -> false
                 }
             }

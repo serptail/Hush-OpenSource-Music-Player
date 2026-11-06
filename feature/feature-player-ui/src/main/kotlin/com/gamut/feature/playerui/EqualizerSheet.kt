@@ -1,11 +1,7 @@
 package com.gamut.feature.playerui
 
-import com.gamut.core.designsystem.GamutSheet
-import com.gamut.core.designsystem.LocalCoverPalette
-import com.gamut.core.designsystem.ink
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
-import com.gamut.core.designsystem.GamutMotion
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -50,6 +46,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gamut.core.designsystem.CoverPalette
+import com.gamut.core.designsystem.GamutMotion
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.ink
 import com.gamut.core.player.EqualizerController
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -88,7 +88,9 @@ internal fun EqualizerSheet(controller: EqualizerController, accent: Color, onDi
                     if (s.available) {
                         Text(
                             if (s.enabled) s.preset else "Off",
-                            fontSize = 13.sp, color = ink(0.55f), modifier = Modifier.padding(top = 2.dp),
+                            fontSize = 13.sp,
+                            color = ink(0.55f),
+                            modifier = Modifier.padding(top = 2.dp),
                         )
                     }
                 }
@@ -109,8 +111,11 @@ internal fun EqualizerSheet(controller: EqualizerController, accent: Color, onDi
             }
 
             Spacer(Modifier.height(16.dp))
-            val presets = if (s.preset == EqualizerController.CUSTOM) listOf(EqualizerController.CUSTOM) + EqualizerController.presetNames
-            else EqualizerController.presetNames
+            val presets = if (s.preset == EqualizerController.CUSTOM) {
+                listOf(EqualizerController.CUSTOM) + EqualizerController.presetNames
+            } else {
+                EqualizerController.presetNames
+            }
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 presets.forEach { name -> PresetChip(name, selected = s.preset == name, accent = accent) { controller.applyPreset(name) } }
             }
@@ -167,8 +172,11 @@ private fun EnableButton(enabled: Boolean, accent: Color, onClick: () -> Unit) {
         modifier = Modifier
             .clip(shape)
             .then(
-                if (enabled) Modifier.border(1.dp, ink(0.18f), shape)
-                else Modifier.background(accent),
+                if (enabled) {
+                    Modifier.border(1.dp, ink(0.18f), shape)
+                } else {
+                    Modifier.background(accent)
+                },
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 7.dp),
@@ -204,12 +212,18 @@ private fun BandSlider(
     modifier: Modifier = Modifier,
 ) {
     val onChangeNow by rememberUpdatedState(onChange)
-    val trackC = ink(0.16f); val zeroC = ink(0.14f); val dotC = ink()
+    val trackC = ink(0.16f)
+    val zeroC = ink(0.14f)
+    val dotC = ink()
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             dbLabel(levelMb),
             color = if (levelMb != 0) accent else ink(0.45f),
-            fontSize = 10.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false, textAlign = TextAlign.Center,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            softWrap = false,
+            textAlign = TextAlign.Center,
             modifier = Modifier.wrapContentWidth(Alignment.CenterHorizontally, unbounded = true),
         )
         Spacer(Modifier.height(8.dp))
@@ -251,7 +265,12 @@ private fun BandSlider(
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            label, color = ink(0.5f), fontSize = 10.sp, maxLines = 1, softWrap = false, textAlign = TextAlign.Center,
+            label,
+            color = ink(0.5f),
+            fontSize = 10.sp,
+            maxLines = 1,
+            softWrap = false,
+            textAlign = TextAlign.Center,
             modifier = Modifier.wrapContentWidth(Alignment.CenterHorizontally, unbounded = true),
         )
     }
@@ -272,7 +291,8 @@ private fun EffectSlider(title: String, value: Int, accent: Color, enabled: Bool
 @Composable
 private fun LineSlider(value: Int, max: Int, accent: Color, enabled: Boolean, onChange: (Int) -> Unit) {
     val onChangeNow by rememberUpdatedState(onChange)
-    val trackC = ink(0.16f); val dotC = ink()
+    val trackC = ink(0.16f)
+    val dotC = ink()
     Canvas(
         Modifier
             .fillMaxWidth()
@@ -305,8 +325,6 @@ private fun LineSlider(value: Int, max: Int, accent: Color, enabled: Boolean, on
     }
 }
 
-private fun dbLabel(mb: Int): String =
-    if (mb == 0) "0" else String.format(Locale.US, "%+.1f", mb / 100f).removeSuffix(".0")
+private fun dbLabel(mb: Int): String = if (mb == 0) "0" else String.format(Locale.US, "%+.1f", mb / 100f).removeSuffix(".0")
 
-private fun freqLabel(hz: Int): String =
-    if (hz >= 1000) String.format(Locale.US, "%.1fk", hz / 1000f).replace(".0k", "k") else "$hz"
+private fun freqLabel(hz: Int): String = if (hz >= 1000) String.format(Locale.US, "%.1fk", hz / 1000f).replace(".0k", "k") else "$hz"

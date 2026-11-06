@@ -4,30 +4,30 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gamut.core.database.DownloadIndex
+import com.gamut.core.database.toDomain
 import com.gamut.core.model.Playlist
 import com.gamut.core.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlin.math.abs
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
-import kotlinx.coroutines.flow.flowOn
-import com.gamut.core.database.toDomain
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 private const val STOP_TIMEOUT_MS = 5_000L
 private const val SAME_SONG_DURATION_SLACK_MS = 5_000L
@@ -46,8 +46,7 @@ internal fun List<Track>.withoutDuplicates(): List<Track> {
     return out
 }
 
-fun playlistIdsContaining(byPlaylist: Map<Long, List<Track>>, track: Track): Set<String> =
-    byPlaylist.filterValues { list -> list.any { sameSong(it, track) } }.keys.mapTo(HashSet()) { it.toString() }
+fun playlistIdsContaining(byPlaylist: Map<Long, List<Track>>, track: Track): Set<String> = byPlaylist.filterValues { list -> list.any { sameSong(it, track) } }.keys.mapTo(HashSet()) { it.toString() }
 
 data class PlaylistInfo(val coverUrl: String?, val songCount: Int, val offline: Boolean = false)
 

@@ -103,7 +103,11 @@ fun EmptyStateCard(
 @Composable
 private fun CoverSpread(urls: List<String>, circle: Boolean = false) {
     val slots = listOf(
-        Triple(-96, 62, 0.55f), Triple(-48, 78, 0.8f), Triple(0, 96, 1f), Triple(48, 78, 0.8f), Triple(96, 62, 0.55f),
+        Triple(-96, 62, 0.55f),
+        Triple(-48, 78, 0.8f),
+        Triple(0, 96, 1f),
+        Triple(48, 78, 0.8f),
+        Triple(96, 62, 0.55f),
     )
     val fillOrder = listOf(2, 1, 3, 0, 4)
     Box(Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {

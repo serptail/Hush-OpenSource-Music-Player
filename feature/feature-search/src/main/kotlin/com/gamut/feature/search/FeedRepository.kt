@@ -43,12 +43,16 @@ class FeedRepository @Inject constructor(
     )
 
     private val nonce = AtomicInteger(0)
+
     @Volatile private var tasteCache: List<Taste>? = null
     private val deezerArtistIds = ConcurrentHashMap<String, Long>()
 
     @Volatile private var globalArtistIds: Set<Any?>? = null
+
     @Volatile private var globalAlbumIds: Set<Any?>? = null
+
     @Volatile private var artistGenreChartIgnoresGenre = false
+
     @Volatile private var albumGenreChartIgnoresGenre = false
 
     fun clearCache() {
@@ -65,8 +69,13 @@ class FeedRepository @Inject constructor(
         if (pool.size < 4) return null
         val picks = pool.shuffled(Random(seed)).take(QUICK_PICK_COUNT).let { if (it.size % 2 == 1) it.dropLast(1) else it }
         return FeedSection(
-            id = "quick:today", kind = FeedKind.QUICK_PICKS, slot = FeedSlot.TOP, order = 0,
-            title = "Picked for today", subtitle = "A different mix every day", items = picks,
+            id = "quick:today",
+            kind = FeedKind.QUICK_PICKS,
+            slot = FeedSlot.TOP,
+            order = 0,
+            title = "Picked for today",
+            subtitle = "A different mix every day",
+            items = picks,
         )
     }
 
@@ -101,12 +110,21 @@ class FeedRepository @Inject constructor(
         }
         return listOf(
             FeedSection(
-                id = "releases:spotlight", kind = FeedKind.SPOTLIGHT, slot = FeedSlot.MIDDLE, order = 20,
-                title = chip, items = listOf(spotlight.toAlbumItem(large = true)),
+                id = "releases:spotlight",
+                kind = FeedKind.SPOTLIGHT,
+                slot = FeedSlot.MIDDLE,
+                order = 20,
+                title = chip,
+                items = listOf(spotlight.toAlbumItem(large = true)),
             ),
             FeedSection(
-                id = "releases:new", kind = FeedKind.ALBUM_CAROUSEL, slot = FeedSlot.MIDDLE, order = 21,
-                title = "New releases", subtitle = "Just dropped", items = albums.drop(1).take(20).map { it.toAlbumItem() },
+                id = "releases:new",
+                kind = FeedKind.ALBUM_CAROUSEL,
+                slot = FeedSlot.MIDDLE,
+                order = 21,
+                title = "New releases",
+                subtitle = "Just dropped",
+                items = albums.drop(1).take(20).map { it.toAlbumItem() },
             ),
         )
     }
@@ -115,8 +133,12 @@ class FeedRepository @Inject constructor(
         val tracks = load { api.chartTracks(0, 40).data }.distinctBy { it.id }
         if (tracks.size < 6) return null
         return FeedSection(
-            id = "worldwide:tracks", kind = FeedKind.TRACK_RAILS, slot = FeedSlot.BOTTOM, order = 30,
-            title = "Trending in the community", subtitle = "What listeners are playing right now",
+            id = "worldwide:tracks",
+            kind = FeedKind.TRACK_RAILS,
+            slot = FeedSlot.BOTTOM,
+            order = 30,
+            title = "Trending in the community",
+            subtitle = "What listeners are playing right now",
             items = tracks.take(RAILS_COUNT).map { it.toTrackItem() },
         )
     }
@@ -128,8 +150,13 @@ class FeedRepository @Inject constructor(
             .take(CAROUSEL_COUNT)
         if (artists.size < 4) return null
         return FeedSection(
-            id = "hot:artists", kind = FeedKind.ARTIST_CAROUSEL, slot = FeedSlot.BOTTOM, order = 31,
-            title = "Popular artists", subtitle = "Top of the community chart", items = artists.map { it.toArtistItem() },
+            id = "hot:artists",
+            kind = FeedKind.ARTIST_CAROUSEL,
+            slot = FeedSlot.BOTTOM,
+            order = 31,
+            title = "Popular artists",
+            subtitle = "Top of the community chart",
+            items = artists.map { it.toArtistItem() },
         )
     }
 
@@ -178,7 +205,9 @@ class FeedRepository @Inject constructor(
         val key = artistKey(taste.name)
         return FeedSection(
             id = if (slot == FeedSlot.BOTTOM) "because-top:$key" else "because:top:$key",
-            kind = FeedKind.TRACK_CAROUSEL, slot = slot, order = order,
+            kind = FeedKind.TRACK_CAROUSEL,
+            slot = slot,
+            order = order,
             title = if (taste.followed) "Because you follow ${taste.name}" else "Because you listen to ${taste.name}",
             subtitle = if (taste.followed) "More from an artist you follow" else "More of what you have been playing",
             items = tracks.take(CAROUSEL_COUNT).map { it.toTrackItem() },
@@ -191,8 +220,11 @@ class FeedRepository @Inject constructor(
         val key = artistKey(taste.name)
         return FeedSection(
             id = if (slot == FeedSlot.BOTTOM) "because-rel:$key" else "because:related:$key",
-            kind = FeedKind.ARTIST_CAROUSEL, slot = slot, order = order,
-            title = "Fans of ${taste.name} also like", items = related.take(CAROUSEL_COUNT).map { it.toArtistItem() },
+            kind = FeedKind.ARTIST_CAROUSEL,
+            slot = slot,
+            order = order,
+            title = "Fans of ${taste.name} also like",
+            items = related.take(CAROUSEL_COUNT).map { it.toArtistItem() },
         )
     }
 
@@ -231,11 +263,16 @@ class FeedRepository @Inject constructor(
                 val tracks = load(attempts = 1) { api.chartTracks(genre.id, 30).data }.distinctBy { it.id }
                 if (tracks.size < 6) return null
                 FeedSection(
-                    id = spec.id, kind = if (spec.rails) FeedKind.TRACK_RAILS else FeedKind.TRACK_CAROUSEL,
-                    slot = FeedSlot.BOTTOM, order = order, title = "Trending in ${genre.name}", subtitle = "Most played by the community in ${genre.name}",
+                    id = spec.id,
+                    kind = if (spec.rails) FeedKind.TRACK_RAILS else FeedKind.TRACK_CAROUSEL,
+                    slot = FeedSlot.BOTTOM,
+                    order = order,
+                    title = "Trending in ${genre.name}",
+                    subtitle = "Most played by the community in ${genre.name}",
                     items = tracks.take(if (spec.rails) RAILS_COUNT else CAROUSEL_COUNT).map { it.toTrackItem() },
                 )
             }
+
             SpecType.GENRE_ALBUMS -> {
                 genre ?: return null
                 if (albumGenreChartIgnoresGenre) return null
@@ -247,11 +284,16 @@ class FeedRepository @Inject constructor(
                     return null
                 }
                 FeedSection(
-                    id = spec.id, kind = FeedKind.ALBUM_CAROUSEL, slot = FeedSlot.BOTTOM, order = order,
-                    title = "${genre.name} albums", subtitle = "Community favorites in ${genre.name}",
+                    id = spec.id,
+                    kind = FeedKind.ALBUM_CAROUSEL,
+                    slot = FeedSlot.BOTTOM,
+                    order = order,
+                    title = "${genre.name} albums",
+                    subtitle = "Community favorites in ${genre.name}",
                     items = albums.take(CAROUSEL_COUNT).map { it.toAlbumItem() },
                 )
             }
+
             SpecType.GENRE_ARTISTS -> {
                 genre ?: return null
                 if (artistGenreChartIgnoresGenre) return null
@@ -262,16 +304,22 @@ class FeedRepository @Inject constructor(
                     return null
                 }
                 FeedSection(
-                    id = spec.id, kind = FeedKind.ARTIST_CAROUSEL, slot = FeedSlot.BOTTOM, order = order,
-                    title = "Top in ${genre.name}", subtitle = "Most followed by the community in ${genre.name}",
+                    id = spec.id,
+                    kind = FeedKind.ARTIST_CAROUSEL,
+                    slot = FeedSlot.BOTTOM,
+                    order = order,
+                    title = "Top in ${genre.name}",
+                    subtitle = "Most followed by the community in ${genre.name}",
                     items = artists.take(CAROUSEL_COUNT).map { it.toArtistItem() },
                 )
             }
+
             SpecType.BECAUSE_TOP -> {
                 val taste = spec.taste ?: return null
                 val id = deezerArtistId(taste.name, attempts = 1) ?: return null
                 becauseTop(id, taste, FeedSlot.BOTTOM, order, attempts = 1)
             }
+
             SpecType.BECAUSE_RELATED -> {
                 val taste = spec.taste ?: return null
                 val id = deezerArtistId(taste.name, attempts = 1) ?: return null
@@ -280,16 +328,13 @@ class FeedRepository @Inject constructor(
         }
     }
 
-    private fun isCopyOf(ids: List<Any?>, global: Set<Any?>?): Boolean =
-        global != null && global.isNotEmpty() && ids.isNotEmpty() && ids.count { it in global } * 10 >= ids.size * 6
+    private fun isCopyOf(ids: List<Any?>, global: Set<Any?>?): Boolean = global != null && global.isNotEmpty() && ids.isNotEmpty() && ids.count { it in global } * 10 >= ids.size * 6
 
-    private suspend fun globalArtists(): Set<Any?>? =
-        globalArtistIds ?: load(attempts = 1) { api.chartArtists(0, 30).data }.map { it.id }.toSet()
-            .takeIf { it.isNotEmpty() }?.also { globalArtistIds = it }
+    private suspend fun globalArtists(): Set<Any?>? = globalArtistIds ?: load(attempts = 1) { api.chartArtists(0, 30).data }.map { it.id }.toSet()
+        .takeIf { it.isNotEmpty() }?.also { globalArtistIds = it }
 
-    private suspend fun globalAlbums(): Set<Any?>? =
-        globalAlbumIds ?: load(attempts = 1) { api.chartAlbums(0, 30).data }.map { it.id }.toSet()
-            .takeIf { it.isNotEmpty() }?.also { globalAlbumIds = it }
+    private suspend fun globalAlbums(): Set<Any?>? = globalAlbumIds ?: load(attempts = 1) { api.chartAlbums(0, 30).data }.map { it.id }.toSet()
+        .takeIf { it.isNotEmpty() }?.also { globalAlbumIds = it }
 
     suspend fun album(item: DiscoverItem): AlbumDetails? {
         val id = item.id.removePrefix(DEEZER_ALBUM_PREFIX).toLongOrNull() ?: return null
@@ -318,8 +363,7 @@ class FeedRepository @Inject constructor(
 
     private fun leadName(artist: String): String = artist.split(LEAD_SPLIT).first().trim()
 
-    private fun trackTitle(t: DeezerTrackDto): String =
-        listOfNotNull(t.titleShort ?: t.title, t.titleVersion?.takeIf { it.isNotBlank() }).joinToString(" ")
+    private fun trackTitle(t: DeezerTrackDto): String = listOfNotNull(t.titleShort ?: t.title, t.titleVersion?.takeIf { it.isNotBlank() }).joinToString(" ")
 
     private fun DeezerTrackDto.toTrack(albumTitle: String? = null, art: String? = null) = Track(
         isrc = "deezer:$id",
@@ -344,7 +388,11 @@ class FeedRepository @Inject constructor(
     )
 
     private fun DeezerArtistDto.toArtistItem() = DiscoverItem(
-        id = "deezer-artist:$id", title = name, subtitle = "", imageUrl = (pictureBig ?: pictureXl).orEmpty(), followers = fanCount,
+        id = "deezer-artist:$id",
+        title = name,
+        subtitle = "",
+        imageUrl = (pictureBig ?: pictureXl).orEmpty(),
+        followers = fanCount,
     )
 
     companion object {

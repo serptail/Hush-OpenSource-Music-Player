@@ -19,24 +19,22 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.hoverable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.ui.composed
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -66,6 +64,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
@@ -73,11 +72,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -93,10 +93,10 @@ import com.adamglin.phosphoricons.bold.Image as ImageIcon
 import com.adamglin.phosphoricons.bold.Link
 import com.adamglin.phosphoricons.bold.LinkSimpleHorizontal
 import com.adamglin.phosphoricons.bold.MusicNote
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 private val CardW = 280.dp
 private val CardH = 370.dp
@@ -127,12 +127,23 @@ private fun Modifier.bounceClick(onClick: () -> Unit): Modifier = composed {
         label = "bounce",
     )
     val tint by animateColorAsState(
-        targetValue = ink().copy(alpha = if (pressed) 0.10f else if (hovered) 0.06f else 0f),
+        targetValue = ink().copy(
+            alpha = if (pressed) {
+                0.10f
+            } else if (hovered) {
+                0.06f
+            } else {
+                0f
+            },
+        ),
         animationSpec = tween(140),
         label = "tint",
     )
     this
-        .graphicsLayer { scaleX = scale; scaleY = scale }
+        .graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
         .clip(RoundedCornerShape(16.dp))
         .background(tint)
         .hoverable(source)
@@ -160,8 +171,7 @@ private fun rememberShareStyles(): List<ShareCardStyle> {
     }
 }
 
-fun defaultShareUrl(title: String, artist: String): String =
-    "https://music.youtube.com/search?q=" + Uri.encode("$title $artist")
+fun defaultShareUrl(title: String, artist: String): String = "https://music.youtube.com/search?q=" + Uri.encode("$title $artist")
 
 @Composable
 fun ShareSheet(
@@ -315,7 +325,10 @@ private fun ShareSheetContent(
                         ShareTarget("Story", onClick = {
                             withCard { bmp ->
                                 val uri = bmp?.let { writeToCache(context, it, track) }
-                                if (uri == null) { context.toast("Couldn't create the image"); return@withCard }
+                                if (uri == null) {
+                                    context.toast("Couldn't create the image")
+                                    return@withCard
+                                }
                                 context.grantUriPermission("com.instagram.android", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                 open(
                                     Intent("com.instagram.share.ADD_TO_STORY").apply {
@@ -409,13 +422,17 @@ private fun ShareCard(track: ShareItem, style: ShareCardStyle, layer: GraphicsLa
         Text(
             track.title,
             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-            color = style.text, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            color = style.text,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(2.dp))
         Text(
             track.artist,
             style = MaterialTheme.typography.bodyLarge,
-            color = style.text.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+            color = style.text.copy(alpha = 0.7f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.weight(1f))
         Text(
@@ -440,13 +457,17 @@ private fun ShareTarget(label: String, onClick: () -> Unit, icon: @Composable ()
 
 @Composable
 private fun AppIcon(icon: ImageBitmap?) {
-    if (icon != null) Image(icon, null, Modifier.size(56.dp).clip(CircleShape))
-    else Icon(PhosphorIcons.Bold.DotsThree, null, tint = ink(), modifier = Modifier.size(28.dp))
+    if (icon != null) {
+        Image(icon, null, Modifier.size(56.dp).clip(CircleShape))
+    } else {
+        Icon(PhosphorIcons.Bold.DotsThree, null, tint = ink(), modifier = Modifier.size(28.dp))
+    }
 }
 
 private suspend fun captureCard(layer: GraphicsLayer): Bitmap? = try {
-    if (layer.size.width == 0 || layer.size.height == 0) null
-    else {
+    if (layer.size.width == 0 || layer.size.height == 0) {
+        null
+    } else {
         val bmp = layer.toImageBitmap().asAndroidBitmap()
         if (bmp.config == Bitmap.Config.HARDWARE) bmp.copy(Bitmap.Config.ARGB_8888, false) else bmp
     }
@@ -492,7 +513,8 @@ private fun resolveShareApps(context: Context, withImage: Boolean): List<ShareAp
     val infos = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         pm.queryIntentActivities(probe, PackageManager.ResolveInfoFlags.of(0))
     } else {
-        @Suppress("DEPRECATION") pm.queryIntentActivities(probe, 0)
+        @Suppress("DEPRECATION")
+        pm.queryIntentActivities(probe, 0)
     }
     return infos
         .filter { it.activityInfo.exported && it.activityInfo.packageName != context.packageName }
@@ -513,11 +535,18 @@ private fun resolveShareApps(context: Context, withImage: Boolean): List<ShareAp
         }
 }
 
-private fun Context.isInstalled(pkg: String): Boolean =
-    try { packageManager.getApplicationInfo(pkg, 0); true } catch (_: Exception) { false }
+private fun Context.isInstalled(pkg: String): Boolean = try {
+    packageManager.getApplicationInfo(pkg, 0)
+    true
+} catch (_: Exception) {
+    false
+}
 
-private fun Context.appIcon(pkg: String): ImageBitmap? =
-    try { packageManager.getApplicationIcon(pkg).toBitmap(112, 112).asImageBitmap() } catch (_: Exception) { null }
+private fun Context.appIcon(pkg: String): ImageBitmap? = try {
+    packageManager.getApplicationIcon(pkg).toBitmap(112, 112).asImageBitmap()
+} catch (_: Exception) {
+    null
+}
 
 private fun Context.toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 

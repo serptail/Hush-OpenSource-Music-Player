@@ -92,16 +92,16 @@ internal class VolumeHud(private val audio: AudioManager, private val haptic: Ha
         }
     }
 
-    fun end() { holding = false }
+    fun end() {
+        holding = false
+    }
 
     fun fractionNow(): Float = fraction
 }
 
-internal fun Modifier.volumeHudAnchor(hud: VolumeHud): Modifier =
-    onGloballyPositioned { hud.anchor = it.boundsInRoot() }
+internal fun Modifier.volumeHudAnchor(hud: VolumeHud): Modifier = onGloballyPositioned { hud.anchor = it.boundsInRoot() }
 
-internal fun Modifier.volumeHudHeaderAnchor(hud: VolumeHud): Modifier =
-    onGloballyPositioned { hud.headerBottom = it.boundsInRoot().bottom }
+internal fun Modifier.volumeHudHeaderAnchor(hud: VolumeHud): Modifier = onGloballyPositioned { hud.headerBottom = it.boundsInRoot().bottom }
 
 private val CoverArtInset = 18.dp
 
@@ -137,7 +137,9 @@ internal fun Modifier.swipeVolumeGesture(
                         startFraction = hud.fractionNow()
                         startX = c.position.x
                         c.consume()
-                    } else break
+                    } else {
+                        break
+                    }
                 }
             } else {
                 c.consume()
@@ -152,7 +154,12 @@ internal fun Modifier.swipeVolumeGesture(
 internal fun VolumeHudOverlay(hud: VolumeHud, modifier: Modifier = Modifier) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(hud.holding) {
-        if (hud.holding) visible = true else { delay(700); visible = false }
+        if (hud.holding) {
+            visible = true
+        } else {
+            delay(700)
+            visible = false
+        }
     }
     var origin by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current

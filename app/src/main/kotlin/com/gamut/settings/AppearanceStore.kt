@@ -23,8 +23,7 @@ class AppearanceStore @Inject constructor(@ApplicationContext context: Context) 
         save(next)
     }
 
-    private inline fun <reified E : Enum<E>> enum(key: String, default: E): E =
-        runCatching { enumValueOf<E>(prefs.getString(key, null) ?: return default) }.getOrDefault(default)
+    private inline fun <reified E : Enum<E>> enum(key: String, default: E): E = runCatching { enumValueOf<E>(prefs.getString(key, null) ?: return default) }.getOrDefault(default)
 
     private fun load(): AppearanceSettings {
         val d = AppearanceSettings()

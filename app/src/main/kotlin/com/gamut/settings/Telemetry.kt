@@ -75,15 +75,23 @@ class TelemetryCollector @Inject constructor(
 
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
-            try { writeCrash(thread, error) } catch (_: Exception) { }
+            try {
+                writeCrash(thread, error)
+            } catch (_: Exception) { }
             previous?.uncaughtException(thread, error)
         }
     }
 
     fun snapshot(extras: Map<String, String> = emptyMap()): String {
         val out = StringBuilder()
-        fun line(k: String, v: Any?) { out.append(k).append(": ").append(v).append('\n') }
-        fun safe(block: () -> Unit) { try { block() } catch (_: Exception) { } }
+        fun line(k: String, v: Any?) {
+            out.append(k).append(": ").append(v).append('\n')
+        }
+        fun safe(block: () -> Unit) {
+            try {
+                block()
+            } catch (_: Exception) { }
+        }
 
         safe {
             val info = app.packageManager.getPackageInfo(app.packageName, 0)

@@ -5,14 +5,6 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import com.gamut.core.designsystem.focusRing
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.ui.unit.TextUnit
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.platform.LocalInputModeManager
-import androidx.compose.ui.input.InputMode
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -50,14 +43,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -72,6 +71,7 @@ import com.gamut.core.designsystem.LocalAppearance
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.appNeutralPalette
+import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.ink
 import com.gamut.settings.AppearanceViewModel
 import kotlinx.coroutines.delay
@@ -117,8 +117,11 @@ private val ShortWindow = 520.dp
 fun WelcomeScreen(
     vm: WelcomeViewModel,
     logo: @Composable () -> Unit = {
-        val res = if (LocalCoverPalette.current.isLight) R.drawable.ic_gamut_stacked_black
-        else R.drawable.ic_gamut_stacked_white
+        val res = if (LocalCoverPalette.current.isLight) {
+            R.drawable.ic_gamut_stacked_black
+        } else {
+            R.drawable.ic_gamut_stacked_white
+        }
         Image(
             painterResource(res),
             contentDescription = "Gamut",

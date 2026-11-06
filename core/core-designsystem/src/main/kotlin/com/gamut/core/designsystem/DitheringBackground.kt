@@ -89,7 +89,10 @@ half4 main(float2 fragCoord) {
 @Composable
 @Suppress("UNUSED_PARAMETER")
 internal fun DitheringBackground(
-    base: Color, c1: Color, c2: Color, c3: Color,
+    base: Color,
+    c1: Color,
+    c2: Color,
+    c3: Color,
     strength: Float,
     isLight: Boolean,
     clock: FloatState,

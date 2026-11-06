@@ -16,8 +16,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -315,9 +315,13 @@ private fun HeroCard(
             )
         }
         Box(Modifier.align(Alignment.BottomEnd).padding(18.dp).size(44.dp), contentAlignment = Alignment.Center) {
-            if (isPlaying) NowPlayingBars(color = Color.White)
-            else if (opensAlbum) Icon(PhosphorIcons.Bold.CaretRight, "Open album", tint = Color.White.copy(alpha = 0.95f), modifier = Modifier.size(28.dp))
-            else Icon(PhosphorIcons.Fill.Play, "Play", tint = Color.White.copy(alpha = 0.95f), modifier = Modifier.size(34.dp))
+            if (isPlaying) {
+                NowPlayingBars(color = Color.White)
+            } else if (opensAlbum) {
+                Icon(PhosphorIcons.Bold.CaretRight, "Open album", tint = Color.White.copy(alpha = 0.95f), modifier = Modifier.size(28.dp))
+            } else {
+                Icon(PhosphorIcons.Fill.Play, "Play", tint = Color.White.copy(alpha = 0.95f), modifier = Modifier.size(34.dp))
+            }
         }
     }
 }
@@ -394,12 +398,15 @@ private fun ChartRow(rank: Int?, item: DiscoverItem, isPlaying: Boolean, onClick
     ) { _ ->
         if (rank != null) {
             Column(Modifier.width(40.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                if (isPlaying) NowPlayingBars(color = accent)
-                else Text(
-                    rank.toString(),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = if (rank <= 3) FontWeight.SemiBold else FontWeight.Normal),
-                    color = if (rank <= 3) TextPrimary else TextTertiary,
-                )
+                if (isPlaying) {
+                    NowPlayingBars(color = accent)
+                } else {
+                    Text(
+                        rank.toString(),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = if (rank <= 3) FontWeight.SemiBold else FontWeight.Normal),
+                        color = if (rank <= 3) TextPrimary else TextTertiary,
+                    )
+                }
                 TrendMark(item.trend, item.trendDelta, accent)
             }
         }
@@ -430,8 +437,11 @@ private fun ChartRow(rank: Int?, item: DiscoverItem, isPlaying: Boolean, onClick
                 Text(it, style = MaterialTheme.typography.labelMedium, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        if (onMore != null) RowIconButton(PhosphorIcons.Bold.DotsThreeVertical, "More options", ink(0.6f), onMore)
-        else Icon(PhosphorIcons.Bold.CaretRight, null, tint = ink(0.4f), modifier = Modifier.padding(end = 8.dp).size(18.dp))
+        if (onMore != null) {
+            RowIconButton(PhosphorIcons.Bold.DotsThreeVertical, "More options", ink(0.6f), onMore)
+        } else {
+            Icon(PhosphorIcons.Bold.CaretRight, null, tint = ink(0.4f), modifier = Modifier.padding(end = 8.dp).size(18.dp))
+        }
     }
 }
 
@@ -481,25 +491,30 @@ private fun LazyListScope.feedSectionItems(
         item(key = "feed-${section.id}-body") {
             when (section.kind) {
                 FeedKind.QUICK_PICKS -> QuickPicksGrid(section.items, playing, play)
+
                 FeedKind.TRACK_RAILS -> TrackRails(section.items, playing, play, onMoreClick)
+
                 FeedKind.TRACK_CAROUSEL -> LazyRow(
                     contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     items(section.items, key = { it.id }) { song -> AlbumCard(song, isPlaying = playing(song)) { play(song) } }
                 }
+
                 FeedKind.ALBUM_CAROUSEL -> LazyRow(
                     contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     items(section.items, key = { it.id }) { album -> AlbumCard(album) { onAlbumClick(album) } }
                 }
+
                 FeedKind.ARTIST_CAROUSEL -> LazyRow(
                     contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(18.dp),
                 ) {
                     items(section.items, key = { it.id }) { artist -> ArtistBubble(artist) { onArtistItemClick(artist) } }
                 }
+
                 FeedKind.SPOTLIGHT -> Unit
             }
         }
@@ -586,6 +601,7 @@ private fun FeedFooter(count: Int, exhausted: Boolean, failed: Boolean, onLoadMo
                 color = TextSecondary,
                 modifier = Modifier.pressScale(onClick = onLoadMore, scaleDown = 0.92f).padding(horizontal = 16.dp, vertical = 8.dp),
             )
+
             exhausted -> Text(
                 "You\u2019re all caught up \u00B7 pull down for a fresh mix",
                 style = MaterialTheme.typography.labelMedium,
@@ -593,6 +609,7 @@ private fun FeedFooter(count: Int, exhausted: Boolean, failed: Boolean, onLoadMo
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 24.dp),
             )
+
             else -> CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
         }
     }

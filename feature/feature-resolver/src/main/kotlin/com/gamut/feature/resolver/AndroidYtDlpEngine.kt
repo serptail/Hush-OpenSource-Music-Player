@@ -10,16 +10,16 @@ import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.net.URLEncoder
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.concurrent.ConcurrentHashMap
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -55,7 +55,11 @@ class AndroidYtDlpEngine @Inject constructor(
     @ApplicationContext private val context: Context,
     private val updater: YtDlpUpdater,
 ) : YoutubeMusicSearchSource {
-    private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
+    private val json = Json {
+        ignoreUnknownKeys = true
+        explicitNulls = false
+    }
+
     @Volatile private var initialized = false
     private val streamScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val streamCache = ConcurrentHashMap<String, CachedUrl>()
@@ -108,7 +112,7 @@ class AndroidYtDlpEngine @Inject constructor(
             .getOrNull()
             ?.entries
             ?.mapNotNull { entry ->
-                    entry.id.takeIf(::isValidYoutubeVideoId)?.let {
+                entry.id.takeIf(::isValidYoutubeVideoId)?.let {
                     YoutubeCandidate(
                         videoId = it,
                         title = entry.title,
@@ -131,9 +135,13 @@ class AndroidYtDlpEngine @Inject constructor(
         return searchBroad(query)
     }
 
-    fun forget(videoId: String) { streamCache.keys.removeIf { it.startsWith("$videoId|") } }
+    fun forget(videoId: String) {
+        streamCache.keys.removeIf { it.startsWith("$videoId|") }
+    }
 
-    fun forgetAll() { streamCache.clear() }
+    fun forgetAll() {
+        streamCache.clear()
+    }
 
     suspend fun audioUrl(videoId: String, quality: StreamQuality = StreamQuality.NORMAL): Result<String> {
         val key = "$videoId|${quality.name}"
@@ -214,8 +222,7 @@ class AndroidYtDlpEngine @Inject constructor(
     private fun YtMusicEntryJson.durationMsOrZero(): Long = ((duration ?: 0.0) * 1_000).toLong()
     private fun SearchEntryJson.durationMsOrZero(): Long = ((duration ?: 0.0) * 1_000).toLong()
 
-    private fun isTopicChannel(channelName: String?): Boolean =
-        channelName?.trim()?.endsWith("- Topic", ignoreCase = true) == true
+    private fun isTopicChannel(channelName: String?): Boolean = channelName?.trim()?.endsWith("- Topic", ignoreCase = true) == true
 
     private fun ensureReady() {
         if (!initialized) {

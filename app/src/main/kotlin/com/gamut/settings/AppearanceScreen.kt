@@ -3,11 +3,9 @@ package com.gamut.settings
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
-import com.gamut.core.designsystem.GamutMotion
-import com.gamut.core.designsystem.softResize
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -42,10 +40,12 @@ import com.gamut.core.designsystem.AppearanceLevel
 import com.gamut.core.designsystem.AppearanceSettings
 import com.gamut.core.designsystem.FlowStyle
 import com.gamut.core.designsystem.FlowingBackground
+import com.gamut.core.designsystem.GamutMotion
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.acrylicSource
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
+import com.gamut.core.designsystem.softResize
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.StateFlow

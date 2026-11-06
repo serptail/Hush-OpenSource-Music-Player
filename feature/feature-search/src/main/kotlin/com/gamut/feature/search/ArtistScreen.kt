@@ -1,62 +1,62 @@
 package com.gamut.feature.search
 
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.lazy.LazyListScope
-import com.gamut.core.designsystem.focusRing
-import com.gamut.core.designsystem.isWideLayout
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.animation.Crossfade
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.SavedStateHandle
@@ -66,31 +66,31 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
-import androidx.compose.foundation.lazy.itemsIndexed
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.bold.ArrowLeft
 import com.adamglin.phosphoricons.bold.DotsThreeVertical
-import com.gamut.core.designsystem.CoverTheme
-import com.gamut.core.designsystem.ShareSheet
+import com.gamut.core.designsystem.ArtPlaceholder
 import com.gamut.core.designsystem.ArtistLine
 import com.gamut.core.designsystem.ArtistPickerSheet
-import com.gamut.core.designsystem.rememberArtistTap
-import com.gamut.core.designsystem.splitArtists
-import com.gamut.core.designsystem.TrackRowSkeleton
-import com.gamut.core.designsystem.shimmer
-import androidx.compose.foundation.layout.Spacer
+import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.LocalCoverPalette
-import com.gamut.core.designsystem.NowPlayingBars
-import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.LocalNavSettled
-import com.gamut.core.designsystem.squareArtUrl
-import com.gamut.core.designsystem.fadeEdges
-import com.gamut.core.designsystem.ink
-import com.gamut.core.designsystem.pressScale
+import com.gamut.core.designsystem.NowPlayingBars
+import com.gamut.core.designsystem.ShareSheet
+import com.gamut.core.designsystem.TrackRowSkeleton
+import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.VerticalTabs
-import com.gamut.core.designsystem.ArtPlaceholder
+import com.gamut.core.designsystem.fadeEdges
+import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.glass
+import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.isWideLayout
+import com.gamut.core.designsystem.pressScale
+import com.gamut.core.designsystem.rememberArtistTap
+import com.gamut.core.designsystem.shimmer
+import com.gamut.core.designsystem.splitArtists
+import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -254,8 +254,11 @@ fun ArtistScreen(
                             following = following,
                             onFollowClick = onFollowClick,
                         )
+
                         1 -> TrackList(value.songs, loading = !value.songsLoaded, wide = wide, nowPlayingIsrc = nowPlayingIsrc, accent = accent, onMore = { actionsTrack = it }) { picked -> onTrackSelected(picked, value.songs) }
+
                         2 -> AlbumGrid(value.albums, onAlbumSelected, wide)
+
                         else -> TrackList(value.latestSongs, loading = !value.songsLoaded, wide = wide, nowPlayingIsrc = nowPlayingIsrc, accent = accent, onMore = { actionsTrack = it }) { picked -> onTrackSelected(picked, value.latestSongs) }
                     }
                 }
@@ -268,9 +271,15 @@ fun ArtistScreen(
                 track = t,
                 isFavorite = t.isrc in favoriteIsrcs,
                 onDismiss = { actionsTrack = null },
-                onShare = { actionsTrack = null; shareTrack = t },
+                onShare = {
+                    actionsTrack = null
+                    shareTrack = t
+                },
                 onToggleFavorite = { onToggleFavorite(t) },
-                onAddToPlaylist = { actionsTrack = null; pickerTrack = t },
+                onAddToPlaylist = {
+                    actionsTrack = null
+                    pickerTrack = t
+                },
                 onGoToArtist = {
                     actionsTrack = null
                     if (splitArtists(t.artist).size > 1) artistPickTrack = t else onTrackArtist(t)
@@ -400,10 +409,12 @@ private fun LazyListScope.overviewBody(
             }
         }
     }
-    if (artist.similar.isNotEmpty()) item(key = "similar") {
-        Text("Similar artists", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(top = 24.dp, bottom = 12.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(end = endPad)) {
-            items(artist.similar, key = { it.id }) { SimilarArtistCard(it, onArtist) }
+    if (artist.similar.isNotEmpty()) {
+        item(key = "similar") {
+            Text("Similar artists", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(top = 24.dp, bottom = 12.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(end = endPad)) {
+                items(artist.similar, key = { it.id }) { SimilarArtistCard(it, onArtist) }
+            }
         }
     }
 }
@@ -430,9 +441,11 @@ private fun TrackList(
             horizontalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             itemsIndexed(tracks, key = { i, t -> "${t.isrc}-$i" }) { _, t -> TrackLine(t, isPlaying = t.isrc == nowPlayingIsrc, accent = accent, onClick = onTrack, onMore = onMore) }
-            if (loading) item(key = "loading", span = { GridItemSpan(maxLineSpan) }) {
-                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = ink(), strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
+            if (loading) {
+                item(key = "loading", span = { GridItemSpan(maxLineSpan) }) {
+                    Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = ink(), strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
+                    }
                 }
             }
         }
@@ -440,9 +453,11 @@ private fun TrackList(
     }
     LazyColumn(Modifier.fillMaxSize().fadeEdges(), contentPadding = PaddingValues(start = 12.dp, end = 24.dp, bottom = 24.dp)) {
         itemsIndexed(tracks, key = { i, t -> "${t.isrc}-$i" }) { _, t -> TrackLine(t, isPlaying = t.isrc == nowPlayingIsrc, accent = accent, onClick = onTrack, onMore = onMore) }
-        if (loading) item(key = "loading") {
-            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = ink(), strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
+        if (loading) {
+            item(key = "loading") {
+                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = ink(), strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
+                }
             }
         }
     }

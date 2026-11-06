@@ -121,9 +121,14 @@ fun StorageSettingsScreen(
     LaunchedEffect(active) {
         if (active) {
             vm.onOpened()
-            while (true) { delay(8_000); vm.refreshNow() }
+            while (true) {
+                delay(8_000)
+                vm.refreshNow()
+            }
         } else {
-            selecting = false; selected = emptySet(); visible = PAGE
+            selecting = false
+            selected = emptySet()
+            visible = PAGE
         }
     }
     LaunchedEffect(songs) { removing = removing.filter { id -> songs.any { it.isrc == id } }.toSet() }
@@ -160,19 +165,26 @@ fun StorageSettingsScreen(
         SoftHeader("Your downloads")
         SoftCard {
             Column(Modifier.softResize()) {
-                if (songs.isNotEmpty()) Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            if (songs.size == 1) "1 song" else "${songs.size} songs",
-                            style = MaterialTheme.typography.titleMedium, color = ink(), modifier = Modifier.weight(1f),
-                        )
-                        if (songs.isNotEmpty()) TextAction(if (selecting) "Done" else "Select") {
-                            selecting = !selecting; selected = emptySet()
+                if (songs.isNotEmpty()) {
+                    Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                if (songs.size == 1) "1 song" else "${songs.size} songs",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = ink(),
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (songs.isNotEmpty()) {
+                                TextAction(if (selecting) "Done" else "Select") {
+                                    selecting = !selecting
+                                    selected = emptySet()
+                                }
+                            }
                         }
-                    }
-                    if (songs.size > 1) {
-                        Spacer(Modifier.height(12.dp))
-                        SegmentedControl(options = SortChoices, selected = sort, onSelect = { sort = it })
+                        if (songs.size > 1) {
+                            Spacer(Modifier.height(12.dp))
+                            SegmentedControl(options = SortChoices, selected = sort, onSelect = { sort = it })
+                        }
                     }
                 }
                 if (songs.isEmpty()) {
@@ -195,7 +207,8 @@ fun StorageSettingsScreen(
                             DestructiveButton(
                                 if (selected.isEmpty()) "Delete" else "Delete (${selected.size})",
                                 onClick = { confirm = Confirm.DeleteSelected(selected) },
-                                modifier = Modifier.weight(1f), enabled = selected.isNotEmpty(),
+                                modifier = Modifier.weight(1f),
+                                enabled = selected.isNotEmpty(),
                             )
                         }
                     }
@@ -221,13 +234,16 @@ fun StorageSettingsScreen(
                         SoftDivider()
                         TextAction(
                             "Show ${minOf(PAGE, sorted.size - visible)} more \u00B7 ${sorted.size - visible} hidden",
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), centered = true,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            centered = true,
                         ) { visible += PAGE }
                     }
                     SoftDivider()
                     TextAction(
-                        "Delete all downloads", modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        centered = true, color = GamutDestructive,
+                        "Delete all downloads",
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        centered = true,
+                        color = GamutDestructive,
                     ) { confirm = Confirm.DeleteAll }
                 }
             }
@@ -238,17 +254,21 @@ fun StorageSettingsScreen(
             Column(Modifier.softResize()) {
                 CacheRow(
                     "Images & temporary files",
-                    fmt(snap?.imageCacheBytes ?: 0L), (snap?.imageCacheBytes ?: 0L) > 0,
+                    fmt(snap?.imageCacheBytes ?: 0L),
+                    (snap?.imageCacheBytes ?: 0L) > 0,
                 ) { confirm = Confirm.ClearImages }
                 SoftDivider()
                 CacheRow(
                     "Discover & search",
-                    fmt(snap?.discoverCacheBytes ?: 0L), (snap?.discoverCacheBytes ?: 0L) > 0,
+                    fmt(snap?.discoverCacheBytes ?: 0L),
+                    (snap?.discoverCacheBytes ?: 0L) > 0,
                 ) { confirm = Confirm.ClearDiscover }
                 SoftDivider()
                 TextAction(
-                    "Clear all cache", modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    centered = true, color = GamutDestructive,
+                    "Clear all cache",
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    centered = true,
+                    color = GamutDestructive,
                 ) { confirm = Confirm.ClearAllCache }
             }
         }
@@ -292,39 +312,64 @@ fun StorageSettingsScreen(
         is Confirm.DeleteSong -> GamutDialog(
             title = "Delete this song?",
             body = "\u201C${c.song.title}\u201D will be removed from this device.",
-            confirmLabel = "Delete", destructive = true,
+            confirmLabel = "Delete",
+            destructive = true,
             onDismiss = { confirm = null },
-            onConfirm = { deleteSongs(listOf(c.song.isrc), "Deleted \u201C${c.song.title}\u201D"); confirm = null },
+            onConfirm = {
+                deleteSongs(listOf(c.song.isrc), "Deleted \u201C${c.song.title}\u201D")
+                confirm = null
+            },
         )
+
         is Confirm.DeleteSelected -> GamutDialog(
             title = if (c.ids.size == 1) "Delete 1 song?" else "Delete ${c.ids.size} songs?",
             body = "They will be removed from this device.",
-            confirmLabel = "Delete", destructive = true,
+            confirmLabel = "Delete",
+            destructive = true,
             onDismiss = { confirm = null },
             onConfirm = {
                 deleteSongs(c.ids, if (c.ids.size == 1) "Deleted 1 song" else "Deleted ${c.ids.size} songs")
-                selecting = false; selected = emptySet(); confirm = null
+                selecting = false
+                selected = emptySet()
+                confirm = null
             },
         )
+
         Confirm.DeleteAll -> GamutDialog(
             title = "Delete all downloads?",
             body = "${songs.size} songs will be removed from this device.",
-            confirmLabel = "Delete all", destructive = true,
+            confirmLabel = "Delete all",
+            destructive = true,
             onDismiss = { confirm = null },
-            onConfirm = { vm.deleteAll(); selecting = false; selected = emptySet(); confirm = null; notifier.success("All downloads deleted") },
+            onConfirm = {
+                vm.deleteAll()
+                selecting = false
+                selected = emptySet()
+                confirm = null
+                notifier.success("All downloads deleted")
+            },
         )
+
         Confirm.ClearImages -> ClearDialog("Clear images & temporary files?", "${fmt(snap?.imageCacheBytes ?: 0L)} will be freed.", { confirm = null }) {
-            vm.clear(CacheTarget.IMAGES) { notifier.success(if (it > 0) "Freed ${fmt(it)}" else "Nothing to clear") }; confirm = null
+            vm.clear(CacheTarget.IMAGES) { notifier.success(if (it > 0) "Freed ${fmt(it)}" else "Nothing to clear") }
+            confirm = null
         }
+
         Confirm.ClearDiscover -> ClearDialog("Clear Discover & search cache?", "${fmt(snap?.discoverCacheBytes ?: 0L)} will be freed.", { confirm = null }) {
-            vm.clear(CacheTarget.DISCOVER) { notifier.success(if (it > 0) "Freed ${fmt(it)}" else "Cache cleared") }; confirm = null
+            vm.clear(CacheTarget.DISCOVER) { notifier.success(if (it > 0) "Freed ${fmt(it)}" else "Cache cleared") }
+            confirm = null
         }
+
         Confirm.ClearAllCache -> ClearDialog("Clear all cache?", "${fmt(snap?.cacheBytes ?: 0L)} will be freed.", { confirm = null }) {
-            vm.clear(CacheTarget.ALL) { notifier.success(if (it > 0) "Freed ${fmt(it)}" else "Cache was already empty") }; confirm = null
+            vm.clear(CacheTarget.ALL) { notifier.success(if (it > 0) "Freed ${fmt(it)}" else "Cache was already empty") }
+            confirm = null
         }
+
         Confirm.CleanLeftovers -> ClearDialog("Delete leftover files?", "${fmt(snap?.leftoverBytes ?: 0L)} will be freed.", { confirm = null }) {
-            vm.cleanLeftovers { notifier.success(if (it > 0) "Freed ${fmt(it)}" else "Nothing to clean") }; confirm = null
+            vm.cleanLeftovers { notifier.success(if (it > 0) "Freed ${fmt(it)}" else "Nothing to clean") }
+            confirm = null
         }
+
         null -> Unit
     }
 
@@ -337,13 +382,18 @@ fun StorageSettingsScreen(
             onDismiss = { dialog = null },
             note = "Applies to new downloads. Songs you already downloaded keep the quality they have.",
         )
+
         StorageDialog.CACHE_LIMIT -> GamutChoiceDialog(
             title = "Cache limit",
             choices = CacheLimitChoices,
             selected = cfg.cacheLimitMb,
-            onSelect = { mb -> vm.settings.update { it.copy(cacheLimitMb = mb) }; vm.onOpened() },
+            onSelect = { mb ->
+                vm.settings.update { it.copy(cacheLimitMb = mb) }
+                vm.onOpened()
+            },
             onDismiss = { dialog = null },
         )
+
         null -> Unit
     }
 }
@@ -351,8 +401,7 @@ fun StorageSettingsScreen(
 private fun limitLabel(mb: Int) = CacheLimitChoices.firstOrNull { it.value == mb }?.label ?: "$mb MB"
 
 @Composable
-private fun ClearDialog(title: String, body: String, onDismiss: () -> Unit, onConfirm: () -> Unit) =
-    GamutDialog(title = title, body = body, confirmLabel = "Clear", destructive = true, onDismiss = onDismiss, onConfirm = onConfirm)
+private fun ClearDialog(title: String, body: String, onDismiss: () -> Unit, onConfirm: () -> Unit) = GamutDialog(title = title, body = body, confirmLabel = "Clear", destructive = true, onDismiss = onDismiss, onConfirm = onConfirm)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -371,7 +420,8 @@ private fun UsageHero(snap: StorageSnapshot?, fmt: (Long) -> String) {
         Column(Modifier.softResize().padding(horizontal = 20.dp, vertical = 18.dp)) {
             Text(
                 if (snap == null) "\u2026" else fmt(shownTotal.toLong()),
-                style = MaterialTheme.typography.headlineLarge, color = ink(),
+                style = MaterialTheme.typography.headlineLarge,
+                color = ink(),
             )
             Spacer(Modifier.height(16.dp))
             Row(
@@ -400,8 +450,11 @@ private fun LegendItem(color: Color, label: String, value: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(8.dp).background(color, CircleShape))
         Text(
-            "$label ($value)", style = MaterialTheme.typography.bodyMedium, color = ink(0.7f),
-            maxLines = 1, modifier = Modifier.padding(start = 6.dp),
+            "$label ($value)",
+            style = MaterialTheme.typography.bodyMedium,
+            color = ink(0.7f),
+            maxLines = 1,
+            modifier = Modifier.padding(start = 6.dp),
         )
     }
 }
@@ -431,12 +484,16 @@ private fun QueueCard(manager: TrackDownloadManager, onCancelAll: () -> Unit, on
                         val bar by animateFloatAsState(fraction, tween(300), label = "queue-bar")
                         Text(
                             if (shownBatch.waitingForWifi) "Waiting for Wi-Fi" else "Downloading ${minOf(shownBatch.done + 1, shownBatch.total)} of ${shownBatch.total}",
-                            style = MaterialTheme.typography.titleMedium, color = ink(),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = ink(),
                         )
                         Text(
                             if (shownBatch.waitingForWifi) "\u201CDownload on Wi-Fi only\u201D is on, so nothing downloads over mobile data." else shownBatch.current.orEmpty(),
-                            style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), maxLines = 1,
-                            overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ink(0.55f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 2.dp),
                         )
                         Spacer(Modifier.height(14.dp))
                         Box(Modifier.fillMaxWidth().height(6.dp).clip(CircleShape).background(ink(0.08f))) {
@@ -453,7 +510,8 @@ private fun QueueCard(manager: TrackDownloadManager, onCancelAll: () -> Unit, on
                         if (shownBatch.total > 0) Spacer(Modifier.height(18.dp))
                         Text(
                             if (shownFailed == 1) "1 download failed" else "$shownFailed downloads failed",
-                            style = MaterialTheme.typography.titleMedium, color = GamutDestructive,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = GamutDestructive,
                         )
                         Spacer(Modifier.height(12.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -483,10 +541,14 @@ private fun SongRow(
     ) {
         Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
             Crossfade(selecting, animationSpec = tween(GamutMotion.CONTENT_MS), label = "row-lead") { pick ->
-                if (pick) SelectDot(checked) else Box(
-                    Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(ink(0.08f)),
-                    contentAlignment = Alignment.Center,
-                ) { Icon(PhosphorIcons.Bold.MusicNote, null, tint = ink(0.7f), modifier = Modifier.size(22.dp)) }
+                if (pick) {
+                    SelectDot(checked)
+                } else {
+                    Box(
+                        Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(ink(0.08f)),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(PhosphorIcons.Bold.MusicNote, null, tint = ink(0.7f), modifier = Modifier.size(22.dp)) }
+                }
             }
         }
         Spacer(Modifier.width(14.dp))
@@ -494,7 +556,10 @@ private fun SongRow(
             Text(song.title, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 listOf(song.artist, detail).filter { it.isNotBlank() }.joinToString(" \u00B7 "),
-                style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium,
+                color = ink(0.55f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         AnimatedVisibility(!selecting, enter = fadeIn(tween(160)), exit = fadeOut(tween(100))) {
@@ -556,11 +621,15 @@ private fun CacheRow(title: String, size: String, hasData: Boolean, onClear: () 
             Text(title, style = MaterialTheme.typography.titleMedium, color = ink())
             Text(
                 size,
-                style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 2.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = ink(0.55f),
+                modifier = Modifier.padding(top = 2.dp),
             )
         }
         Text(
-            "Clear", style = MaterialTheme.typography.labelLarge, color = ink(if (hasData) 0.85f else 0.35f),
+            "Clear",
+            style = MaterialTheme.typography.labelLarge,
+            color = ink(if (hasData) 0.85f else 0.35f),
             modifier = Modifier
                 .alpha(if (hasData) 1f else 0.6f)
                 .pressScale(onClick = { if (hasData) onClear() })
@@ -571,10 +640,16 @@ private fun CacheRow(title: String, size: String, hasData: Boolean, onClear: () 
 
 @Composable
 private fun TextAction(
-    label: String, modifier: Modifier = Modifier, centered: Boolean = false, color: Color = ink(0.85f), onClick: () -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    centered: Boolean = false,
+    color: Color = ink(0.85f),
+    onClick: () -> Unit,
 ) {
     Text(
-        label, style = MaterialTheme.typography.titleMedium, color = color,
+        label,
+        style = MaterialTheme.typography.titleMedium,
+        color = color,
         textAlign = if (centered) TextAlign.Center else TextAlign.Start,
         modifier = modifier.pressScale(onClick = onClick).padding(horizontal = 8.dp, vertical = 10.dp),
     )

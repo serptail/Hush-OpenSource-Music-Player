@@ -97,7 +97,14 @@ data class ResolvedSourceDto(
 data class AudioStreamDto(val url: String, val expiresAtEpochSeconds: Long? = null)
 
 fun YoutubeCandidateDto.toDomain() = YoutubeCandidate(
-    videoId, title, channelName, channelIsTopicChannel, durationMs, viewCount, category, isMusicCatalog,
+    videoId,
+    title,
+    channelName,
+    channelIsTopicChannel,
+    durationMs,
+    viewCount,
+    category,
+    isMusicCatalog,
 )
 
 @Serializable

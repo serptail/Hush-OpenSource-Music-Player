@@ -190,7 +190,10 @@ object ShazamSignature {
         private val im = DoubleArray(n)
 
         fun powerSpectrum(input: FloatArray, out: FloatArray) {
-            for (i in 0 until n) { re[rev[i]] = input[i].toDouble(); im[rev[i]] = 0.0 }
+            for (i in 0 until n) {
+                re[rev[i]] = input[i].toDouble()
+                im[rev[i]] = 0.0
+            }
             var size = 2
             while (size <= n) {
                 val half = size / 2
@@ -201,8 +204,10 @@ object ShazamSignature {
                     for (j in start until start + half) {
                         val tr = re[j + half] * cosT[k] - im[j + half] * sinT[k]
                         val ti = re[j + half] * sinT[k] + im[j + half] * cosT[k]
-                        re[j + half] = re[j] - tr; im[j + half] = im[j] - ti
-                        re[j] += tr; im[j] += ti
+                        re[j + half] = re[j] - tr
+                        im[j + half] = im[j] - ti
+                        re[j] += tr
+                        im[j] += ti
                         k += step
                     }
                     start += size

@@ -40,20 +40,37 @@ enum class ModPreset(val label: String, val controls: Set<ModControl>) {
         "Lo-Fi",
         setOf(ModControl.SPEED, ModControl.LOWPASS, ModControl.WOBBLE, ModControl.VINYL, ModControl.BASS, ModControl.REVERB_MIX),
     ),
-    CUSTOM("Custom", ModControl.entries.toSet());
+    CUSTOM("Custom", ModControl.entries.toSet()),
+    ;
 
     fun defaults(): ModSettings = when (this) {
         ORIGINAL, CUSTOM -> ModSettings()
+
         SPED_UP -> ModSettings(speed = 1.15f, bassDb = 1f)
+
         NIGHTCORE -> ModSettings(speed = 1.30f, bassDb = 2f)
+
         SLOWED -> ModSettings(speed = 0.85f)
+
         DAYCORE -> ModSettings(speed = 0.75f, lowPassHz = 12_000f)
+
         SLOWED_REVERB -> ModSettings(
-            speed = 0.80f, reverbMix = 0.35f, reverbDecaySec = 3f, reverbPreDelayMs = 25f, reverbDamping = 0.55f,
+            speed = 0.80f,
+            reverbMix = 0.35f,
+            reverbDecaySec = 3f,
+            reverbPreDelayMs = 25f,
+            reverbDamping = 0.55f,
         )
+
         ULTRA_SLOWED -> ModSettings(
-            speed = 0.60f, bassDb = 2f, reverbMix = 0.45f, reverbDecaySec = 5f, reverbPreDelayMs = 40f, reverbDamping = 0.6f,
+            speed = 0.60f,
+            bassDb = 2f,
+            reverbMix = 0.45f,
+            reverbDecaySec = 5f,
+            reverbPreDelayMs = 40f,
+            reverbDamping = 0.6f,
         )
+
         LO_FI -> ModSettings(
             speed = 0.95f, bassDb = 2f, lowPassHz = 4_500f, wobbleCents = 12f, vinylNoise = 0.25f,
             reverbMix = 0.10f, reverbDecaySec = 0.8f, reverbPreDelayMs = 10f, reverbDamping = 0.7f,

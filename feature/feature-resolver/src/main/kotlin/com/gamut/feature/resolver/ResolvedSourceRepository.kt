@@ -31,7 +31,9 @@ class ResolvedSourceRepositoryImpl @Inject constructor(private val dao: Resolved
     override suspend fun getLocal(isrc: String) = dao.get(isrc)?.toDomain()
     override suspend fun getRemote(isrc: String) = if (remoteEnabled) runCatching { api.get(isrc).body()?.toDomain() }.getOrNull() else null
     override suspend fun saveLocal(source: ResolvedSource) = dao.upsert(source.toEntity())
-    override suspend fun submitRemote(source: ResolvedSource) { if (remoteEnabled) runCatching { api.save(source.toDto()) } }
+    override suspend fun submitRemote(source: ResolvedSource) {
+        if (remoteEnabled) runCatching { api.save(source.toDto()) }
+    }
 }
 
 private fun ResolvedSourceDto.toDomain() = ResolvedSource(isrc, youtubeVideoId, com.gamut.core.model.ResolutionMethod.valueOf(resolutionMethod), confidenceScore, verifiedCount)
@@ -41,7 +43,9 @@ private fun ResolvedSource.toDto() = ResolvedSourceDto(isrc, youtubeVideoId, res
 @InstallIn(SingletonComponent::class)
 abstract class ResolverRepositoryModule {
     @Binds abstract fun bindResolvedSourceRepository(impl: ResolvedSourceRepositoryImpl): ResolvedSourceRepository
+
     @Binds abstract fun bindYoutubeCandidateRepository(impl: YoutubeCandidateRepositoryImpl): YoutubeCandidateRepository
+
     @Binds abstract fun bindAudioSourceRepository(impl: AudioSourceRepositoryImpl): AudioSourceRepository
 
     @Binds abstract fun bindYoutubeMusicSearchSource(source: HybridYoutubeMusicSearchSource): YoutubeMusicSearchSource

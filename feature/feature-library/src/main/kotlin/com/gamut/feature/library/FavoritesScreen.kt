@@ -1,21 +1,5 @@
 package com.gamut.feature.library
 
-import androidx.compose.foundation.focusable
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.input.InputMode
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalInputModeManager
-import com.gamut.core.designsystem.FocusLive
-import com.gamut.core.designsystem.LocalFocusLive
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -26,6 +10,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
@@ -49,6 +34,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -59,34 +45,45 @@ import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import com.gamut.core.designsystem.GamutSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -96,11 +93,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.fill.CheckCircle
-import com.adamglin.phosphoricons.fill.Heart
-import com.adamglin.phosphoricons.fill.Play
+import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.ArrowCircleDown
 import com.adamglin.phosphoricons.bold.ArrowLeft
 import com.adamglin.phosphoricons.bold.BoxArrowDown
@@ -108,24 +102,30 @@ import com.adamglin.phosphoricons.bold.DotsSixVertical
 import com.adamglin.phosphoricons.bold.DotsThreeVertical
 import com.adamglin.phosphoricons.bold.Plus
 import com.adamglin.phosphoricons.bold.ShareNetwork
-import com.adamglin.phosphoricons.bold.User
 import com.adamglin.phosphoricons.bold.Shuffle
 import com.adamglin.phosphoricons.bold.Trash
 import com.adamglin.phosphoricons.bold.TrashSimple
-import com.gamut.core.designsystem.CoverTheme
-import com.gamut.core.designsystem.ShareSheet
+import com.adamglin.phosphoricons.bold.User
+import com.adamglin.phosphoricons.fill.CheckCircle
+import com.adamglin.phosphoricons.fill.Heart
+import com.adamglin.phosphoricons.fill.Play
 import com.gamut.core.designsystem.ArtistLine
 import com.gamut.core.designsystem.ArtistPickerSheet
-import com.gamut.core.designsystem.rememberArtistTap
-import com.gamut.core.designsystem.splitArtists
+import com.gamut.core.designsystem.CoverTheme
+import com.gamut.core.designsystem.FocusLive
+import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.LocalFocusLive
+import com.gamut.core.designsystem.LocalNavSettled
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.NowPlayingBars
+import com.gamut.core.designsystem.ShareSheet
 import com.gamut.core.designsystem.TransparentStatusBar
-import com.gamut.core.designsystem.LocalNavSettled
 import com.gamut.core.designsystem.glass
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
+import com.gamut.core.designsystem.rememberArtistTap
+import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.model.Track
 import com.gamut.feature.resolver.DownloadState
 import kotlin.math.abs
@@ -205,10 +205,15 @@ fun FavoritesScreen(
                     }
                     val totalMs = songs.sumOf { it.durationMs }
                     Text(
-                        if (downloading && batch.waitingForWifi) "Waiting for Wi\u2011Fi \u00B7 mobile data downloads are off"
-                        else if (downloading) "Downloading ${minOf(downloadUi.done + 1, downloadUi.total)} of ${downloadUi.total}"
-                        else (if (songs.size == 1) "1 song" else "${songs.size} songs") + if (totalMs > 0) " \u00B7 ${formatTotal(totalMs)}" else "",
-                        style = MaterialTheme.typography.bodyMedium, color = ink(0.6f),
+                        if (downloading && batch.waitingForWifi) {
+                            "Waiting for Wi\u2011Fi \u00B7 mobile data downloads are off"
+                        } else if (downloading) {
+                            "Downloading ${minOf(downloadUi.done + 1, downloadUi.total)} of ${downloadUi.total}"
+                        } else {
+                            (if (songs.size == 1) "1 song" else "${songs.size} songs") + if (totalMs > 0) " \u00B7 ${formatTotal(totalMs)}" else ""
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ink(0.6f),
                         maxLines = if (downloading) 1 else Int.MAX_VALUE,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -235,7 +240,9 @@ fun FavoritesScreen(
                             when (downloadUi.status) {
                                 PlaylistDownloadStatus.Idle ->
                                     downloads.download(remote.filter { downloadStates[it.isrc] != DownloadState.Done }, label = "Favorites")
+
                                 PlaylistDownloadStatus.Active -> downloads.cancel(remote.map { it.isrc })
+
                                 PlaylistDownloadStatus.Done -> showManage = true
                             }
                         },
@@ -265,26 +272,28 @@ fun FavoritesScreen(
                     Spacer(Modifier.height(6.dp))
                     Text(
                         "Tap the + on any song in Discover to save it here.",
-                        style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ink(0.6f),
+                        textAlign = TextAlign.Center,
                     )
                 }
             } else if (!settled) {
                 Spacer(Modifier.weight(1f))
             } else {
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                SongWheel(
-                    songs = songs,
-                    downloadStates = rowStates,
-                    onTrackSelected = onTrackSelected,
-                    onRemove = onRemove,
-                    onAddToPlaylist = onAddToPlaylist,
-                    onDownload = { if (!it.isLocal) downloads.download(listOf(it)) },
-                    onRemoveDownload = { if (!it.isLocal) downloads.remove(listOf(it.isrc)) },
-                    onCancelDownload = { if (!it.isLocal) downloads.cancel(listOf(it.isrc)) },
-                    onTrackArtist = onTrackArtist,
-                    nowPlayingIsrc = nowPlayingIsrc,
-                    modifier = Modifier.widthIn(max = WheelMaxWidth).fillMaxSize(),
-                )
+                    SongWheel(
+                        songs = songs,
+                        downloadStates = rowStates,
+                        onTrackSelected = onTrackSelected,
+                        onRemove = onRemove,
+                        onAddToPlaylist = onAddToPlaylist,
+                        onDownload = { if (!it.isLocal) downloads.download(listOf(it)) },
+                        onRemoveDownload = { if (!it.isLocal) downloads.remove(listOf(it.isrc)) },
+                        onCancelDownload = { if (!it.isLocal) downloads.cancel(listOf(it.isrc)) },
+                        onTrackArtist = onTrackArtist,
+                        nowPlayingIsrc = nowPlayingIsrc,
+                        modifier = Modifier.widthIn(max = WheelMaxWidth).fillMaxSize(),
+                    )
                 }
             }
 
@@ -314,8 +323,7 @@ private fun slotOffset(i: Int): Int = when {
     else -> -(i / 2)
 }
 
-private fun wheelOrder(songs: List<Track>): List<Track> =
-    songs.indices.sortedBy { slotOffset(it) }.map { songs[it] }
+private fun wheelOrder(songs: List<Track>): List<Track> = songs.indices.sortedBy { slotOffset(it) }.map { songs[it] }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -386,8 +394,9 @@ private fun SongWheel(
                         Key.DirectionDown, Key.DirectionUp -> {
                             val step = if (e.key == Key.DirectionDown) 1 else -1
                             val next = target + step
-                            if (next !in 0..last) false
-                            else {
+                            if (next !in 0..last) {
+                                false
+                            } else {
                                 if (e.type == KeyEventType.KeyDown) {
                                     target = next
                                     scope.launch { state.animateScrollToItem(next) }
@@ -395,6 +404,7 @@ private fun SongWheel(
                                 true
                             }
                         }
+
                         Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
                             if (e.type == KeyEventType.KeyDown) {
                                 if (e.nativeKeyEvent.isLongPress) {
@@ -408,10 +418,12 @@ private fun SongWheel(
                             }
                             true
                         }
+
                         Key.Menu -> {
                             if (e.type == KeyEventType.KeyDown) menuTrack = ordered.getOrNull(target)
                             true
                         }
+
                         else -> false
                     }
                 }
@@ -433,8 +445,11 @@ private fun SongWheel(
                     playing = index == playingIndex,
                     accent = accent,
                     onClick = {
-                        if (state.focusOf(index) > 0.5f) onTrackSelected(song, songs)
-                        else scope.launch { state.animateScrollToItem(index) }
+                        if (state.focusOf(index) > 0.5f) {
+                            onTrackSelected(song, songs)
+                        } else {
+                            scope.launch { state.animateScrollToItem(index) }
+                        }
                     },
                     onLongClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -531,7 +546,10 @@ private fun WheelRow(
             .fillMaxWidth()
             .height(itemHeight)
             .wheelTransform(state, index, itemHeight, pivotX = SideInset + PillInset + coverSize / 2)
-            .graphicsLayer { scaleX = pressScale; scaleY = pressScale }
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
             .focusProperties { canFocus = false }
             .combinedClickable(
                 interactionSource = interaction,
@@ -542,87 +560,90 @@ private fun WheelRow(
         contentAlignment = Alignment.Center,
     ) {
         FocusLive(false) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(pillHeight)
-                .padding(horizontal = SideInset)
-                .graphicsLayer { alpha = state.focusOf(index) }
-                .background(ink(if (ringed) 0.12f else 0.07f), WheelPillShape)
-                .border(if (ringed) 2.dp else 1.dp, if (ringed) ink(0.9f) else ink(0.08f), WheelPillShape),
-        )
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = SideInset + PillInset),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BadgedCover(local = song.isLocal, tagSize = 24.dp) {
-                CoverImage(song.albumArtUrl.orEmpty(), Modifier.size(coverSize).softCover(WheelCoverShape))
-            }
-            Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
-                Text(
-                    song.title,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = if (playing) accent else ink(),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                ArtistLine(song.artist, song.album, onArtist, stackSize = 20.dp) { m ->
-                    Text(
-                        song.artist,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ink(0.6f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = m,
-                    )
-                }
-                if (playing && itemHeight >= 96.dp) {
-                    Text(
-                        "Playing now",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = accent,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                } else if (offline && itemHeight >= 96.dp) {
-                    Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(PhosphorIcons.Fill.CheckCircle, null, tint = ink(0.6f), modifier = Modifier.size(13.dp))
-                        Text(
-                            "Available offline",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = ink(0.6f),
-                            maxLines = 1,
-                            modifier = Modifier.padding(start = 5.dp),
-                        )
-                    }
-                }
-                if (downloading && !playing && itemHeight >= 96.dp) {
-                    Box(Modifier.padding(top = 5.dp).height(2.dp)) { DownloadProgressLine(downloadState) }
-                }
-            }
-            if (downloading) {
-                TrackDownloadButton(
-                    downloadState,
-                    onDownload = {},
-                    onCancel = { if (state.focusOf(index) > 0.5f) onCancelDownload() },
-                    onDone = {},
-                    glyph = 20.dp,
-                    modifier = Modifier.graphicsLayer { alpha = state.focusOf(index) },
-                )
-            }
             Box(
                 Modifier
-                    .size(PlayButtonSize)
+                    .fillMaxWidth()
+                    .height(pillHeight)
+                    .padding(horizontal = SideInset)
                     .graphicsLayer { alpha = state.focusOf(index) }
-                    .pressScale(onClick = onPlay),
-                contentAlignment = Alignment.Center,
+                    .background(ink(if (ringed) 0.12f else 0.07f), WheelPillShape)
+                    .border(if (ringed) 2.dp else 1.dp, if (ringed) ink(0.9f) else ink(0.08f), WheelPillShape),
+            )
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = SideInset + PillInset),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (playing) NowPlayingBars(color = accent)
-                else Icon(PhosphorIcons.Fill.Play, "Play", tint = ink(), modifier = Modifier.size(22.dp))
+                BadgedCover(local = song.isLocal, tagSize = 24.dp) {
+                    CoverImage(song.albumArtUrl.orEmpty(), Modifier.size(coverSize).softCover(WheelCoverShape))
+                }
+                Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
+                    Text(
+                        song.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = if (playing) accent else ink(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    ArtistLine(song.artist, song.album, onArtist, stackSize = 20.dp) { m ->
+                        Text(
+                            song.artist,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ink(0.6f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = m,
+                        )
+                    }
+                    if (playing && itemHeight >= 96.dp) {
+                        Text(
+                            "Playing now",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = accent,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    } else if (offline && itemHeight >= 96.dp) {
+                        Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(PhosphorIcons.Fill.CheckCircle, null, tint = ink(0.6f), modifier = Modifier.size(13.dp))
+                            Text(
+                                "Available offline",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = ink(0.6f),
+                                maxLines = 1,
+                                modifier = Modifier.padding(start = 5.dp),
+                            )
+                        }
+                    }
+                    if (downloading && !playing && itemHeight >= 96.dp) {
+                        Box(Modifier.padding(top = 5.dp).height(2.dp)) { DownloadProgressLine(downloadState) }
+                    }
+                }
+                if (downloading) {
+                    TrackDownloadButton(
+                        downloadState,
+                        onDownload = {},
+                        onCancel = { if (state.focusOf(index) > 0.5f) onCancelDownload() },
+                        onDone = {},
+                        glyph = 20.dp,
+                        modifier = Modifier.graphicsLayer { alpha = state.focusOf(index) },
+                    )
+                }
+                Box(
+                    Modifier
+                        .size(PlayButtonSize)
+                        .graphicsLayer { alpha = state.focusOf(index) }
+                        .pressScale(onClick = onPlay),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (playing) {
+                        NowPlayingBars(color = accent)
+                    } else {
+                        Icon(PhosphorIcons.Fill.Play, "Play", tint = ink(), modifier = Modifier.size(22.dp))
+                    }
+                }
             }
         }
-            }
     }
 }
 
@@ -690,10 +711,12 @@ private fun TrackActionsSheet(
             }
 
             SheetAction("Play", PhosphorIcons.Fill.Play) { close(onPlay) }
-            if (!track.isLocal) when (downloadState) {
-                DownloadState.Done -> SheetAction("Remove download", PhosphorIcons.Fill.CheckCircle) { close(onRemoveDownload) }
-                null, is DownloadState.Failed -> SheetAction("Download", PhosphorIcons.Bold.ArrowCircleDown) { close(onDownload) }
-                else -> Unit
+            if (!track.isLocal) {
+                when (downloadState) {
+                    DownloadState.Done -> SheetAction("Remove download", PhosphorIcons.Fill.CheckCircle) { close(onRemoveDownload) }
+                    null, is DownloadState.Failed -> SheetAction("Download", PhosphorIcons.Bold.ArrowCircleDown) { close(onDownload) }
+                    else -> Unit
+                }
             }
             SheetAction(
                 if (splitArtists(track.artist).size > 1) "Go to artist\u2026" else "Go to artist",
@@ -736,8 +759,7 @@ private fun LazyListState.distanceFromCenter(key: Int): Float? {
     return (item.offset + item.size / 2f - center) / item.size
 }
 
-private fun LazyListState.focusOf(key: Int): Float =
-    (1f - abs(distanceFromCenter(key) ?: 9f)).coerceIn(0f, 1f)
+private fun LazyListState.focusOf(key: Int): Float = (1f - abs(distanceFromCenter(key) ?: 9f)).coerceIn(0f, 1f)
 
 private fun Modifier.wheelTransform(
     state: LazyListState,

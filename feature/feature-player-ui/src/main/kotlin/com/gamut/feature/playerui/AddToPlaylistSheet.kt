@@ -1,8 +1,5 @@
 package com.gamut.feature.playerui
 
-import com.gamut.core.designsystem.focusRing
-import com.gamut.core.designsystem.GamutSheet
-import com.gamut.core.designsystem.ink
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -38,6 +35,9 @@ import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.bold.Check
 import com.adamglin.phosphoricons.bold.MusicNote
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.focusRing
+import com.gamut.core.designsystem.ink
 
 data class PlaylistPickerItem(
     val id: String,

@@ -162,7 +162,13 @@ internal fun LyricsPreviewCard(
             .fillMaxWidth()
             .clip(PreviewShape)
             .background(Brush.linearGradient(listOf(tint.top, tint.bottom)))
-            .tapTarget { if (lyricsState is LyricsState.Loaded) onShowLyrics() else if (lyricsState !is LyricsState.Loading) onRetry() }
+            .tapTarget {
+                if (lyricsState is LyricsState.Loaded) {
+                    onShowLyrics()
+                } else if (lyricsState !is LyricsState.Loading) {
+                    onRetry()
+                }
+            }
             .padding(20.dp),
     ) {
         Text("Lyrics preview", color = Color.White, style = MaterialTheme.typography.titleMedium)
@@ -171,6 +177,7 @@ internal fun LyricsPreviewCard(
             is LyricsState.Loading -> Box(Modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
                 PlayerSpinner(Modifier.size(26.dp), Color.White.copy(alpha = 0.8f))
             }
+
             is LyricsState.Loaded -> {
                 val lines = lyricsState.lines
                 val idx = if (lyricsState.isSynced) activeIndex() else -1
@@ -211,7 +218,9 @@ internal fun LyricsPreviewCard(
                     Text("Show lyrics", color = Color.Black, style = MaterialTheme.typography.labelLarge)
                 }
             }
+
             is LyricsState.NotAvailable -> PreviewMessage("No lyrics found for this track\nTap to try again", soft)
+
             is LyricsState.Error -> PreviewMessage("Couldn't load the lyrics\nRetrying\u2026 tap to retry now", soft)
         }
     }
@@ -259,7 +268,8 @@ internal fun FullLyricsPanel(
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
             Box(Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 12.dp)) {
                 DepthIcon(
-                    PhosphorIcons.Bold.CaretDown, "Close lyrics",
+                    PhosphorIcons.Bold.CaretDown,
+                    "Close lyrics",
                     Modifier.align(Alignment.CenterStart).tapTarget(onClose).padding(12.dp),
                 )
                 Column(Modifier.align(Alignment.Center).padding(horizontal = 56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -282,6 +292,7 @@ internal fun FullLyricsPanel(
                     is LyricsState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         PlayerSpinner(Modifier.size(30.dp), Color.White.copy(alpha = 0.8f))
                     }
+
                     is LyricsState.Loaded -> PanelLyricsList(
                         lines = lyricsState.lines,
                         isSynced = lyricsState.isSynced,
@@ -291,7 +302,9 @@ internal fun FullLyricsPanel(
                         onSeekToMs = onSeekToMs,
                         modifier = Modifier.fillMaxSize(),
                     )
+
                     is LyricsState.NotAvailable -> LyricsEmptyState("${lyricsState.reason}\nTap to retry", onRetry)
+
                     is LyricsState.Error -> LyricsEmptyState("${lyricsState.message}\nRetrying\u2026 tap to retry now", onRetry)
                 }
             }
@@ -347,7 +360,8 @@ private fun PanelLyricsList(
             state = listState,
             modifier = Modifier.fillMaxSize().fadingEdges(0.08f),
             contentPadding = PaddingValues(
-                start = 24.dp, end = 24.dp,
+                start = 24.dp,
+                end = 24.dp,
                 top = if (isSynced) viewport * 0.14f else 12.dp,
                 bottom = viewport * 0.55f,
             ),

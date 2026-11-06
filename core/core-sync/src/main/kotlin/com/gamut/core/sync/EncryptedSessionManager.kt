@@ -15,14 +15,17 @@ class EncryptedSessionManager(private val context: Context) : SessionManager {
     private val json = Json { ignoreUnknownKeys = true }
 
     private fun open(): SharedPreferences = EncryptedSharedPreferences.create(
-        context, FILE,
+        context,
+        FILE,
         MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
         EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
     )
 
     private val prefs: SharedPreferences by lazy {
-        try { open() } catch (e: Exception) {
+        try {
+            open()
+        } catch (e: Exception) {
             context.deleteSharedPreferences(FILE)
             open()
         }

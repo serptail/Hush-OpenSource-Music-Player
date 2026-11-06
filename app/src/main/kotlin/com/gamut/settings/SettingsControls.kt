@@ -82,8 +82,12 @@ fun SliderCell(
     Column(modifier.fillMaxWidth().padding(top = 10.dp).alpha(if (enabled) 1f else 0.4f)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                title, style = MaterialTheme.typography.titleMedium, color = ink(),
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = ink(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
             )
             Text(valueLabel, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), maxLines = 1)
         }
@@ -118,7 +122,10 @@ fun <T> GamutChoiceDialog(
             choices.forEach { choice ->
                 Row(
                     Modifier.fillMaxWidth()
-                        .pressScale(onClick = { onSelect(choice.value); close() }, scaleDown = 0.98f)
+                        .pressScale(onClick = {
+                            onSelect(choice.value)
+                            close()
+                        }, scaleDown = 0.98f)
                         .padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

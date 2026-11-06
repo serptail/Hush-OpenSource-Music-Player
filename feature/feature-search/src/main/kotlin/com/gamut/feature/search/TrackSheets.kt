@@ -1,22 +1,17 @@
 package com.gamut.feature.search
 
-import com.gamut.core.designsystem.GamutSheet
-import com.gamut.core.designsystem.LocalCoverPalette
-import com.gamut.core.designsystem.ink
-import androidx.compose.foundation.background
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.hoverable
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.ui.graphics.graphicsLayer
-import com.gamut.core.designsystem.CoverPalette
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -38,32 +33,37 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.fill.CheckCircle
-import com.adamglin.phosphoricons.fill.Heart as HeartFill
-import com.adamglin.phosphoricons.bold.ListPlus
-import com.adamglin.phosphoricons.bold.UserCircle
+import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.Heart
+import com.adamglin.phosphoricons.bold.ListPlus
 import com.adamglin.phosphoricons.bold.MusicNote
 import com.adamglin.phosphoricons.bold.PlusCircle
 import com.adamglin.phosphoricons.bold.ShareNetwork
+import com.adamglin.phosphoricons.bold.UserCircle
+import com.adamglin.phosphoricons.fill.CheckCircle
+import com.adamglin.phosphoricons.fill.Heart as HeartFill
 import com.gamut.core.designsystem.ArtImage
+import com.gamut.core.designsystem.CoverPalette
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
 
@@ -90,12 +90,23 @@ internal fun Modifier.bounceClick(onClick: () -> Unit): Modifier = composed {
         label = "bounce",
     )
     val tint by animateColorAsState(
-        targetValue = ink().copy(alpha = if (pressed) 0.10f else if (hovered) 0.06f else 0f),
+        targetValue = ink().copy(
+            alpha = if (pressed) {
+                0.10f
+            } else if (hovered) {
+                0.06f
+            } else {
+                0f
+            },
+        ),
         animationSpec = tween(140),
         label = "tint",
     )
     this
-        .graphicsLayer { scaleX = scale; scaleY = scale }
+        .graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
         .clip(RoundedCornerShape(16.dp))
         .background(tint)
         .hoverable(source)
@@ -203,8 +214,13 @@ internal fun SavedInSheet(
                     checked = checked,
                     accent = accent,
                     onClick = {
-                        if (checked) { ticked.remove(p.id); removeFromPlaylist(track, p.id) }
-                        else { ticked.add(p.id); onAddToPlaylist(p.id) }
+                        if (checked) {
+                            ticked.remove(p.id)
+                            removeFromPlaylist(track, p.id)
+                        } else {
+                            ticked.add(p.id)
+                            onAddToPlaylist(p.id)
+                        }
                     },
                 )
             }
@@ -231,16 +247,22 @@ private fun PlaylistRow(
             Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(ink(0.07f)),
             contentAlignment = Alignment.Center,
         ) {
-            if (coverUrl != null) ArtImage(url = coverUrl, modifier = Modifier.size(48.dp), fallback = {})
-            else Icon(icon, null, tint = iconTint, modifier = Modifier.size(22.dp))
+            if (coverUrl != null) {
+                ArtImage(url = coverUrl, modifier = Modifier.size(48.dp), fallback = {})
+            } else {
+                Icon(icon, null, tint = iconTint, modifier = Modifier.size(22.dp))
+            }
         }
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
             Text(name, style = MaterialTheme.typography.bodyLarge, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (sub != null) Text(sub, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f))
         }
         Crossfade(targetState = checked, label = "added") { on ->
-            if (on) Icon(PhosphorIcons.Fill.CheckCircle, "Added", tint = accent, modifier = Modifier.size(28.dp))
-            else Icon(PhosphorIcons.Bold.PlusCircle, "Add", tint = ink(0.6f), modifier = Modifier.size(28.dp))
+            if (on) {
+                Icon(PhosphorIcons.Fill.CheckCircle, "Added", tint = accent, modifier = Modifier.size(28.dp))
+            } else {
+                Icon(PhosphorIcons.Bold.PlusCircle, "Add", tint = ink(0.6f), modifier = Modifier.size(28.dp))
+            }
         }
     }
 }

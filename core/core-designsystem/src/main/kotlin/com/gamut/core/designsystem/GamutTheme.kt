@@ -1,16 +1,13 @@
 package com.gamut.core.designsystem
 
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.graphics.graphicsLayer
-import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,6 +16,7 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -29,12 +27,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.flow.collectLatest
 
 val GamutInk = Color(0xFF1B1B1F)
 val GamutMist = Color(0xFF7A7680)
@@ -109,8 +109,7 @@ val PillShape = RoundedCornerShape(50)
 val ArtworkShape = RoundedCornerShape(16.dp)
 val ArtworkShapeLarge = RoundedCornerShape(24.dp)
 
-fun Modifier.hairlineBorder(shape: Shape = CardShape, color: Color = GamutHairline): Modifier =
-    this.border(width = 1.dp, color = color, shape = shape)
+fun Modifier.hairlineBorder(shape: Shape = CardShape, color: Color = GamutHairline): Modifier = this.border(width = 1.dp, color = color, shape = shape)
 
 fun Modifier.thinCard(shape: Shape = CardShape, elevation: androidx.compose.ui.unit.Dp = 6.dp): Modifier = this
     .shadow(elevation = elevation, shape = shape, ambientColor = GamutShadow, spotColor = GamutShadow, clip = false)

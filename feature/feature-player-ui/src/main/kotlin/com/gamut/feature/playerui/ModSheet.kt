@@ -1,24 +1,13 @@
 package com.gamut.feature.playerui
 
-import com.gamut.core.designsystem.focusRing
-import androidx.compose.foundation.focusable
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
-import com.gamut.core.designsystem.GamutSheet
-import com.gamut.core.designsystem.LocalCoverPalette
-import com.gamut.core.designsystem.ink
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
-import com.gamut.core.designsystem.GamutMotion
-import com.gamut.core.designsystem.softResize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
@@ -49,6 +38,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -56,8 +50,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gamut.core.designsystem.CoverPalette
-import com.gamut.core.player.ModController
+import com.gamut.core.designsystem.GamutMotion
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.focusRing
+import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.softResize
 import com.gamut.core.player.ModControl
+import com.gamut.core.player.ModController
 import com.gamut.core.player.ModPreset
 import com.gamut.core.player.ModSettings
 import com.gamut.feature.playerui.components.bounceTap
@@ -83,12 +83,17 @@ internal fun ModSheet(accent: Color, onDismiss: () -> Unit) {
                             ModPreset.CUSTOM -> "Custom mix"
                             else -> "${state.preset.label} \u00B7 ${presetHint(state.preset)}"
                         },
-                        fontSize = 13.sp, color = ink(0.55f), modifier = Modifier.padding(top = 2.dp),
+                        fontSize = 13.sp,
+                        color = ink(0.55f),
+                        modifier = Modifier.padding(top = 2.dp),
                     )
                 }
                 if (state.preset != ModPreset.ORIGINAL && state.settings != state.preset.defaults()) {
                     Text(
-                        "Reset", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = accent,
+                        "Reset",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = accent,
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
                             .border(1.dp, accent.copy(alpha = 0.6f), RoundedCornerShape(50))
@@ -151,13 +156,21 @@ private fun PresetCell(preset: ModPreset, selected: Boolean, accent: Color, modi
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            preset.label, fontSize = 13.sp, lineHeight = 15.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, color = ink(),
-            maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+            preset.label,
+            fontSize = 13.sp,
+            lineHeight = 15.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            color = ink(),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(5.dp))
         Text(
-            presetHint(preset), fontSize = 10.5.sp, color = if (selected) ink() else ink(0.6f), maxLines = 1,
+            presetHint(preset),
+            fontSize = 10.5.sp,
+            color = if (selected) ink() else ink(0.6f),
+            maxLines = 1,
             modifier = Modifier.clip(RoundedCornerShape(50)).background(chipBg).padding(horizontal = 8.dp, vertical = 2.dp),
         )
     }
@@ -181,18 +194,33 @@ private class Spec(
 
 private fun specFor(control: ModControl): Spec? = when (control) {
     ModControl.SPEED -> Spec("Speed", 0.5f, 2f, 0.05f, { it.speed }, { s, v -> s.copy(speed = v) }, { "%.2fx".format(it) })
+
     ModControl.PITCH -> Spec("Pitch", -12f, 12f, 0.5f, { it.pitchSemitones }, { s, v -> s.copy(pitchSemitones = v) }, { "%+.1f st".format(it) })
+
     ModControl.BASS -> Spec("Bass", -6f, 10f, 0.5f, { it.bassDb }, { s, v -> s.copy(bassDb = v) }, { "%+.1f dB".format(it) })
+
     ModControl.REVERB_MIX -> Spec("Reverb", 0f, 1f, 0.05f, { it.reverbMix }, { s, v -> s.copy(reverbMix = v) }, { "${(it * 100).roundToInt()}%" })
+
     ModControl.DECAY -> Spec("Decay", 0.3f, 8f, 0.1f, { it.reverbDecaySec }, { s, v -> s.copy(reverbDecaySec = v) }, { "%.1f s".format(it) })
+
     ModControl.PREDELAY -> Spec("Pre-delay", 0f, 100f, 5f, { it.reverbPreDelayMs }, { s, v -> s.copy(reverbPreDelayMs = v) }, { "${it.roundToInt()} ms" })
+
     ModControl.DAMPING -> Spec("Damping", 0f, 1f, 0.05f, { it.reverbDamping }, { s, v -> s.copy(reverbDamping = v) }, { "${(it * 100).roundToInt()}%" })
+
     ModControl.LOWPASS -> Spec(
-        "Low-pass", 1_500f, 20_000f, 500f, { it.lowPassHz }, { s, v -> s.copy(lowPassHz = v) },
+        "Low-pass",
+        1_500f,
+        20_000f,
+        500f,
+        { it.lowPassHz },
+        { s, v -> s.copy(lowPassHz = v) },
         { if (it >= 20_000f) "Off" else "%.1f kHz".format(it / 1000f) },
     )
+
     ModControl.WOBBLE -> Spec("Tape wobble", 0f, 40f, 1f, { it.wobbleCents }, { s, v -> s.copy(wobbleCents = v) }, { "${it.roundToInt()} ct" })
+
     ModControl.VINYL -> Spec("Vinyl noise", 0f, 1f, 0.05f, { it.vinylNoise }, { s, v -> s.copy(vinylNoise = v) }, { "${(it * 100).roundToInt()}%" })
+
     ModControl.LINK -> null
 }
 
@@ -219,7 +247,11 @@ private fun ControlRow(control: ModControl, settings: ModSettings, accent: Color
             Text(spec.format(value), color = accent, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyMedium)
         }
         LineSlider(
-            value = value, min = spec.min, max = spec.max, step = spec.step, accent = accent,
+            value = value,
+            min = spec.min,
+            max = spec.max,
+            step = spec.step,
+            accent = accent,
             onChange = { v -> ModController.edit { spec.set(it, v) } },
         )
     }
@@ -235,8 +267,11 @@ private fun TogglePill(on: Boolean, accent: Color, onClick: () -> Unit) {
         modifier = Modifier
             .clip(shape)
             .then(
-                if (on) Modifier.background(accent)
-                else Modifier.border(1.dp, ink(0.18f), shape),
+                if (on) {
+                    Modifier.background(accent)
+                } else {
+                    Modifier.border(1.dp, ink(0.18f), shape)
+                },
             )
             .focusRing(shape)
             .clickable(onClick = onClick)
@@ -247,14 +282,20 @@ private fun TogglePill(on: Boolean, accent: Color, onClick: () -> Unit) {
 @Composable
 private fun LineSlider(value: Float, min: Float, max: Float, step: Float, accent: Color, onChange: (Float) -> Unit) {
     val onChangeNow by rememberUpdatedState(onChange)
-    val trackC = ink(0.16f); val tickC = ink(0.3f); val dotC = ink()
+    val trackC = ink(0.16f)
+    val tickC = ink(0.3f)
+    val dotC = ink()
     Canvas(
         Modifier
             .fillMaxWidth()
             .height(32.dp)
             .focusRing(RoundedCornerShape(12.dp))
             .onKeyEvent { e ->
-                val dir = when (e.key) { Key.DirectionLeft -> -1; Key.DirectionRight -> 1; else -> 0 }
+                val dir = when (e.key) {
+                    Key.DirectionLeft -> -1
+                    Key.DirectionRight -> 1
+                    else -> 0
+                }
                 if (dir == 0) return@onKeyEvent false
                 if (e.type == KeyEventType.KeyDown) {
                     val mult = (1 + e.nativeKeyEvent.repeatCount / 4).coerceAtMost(8)

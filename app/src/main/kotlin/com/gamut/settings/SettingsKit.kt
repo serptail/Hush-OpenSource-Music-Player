@@ -11,18 +11,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.window.DialogWindowProvider
-import com.gamut.core.designsystem.GamutMotion
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -49,29 +37,41 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogWindowProvider
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.bold.CaretLeft
 import com.adamglin.phosphoricons.bold.CaretRight
 import com.adamglin.phosphoricons.bold.Check
 import com.gamut.core.designsystem.CoverTheme
+import com.gamut.core.designsystem.GamutMotion
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 val GamutDestructive = Color(0xFFFF6B6B)
 
@@ -136,13 +136,20 @@ fun Cell(
             Text(title, style = MaterialTheme.typography.titleMedium, color = tone, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (subtitle != null) {
                 Text(
-                    subtitle, style = MaterialTheme.typography.bodyMedium, color = subtitleColor ?: ink(0.55f),
-                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp),
+                    subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = subtitleColor ?: ink(0.55f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
                 )
             }
         }
-        if (trailing != null) trailing()
-        else if (onClick != null && chevron && !destructive) Icon(PhosphorIcons.Bold.CaretRight, null, tint = ink(0.45f), modifier = Modifier.size(18.dp))
+        if (trailing != null) {
+            trailing()
+        } else if (onClick != null && chevron && !destructive) {
+            Icon(PhosphorIcons.Bold.CaretRight, null, tint = ink(0.45f), modifier = Modifier.size(18.dp))
+        }
     }
 }
 
@@ -207,31 +214,33 @@ fun GamutCheck(checked: Boolean, label: String, onChange: (Boolean) -> Unit, war
         val fill by animateColorAsState(if (checked) ink(0.95f) else ink(0.95f).copy(alpha = 0f), tween(GamutMotion.CONTENT_MS), label = "check-fill")
         val edge by animateColorAsState(if (checked) ink(0.3f).copy(alpha = 0f) else ink(0.3f), tween(GamutMotion.CONTENT_MS), label = "check-edge")
         Box(
-    Modifier
-        .size(22.dp)
-        .clip(shape)
-        .background(fill, shape)
-        .border(1.5.dp, edge, shape),
-    contentAlignment = Alignment.Center,
-) {
-    androidx.compose.animation.AnimatedVisibility(
-        visible = checked,
-        modifier = Modifier,
-        enter = fadeIn(tween(120)) +
-            scaleIn(tween(160), initialScale = 0.6f),
-        exit = fadeOut(tween(100)),
-        label = "check-visibility",
-    ) {
-        Icon(
-            imageVector = PhosphorIcons.Bold.Check,
-            contentDescription = null,
-            tint = onInk,
-            modifier = Modifier.size(14.dp),
-        )
-    }
-}
+            Modifier
+                .size(22.dp)
+                .clip(shape)
+                .background(fill, shape)
+                .border(1.5.dp, edge, shape),
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = checked,
+                modifier = Modifier,
+                enter = fadeIn(tween(120)) +
+                    scaleIn(tween(160), initialScale = 0.6f),
+                exit = fadeOut(tween(100)),
+                label = "check-visibility",
+            ) {
+                Icon(
+                    imageVector = PhosphorIcons.Bold.Check,
+                    contentDescription = null,
+                    tint = onInk,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+        }
         Text(
-            label, style = MaterialTheme.typography.bodyMedium, color = if (warn && checked) GamutDestructive else ink(0.85f),
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (warn && checked) GamutDestructive else ink(0.85f),
             modifier = Modifier.padding(start = 12.dp),
         )
     }
@@ -253,7 +262,9 @@ fun GamutField(
         Box(Modifier.weight(1f)) {
             if (value.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = ink(0.4f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             BasicTextField(
-                value = value, onValueChange = onChange, singleLine = true,
+                value = value,
+                onValueChange = onChange,
+                singleLine = true,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = ink()),
                 cursorBrush = SolidColor(ink()),
                 visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
@@ -288,7 +299,10 @@ fun GamutDialog(
         if (!closing) {
             closing = true
             state.targetState = false
-            scope.launch { delay(DIALOG_EXIT_MS + 20L); action() }
+            scope.launch {
+                delay(DIALOG_EXIT_MS + 20L)
+                action()
+            }
         }
     }
     val dismiss: () -> Unit = { finish(onDismiss) }
@@ -313,12 +327,18 @@ fun GamutDialog(
                         if (body != null) Text(body, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), modifier = Modifier.padding(top = 10.dp))
                         if (content != null) Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(2.dp), content = content)
                         Row(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.End) {
-                            if (dismissLabel != null) Text(
-                                dismissLabel, style = MaterialTheme.typography.titleMedium, color = ink(),
-                                modifier = Modifier.pressScale(onClick = dismiss).padding(horizontal = 16.dp, vertical = 10.dp),
-                            )
+                            if (dismissLabel != null) {
+                                Text(
+                                    dismissLabel,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = ink(),
+                                    modifier = Modifier.pressScale(onClick = dismiss).padding(horizontal = 16.dp, vertical = 10.dp),
+                                )
+                            }
                             Text(
-                                confirmLabel, style = MaterialTheme.typography.titleMedium, color = if (destructive) GamutDestructive else ink(),
+                                confirmLabel,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = if (destructive) GamutDestructive else ink(),
                                 modifier = Modifier.pressScale(onClick = confirm).padding(horizontal = 16.dp, vertical = 10.dp),
                             )
                         }

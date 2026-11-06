@@ -12,7 +12,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import kotlinx.coroutines.delay
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -25,18 +24,19 @@ import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.bold.CaretRight
 import com.adamglin.phosphoricons.bold.ClockCounterClockwise
 import com.adamglin.phosphoricons.bold.HardDrives
+import com.adamglin.phosphoricons.bold.Headphones
 import com.adamglin.phosphoricons.bold.Heart
 import com.adamglin.phosphoricons.bold.Info
 import com.adamglin.phosphoricons.bold.Palette
 import com.adamglin.phosphoricons.bold.Playlist
 import com.adamglin.phosphoricons.bold.Question
 import com.adamglin.phosphoricons.bold.User
-import com.adamglin.phosphoricons.bold.Headphones
 import com.gamut.account.AccountViewModel
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.ProfileAvatar
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
+import kotlinx.coroutines.delay
 
 @Composable
 fun SettingsScreen(
@@ -61,7 +61,12 @@ fun SettingsScreen(
     val avatar by vm.avatar.collectAsState()
     val supportVm: SupportViewModel = hiltViewModel()
     val active = LocalPageActive.current
-    LaunchedEffect(active) { if (active) { delay(600); supportVm.store.clearNudge() } }
+    LaunchedEffect(active) {
+        if (active) {
+            delay(600)
+            supportVm.store.clearNudge()
+        }
+    }
 
     GamutPage(title = "Settings", onBack = onBack, nowPlaying = nowPlaying) {
         Row(

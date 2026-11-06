@@ -46,9 +46,9 @@ fun ArtImage(
         if (failed) ArtPlaceholder(tile = tile)
     }
 }
+
 @Composable
-fun artTileColor(): Color =
-    ink(0.08f).compositeOver(if (ink().luminance() > 0.5f) Color(0xFF0E0E10) else Color(0xFFF4F4F6))
+fun artTileColor(): Color = ink(0.08f).compositeOver(if (ink().luminance() > 0.5f) Color(0xFF0E0E10) else Color(0xFFF4F4F6))
 
 @Composable
 fun ArtPlaceholder(

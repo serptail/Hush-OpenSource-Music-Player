@@ -108,7 +108,17 @@ fun MiniPlayerStrip(
                 Icon(PhosphorIcons.Regular.SkipBack, "Previous", tint = ink(0.9f), modifier = Modifier.size(22.dp))
             }
             Box(Modifier.size(48.dp).pressScale(onClick = onTogglePlay, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
-                Crossfade(if (isLoading) 2 else if (isPlaying) 1 else 0, animationSpec = tween(160), label = "mini-play") { s ->
+                Crossfade(
+                    if (isLoading) {
+                        2
+                    } else if (isPlaying) {
+                        1
+                    } else {
+                        0
+                    },
+                    animationSpec = tween(160),
+                    label = "mini-play",
+                ) { s ->
                     when (s) {
                         2 -> CircularProgressIndicator(color = ink(), strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
                         1 -> Icon(PhosphorIcons.Regular.Pause, "Pause", tint = ink(), modifier = Modifier.size(24.dp))

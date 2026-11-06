@@ -3,9 +3,9 @@ package com.gamut.feature.search
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -89,7 +89,13 @@ class SlingshotRefreshState internal constructor(
     }
 
     private fun release() {
-        if (refreshing) springTo(holdPx) else if (pull >= thresholdPx) trigger() else springTo(0f)
+        if (refreshing) {
+            springTo(holdPx)
+        } else if (pull >= thresholdPx) {
+            trigger()
+        } else {
+            springTo(0f)
+        }
     }
 
     val connection = object : NestedScrollConnection {
@@ -111,12 +117,17 @@ class SlingshotRefreshState internal constructor(
         }
 
         override suspend fun onPreFling(available: Velocity): Velocity {
-            if (pull > 0f && enabled()) { release(); return available }
+            if (pull > 0f && enabled()) {
+                release()
+                return available
+            }
             return Velocity.Zero
         }
     }
 
-    private companion object { const val MIN_SPIN_MS = 1_100L }
+    private companion object {
+        const val MIN_SPIN_MS = 1_100L
+    }
 }
 
 @Composable
@@ -163,7 +174,9 @@ fun BoxScope.SlingshotIndicator(state: SlingshotRefreshState, topOffsetPx: Int =
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            PhosphorIcons.Bold.ArrowClockwise, "Refresh", tint = ink(),
+            PhosphorIcons.Bold.ArrowClockwise,
+            "Refresh",
+            tint = ink(),
             modifier = Modifier.size(22.dp).graphicsLayer { rotationZ = if (state.refreshing) spin else progress.coerceIn(0f, 1.2f) * 270f },
         )
     }

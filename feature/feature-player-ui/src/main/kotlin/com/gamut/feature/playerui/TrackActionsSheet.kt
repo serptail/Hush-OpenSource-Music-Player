@@ -2,11 +2,6 @@ package com.gamut.feature.playerui
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
-import com.gamut.core.designsystem.GamutMotion
-import com.gamut.core.designsystem.softResize
-import com.gamut.core.designsystem.GamutSheet
-import com.gamut.core.designsystem.LocalCoverPalette
-import com.gamut.core.designsystem.ink
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -43,6 +38,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.gamut.core.designsystem.CoverPalette
+import com.gamut.core.designsystem.GamutMotion
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.softResize
 import com.gamut.core.model.Playlist
 import com.gamut.core.model.Track
 
@@ -87,8 +87,18 @@ fun TrackActionsSheet(
                     )
                 }
             }
-            item { ActionRow("Play next") { onPlayNext(); onDismiss() } }
-            item { ActionRow("Add to queue") { onAddToQueue(); onDismiss() } }
+            item {
+                ActionRow("Play next") {
+                    onPlayNext()
+                    onDismiss()
+                }
+            }
+            item {
+                ActionRow("Add to queue") {
+                    onAddToQueue()
+                    onDismiss()
+                }
+            }
             item {
                 Text(
                     "Add to playlist",
@@ -99,43 +109,46 @@ fun TrackActionsSheet(
             }
             item {
                 Box(Modifier.softResize()) {
-                Crossfade(targetState = creating, animationSpec = tween(GamutMotion.CONTENT_MS), label = "new-playlist") { isCreating ->
-                if (isCreating) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            Modifier
-                                .weight(1f)
-                                .background(ink(0.1f), RoundedCornerShape(12.dp))
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                        ) {
-                            if (name.isEmpty()) {
-                                Text("Playlist name", color = ink(0.4f), style = MaterialTheme.typography.bodyLarge)
+                    Crossfade(targetState = creating, animationSpec = tween(GamutMotion.CONTENT_MS), label = "new-playlist") { isCreating ->
+                        if (isCreating) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(
+                                    Modifier
+                                        .weight(1f)
+                                        .background(ink(0.1f), RoundedCornerShape(12.dp))
+                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                ) {
+                                    if (name.isEmpty()) {
+                                        Text("Playlist name", color = ink(0.4f), style = MaterialTheme.typography.bodyLarge)
+                                    }
+                                    BasicTextField(
+                                        value = name,
+                                        onValueChange = { name = it },
+                                        singleLine = true,
+                                        textStyle = MaterialTheme.typography.bodyLarge.merge(TextStyle(color = ink())),
+                                        cursorBrush = SolidColor(ink()),
+                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                        keyboardActions = KeyboardActions(onDone = { submitNew() }),
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                TextButton(onClick = { submitNew() }, enabled = name.isNotBlank()) { Text("Create") }
                             }
-                            BasicTextField(
-                                value = name,
-                                onValueChange = { name = it },
-                                singleLine = true,
-                                textStyle = MaterialTheme.typography.bodyLarge.merge(TextStyle(color = ink())),
-                                cursorBrush = SolidColor(ink()),
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                keyboardActions = KeyboardActions(onDone = { submitNew() }),
-                                modifier = Modifier.fillMaxWidth(),
-                            )
+                        } else {
+                            ActionRow("New playlist\u2026") { creating = true }
                         }
-                        Spacer(Modifier.width(8.dp))
-                        TextButton(onClick = { submitNew() }, enabled = name.isNotBlank()) { Text("Create") }
                     }
-                } else {
-                    ActionRow("New playlist\u2026") { creating = true }
-                }
-                }
                 }
             }
             items(playlists, key = { it.id }) { playlist ->
-                ActionRow(playlist.name) { onAddToPlaylist(playlist); onDismiss() }
+                ActionRow(playlist.name) {
+                    onAddToPlaylist(playlist)
+                    onDismiss()
+                }
             }
         }
     }

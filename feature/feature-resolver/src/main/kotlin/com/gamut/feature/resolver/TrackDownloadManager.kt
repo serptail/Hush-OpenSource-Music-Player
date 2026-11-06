@@ -91,6 +91,7 @@ class TrackDownloadManager @Inject constructor(
 
     private val queue = Channel<Track>(Channel.UNLIMITED)
     private val cancelled = ConcurrentHashMap.newKeySet<String>()
+
     @Volatile private var running: Pair<String, Job>? = null
     private val failedTracks = ConcurrentHashMap<String, Track>()
 
@@ -206,7 +207,10 @@ class TrackDownloadManager @Inject constructor(
                 if (++attempts > MAX_ATTEMPTS) throw e
                 delay(500L * attempts)
                 url = bestUrl(videoId, refresh = true)
-                if (streamKey(url) != stream) { part.delete(); stream = streamKey(url) }
+                if (streamKey(url) != stream) {
+                    part.delete()
+                    stream = streamKey(url)
+                }
             }
         }
         if (part.length() < MIN_VALID_BYTES) throw IOException("Download incomplete")
@@ -220,7 +224,8 @@ class TrackDownloadManager @Inject constructor(
         val best = storageSettings.current.downloadQuality == DownloadQuality.BEST
         if (best) newPipe.bestAudioUrl(videoId).getOrNull()?.let { return it }
         return audioSources.audioUrl(
-            videoId, forceRefresh = refresh,
+            videoId,
+            forceRefresh = refresh,
             quality = if (best) StreamQuality.HIGH else StreamQuality.NORMAL,
         ).getOrThrow()
     }
@@ -237,11 +242,17 @@ class TrackDownloadManager @Inject constructor(
                 val hook = currentCoroutineContext().job.invokeOnCompletion { cause -> if (cause != null) call.cancel() }
                 try {
                     call.execute().use { response ->
-                        if (response.code == 416) { total = offset; return@use }
+                        if (response.code == 416) {
+                            total = offset
+                            return@use
+                        }
                         if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
                         val body = response.body ?: throw IOException("Empty response")
                         val ranged = response.code == 206
-                        if (!ranged && offset > 0) { out.channel.truncate(0); offset = 0 }
+                        if (!ranged && offset > 0) {
+                            out.channel.truncate(0)
+                            offset = 0
+                        }
                         if (ranged) {
                             response.header("Content-Range")?.substringAfterLast('/')?.toLongOrNull()?.let { total = it }
                         } else if (body.contentLength() > 0) {
@@ -270,13 +281,20 @@ class TrackDownloadManager @Inject constructor(
     }
 
     private suspend fun saveMetadata(track: Track) {
-        try { trackDao.upsert(track.toEntity()) } catch (e: CancellationException) { throw e } catch (_: Exception) { }
+        try {
+            trackDao.upsert(track.toEntity())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) { }
     }
 
     private suspend fun awaitNetworkAllowed(isrc: String) {
         var waited = false
         while (!networkAllowed() && !cancelled.contains(isrc)) {
-            if (!waited) { waited = true; batchState.update { it.copy(waitingForWifi = true) } }
+            if (!waited) {
+                waited = true
+                batchState.update { it.copy(waitingForWifi = true) }
+            }
             delay(2_000)
         }
         if (waited) batchState.update { it.copy(waitingForWifi = false) }
@@ -306,13 +324,21 @@ class TrackDownloadManager @Inject constructor(
     }
 
     private fun recordResult(title: String, ok: Boolean) = synchronized(summaryLock) {
-        if (ok) { okCount++; if (firstTitle == null) firstTitle = title } else failCount++
+        if (ok) {
+            okCount++
+            if (firstTitle == null) firstTitle = title
+        } else {
+            failCount++
+        }
     }
 
     private fun emitSummary() {
         val summary = synchronized(summaryLock) {
             DownloadSummary(okCount, failCount, firstTitle, runLabel).also {
-                okCount = 0; failCount = 0; firstTitle = null; runLabel = null
+                okCount = 0
+                failCount = 0
+                firstTitle = null
+                runLabel = null
             }
         }
         if (summary.succeeded + summary.failed > 0) summaryEvents.tryEmit(summary)

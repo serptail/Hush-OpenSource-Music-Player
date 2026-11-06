@@ -81,11 +81,15 @@ class AccountViewModel @Inject constructor(
 
     private val _importSummary = MutableStateFlow<ImportSummary?>(null)
     val importSummary: StateFlow<ImportSummary?> = _importSummary
-    fun dismissImportSummary() { _importSummary.value = null }
+    fun dismissImportSummary() {
+        _importSummary.value = null
+    }
 
     private val _restorePrompt = MutableStateFlow<RestorePrompt?>(null)
     val restorePrompt: StateFlow<RestorePrompt?> = _restorePrompt
-    fun cancelRestore() { _restorePrompt.value = null }
+    fun cancelRestore() {
+        _restorePrompt.value = null
+    }
 
     private val busy = AtomicBoolean(false)
 
@@ -131,7 +135,13 @@ class AccountViewModel @Inject constructor(
     fun signOut(allDevices: Boolean, clearLocal: Boolean) = viewModelScope.launch {
         val uid = auth.currentUserId()
         auth.signOut(allDevices).onFailure { _events.tryEmit(Notice.Error("Couldn\u2019t sign out everywhere")) }
-        if (clearLocal) { cleaner.clear(); avatars.clearLocal(); AutoBackup.deleteAll(appContext); store.setName(uid, null); refreshBackups() }
+        if (clearLocal) {
+            cleaner.clear()
+            avatars.clearLocal()
+            AutoBackup.deleteAll(appContext)
+            store.setName(uid, null)
+            refreshBackups()
+        }
         _events.tryEmit(Notice.Info("Google disconnected"))
     }
 
@@ -139,8 +149,15 @@ class AccountViewModel @Inject constructor(
         val uid = auth.currentUserId()
         auth.deleteAccount()
             .onSuccess {
-                if (clearLocal) { cleaner.clear(); avatars.clearLocal(); AutoBackup.deleteAll(appContext); store.setName(uid, null); refreshBackups() }
-                else sync.forgetOwner()
+                if (clearLocal) {
+                    cleaner.clear()
+                    avatars.clearLocal()
+                    AutoBackup.deleteAll(appContext)
+                    store.setName(uid, null)
+                    refreshBackups()
+                } else {
+                    sync.forgetOwner()
+                }
                 _events.tryEmit(Notice.Success("Account deleted"))
             }
             .onFailure { _events.tryEmit(Notice.Error("Couldn\u2019t delete account")) }
@@ -165,7 +182,10 @@ class AccountViewModel @Inject constructor(
             val pw = password.takeIf { it.isNotBlank() }?.toCharArray()
             try {
                 val bytes = runCatching { resolver.openInputStream(uri)!!.use { exporter.readLimited(it) } }
-                    .getOrElse { _events.tryEmit(Notice.Error("Couldn\u2019t read that file")); return@launch }
+                    .getOrElse {
+                        _events.tryEmit(Notice.Error("Couldn\u2019t read that file"))
+                        return@launch
+                    }
                 _importSummary.value = ImportSummary(exporter.import(bytes, pw, replace), replace)
             } catch (e: CancellationException) {
                 throw e
@@ -204,8 +224,11 @@ class AccountViewModel @Inject constructor(
             try {
                 val bytes = File(file.path).inputStream().use { exporter.readLimited(it) }
                 val preview = exporter.preview(bytes, null)
-                if (preview.totalAdded == 0) _events.tryEmit(Notice.Info("Already up to date \u00B7 nothing to restore"))
-                else _restorePrompt.value = RestorePrompt(file, preview)
+                if (preview.totalAdded == 0) {
+                    _events.tryEmit(Notice.Info("Already up to date \u00B7 nothing to restore"))
+                } else {
+                    _restorePrompt.value = RestorePrompt(file, preview)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

@@ -1,10 +1,5 @@
 package com.gamut.settings
 
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import java.io.IOException
 import java.io.OutputStream
 import java.net.ConnectException
@@ -14,6 +9,11 @@ import java.net.URL
 import java.net.UnknownHostException
 import java.util.UUID
 import javax.net.ssl.SSLException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 data class FeedbackPayload(
     val type: FeedbackType,

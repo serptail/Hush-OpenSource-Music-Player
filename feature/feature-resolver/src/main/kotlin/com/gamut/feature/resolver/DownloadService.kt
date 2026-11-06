@@ -23,7 +23,9 @@ import kotlinx.coroutines.launch
 class DownloadService : Service() {
     @EntryPoint
     @InstallIn(SingletonComponent::class)
-    interface Access { fun downloads(): TrackDownloadManager }
+    interface Access {
+        fun downloads(): TrackDownloadManager
+    }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var watcher: Job? = null
@@ -35,8 +37,11 @@ class DownloadService : Service() {
         val notifications = getSystemService(NotificationManager::class.java)
         notifications.createNotificationChannel(NotificationChannel(CHANNEL, "Downloads", NotificationManager.IMPORTANCE_LOW))
         val first = notification(manager.batch.value)
-        if (Build.VERSION.SDK_INT >= 29) startForeground(ID, first, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        else startForeground(ID, first)
+        if (Build.VERSION.SDK_INT >= 29) {
+            startForeground(ID, first, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            startForeground(ID, first)
+        }
         if (watcher == null) {
             watcher = scope.launch {
                 manager.batch.collect { batch ->

@@ -60,13 +60,16 @@ class AppleCatalogRepository @Inject constructor(
         val photo = artistPhoto(id, name, albums.mapNotNull { it.collectionName })
         val art = photo ?: albums.firstOrNull()?.artworkUrl100.big()
         return DiscoverItem(
-            id = "artist:$id", title = name, subtitle = "Artist", imageUrl = art, artistId = id,
+            id = "artist:$id",
+            title = name,
+            subtitle = "Artist",
+            imageUrl = art,
+            artistId = id,
             followers = fansByName[TextMatch.norm(name)],
         )
     }
 
-    suspend fun artistPhoto(appleId: Long, name: String, appleAlbumTitles: List<String>): String? =
-        photoByName[TextMatch.norm(name)] ?: cachedPhoto("id:$appleId", name, appleAlbumTitles)
+    suspend fun artistPhoto(appleId: Long, name: String, appleAlbumTitles: List<String>): String? = photoByName[TextMatch.norm(name)] ?: cachedPhoto("id:$appleId", name, appleAlbumTitles)
 
     suspend fun artistPhotoFor(name: String, albumTitle: String): String? {
         photoByName[TextMatch.norm(name)]?.let { return it }
@@ -117,11 +120,9 @@ class AppleCatalogRepository @Inject constructor(
         return top.takeIf { second == null || (top.nbFan ?: 0L) >= (second.nbFan ?: 0L) * 5 }
     }
 
-    private fun sameAlbum(a: String, b: String): Boolean =
-        a == b || (minOf(a.length, b.length) >= 4 && (a.startsWith(b) || b.startsWith(a)))
+    private fun sameAlbum(a: String, b: String): Boolean = a == b || (minOf(a.length, b.length) >= 4 && (a.startsWith(b) || b.startsWith(a)))
 
-    private fun DeezerPhotoArtist.photo(): String? =
-        (pictureXl ?: pictureBig)?.takeIf { it.isNotBlank() && !it.contains("/artist//") }
+    private fun DeezerPhotoArtist.photo(): String? = (pictureXl ?: pictureBig)?.takeIf { it.isNotBlank() && !it.contains("/artist//") }
 
     suspend fun similarArtists(base: ArtistDetails): List<DiscoverItem> {
         similarCache[base.id]?.let { return it }
@@ -146,18 +147,19 @@ class AppleCatalogRepository @Inject constructor(
             .mapNotNull { related ->
                 val photo = related.photo() ?: return@mapNotNull null
                 DiscoverItem(
-                    id = "similar:${related.id}", title = related.name, subtitle = "Artist", imageUrl = photo,
+                    id = "similar:${related.id}",
+                    title = related.name,
+                    subtitle = "Artist",
+                    imageUrl = photo,
                     followers = related.fanCount,
                 )
             }
             .take(SIMILAR_LIMIT)
     }
 
-    private fun DeezerArtistDto.photo(): String? =
-        (pictureXl ?: pictureBig)?.takeIf { it.isNotBlank() && !it.contains("/artist//") }
+    private fun DeezerArtistDto.photo(): String? = (pictureXl ?: pictureBig)?.takeIf { it.isNotBlank() && !it.contains("/artist//") }
 
-    private fun ArtistDetails.withKnownPhoto(): ArtistDetails =
-        photoByName[TextMatch.norm(name)]?.let { copy(imageUrl = it) } ?: this
+    private fun ArtistDetails.withKnownPhoto(): ArtistDetails = photoByName[TextMatch.norm(name)]?.let { copy(imageUrl = it) } ?: this
 
     suspend fun artistOverview(id: Long): ArtistDetails? {
         (cache[id] ?: overviewCache[id])?.let { return it.withKnownPhoto() }

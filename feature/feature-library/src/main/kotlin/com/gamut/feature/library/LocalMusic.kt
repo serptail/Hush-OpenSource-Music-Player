@@ -30,13 +30,13 @@ import java.net.URL
 import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.resume
 import kotlin.math.abs
 import kotlin.math.max
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -55,7 +56,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlin.coroutines.resume
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -63,8 +63,7 @@ const val LOCAL_ISRC_PREFIX = "local:"
 
 val Track.isLocal: Boolean get() = isrc.startsWith(LOCAL_ISRC_PREFIX)
 
-fun List<Track>.withoutMissingLocal(existing: Set<String>?): List<Track> =
-    if (existing == null) this else filter { !it.isLocal || it.isrc in existing }
+fun List<Track>.withoutMissingLocal(existing: Set<String>?): List<Track> = if (existing == null) this else filter { !it.isLocal || it.isrc in existing }
 
 fun Track.localUri(): Uri? {
     if (!isLocal) return null
@@ -72,9 +71,11 @@ fun Track.localUri(): Uri? {
     return ContentUris.withAppendedId(audioCollection(), id)
 }
 
-private fun audioCollection(): Uri =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-    else MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+private fun audioCollection(): Uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+    MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+} else {
+    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+}
 
 private const val MIN_QUICK_MS = 30_000L
 private const val MIN_DEEP_MS = 5_000L
@@ -87,8 +88,11 @@ private val AUDIO_EXTENSIONS = setOf(
 )
 
 val LOCAL_AUDIO_PERMISSION: String =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_AUDIO
-    else Manifest.permission.READ_EXTERNAL_STORAGE
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        Manifest.permission.READ_MEDIA_AUDIO
+    } else {
+        Manifest.permission.READ_EXTERNAL_STORAGE
+    }
 
 data class MetaCandidate(val title: String, val artist: String, val album: String?, val artUrl: String?, val source: String)
 
@@ -137,8 +141,7 @@ class LocalMetadataStore @Inject constructor(@ApplicationContext private val con
         }
     }
 
-    @Synchronized fun pinnedIds(): Set<Long> =
-        pinPrefs.getStringSet("ids", emptySet()).orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
+    @Synchronized fun pinnedIds(): Set<Long> = pinPrefs.getStringSet("ids", emptySet()).orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
 
     @Synchronized fun pin(id: Long) {
         val next = pinPrefs.getStringSet("ids", emptySet()).orEmpty().toMutableSet().apply { add(id.toString()) }
@@ -146,9 +149,15 @@ class LocalMetadataStore @Inject constructor(@ApplicationContext private val con
         _version.update { it + 1 }
     }
 
-    @Synchronized fun get(isrc: String): Track? { ensureLoaded(); return map[isrc] }
+    @Synchronized fun get(isrc: String): Track? {
+        ensureLoaded()
+        return map[isrc]
+    }
 
-    @Synchronized fun snapshot(): Map<String, Track> { ensureLoaded(); return HashMap(map) }
+    @Synchronized fun snapshot(): Map<String, Track> {
+        ensureLoaded()
+        return HashMap(map)
+    }
 
     @Synchronized fun put(track: Track) {
         ensureLoaded()
@@ -156,11 +165,16 @@ class LocalMetadataStore @Inject constructor(@ApplicationContext private val con
         runCatching {
             val arr = JSONArray()
             map.values.forEach { t ->
-                arr.put(JSONObject().apply {
-                    put("isrc", t.isrc); put("title", t.title); put("artist", t.artist); put("durationMs", t.durationMs)
-                    t.album?.let { put("album", it) }
-                    t.albumArtUrl?.let { put("art", it) }
-                })
+                arr.put(
+                    JSONObject().apply {
+                        put("isrc", t.isrc)
+                        put("title", t.title)
+                        put("artist", t.artist)
+                        put("durationMs", t.durationMs)
+                        t.album?.let { put("album", it) }
+                        t.albumArtUrl?.let { put("art", it) }
+                    },
+                )
             }
             file.writeText(arr.toString())
         }
@@ -187,7 +201,9 @@ class LocalMetadataResolver @Inject constructor(
             context.contentResolver.query(
                 uri,
                 arrayOf(MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.DISPLAY_NAME),
-                null, null, null,
+                null,
+                null,
+                null,
             )?.use { c ->
                 if (!c.moveToFirst()) return@use null
                 fun col(i: Int) = c.getString(i)?.takeIf { it.isNotBlank() && it != "<unknown>" }
@@ -295,7 +311,10 @@ class LocalMetadataResolver @Inject constructor(
         if (artist == null && " - " in title) {
             val left = title.substringBefore(" - ").trim()
             val right = title.substringAfter(" - ").trim()
-            if (left.isNotEmpty() && right.isNotEmpty() && left.any { it.isLetter() }) { artist = left; title = right }
+            if (left.isNotEmpty() && right.isNotEmpty() && left.any { it.isLetter() }) {
+                artist = left
+                title = right
+            }
         }
         val terms = listOf(listOfNotNull(artist, title).joinToString(" "), baseTitle, title).filter { it.isNotBlank() }.distinct()
         val want = norm(title)
@@ -314,7 +333,11 @@ class LocalMetadataResolver @Inject constructor(
                 val dur = r.optLong("trackTimeMillis")
                 if (track.durationMs > 0 && dur > 0) {
                     val diff = abs(dur - track.durationMs)
-                    if (diff <= 6_000) score += 2 else if (diff > 15_000) score -= 2
+                    if (diff <= 6_000) {
+                        score += 2
+                    } else if (diff > 15_000) {
+                        score -= 2
+                    }
                 }
                 if (score >= 2) score to r else null
             }.sortedByDescending { it.first }
@@ -334,8 +357,15 @@ class LocalMetadataResolver @Inject constructor(
 
     private fun searchCatalog(term: String): List<JSONObject> {
         val url = URL("https://itunes.apple.com/search?media=music&entity=song&limit=10&term=" + URLEncoder.encode(term, "UTF-8"))
-        val conn = (url.openConnection() as HttpURLConnection).apply { connectTimeout = 6_000; readTimeout = 6_000 }
-        val body = try { conn.inputStream.bufferedReader().use { it.readText() } } finally { conn.disconnect() }
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            connectTimeout = 6_000
+            readTimeout = 6_000
+        }
+        val body = try {
+            conn.inputStream.bufferedReader().use { it.readText() }
+        } finally {
+            conn.disconnect()
+        }
         val arr = JSONObject(body).optJSONArray("results") ?: return emptyList()
         return (0 until arr.length()).map { arr.getJSONObject(it) }
     }
@@ -355,13 +385,23 @@ class LocalMetadataResolver @Inject constructor(
         if (artist == null && " - " in title) {
             val left = title.substringBefore(" - ").trim()
             val right = title.substringAfter(" - ").trim()
-            if (left.isNotEmpty() && right.isNotEmpty() && left.any { it.isLetter() }) { artist = left; title = right }
+            if (left.isNotEmpty() && right.isNotEmpty() && left.any { it.isLetter() }) {
+                artist = left
+                title = right
+            }
         }
         if (title.isBlank()) return@runCatching null
         val term = listOfNotNull(artist, title).joinToString(" ")
         val url = URL("https://itunes.apple.com/search?media=music&entity=song&limit=10&term=" + URLEncoder.encode(term, "UTF-8"))
-        val conn = (url.openConnection() as HttpURLConnection).apply { connectTimeout = 6_000; readTimeout = 6_000 }
-        val body = try { conn.inputStream.bufferedReader().use { it.readText() } } finally { conn.disconnect() }
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            connectTimeout = 6_000
+            readTimeout = 6_000
+        }
+        val body = try {
+            conn.inputStream.bufferedReader().use { it.readText() }
+        } finally {
+            conn.disconnect()
+        }
         val results = JSONObject(body).optJSONArray("results") ?: return@runCatching null
 
         var best: JSONObject? = null
@@ -380,9 +420,16 @@ class LocalMetadataResolver @Inject constructor(
             val dur = r.optLong("trackTimeMillis")
             if (t.durationMs > 0 && dur > 0) {
                 val diff = abs(dur - t.durationMs)
-                if (diff <= 6_000) score += 2 else if (diff > 15_000) score -= 3
+                if (diff <= 6_000) {
+                    score += 2
+                } else if (diff > 15_000) {
+                    score -= 3
+                }
             }
-            if (score > bestScore) { bestScore = score; best = r }
+            if (score > bestScore) {
+                bestScore = score
+                best = r
+            }
         }
         val hit = best ?: return@runCatching null
         if (bestScore < 3) return@runCatching null
@@ -409,22 +456,28 @@ class LocalMediaScanner @Inject constructor(
     @ApplicationContext private val context: Context,
     private val store: LocalMetadataStore,
 ) {
-    fun hasPermission(): Boolean =
-        ContextCompat.checkSelfPermission(context, LOCAL_AUDIO_PERMISSION) == PackageManager.PERMISSION_GRANTED
+    fun hasPermission(): Boolean = ContextCompat.checkSelfPermission(context, LOCAL_AUDIO_PERMISSION) == PackageManager.PERMISSION_GRANTED
 
     fun observe(deep: Boolean): Flow<List<LocalSong>> = callbackFlow<Unit> {
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) { trySend(Unit) }
+            override fun onChange(selfChange: Boolean) {
+                trySend(Unit)
+            }
         }
         context.contentResolver.registerContentObserver(audioCollection(), true, observer)
         val edits = launch { store.version.collect { trySend(Unit) } }
         trySend(Unit)
-        awaitClose { edits.cancel(); context.contentResolver.unregisterContentObserver(observer) }
+        awaitClose {
+            edits.cancel()
+            context.contentResolver.unregisterContentObserver(observer)
+        }
     }.conflate().map { load(deep) }.flowOn(Dispatchers.IO)
 
     fun observeExistingIds(): Flow<Set<String>?> = callbackFlow<Unit> {
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) { trySend(Unit) }
+            override fun onChange(selfChange: Boolean) {
+                trySend(Unit)
+            }
         }
         context.contentResolver.registerContentObserver(audioCollection(), true, observer)
         trySend(Unit)
@@ -567,7 +620,11 @@ class LocalMediaScanner @Inject constructor(
     private fun idForPath(path: String): Long? = runCatching {
         @Suppress("DEPRECATION")
         context.contentResolver.query(
-            audioCollection(), arrayOf(MediaStore.Audio.Media._ID), "${MediaStore.Audio.Media.DATA} = ?", arrayOf(path), null,
+            audioCollection(),
+            arrayOf(MediaStore.Audio.Media._ID),
+            "${MediaStore.Audio.Media.DATA} = ?",
+            arrayOf(path),
+            null,
         )?.use { c -> if (c.moveToFirst()) c.getLong(0) else null }
     }.getOrNull()
 
@@ -621,17 +678,26 @@ class LocalMediaScanner @Inject constructor(
     private fun titleOf(id: Long): String = runCatching {
         context.contentResolver.query(
             ContentUris.withAppendedId(audioCollection(), id),
-            arrayOf(MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.DISPLAY_NAME), null, null, null,
+            arrayOf(MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.DISPLAY_NAME),
+            null,
+            null,
+            null,
         )?.use { c ->
-            if (!c.moveToFirst()) null
-            else c.getString(0)?.takeIf { it.isNotBlank() && it != "<unknown>" } ?: c.getString(1)?.substringBeforeLast('.')
+            if (!c.moveToFirst()) {
+                null
+            } else {
+                c.getString(0)?.takeIf { it.isNotBlank() && it != "<unknown>" } ?: c.getString(1)?.substringBeforeLast('.')
+            }
         }
     }.getOrNull() ?: "Song"
 
     private suspend fun scanFiles(paths: List<String>) = suspendCancellableCoroutine<Unit> { cont ->
         var left = paths.size
         MediaScannerConnection.scanFile(context, paths.toTypedArray(), null) { _, _ ->
-            synchronized(this) { left-- ; if (left == 0 && cont.isActive) cont.resume(Unit) }
+            synchronized(this) {
+                left--
+                if (left == 0 && cont.isActive) cont.resume(Unit)
+            }
         }
     }
 }
@@ -673,11 +739,15 @@ class LocalMusicViewModel @Inject constructor(
 
     private val _sort = MutableStateFlow(LocalSort.Recent)
     val sort: StateFlow<LocalSort> = _sort
-    fun setSort(s: LocalSort) { _sort.value = s }
+    fun setSort(s: LocalSort) {
+        _sort.value = s
+    }
 
     private val _format = MutableStateFlow<String?>(null)
     val format: StateFlow<String?> = _format
-    fun setFormat(f: String?) { _format.value = f }
+    fun setFormat(f: String?) {
+        _format.value = f
+    }
 
     val formats: StateFlow<List<String>> = songs.map { l -> l.map { it.format }.distinct().sorted() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -743,13 +813,14 @@ class LocalMusicViewModel @Inject constructor(
         }
     }
 
-    fun stopAutoFetch() { autoJob?.cancel(); autoJob = null }
+    fun stopAutoFetch() {
+        autoJob?.cancel()
+        autoJob = null
+    }
 
-    suspend fun saveEdit(track: Track, title: String, artist: String, cover: CoverEdit): Track =
-        resolver.saveEdit(track, title, artist, cover)
+    suspend fun saveEdit(track: Track, title: String, artist: String, cover: CoverEdit): Track = resolver.saveEdit(track, title, artist, cover)
 
-    suspend fun applyCandidate(track: Track, c: MetaCandidate): Track =
-        resolver.saveEdit(track, c.title, c.artist, c.artUrl?.let { CoverEdit.Url(it) } ?: CoverEdit.Keep)
+    suspend fun applyCandidate(track: Track, c: MetaCandidate): Track = resolver.saveEdit(track, c.title, c.artist, c.artUrl?.let { CoverEdit.Url(it) } ?: CoverEdit.Keep)
 
     fun refreshPermission(requestResultGranted: Boolean? = null) {
         val now = requestResultGranted ?: scanner.hasPermission()

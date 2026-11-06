@@ -1,16 +1,5 @@
 package com.gamut.feature.library
 
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.InputMode
-import androidx.compose.ui.platform.LocalInputModeManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import com.gamut.core.designsystem.LocalFocusLive
-import androidx.compose.foundation.layout.fillMaxHeight
-import com.gamut.core.designsystem.isWideLayout
-import com.gamut.core.designsystem.focusRing
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -22,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,6 +21,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
@@ -45,23 +36,29 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.snapshots.SnapshotStateList
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.toMutableStateList
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -71,19 +68,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.fill.Heart
+import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.MusicNote
 import com.adamglin.phosphoricons.bold.Plus
 import com.adamglin.phosphoricons.bold.VinylRecord
 import com.adamglin.phosphoricons.bold.X
+import com.adamglin.phosphoricons.fill.Heart
 import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.LocalFocusLive
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.TransparentStatusBar
+import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.isWideLayout
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.softResize
 import com.gamut.core.model.Track
@@ -179,7 +179,10 @@ fun CreatePlaylistScreen(
                     color = ink(),
                     modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 28.dp, bottom = 12.dp),
                 )
-                TagsEditor(tags = tags, onChange = { tags.clear(); tags.addAll(it) })
+                TagsEditor(tags = tags, onChange = {
+                    tags.clear()
+                    tags.addAll(it)
+                })
 
                 if (selectedTrack != null || favorites.isNotEmpty()) {
                     Text(
@@ -313,7 +316,12 @@ private fun NameField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit,
     val fieldFocus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     var editing by remember { mutableStateOf(false) }
-    LaunchedEffect(editing) { if (editing) { runCatching { fieldFocus.requestFocus() }; keyboard?.show() } }
+    LaunchedEffect(editing) {
+        if (editing) {
+            runCatching { fieldFocus.requestFocus() }
+            keyboard?.show()
+        }
+    }
     Column(
         Modifier
             .fillMaxWidth()
@@ -333,7 +341,10 @@ private fun NameField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit,
                 .fillMaxWidth()
                 .focusProperties { canFocus = (!remote || editing) && live }
                 .focusRequester(fieldFocus)
-                .onFocusChanged { focused = it.isFocused; if (!it.isFocused) editing = false },
+                .onFocusChanged {
+                    focused = it.isFocused
+                    if (!it.isFocused) editing = false
+                },
             decorationBox = { inner ->
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     if (value.text.isEmpty()) {

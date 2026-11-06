@@ -58,14 +58,11 @@ class SoundSettings private constructor(context: Context) {
 
     fun setEqEnabled(on: Boolean) = edit { it.copy(eqEnabled = on) }
 
-    fun setBandGain(index: Int, gainDb: Float) =
-        edit { s -> s.withBand(index) { it.copy(gainDb = gainDb.coerceIn(-MAX_GAIN_DB, MAX_GAIN_DB)) } }
+    fun setBandGain(index: Int, gainDb: Float) = edit { s -> s.withBand(index) { it.copy(gainDb = gainDb.coerceIn(-MAX_GAIN_DB, MAX_GAIN_DB)) } }
 
-    fun setBandFreq(index: Int, hz: Float) =
-        edit { s -> s.withBand(index) { it.copy(freqHz = hz.coerceIn(20f, 20_000f)) } }
+    fun setBandFreq(index: Int, hz: Float) = edit { s -> s.withBand(index) { it.copy(freqHz = hz.coerceIn(20f, 20_000f)) } }
 
-    fun setBandQ(index: Int, q: Float) =
-        edit { s -> s.withBand(index) { it.copy(q = q.coerceIn(0.2f, 10f)) } }
+    fun setBandQ(index: Int, q: Float) = edit { s -> s.withBand(index) { it.copy(q = q.coerceIn(0.2f, 10f)) } }
 
     fun applyPreset(name: String) {
         val gains = PRESETS[name] ?: return
@@ -155,10 +152,9 @@ class SoundSettings private constructor(context: Context) {
 
         @Volatile private var instance: SoundSettings? = null
 
-        fun get(context: Context): SoundSettings =
-            instance ?: synchronized(this) {
-                instance ?: SoundSettings(context.applicationContext).also { instance = it }
-            }
+        fun get(context: Context): SoundSettings = instance ?: synchronized(this) {
+            instance ?: SoundSettings(context.applicationContext).also { instance = it }
+        }
     }
 }
 

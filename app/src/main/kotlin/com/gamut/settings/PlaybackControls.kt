@@ -69,7 +69,9 @@ private val BouncySpec = spring<Float>(dampingRatio = 0.55f, stiffness = Spring.
 @Composable
 fun SoftHeader(text: String) {
     Text(
-        text, style = GamutHeading.copy(fontSize = 20.sp), color = ink(0.9f),
+        text,
+        style = GamutHeading.copy(fontSize = 20.sp),
+        color = ink(0.9f),
         modifier = Modifier.padding(start = 8.dp, top = 30.dp, bottom = 10.dp),
     )
 }
@@ -97,12 +99,15 @@ private fun RowText(title: String, subtitle: String?, modifier: Modifier = Modif
 @Composable
 fun PillSwitch(checked: Boolean, modifier: Modifier = Modifier) {
     val onInk = if (LocalCoverPalette.current.isLight) Color.White else Color.Black
-    val trackOn = ink(0.95f); val trackOff = ink(0.16f); val thumbOff = ink(0.7f)
+    val trackOn = ink(0.95f)
+    val trackOff = ink(0.16f)
+    val thumbOff = ink(0.7f)
     val track by animateColorAsState(if (checked) trackOn else trackOff, label = "track")
     val thumb by animateColorAsState(if (checked) onInk else thumbOff, label = "thumb")
     val x by animateDpAsState(
         if (checked) 22.dp else 0.dp,
-        spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow), label = "x",
+        spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow),
+        label = "x",
     )
     Box(modifier.size(width = 52.dp, height = 30.dp).clip(CircleShape).background(track).padding(3.dp)) {
         Box(Modifier.offset(x = x).size(24.dp).background(thumb, CircleShape))
@@ -139,8 +144,12 @@ fun SoftValueRow(title: String, value: String? = null, subtitle: String? = null,
         if (value != null) {
             Spacer(Modifier.width(12.dp))
             Text(
-                value, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f),
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 180.dp),
+                value,
+                style = MaterialTheme.typography.bodyMedium,
+                color = ink(0.55f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 180.dp),
             )
         }
         Spacer(Modifier.width(6.dp))
@@ -163,7 +172,9 @@ fun PillSlider(
     val onFinishedNow by rememberUpdatedState(onFinished)
     var pressed by remember { mutableStateOf(false) }
     val grow by animateFloatAsState(if (pressed) 1.2f else 1f, BouncySpec, label = "grow")
-    val trackC = ink(0.12f); val fillC = ink(0.95f); val tickC = ink(0.35f)
+    val trackC = ink(0.12f)
+    val fillC = ink(0.95f)
+    val tickC = ink(0.35f)
     val span = range.endInclusive - range.start
     val f = ((value - range.start) / span).coerceIn(0f, 1f)
 
@@ -180,7 +191,10 @@ fun PillSlider(
                 val down = awaitFirstDown()
                 pressed = true
                 apply(down.position.x)
-                drag(down.id) { change -> change.consume(); apply(change.position.x) }
+                drag(down.id) { change ->
+                    change.consume()
+                    apply(change.position.x)
+                }
                 pressed = false
                 onFinishedNow?.invoke()
             }
@@ -193,7 +207,8 @@ fun PillSlider(
         val r = th / 2f
         drawRoundRect(trackC, Offset(pad, cy - r), Size(size.width - 2 * pad, th), CornerRadius(r))
         val startX = if (centered) size.width / 2f else pad
-        val l = min(startX, x); val rr = max(startX, x)
+        val l = min(startX, x)
+        val rr = max(startX, x)
         if (rr - l > 0.5f) drawRoundRect(fillC, Offset(l, cy - r), Size(rr - l, th), CornerRadius(r))
         if (centered) drawLine(tickC, Offset(size.width / 2f, cy - 5.dp.toPx()), Offset(size.width / 2f, cy + 5.dp.toPx()), 1.dp.toPx(), StrokeCap.Round)
         drawCircle(fillC, 6.5.dp.toPx() * grow, Offset(x, cy))
@@ -237,8 +252,11 @@ fun <T> SegmentedControl(options: List<Choice<T>>, selected: T, onSelect: (T) ->
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        o.label, style = MaterialTheme.typography.labelLarge,
-                        color = if (i == idx) ink() else ink(0.5f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        o.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (i == idx) ink() else ink(0.5f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -248,9 +266,13 @@ fun <T> SegmentedControl(options: List<Choice<T>>, selected: T, onSelect: (T) ->
 
 @Composable
 fun EqCurve(bands: List<EqBand>, maxDb: Float, enabled: Boolean, lnMin: Float, lnMax: Float, modifier: Modifier = Modifier) {
-    val line = ink(0.95f); val area = ink(0.12f); val grid = ink(0.1f)
+    val line = ink(0.95f)
+    val area = ink(0.12f)
+    val grid = ink(0.1f)
     Canvas(modifier.fillMaxWidth().height(96.dp).alpha(if (enabled) 1f else 0.4f)) {
-        val w = size.width; val h = size.height; val mid = h / 2f
+        val w = size.width
+        val h = size.height
+        val mid = h / 2f
         drawLine(grid, Offset(0f, mid), Offset(w, mid), 1.dp.toPx())
         if (bands.isEmpty()) return@Canvas
         val inset = 10.dp.toPx()
@@ -264,12 +286,19 @@ fun EqCurve(bands: List<EqBand>, maxDb: Float, enabled: Boolean, lnMin: Float, l
             moveTo(0f, pts.first().y)
             lineTo(pts.first().x, pts.first().y)
             for (i in 0 until pts.size - 1) {
-                val a = pts[i]; val b = pts[i + 1]; val mx = (a.x + b.x) / 2f
+                val a = pts[i]
+                val b = pts[i + 1]
+                val mx = (a.x + b.x) / 2f
                 cubicTo(mx, a.y, mx, b.y, b.x, b.y)
             }
             lineTo(w, pts.last().y)
         }
-        val fill = Path().apply { addPath(path); lineTo(w, mid); lineTo(0f, mid); close() }
+        val fill = Path().apply {
+            addPath(path)
+            lineTo(w, mid)
+            lineTo(0f, mid)
+            close()
+        }
         drawPath(fill, area)
         drawPath(path, line, style = Stroke(2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
     }
@@ -301,7 +330,9 @@ private fun VerticalBand(gain: Float, maxDb: Float, enabled: Boolean, onChange: 
     val onPressNow by rememberUpdatedState(onPress)
     var pressed by remember { mutableStateOf(false) }
     val grow by animateFloatAsState(if (pressed) 1.25f else 1f, BouncySpec, label = "bandGrow")
-    val trackC = ink(0.12f); val fillC = ink(0.95f); val tickC = ink(0.35f)
+    val trackC = ink(0.12f)
+    val fillC = ink(0.95f)
+    val tickC = ink(0.35f)
 
     Canvas(
         Modifier.width(26.dp).height(170.dp).pointerInput(maxDb, enabled) {
@@ -315,22 +346,29 @@ private fun VerticalBand(gain: Float, maxDb: Float, enabled: Boolean, onChange: 
                     onChangeNow(db)
                 }
                 val down = awaitFirstDown()
-                pressed = true; onPressNow(true)
+                pressed = true
+                onPressNow(true)
                 apply(down.position.y)
-                drag(down.id) { change -> change.consume(); apply(change.position.y) }
-                pressed = false; onPressNow(false)
+                drag(down.id) { change ->
+                    change.consume()
+                    apply(change.position.y)
+                }
+                pressed = false
+                onPressNow(false)
             }
         },
     ) {
         val pad = 12.dp.toPx()
         val cx = size.width / 2f
-        val top = pad; val bottom = size.height - pad
+        val top = pad
+        val bottom = size.height - pad
         fun yFor(db: Float) = bottom - (db + maxDb) / (2 * maxDb) * (bottom - top)
         val tw = 3.dp.toPx()
         val zeroY = yFor(0f)
         val y = yFor(gain.coerceIn(-maxDb, maxDb))
         drawRoundRect(trackC, Offset(cx - tw / 2, top), Size(tw, bottom - top), CornerRadius(tw / 2))
-        val t = min(y, zeroY); val len = abs(y - zeroY)
+        val t = min(y, zeroY)
+        val len = abs(y - zeroY)
         if (len > 0.5f) drawRoundRect(fillC, Offset(cx - tw / 2, t), Size(tw, len), CornerRadius(tw / 2))
         drawLine(tickC, Offset(cx - 8.dp.toPx(), zeroY), Offset(cx + 8.dp.toPx(), zeroY), 1.dp.toPx())
         drawCircle(fillC, 5.dp.toPx() * grow, Offset(cx, y))

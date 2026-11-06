@@ -1,9 +1,5 @@
 package com.gamut.feature.library
 
-import com.gamut.core.designsystem.focusRing
-import com.gamut.core.designsystem.isWideLayout
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.lazy.LazyListScope
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -19,6 +15,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -75,12 +73,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.fill.Archive
-import com.adamglin.phosphoricons.fill.CheckCircle
-import com.adamglin.phosphoricons.fill.Heart
-import com.adamglin.phosphoricons.fill.Play
+import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.ArrowCircleDown
 import com.adamglin.phosphoricons.bold.ArrowDown
 import com.adamglin.phosphoricons.bold.ArrowLeft
@@ -99,19 +93,25 @@ import com.adamglin.phosphoricons.bold.Trash
 import com.adamglin.phosphoricons.bold.User
 import com.adamglin.phosphoricons.bold.VinylRecord
 import com.adamglin.phosphoricons.bold.X
+import com.adamglin.phosphoricons.fill.Archive
+import com.adamglin.phosphoricons.fill.CheckCircle
+import com.adamglin.phosphoricons.fill.Heart
+import com.adamglin.phosphoricons.fill.Play
+import com.gamut.core.designsystem.ArtistLine
+import com.gamut.core.designsystem.ArtistPickerSheet
 import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.LocalNavSettled
 import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.ShareSheet
-import com.gamut.core.designsystem.ArtistLine
-import com.gamut.core.designsystem.ArtistPickerSheet
+import com.gamut.core.designsystem.TransparentStatusBar
+import com.gamut.core.designsystem.focusRing
+import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.isWideLayout
+import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.rememberArtistTap
 import com.gamut.core.designsystem.splitArtists
-import com.gamut.core.designsystem.TransparentStatusBar
-import com.gamut.core.designsystem.LocalNavSettled
-import com.gamut.core.designsystem.ink
-import com.gamut.core.designsystem.pressScale
 import com.gamut.core.model.Track
 import com.gamut.feature.resolver.DownloadState
 import kotlinx.coroutines.launch
@@ -203,7 +203,8 @@ fun PlaylistScreen(
     fun startEdit() {
         draftName = name
         draftCover = playlist?.coverUri
-        draftTags.clear(); draftTags.addAll(playlist?.tags.orEmpty())
+        draftTags.clear()
+        draftTags.addAll(playlist?.tags.orEmpty())
         sheet = PlaylistSheet.Edit
     }
 
@@ -214,7 +215,10 @@ fun PlaylistScreen(
     }
 
     fun closeSheet(state: SheetState, then: () -> Unit = {}) {
-        scope.launch { state.hide() }.invokeOnCompletion { sheet = PlaylistSheet.None; then() }
+        scope.launch { state.hide() }.invokeOnCompletion {
+            sheet = PlaylistSheet.None
+            then()
+        }
     }
 
     val onDownloadClick: () -> Unit = {
@@ -225,7 +229,10 @@ fun PlaylistScreen(
         }
     }
 
-    BackHandler(enabled = searching) { query = ""; focus.clearFocus() }
+    BackHandler(enabled = searching) {
+        query = ""
+        focus.clearFocus()
+    }
 
     CoverTheme(palette) {
         val accent = MaterialTheme.colorScheme.primary
@@ -245,23 +252,23 @@ fun PlaylistScreen(
             }
             val headerSlot: @Composable () -> Unit = {
                 PlaylistHeader(
-                            title = name,
-                            coverUrl = coverUrl,
-                            tags = playlist?.tags.orEmpty(),
-                            songCount = songs.size,
-                            artistCount = songs.flatMap { splitArtists(it.artist) }.distinctBy { it.lowercase() }.size,
-                            statusLine = when (downloadUi.status) {
-                                PlaylistDownloadStatus.Active -> "Downloading ${minOf(downloadUi.done + 1, downloadUi.total)} of ${downloadUi.total}"
-                                PlaylistDownloadStatus.Done -> null
-                                PlaylistDownloadStatus.Idle -> if (downloadedCount > 0) "$downloadedCount of ${isrcs.size} downloaded" else null
-                            },
-                            downloadUi = downloadUi,
-                            offline = downloadUi.status == PlaylistDownloadStatus.Done,
-                            onDownload = onDownloadClick,
-                            onMore = if (playlist != null) ({ sheet = PlaylistSheet.Options }) else null,
-                            onPlay = { onPlay(songs) },
-                            onShuffle = { onShuffle(songs) },
-                        )
+                    title = name,
+                    coverUrl = coverUrl,
+                    tags = playlist?.tags.orEmpty(),
+                    songCount = songs.size,
+                    artistCount = songs.flatMap { splitArtists(it.artist) }.distinctBy { it.lowercase() }.size,
+                    statusLine = when (downloadUi.status) {
+                        PlaylistDownloadStatus.Active -> "Downloading ${minOf(downloadUi.done + 1, downloadUi.total)} of ${downloadUi.total}"
+                        PlaylistDownloadStatus.Done -> null
+                        PlaylistDownloadStatus.Idle -> if (downloadedCount > 0) "$downloadedCount of ${isrcs.size} downloaded" else null
+                    },
+                    downloadUi = downloadUi,
+                    offline = downloadUi.status == PlaylistDownloadStatus.Done,
+                    onDownload = onDownloadClick,
+                    onMore = if (playlist != null) ({ sheet = PlaylistSheet.Options }) else null,
+                    onPlay = { onPlay(songs) },
+                    onShuffle = { onShuffle(songs) },
+                )
             }
             val listBody: LazyListScope.(Boolean) -> Unit = { showHeader ->
                 if (showHeader && !searching) {
@@ -299,7 +306,10 @@ fun PlaylistScreen(
                         onCancelDownload = { downloads.cancel(listOf(song.isrc)) },
                         onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
                         onClick = { onTrackSelected(song) },
-                        onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); menuIndex = item.index },
+                        onLongClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            menuIndex = item.index
+                        },
                         onMore = { menuIndex = item.index },
                     )
                 }
@@ -323,7 +333,9 @@ fun PlaylistScreen(
                 }
             } else if (settled) {
                 LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 24.dp)) { listBody(true) }
-            } else Spacer(Modifier.weight(1f))
+            } else {
+                Spacer(Modifier.weight(1f))
+            }
             nowPlaying()
         }
 
@@ -386,7 +398,10 @@ fun PlaylistScreen(
                     Box(Modifier.fillMaxWidth().padding(vertical = 6.dp).height(1.dp).background(sheetInk(0.10f)))
                     SheetAction(PhosphorIcons.Bold.PencilSimple, "Edit playlist") { closeSheet(state) { startEdit() } }
                     if (songs.isNotEmpty()) SheetAction(PhosphorIcons.Bold.RowsPlusTop, "Manage playlist") { closeSheet(state) { showManage = true } }
-                    SheetAction(PhosphorIcons.Bold.ImageSquare, "Change cover art") { pickQuickCover(); closeSheet(state) }
+                    SheetAction(PhosphorIcons.Bold.ImageSquare, "Change cover art") {
+                        pickQuickCover()
+                        closeSheet(state)
+                    }
                     if (streamedDownloaded > 0) SheetAction(PhosphorIcons.Bold.X, "Remove downloads") { closeSheet(state) { confirmRemoveDownloads = true } }
                     SheetAction(PhosphorIcons.Bold.Trash, "Delete playlist", danger = true) { closeSheet(state) { confirmDelete = true } }
                 }
@@ -460,7 +475,10 @@ fun PlaylistScreen(
                         color = sheetInk(),
                         modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 22.dp, bottom = 10.dp),
                     )
-                    TagsEditor(tags = draftTags, onChange = { draftTags.clear(); draftTags.addAll(it) })
+                    TagsEditor(tags = draftTags, onChange = {
+                        draftTags.clear()
+                        draftTags.addAll(it)
+                    })
                     Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         SheetButton("Cancel", filled = false, enabled = true) { closeSheet(state) }
                         SheetButton("Save", filled = true, enabled = draftName.isNotBlank()) { saveEdit() }
@@ -505,7 +523,10 @@ fun PlaylistScreen(
                 message = "The songs stay in the playlist, but won't play offline until you download them again.",
                 confirmLabel = "Remove",
                 danger = true,
-                onConfirm = { confirmRemoveDownloads = false; downloads.remove(streamedIsrcs) },
+                onConfirm = {
+                    confirmRemoveDownloads = false
+                    downloads.remove(streamedIsrcs)
+                },
                 onDismiss = { confirmRemoveDownloads = false },
             )
         }
@@ -651,7 +672,10 @@ private fun Modifier.rowPress(onClick: () -> Unit, onLongClick: () -> Unit): Mod
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.98f else 1f, tween(90), label = "row-press")
-    graphicsLayer { scaleX = scale; scaleY = scale }
+    graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+    }
         .focusRing(RoundedCornerShape(12.dp))
         .combinedClickable(interactionSource = source, indication = null, onClick = onClick, onLongClick = onLongClick)
 }
@@ -740,22 +764,53 @@ private fun TrackOptionsPanel(
                 }
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(ink(0.10f)))
-            PanelAction(PhosphorIcons.Fill.Play, "Play", true) { onPlay(); onDismiss() }
-            if (!local) when (downloadState) {
-                DownloadState.Done -> PanelAction(PhosphorIcons.Fill.CheckCircle, "Remove download", true) { onRemoveDownload(); onDismiss() }
-                null, is DownloadState.Failed -> PanelAction(PhosphorIcons.Bold.ArrowCircleDown, "Download", true) { onDownload(); onDismiss() }
-                else -> Unit
+            PanelAction(PhosphorIcons.Fill.Play, "Play", true) {
+                onPlay()
+                onDismiss()
+            }
+            if (!local) {
+                when (downloadState) {
+                    DownloadState.Done -> PanelAction(PhosphorIcons.Fill.CheckCircle, "Remove download", true) {
+                        onRemoveDownload()
+                        onDismiss()
+                    }
+
+                    null, is DownloadState.Failed -> PanelAction(PhosphorIcons.Bold.ArrowCircleDown, "Download", true) {
+                        onDownload()
+                        onDismiss()
+                    }
+
+                    else -> Unit
+                }
             }
             PanelAction(
                 if (isFavorite) PhosphorIcons.Fill.Heart else PhosphorIcons.Bold.Heart,
                 if (isFavorite) "Remove from Favorites" else "Add to Favorites",
                 true,
-            ) { onToggleFavorite(); onDismiss() }
-            PanelAction(PhosphorIcons.Bold.User, if (splitArtists(track.artist).size > 1) "Go to artist\u2026" else "Go to artist", true) { onGoToArtist(); onDismiss() }
-            PanelAction(PhosphorIcons.Bold.ShareNetwork, "Share", true) { onShare(); onDismiss() }
-            PanelAction(PhosphorIcons.Bold.ArrowUp, "Move up", canMoveUp) { onMoveUp(); onDismiss() }
-            PanelAction(PhosphorIcons.Bold.ArrowDown, "Move down", canMoveDown) { onMoveDown(); onDismiss() }
-            PanelAction(PhosphorIcons.Bold.Trash, "Remove from playlist", true) { onRemove(); onDismiss() }
+            ) {
+                onToggleFavorite()
+                onDismiss()
+            }
+            PanelAction(PhosphorIcons.Bold.User, if (splitArtists(track.artist).size > 1) "Go to artist\u2026" else "Go to artist", true) {
+                onGoToArtist()
+                onDismiss()
+            }
+            PanelAction(PhosphorIcons.Bold.ShareNetwork, "Share", true) {
+                onShare()
+                onDismiss()
+            }
+            PanelAction(PhosphorIcons.Bold.ArrowUp, "Move up", canMoveUp) {
+                onMoveUp()
+                onDismiss()
+            }
+            PanelAction(PhosphorIcons.Bold.ArrowDown, "Move down", canMoveDown) {
+                onMoveDown()
+                onDismiss()
+            }
+            PanelAction(PhosphorIcons.Bold.Trash, "Remove from playlist", true) {
+                onRemove()
+                onDismiss()
+            }
         }
     }
 }

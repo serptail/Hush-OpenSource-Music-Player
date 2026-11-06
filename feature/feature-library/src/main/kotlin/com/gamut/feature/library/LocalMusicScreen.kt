@@ -1,10 +1,5 @@
 package com.gamut.feature.library
 
-import com.gamut.core.designsystem.isWideLayout
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.ui.draw.shadow
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.offset
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -12,8 +7,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -23,34 +16,39 @@ import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -71,14 +69,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.graphicsLayer
-import kotlinx.coroutines.delay
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -95,29 +93,29 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.fill.CheckCircle
-import com.adamglin.phosphoricons.fill.DeviceMobileCamera
-import com.adamglin.phosphoricons.fill.Heart
-import com.adamglin.phosphoricons.fill.Play
+import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.ArrowLeft
 import com.adamglin.phosphoricons.bold.ArrowsDownUp
 import com.adamglin.phosphoricons.bold.Check
 import com.adamglin.phosphoricons.bold.Circle
+import com.adamglin.phosphoricons.bold.DeviceMobileCamera
+import com.adamglin.phosphoricons.bold.DotsThreeVertical
+import com.adamglin.phosphoricons.bold.FolderOpen
 import com.adamglin.phosphoricons.bold.Globe
+import com.adamglin.phosphoricons.bold.Heart
 import com.adamglin.phosphoricons.bold.Image
 import com.adamglin.phosphoricons.bold.Link
-import com.adamglin.phosphoricons.bold.PencilSimple
-import com.adamglin.phosphoricons.bold.ReadCvLogo
-import com.adamglin.phosphoricons.bold.DeviceMobileCamera
-import com.adamglin.phosphoricons.bold.FolderOpen
-import com.adamglin.phosphoricons.bold.Scan
-import com.adamglin.phosphoricons.bold.DotsThreeVertical
-import com.adamglin.phosphoricons.bold.Heart
 import com.adamglin.phosphoricons.bold.MagnifyingGlass
+import com.adamglin.phosphoricons.bold.PencilSimple
 import com.adamglin.phosphoricons.bold.PlusCircle
+import com.adamglin.phosphoricons.bold.ReadCvLogo
+import com.adamglin.phosphoricons.bold.Scan
 import com.adamglin.phosphoricons.bold.X
+import com.adamglin.phosphoricons.fill.CheckCircle
+import com.adamglin.phosphoricons.fill.DeviceMobileCamera
+import com.adamglin.phosphoricons.fill.Heart
+import com.adamglin.phosphoricons.fill.Play
 import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
@@ -127,8 +125,10 @@ import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.R as DesignR
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.isWideLayout
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.model.Track
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -244,10 +244,12 @@ fun LocalMusicScreen(
         viewModel.refreshPermission(granted)
     }
     val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) scope.launch {
-            when (val r = viewModel.importPicked(uri)) {
-                is ImportResult.Added -> notifier.success("Added \u201C${r.title}\u201D to this device")
-                is ImportResult.Failed -> notifier.info(r.reason)
+        if (uri != null) {
+            scope.launch {
+                when (val r = viewModel.importPicked(uri)) {
+                    is ImportResult.Added -> notifier.success("Added \u201C${r.title}\u201D to this device")
+                    is ImportResult.Failed -> notifier.info(r.reason)
+                }
             }
         }
     }
@@ -255,23 +257,41 @@ fun LocalMusicScreen(
 
     val visible = remember(songs, query) {
         val q = query.trim().lowercase()
-        if (q.isEmpty()) songs else songs.filter {
-            val t = it.track
-            t.title.lowercase().contains(q) || t.artist.lowercase().contains(q) || t.album.orEmpty().lowercase().contains(q)
+        if (q.isEmpty()) {
+            songs
+        } else {
+            songs.filter {
+                val t = it.track
+                t.title.lowercase().contains(q) || t.artist.lowercase().contains(q) || t.album.orEmpty().lowercase().contains(q)
+            }
         }
     }
     val visibleTracks = remember(visible) { visible.map { it.track } }
     val searching = query.isNotBlank()
 
-    fun closeSheet() { sheetSong = null; busy = false; pendingSave = null }
+    fun closeSheet() {
+        sheetSong = null
+        busy = false
+        pendingSave = null
+    }
 
     fun addToPlaylist(song: LocalSong, id: Long, name: String) {
         if (busy) return
         busy = true
         scope.launch {
             val r = viewModel.prepareForSave(song.track)
-            val save: suspend () -> Unit = { libraryVm.addTrack(id, r.track); notifier.success("Added to $name"); closeSheet() }
-            if (r.found) save() else { pendingSave = save; busy = false; sheetMode = SongSheetMode.NotFound }
+            val save: suspend () -> Unit = {
+                libraryVm.addTrack(id, r.track)
+                notifier.success("Added to $name")
+                closeSheet()
+            }
+            if (r.found) {
+                save()
+            } else {
+                pendingSave = save
+                busy = false
+                sheetMode = SongSheetMode.NotFound
+            }
         }
     }
 
@@ -286,8 +306,18 @@ fun LocalMusicScreen(
         busy = true
         scope.launch {
             val r = viewModel.prepareForSave(song.track)
-            val save: suspend () -> Unit = { libraryVm.toggleFavorite(r.track); notifier.success("Added to Favorites"); closeSheet() }
-            if (r.found) save() else { pendingSave = save; busy = false; sheetMode = SongSheetMode.NotFound }
+            val save: suspend () -> Unit = {
+                libraryVm.toggleFavorite(r.track)
+                notifier.success("Added to Favorites")
+                closeSheet()
+            }
+            if (r.found) {
+                save()
+            } else {
+                pendingSave = save
+                busy = false
+                sheetMode = SongSheetMode.NotFound
+            }
         }
     }
 
@@ -325,32 +355,32 @@ fun LocalMusicScreen(
 
             val headerSlot: @Composable () -> Unit = {
                 Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 14.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                DeviceTile(88.dp, RoundedCornerShape(22.dp), background = false)
-                                Column(Modifier.weight(1f).padding(start = 18.dp)) {
-                                    Text("On this device", style = MaterialTheme.typography.headlineMedium, color = ink(), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                    Text(
-                                        when {
-                                            !hasPermission -> "Allow access to see your music"
-                                            songs.isEmpty() -> "No songs found yet"
-                                            else -> plural(songs.size, "song")
-                                        },
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = ink(0.6f),
-                                        modifier = Modifier.padding(top = 4.dp),
-                                    )
-                                }
-                            }
-                            if (hasPermission) {
-                                ScanCard(
-                                    scan = scan,
-                                    deepScanned = deepScanned,
-                                    onScan = viewModel::deepScan,
-                                    onBrowse = { importPicker.launch(arrayOf("audio/*", "application/ogg")) },
-                                    modifier = Modifier.padding(top = 18.dp),
-                                )
-                            }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        DeviceTile(88.dp, RoundedCornerShape(22.dp), background = false)
+                        Column(Modifier.weight(1f).padding(start = 18.dp)) {
+                            Text("On this device", style = MaterialTheme.typography.headlineMedium, color = ink(), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                when {
+                                    !hasPermission -> "Allow access to see your music"
+                                    songs.isEmpty() -> "No songs found yet"
+                                    else -> plural(songs.size, "song")
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ink(0.6f),
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
                         }
+                    }
+                    if (hasPermission) {
+                        ScanCard(
+                            scan = scan,
+                            deepScanned = deepScanned,
+                            onScan = viewModel::deepScan,
+                            onBrowse = { importPicker.launch(arrayOf("audio/*", "application/ogg")) },
+                            modifier = Modifier.padding(top = 18.dp),
+                        )
+                    }
+                }
             }
             val listBody: LazyListScope.(Boolean) -> Unit = { showHeader ->
                 if (showHeader && !searching) {
@@ -374,8 +404,11 @@ fun LocalMusicScreen(
                     item(key = "permission") {
                         EmptyStateCard(
                             title = if (denied) "Music access is off" else "Play any music on your device",
-                            subtitle = if (denied) "Turn on “Music and audio” for this app in system settings."
-                            else "Allow access to your audio files. They stay on your device and are never uploaded.",
+                            subtitle = if (denied) {
+                                "Turn on “Music and audio” for this app in system settings."
+                            } else {
+                                "Allow access to your audio files. They stay on your device and are never uploaded."
+                            },
                             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
                             buttonLabel = if (denied) "Open settings" else "Allow access",
                             onButton = {
@@ -383,7 +416,9 @@ fun LocalMusicScreen(
                                     context.startActivity(
                                         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
                                     )
-                                } else permissionLauncher.launch(LOCAL_AUDIO_PERMISSION)
+                                } else {
+                                    permissionLauncher.launch(LOCAL_AUDIO_PERMISSION)
+                                }
                             },
                         )
                     }
@@ -416,7 +451,11 @@ fun LocalMusicScreen(
                         accent = accent,
                         isFavorite = song.track.isrc in favoriteIsrcs,
                         onClick = { onTrackSelected(song.track, visibleTracks) },
-                        onMore = { sheetSong = song; sheetMode = SongSheetMode.Actions; busy = false },
+                        onMore = {
+                            sheetSong = song
+                            sheetMode = SongSheetMode.Actions
+                            busy = false
+                        },
                     )
                 }
                 item(key = "nav-space") { Box(Modifier.navigationBarsPadding()) }
@@ -439,7 +478,9 @@ fun LocalMusicScreen(
                 }
             } else if (settled) {
                 LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 24.dp)) { listBody(true) }
-            } else Spacer(Modifier.weight(1f))
+            } else {
+                Spacer(Modifier.weight(1f))
+            }
             nowPlaying()
         }
 
@@ -468,7 +509,10 @@ fun LocalMusicScreen(
                             Text("Getting song info…", style = MaterialTheme.typography.titleMedium, color = ink(), modifier = Modifier.padding(start = 16.dp))
                         }
                     } else if (sheetMode == SongSheetMode.Actions) {
-                        SongAction(PhosphorIcons.Fill.Play, "Play now") { onTrackSelected(song.track, visibleTracks); closeSheet() }
+                        SongAction(PhosphorIcons.Fill.Play, "Play now") {
+                            onTrackSelected(song.track, visibleTracks)
+                            closeSheet()
+                        }
                         SongAction(PhosphorIcons.Bold.PlusCircle, "Add to playlist…") { sheetMode = SongSheetMode.Playlists }
                         SongAction(
                             if (isFavorite) PhosphorIcons.Fill.Heart else PhosphorIcons.Bold.Heart,
@@ -492,23 +536,38 @@ fun LocalMusicScreen(
                             Text("Edit metadata", style = MaterialTheme.typography.labelLarge, color = ink(0.6f), modifier = Modifier.padding(start = 12.dp))
                         }
                         SongAction(PhosphorIcons.Bold.Globe, "Auto fetch", subtitle = "Find the cover, name and artist online") {
-                            editMode = EditMode.Auto; editSong = song; closeSheet()
+                            editMode = EditMode.Auto
+                            editSong = song
+                            closeSheet()
                         }
                         SongAction(PhosphorIcons.Bold.PencilSimple, "Manual edit", subtitle = "Change the cover, name and artist yourself") {
-                            editMode = EditMode.Manual; editSong = song; closeSheet()
+                            editMode = EditMode.Manual
+                            editSong = song
+                            closeSheet()
                         }
                     } else if (sheetMode == SongSheetMode.NotFound) {
                         Text(
-                            "Couldn’t find info for this song", style = MaterialTheme.typography.titleMedium, color = ink(),
+                            "Couldn’t find info for this song",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = ink(),
                             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
                         )
                         Text(
                             "Nothing reliable matched online, so it has no artist yet. Fill it in yourself, or save it as it is.",
-                            style = MaterialTheme.typography.bodyMedium, color = ink(0.6f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ink(0.6f),
                             modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
                         )
-                        SongAction(PhosphorIcons.Bold.PencilSimple, "Edit manually") { val s = song; closeSheet(); editMode = EditMode.Manual; editSong = s }
-                        SongAction(PhosphorIcons.Bold.Check, "Save anyway") { busy = true; scope.launch { pendingSave?.invoke() } }
+                        SongAction(PhosphorIcons.Bold.PencilSimple, "Edit manually") {
+                            val s = song
+                            closeSheet()
+                            editMode = EditMode.Manual
+                            editSong = s
+                        }
+                        SongAction(PhosphorIcons.Bold.Check, "Save anyway") {
+                            busy = true
+                            scope.launch { pendingSave?.invoke() }
+                        }
                     } else {
                         Text("Choose a playlist", style = MaterialTheme.typography.labelLarge, color = ink(0.6f), modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp))
                         if (playlists.isEmpty()) {
@@ -531,6 +590,7 @@ fun LocalMusicScreen(
                         editSong = null
                     },
                 )
+
                 EditMode.Auto -> AutoFetchSheet(
                     song = song,
                     ui = autoUi,
@@ -562,12 +622,14 @@ private fun ScanCard(scan: ScanUi, deepScanned: Boolean, onScan: () -> Unit, onB
 
     val transition = rememberInfiniteTransition(label = "scan")
     val sweep by transition.animateFloat(
-        0f, 1f,
+        0f,
+        1f,
         infiniteRepeatable(tween(1700, easing = FastOutSlowInEasing), RepeatMode.Restart),
         label = "sweep",
     )
     val breathe by transition.animateFloat(
-        0.45f, 1f,
+        0.45f,
+        1f,
         infiniteRepeatable(tween(1100, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "breathe",
     )
@@ -600,7 +662,8 @@ private fun ScanCard(scan: ScanUi, deepScanned: Boolean, onScan: () -> Unit, onB
                             drawRect(
                                 Brush.horizontalGradient(
                                     listOf(Color.Transparent, lineColor.copy(alpha = lineColor.alpha * motion), Color.Transparent),
-                                    startX = x, endX = x + w,
+                                    startX = x,
+                                    endX = x + w,
                                 ),
                                 topLeft = Offset(x.coerceAtLeast(0f), size.height - h),
                                 size = Size((x + w).coerceAtMost(size.width) - x.coerceAtLeast(0f), h),
@@ -719,7 +782,10 @@ private fun ManualEditSheet(
     var saving by remember { mutableStateOf(false) }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) { cover = CoverEdit.Photo(uri); linkOpen = false }
+        if (uri != null) {
+            cover = CoverEdit.Photo(uri)
+            linkOpen = false
+        }
     }
     val preview = when (val c = cover) {
         CoverEdit.Keep -> song.track.albumArtUrl.orEmpty()
@@ -729,8 +795,11 @@ private fun ManualEditSheet(
     fun applyLink() {
         val u = link.trim()
         if (u.startsWith("http://", true) || u.startsWith("https://", true)) {
-            cover = CoverEdit.Url(u); focus.clearFocus()
-        } else notifier.info("Enter a link that starts with https://")
+            cover = CoverEdit.Url(u)
+            focus.clearFocus()
+        } else {
+            notifier.info("Enter a link that starts with https://")
+        }
     }
     val canSave = title.isNotBlank() && !saving
     val light = LocalCoverPalette.current.isLight
@@ -760,8 +829,13 @@ private fun ManualEditSheet(
             AnimatedVisibility(linkOpen, enter = fadeIn(tween(250)) + expandVertically(tween(250))) {
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.Bottom) {
                     EditField(
-                        label = "Image link", value = link, onChange = { link = it }, placeholder = "https://…",
-                        modifier = Modifier.weight(1f), imeAction = ImeAction.Done, onDone = { applyLink() },
+                        label = "Image link",
+                        value = link,
+                        onChange = { link = it },
+                        placeholder = "https://…",
+                        modifier = Modifier.weight(1f),
+                        imeAction = ImeAction.Done,
+                        onDone = { applyLink() },
                     )
                     Box(
                         Modifier.padding(start = 10.dp).size(50.dp).pressScale(onClick = { applyLink() }).background(ink(0.95f), CircleShape),
@@ -776,7 +850,10 @@ private fun ManualEditSheet(
             Box(
                 Modifier.fillMaxWidth().padding(top = 24.dp)
                     .pressScale(onClick = {
-                        if (canSave) { saving = true; scope.launch { onSave(title, artist, cover) } }
+                        if (canSave) {
+                            saving = true
+                            scope.launch { onSave(title, artist, cover) }
+                        }
                     }, scaleDown = 0.98f)
                     .background(if (canSave || saving) ink(0.95f) else ink(0.15f), RoundedCornerShape(50))
                     .padding(vertical = 14.dp),
@@ -845,7 +922,10 @@ private fun AutoFetchSheet(
     DisposableEffect(Unit) { onDispose { onStop() } }
     LaunchedEffect(ui.loading) {
         step = 0
-        while (ui.loading) { delay(1_300); step = (step + 1) % AutoSteps.size }
+        while (ui.loading) {
+            delay(1_300)
+            step = (step + 1) % AutoSteps.size
+        }
     }
 
     GamutSheet(
@@ -858,7 +938,10 @@ private fun AutoFetchSheet(
                 Text("Auto fetch", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(top = 4.dp))
                 Text(
                     "For “${song.track.title}”",
-                    style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink(0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
@@ -879,7 +962,8 @@ private fun AutoFetchSheet(
                 if (!ui.loading && ui.results.isEmpty()) {
                     Text(
                         "Nothing reliable found for this song. You can still fill it in yourself.",
-                        style = MaterialTheme.typography.bodyMedium, color = ink(0.6f),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ink(0.6f),
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
                     )
                 }
@@ -890,8 +974,16 @@ private fun AutoFetchSheet(
             Box(
                 Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 14.dp)
                     .pressScale(onClick = {
-                        if (empty) onManual()
-                        else selected?.let { c -> if (!applying) { applying = true; scope.launch { onApply(c) } } }
+                        if (empty) {
+                            onManual()
+                        } else {
+                            selected?.let { c ->
+                                if (!applying) {
+                                    applying = true
+                                    scope.launch { onApply(c) }
+                                }
+                            }
+                        }
                     }, scaleDown = 0.98f)
                     .background(if (empty || enabled || applying) ink(0.95f) else ink(0.15f), RoundedCornerShape(50))
                     .padding(vertical = 14.dp),
@@ -901,7 +993,11 @@ private fun AutoFetchSheet(
                     CircularProgressIndicator(color = if (light) Color.White else Color.Black, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
                 } else {
                     Text(
-                        when { empty -> "Edit manually"; selected == null -> "Select a result"; else -> "Use this result" },
+                        when {
+                            empty -> "Edit manually"
+                            selected == null -> "Select a result"
+                            else -> "Use this result"
+                        },
                         style = MaterialTheme.typography.titleMedium,
                         color = if (empty || enabled) (if (light) Color.White else Color.Black) else ink(0.4f),
                     )
@@ -924,25 +1020,35 @@ private fun FoundRow(c: MetaCandidate, selected: Boolean, onClick: () -> Unit) {
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (c.artUrl != null) CoverImage(c.artUrl, Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)))
-            else Box(Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)).background(ink(0.10f)), contentAlignment = Alignment.Center) {
-                Icon(PhosphorIcons.Bold.Image, null, tint = ink(0.4f), modifier = Modifier.size(22.dp))
+            if (c.artUrl != null) {
+                CoverImage(c.artUrl, Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)))
+            } else {
+                Box(Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)).background(ink(0.10f)), contentAlignment = Alignment.Center) {
+                    Icon(PhosphorIcons.Bold.Image, null, tint = ink(0.4f), modifier = Modifier.size(22.dp))
+                }
             }
             Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
                 Text(c.title, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     listOfNotNull(c.artist, c.album).joinToString(" · "),
-                    style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink(0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     c.source,
-                    style = MaterialTheme.typography.labelSmall, color = ink(0.7f),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ink(0.7f),
                     modifier = Modifier.padding(top = 4.dp).background(ink(0.10f), CircleShape).padding(horizontal = 7.dp, vertical = 1.dp),
                 )
             }
             Crossfade(selected, animationSpec = tween(200), label = "pick") { on ->
-                if (on) Icon(PhosphorIcons.Fill.CheckCircle, "Selected", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
-                else Icon(PhosphorIcons.Bold.Circle, null, tint = ink(0.35f), modifier = Modifier.size(24.dp))
+                if (on) {
+                    Icon(PhosphorIcons.Fill.CheckCircle, "Selected", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                } else {
+                    Icon(PhosphorIcons.Bold.Circle, null, tint = ink(0.35f), modifier = Modifier.size(24.dp))
+                }
             }
         }
     }

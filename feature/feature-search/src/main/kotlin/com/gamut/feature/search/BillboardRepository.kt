@@ -35,12 +35,10 @@ private val BAD_VERSION = Regex("remix|karaoke|instrumental|live|cover")
 
 private val DIACRITICS = Regex("\\p{M}+")
 
-private fun norm(s: String) =
-    java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD).replace(DIACRITICS, "")
-        .lowercase().replace(NON_ALNUM, " ").trim()
+private fun norm(s: String) = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD).replace(DIACRITICS, "")
+    .lowercase().replace(NON_ALNUM, " ").trim()
 
-internal fun titleKey(title: String): String =
-    norm(title.replace(BRACKETED, "").replace(FEAT_TAIL, "").substringBefore(" - "))
+internal fun titleKey(title: String): String = norm(title.replace(BRACKETED, "").replace(FEAT_TAIL, "").substringBefore(" - "))
 
 internal fun artistKey(artist: String): String = norm(artist.split(ARTIST_SPLIT).first())
 
@@ -54,8 +52,11 @@ internal fun BillboardEntry.placeholderTrack() = Track(
 internal fun BillboardEntry.toDiscoverItem(resolved: Track?): DiscoverItem {
     val track = resolved ?: placeholderTrack()
     return DiscoverItem(
-        id = "billboard:$key", title = title, subtitle = artist,
-        imageUrl = track.albumArtUrl.orEmpty(), track = track,
+        id = "billboard:$key",
+        title = title,
+        subtitle = artist,
+        imageUrl = track.albumArtUrl.orEmpty(),
+        track = track,
         meta = "Peak #$peak \u00B7 $weeks ${if (weeks == 1) "wk" else "wks"}",
         trend = when {
             lastWeek == null -> Trend.NEW
@@ -97,20 +98,19 @@ class BillboardRepository @Inject constructor(
         }
     }
 
-    suspend fun resolve(entries: List<BillboardEntry>, onResolved: suspend (BillboardEntry, Track) -> Unit) =
-        coroutineScope {
-            val gate = Semaphore(4)
-            entries.forEach { entry ->
-                launch {
-                    var track = resolvedCache[entry.key]
-                    if (track == null) {
-                        track = gate.withPermit { lookup(entry) }
-                        if (track != null) resolvedCache[entry.key] = track
-                    }
-                    if (track != null) onResolved(entry, track)
+    suspend fun resolve(entries: List<BillboardEntry>, onResolved: suspend (BillboardEntry, Track) -> Unit) = coroutineScope {
+        val gate = Semaphore(4)
+        entries.forEach { entry ->
+            launch {
+                var track = resolvedCache[entry.key]
+                if (track == null) {
+                    track = gate.withPermit { lookup(entry) }
+                    if (track != null) resolvedCache[entry.key] = track
                 }
+                if (track != null) onResolved(entry, track)
             }
         }
+    }
 
     private suspend fun lookup(e: BillboardEntry): Track? = try {
         val lead = e.artist.split(ARTIST_SPLIT).first().replace("\"", "")
@@ -142,5 +142,7 @@ class BillboardRepository @Inject constructor(
         source = TrackSource.ITUNES,
     )
 
-    private companion object { const val CHART_TTL_MS = 60 * 60 * 1_000L }
+    private companion object {
+        const val CHART_TTL_MS = 60 * 60 * 1_000L
+    }
 }

@@ -13,5 +13,7 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class RecentlyPlayedViewModel @Inject constructor(private val repo: RecentlyPlayedRepository) : ViewModel() {
     val tracks = repo.observe().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-    fun record(track: Track) { viewModelScope.launch { repo.record(track) } }
+    fun record(track: Track) {
+        viewModelScope.launch { repo.record(track) }
+    }
 }

@@ -92,7 +92,9 @@ class AudioSourceRepositoryImpl @Inject constructor(
 
     private data class CachedAudio(val url: String, val expiresAtMs: Long)
 
-    private companion object { const val AUDIO_PRIMARY_TIMEOUT_MS = 8_000L }
+    private companion object {
+        const val AUDIO_PRIMARY_TIMEOUT_MS = 8_000L
+    }
 }
 
 class ResolveTrackSourceUseCase @Inject constructor(
@@ -101,14 +103,13 @@ class ResolveTrackSourceUseCase @Inject constructor(
     private val scorer: CandidateScorer,
     @ApplicationScope private val appScope: CoroutineScope,
 ) {
-    suspend operator fun invoke(track: Track): Result<ResolvedSource> =
-        try {
-            Result.success(resolveOrThrow(track))
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+    suspend operator fun invoke(track: Track): Result<ResolvedSource> = try {
+        Result.success(resolveOrThrow(track))
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
 
     private suspend fun resolveOrThrow(track: Track): ResolvedSource {
         val resolutionKey = track.resolutionKey()
@@ -120,7 +121,10 @@ class ResolveTrackSourceUseCase @Inject constructor(
         } catch (_: Exception) {
             null
         }
-        remote?.let { sources.saveLocal(it); return it }
+        remote?.let {
+            sources.saveLocal(it)
+            return it
+        }
 
         val youtubeVideoId = track.youtubeVideoId
         if (track.source == TrackSource.YOUTUBE && !youtubeVideoId.isNullOrBlank()) {
@@ -141,8 +145,11 @@ class ResolveTrackSourceUseCase @Inject constructor(
             selected = scorer.selectBest(pool, track)
         }
         val result = selected?.copy(isrc = resolutionKey)
-            ?: if (pool.isEmpty()) throw ResolveFailure.NoCandidates(track.title)
-            else throw ResolveFailure.LowScore(scorer.rank(pool, track).first().score, pool.first().title)
+            ?: if (pool.isEmpty()) {
+                throw ResolveFailure.NoCandidates(track.title)
+            } else {
+                throw ResolveFailure.LowScore(scorer.rank(pool, track).first().score, pool.first().title)
+            }
         if (result.confidenceScore >= CandidateScorer.ACCEPT) {
             sources.saveLocal(result)
             appScope.launch { sources.submitRemote(result) }
@@ -166,5 +173,5 @@ class ResolveTrackSourceUseCase @Inject constructor(
     }
 }
 
-private fun Track.resolutionKey(): String = isrc.takeIf { it.isNotBlank() } ?:
-    "fallback:${listOf(artist, title, durationMs.toString()).joinToString("|") { value -> value.lowercase().replace(Regex("[^a-z0-9]+"), " ").trim() }}"
+private fun Track.resolutionKey(): String = isrc.takeIf { it.isNotBlank() }
+    ?: "fallback:${listOf(artist, title, durationMs.toString()).joinToString("|") { value -> value.lowercase().replace(Regex("[^a-z0-9]+"), " ").trim() }}"

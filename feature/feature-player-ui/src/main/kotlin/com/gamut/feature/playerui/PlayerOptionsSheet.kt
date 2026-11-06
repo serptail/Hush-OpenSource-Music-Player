@@ -63,7 +63,8 @@ internal fun PlayerOptionsSheet(
             OptionRow(
                 PhosphorIcons.Bold.Heart,
                 if (isFavorite) "Remove from favorites" else "Add to favorites",
-                null, onToggleFavorite,
+                null,
+                onToggleFavorite,
             )
             OptionRow(PhosphorIcons.Bold.ListPlus, "Add to playlist", null, onAddToPlaylist)
             OptionRow(PhosphorIcons.Bold.UserCircle, "Go to artist", null, onGoToArtist)

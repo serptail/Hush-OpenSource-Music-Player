@@ -124,8 +124,7 @@ class StorageManager @Inject constructor(
         }
     }
 
-    private fun cacheEntries(): List<File> =
-        context.cacheDir.listFiles().orEmpty().filter { it.name !in DISCOVER_FILES && it.name !in PROTECTED }
+    private fun cacheEntries(): List<File> = context.cacheDir.listFiles().orEmpty().filter { it.name !in DISCOVER_FILES && it.name !in PROTECTED }
 
     private suspend fun cacheBytes() = cacheEntries().sumOf { sizeOf(it) } + discoverDiskCache.sizeBytes()
 

@@ -48,15 +48,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.gamut.core.designsystem.GamutSheet
-import com.gamut.core.designsystem.LocalCoverPalette
-import com.gamut.core.designsystem.ink
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.bold.Bluetooth
 import com.adamglin.phosphoricons.bold.BluetoothConnected
 import com.adamglin.phosphoricons.bold.BluetoothSlash
 import com.adamglin.phosphoricons.bold.Devices
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.ink
 
 data class OutputDevice(
     val id: Int,
@@ -101,7 +101,9 @@ fun ConnectSheet(
                     connectedBt != null -> PhosphorIcons.Bold.BluetoothConnected
                     else -> PhosphorIcons.Bold.Bluetooth
                 },
-                null, tint = tint, modifier = Modifier.size(28.dp),
+                null,
+                tint = tint,
+                modifier = Modifier.size(28.dp),
             )
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
@@ -138,7 +140,9 @@ fun ConnectSheet(
                     val tint = if (d.isActive) accent else ink(0.75f)
                     Icon(
                         if (d.isBluetooth) PhosphorIcons.Bold.BluetoothConnected else PhosphorIcons.Bold.Devices,
-                        null, tint = tint, modifier = Modifier.size(24.dp),
+                        null,
+                        tint = tint,
+                        modifier = Modifier.size(24.dp),
                     )
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f)) {
@@ -190,8 +194,7 @@ fun ConnectSheet(
 @Composable
 fun rememberBluetoothEnabled(): Boolean {
     val context = LocalContext.current
-    fun read(): Boolean =
-        (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter?.isEnabled == true
+    fun read(): Boolean = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter?.isEnabled == true
     var enabled by remember { mutableStateOf(read()) }
     DisposableEffect(context) {
         val receiver = object : BroadcastReceiver() {
@@ -225,8 +228,12 @@ fun rememberOutputDevices(): List<OutputDevice> {
     var devices by remember { mutableStateOf(read()) }
     DisposableEffect(am) {
         val cb = object : AudioDeviceCallback() {
-            override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>?) { devices = read() }
-            override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>?) { devices = read() }
+            override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>?) {
+                devices = read()
+            }
+            override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>?) {
+                devices = read()
+            }
         }
         am.registerAudioDeviceCallback(cb, null)
         onDispose { am.unregisterAudioDeviceCallback(cb) }
@@ -236,8 +243,12 @@ fun rememberOutputDevices(): List<OutputDevice> {
 
 private val BT_TYPES = setOf(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_BLE_SPEAKER)
 private val SHOWN_TYPES = BT_TYPES + setOf(
-    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET,
-    AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_HDMI,
+    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+    AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+    AudioDeviceInfo.TYPE_WIRED_HEADSET,
+    AudioDeviceInfo.TYPE_USB_DEVICE,
+    AudioDeviceInfo.TYPE_USB_HEADSET,
+    AudioDeviceInfo.TYPE_HDMI,
 )
 
 private fun priority(type: Int) = when (type) {

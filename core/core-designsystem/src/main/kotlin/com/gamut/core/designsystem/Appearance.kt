@@ -46,10 +46,26 @@ data class AppearanceSettings(
 
 val LocalAppearance = staticCompositionLocalOf { AppearanceSettings() }
 
-val AppearanceLevel.flowStrength: Float get() = when (this) { AppearanceLevel.Low -> 0.65f; AppearanceLevel.Medium -> 1f; AppearanceLevel.High -> 1.25f }
-val AppearanceLevel.flowSpeed: Float get() = when (this) { AppearanceLevel.Low -> 0.5f; AppearanceLevel.Medium -> 1f; AppearanceLevel.High -> 1.7f }
-val AppearanceLevel.blurScale: Float get() = when (this) { AppearanceLevel.Low -> 0.7f; AppearanceLevel.Medium -> 1f; AppearanceLevel.High -> 1.35f }
-val AppearanceLevel.tintScale: Float get() = when (this) { AppearanceLevel.Low -> 0.8f; AppearanceLevel.Medium -> 1f; AppearanceLevel.High -> 1.3f }
+val AppearanceLevel.flowStrength: Float get() = when (this) {
+    AppearanceLevel.Low -> 0.65f
+    AppearanceLevel.Medium -> 1f
+    AppearanceLevel.High -> 1.25f
+}
+val AppearanceLevel.flowSpeed: Float get() = when (this) {
+    AppearanceLevel.Low -> 0.5f
+    AppearanceLevel.Medium -> 1f
+    AppearanceLevel.High -> 1.7f
+}
+val AppearanceLevel.blurScale: Float get() = when (this) {
+    AppearanceLevel.Low -> 0.7f
+    AppearanceLevel.Medium -> 1f
+    AppearanceLevel.High -> 1.35f
+}
+val AppearanceLevel.tintScale: Float get() = when (this) {
+    AppearanceLevel.Low -> 0.8f
+    AppearanceLevel.Medium -> 1f
+    AppearanceLevel.High -> 1.3f
+}
 
 @Immutable
 class AppColorPreset(val id: String, val name: String, val dark: CoverPalette, val light: CoverPalette)
@@ -57,7 +73,9 @@ class AppColorPreset(val id: String, val name: String, val dark: CoverPalette, v
 private fun solid(base: Long, accent: Long, light: Boolean): CoverPalette {
     val b = Color(base)
     return CoverPalette(
-        primary = b, secondary = b, tertiary = b,
+        primary = b,
+        secondary = b,
+        tertiary = b,
         accent = Color(accent),
         base = b,
         onBase = if (light) Color(0xFF141414) else Color.White,
@@ -66,8 +84,7 @@ private fun solid(base: Long, accent: Long, light: Boolean): CoverPalette {
     )
 }
 
-private fun preset(id: String, name: String, darkBase: Long, darkAccent: Long, lightBase: Long, lightAccent: Long) =
-    AppColorPreset(id, name, solid(darkBase, darkAccent, false), solid(lightBase, lightAccent, true))
+private fun preset(id: String, name: String, darkBase: Long, darkAccent: Long, lightBase: Long, lightAccent: Long) = AppColorPreset(id, name, solid(darkBase, darkAccent, false), solid(lightBase, lightAccent, true))
 
 object AppColorPresets {
     val all = listOf(
@@ -93,5 +110,4 @@ fun rememberAppPalette(artUrl: String?, settings: AppearanceSettings = LocalAppe
 }
 
 @Composable
-fun appNeutralPalette(settings: AppearanceSettings = LocalAppearance.current): CoverPalette =
-    settings.neutralPalette(isSystemInDarkTheme())
+fun appNeutralPalette(settings: AppearanceSettings = LocalAppearance.current): CoverPalette = settings.neutralPalette(isSystemInDarkTheme())

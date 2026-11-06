@@ -65,6 +65,7 @@ class SyncManager @Inject constructor(
 
     private val _signedOutRemotely = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val signedOutRemotely: SharedFlow<Unit> = _signedOutRemotely.asSharedFlow()
+
     @Volatile private var offline = false
 
     private val manual = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -73,7 +74,9 @@ class SyncManager @Inject constructor(
     private var failures = 0
     private var retryJob: Job? = null
 
-    fun syncNow() { manual.tryEmit(Unit) }
+    fun syncNow() {
+        manual.tryEmit(Unit)
+    }
 
     suspend fun <T> withSyncPaused(block: suspend () -> T): T = lock.withLock { block() }
 
@@ -88,18 +91,29 @@ class SyncManager @Inject constructor(
                 .distinctUntilChanged()
                 .onEach { (user, online) ->
                     offline = user != null && !online
-                    if (offline) { if (_status.value !is SyncStatus.Syncing) _status.value = SyncStatus.Offline }
-                    else if (_status.value is SyncStatus.Offline) _status.value = SyncStatus.Idle
+                    if (offline) {
+                        if (_status.value !is SyncStatus.Syncing) _status.value = SyncStatus.Offline
+                    } else if (_status.value is SyncStatus.Offline) {
+                        _status.value = SyncStatus.Idle
+                    }
                 }
                 .map { (user, online) -> user != null && online }
                 .distinctUntilChanged()
                 .flatMapLatest { active ->
-                    if (!active) emptyFlow()
-                    else merge(
-                        flow { while (true) { emit(Unit); delay(PERIOD_MS) } },
-                        pending.observeCount().filter { it > 0 }.debounce(2_000).map { },
-                        manual,
-                    )
+                    if (!active) {
+                        emptyFlow()
+                    } else {
+                        merge(
+                            flow {
+                                while (true) {
+                                    emit(Unit)
+                                    delay(PERIOD_MS)
+                                }
+                            },
+                            pending.observeCount().filter { it > 0 }.debounce(2_000).map { },
+                            manual,
+                        )
+                    }
                 }
                 .conflate()
                 .collect { runSync() }
@@ -143,19 +157,28 @@ class SyncManager @Inject constructor(
         val s = scope ?: return
         retryJob?.cancel()
         val wait = minOf(30_000L shl (failures - 1).coerceIn(0, 5), MAX_BACKOFF_MS)
-        retryJob = s.launch { delay(wait); manual.tryEmit(Unit) }
+        retryJob = s.launch {
+            delay(wait)
+            manual.tryEmit(Unit)
+        }
     }
 
     private fun online() = callbackFlow {
         val cm = context.getSystemService(ConnectivityManager::class.java)
         fun hasInternet() = cm.getNetworkCapabilities(cm.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
         val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) { trySend(hasInternet()) }
-            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
-                trySend(caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED))
+            override fun onAvailable(network: Network) {
+                trySend(hasInternet())
             }
-            override fun onLost(network: Network) { trySend(hasInternet()) }
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                trySend(
+                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED),
+                )
+            }
+            override fun onLost(network: Network) {
+                trySend(hasInternet())
+            }
         }
         cm.registerDefaultNetworkCallback(callback)
         trySend(hasInternet())

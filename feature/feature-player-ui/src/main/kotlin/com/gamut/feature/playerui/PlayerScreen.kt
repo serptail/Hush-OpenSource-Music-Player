@@ -1,6 +1,5 @@
 package com.gamut.feature.playerui
 
-import com.gamut.core.designsystem.FocusLive
 import android.content.Context
 import android.media.AudioManager
 import android.os.Build
@@ -9,34 +8,25 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
-import com.gamut.core.designsystem.AdaptiveLayout
-import com.gamut.core.designsystem.adaptiveGutter
-import androidx.compose.ui.unit.Dp
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.BoxWithConstraints
-import com.gamut.core.designsystem.isWideLayout
-import com.gamut.core.designsystem.GamutMotion
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.InputMode
-import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -58,26 +48,31 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Regular
-import com.adamglin.phosphoricons.fill.Heart as HeartFilled
 import com.adamglin.phosphoricons.bold.CaretDown
 import com.adamglin.phosphoricons.bold.DotsThreeVertical
+import com.adamglin.phosphoricons.fill.Heart as HeartFilled
 import com.adamglin.phosphoricons.regular.Heart
 import com.adamglin.phosphoricons.regular.ListPlus
 import com.adamglin.phosphoricons.regular.Queue
@@ -89,9 +84,19 @@ import com.adamglin.phosphoricons.regular.SkipBack
 import com.adamglin.phosphoricons.regular.SkipForward
 import com.adamglin.phosphoricons.regular.Sparkle
 import com.gamut.core.designsystem.AcrylicHost
+import com.gamut.core.designsystem.AdaptiveLayout
+import com.gamut.core.designsystem.ArtistLine
+import com.gamut.core.designsystem.ArtistPickerSheet
 import com.gamut.core.designsystem.CoverPalette
+import com.gamut.core.designsystem.FocusLive
+import com.gamut.core.designsystem.GamutMotion
 import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.ShareSheet
 import com.gamut.core.designsystem.acrylicSource
+import com.gamut.core.designsystem.adaptiveGutter
+import com.gamut.core.designsystem.isWideLayout
+import com.gamut.core.designsystem.rememberArtistTap
+import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.model.PlaybackState
 import com.gamut.core.model.RepeatMode as PlaybackRepeatMode
 import com.gamut.core.model.Track
@@ -99,25 +104,20 @@ import com.gamut.core.player.EqualizerController
 import com.gamut.core.player.ModController
 import com.gamut.core.player.ModPreset
 import com.gamut.core.player.MusicPlayer
-import com.gamut.core.designsystem.ShareSheet
-import com.gamut.core.designsystem.ArtistLine
-import com.gamut.core.designsystem.ArtistPickerSheet
-import com.gamut.core.designsystem.rememberArtistTap
-import com.gamut.core.designsystem.splitArtists
 import com.gamut.feature.playerui.components.ArtworkWithRing
 import com.gamut.feature.playerui.components.BouncingText
 import com.gamut.feature.playerui.components.DepthIcon
 import com.gamut.feature.playerui.components.TimeRow
-import com.gamut.feature.playerui.components.WaveformSource
 import com.gamut.feature.playerui.components.VolumeHud
 import com.gamut.feature.playerui.components.VolumeHudOverlay
+import com.gamut.feature.playerui.components.WaveformSource
 import com.gamut.feature.playerui.components.backdropArtUrl
 import com.gamut.feature.playerui.components.bounceTap
-import com.gamut.feature.playerui.components.swipeVolumeGesture
 import com.gamut.feature.playerui.components.rememberCoverAccent
 import com.gamut.feature.playerui.components.rememberCoverSubAccent
 import com.gamut.feature.playerui.components.rememberCoverTint
 import com.gamut.feature.playerui.components.rememberWaveform
+import com.gamut.feature.playerui.components.swipeVolumeGesture
 import com.gamut.feature.playerui.components.tapTarget
 import com.gamut.feature.playerui.components.volumeHudAnchor
 import com.gamut.feature.playerui.components.volumeHudHeaderAnchor
@@ -151,13 +151,25 @@ fun PlayerScreen(
     val isPlaying by remember { derivedStateOf { state is PlaybackState.Playing } }
     var shownPlaying by remember { mutableStateOf(isPlaying) }
     LaunchedEffect(isPlaying) {
-        if (isPlaying) shownPlaying = true else { delay(700); shownPlaying = false }
+        if (isPlaying) {
+            shownPlaying = true
+        } else {
+            delay(700)
+            shownPlaying = false
+        }
     }
     val showLoading by player.loadingTrack.collectAsState()
     val loadProgressState = player.loadProgress.collectAsState()
     val awaiting by player.awaitingAudio.collectAsState()
     var bufferingShown by remember { mutableStateOf(false) }
-    LaunchedEffect(awaiting) { if (awaiting) { delay(500); bufferingShown = true } else bufferingShown = false }
+    LaunchedEffect(awaiting) {
+        if (awaiting) {
+            delay(500)
+            bufferingShown = true
+        } else {
+            bufferingShown = false
+        }
+    }
     val spinnerOn = showLoading || bufferingShown
 
     val streamDuration by player.streamDurationMs.collectAsState()
@@ -193,7 +205,12 @@ fun PlayerScreen(
     val leave: () -> Unit = { if (active) onBack() }
     BackHandler(enabled = active && !lyricsPanelOpen) { leave() }
     BackHandler(enabled = active && lyricsPanelOpen) { lyricsPanelOpen = false }
-    LaunchedEffect(active) { if (!active) { delay(GamutMotion.PLAYER_LAYER_OUT_MS + 120L); lyricsPanelOpen = false } }
+    LaunchedEffect(active) {
+        if (!active) {
+            delay(GamutMotion.PLAYER_LAYER_OUT_MS + 120L)
+            lyricsPanelOpen = false
+        }
+    }
     val clock = remember { PlayerClock() }
     LaunchedEffect(modState.settings.speed) { clock.setSpeed(modState.settings.speed) }
     LaunchedEffect(player) { clock.follow(player) }
@@ -274,11 +291,17 @@ fun PlayerScreen(
     LaunchedEffect(lyricsKey, active) {
         val t = track ?: return@LaunchedEffect
         if (!active) return@LaunchedEffect
-        if (artistInfo != null) { artistLoading = false; return@LaunchedEffect }
+        if (artistInfo != null) {
+            artistLoading = false
+            return@LaunchedEffect
+        }
         var attempt = 0
         while (artistInfo == null && attempt < 3) {
             artistInfo = ArtistInfoRepository.fetch(t).takeIf { it.imageUrl != null || it.credits.size > 1 }
-            if (artistInfo == null) { attempt++; if (attempt < 3) delay(10_000L * attempt) }
+            if (artistInfo == null) {
+                attempt++
+                if (attempt < 3) delay(10_000L * attempt)
+            }
         }
         artistLoading = false
     }
@@ -296,9 +319,11 @@ fun PlayerScreen(
     val waveformDone = waveform.isNotEmpty() && waveform.indexOfLast { it > 0f } >= waveform.size * 9 / 10
     val shownLyrics = remember(lyricsState, waveformDone, effectiveDurationMs) {
         val s = lyricsState
-        if (s is LyricsState.Loaded && s.isSynced && waveformDone)
+        if (s is LyricsState.Loaded && s.isSynced && waveformDone) {
             LyricsState.Loaded(LyricsAudioAligner.refine(s.lines, waveform, effectiveDurationMs), true)
-        else s
+        } else {
+            s
+        }
     }
 
     val artistTap = rememberArtistTap(track?.artist.orEmpty(), track?.album) { name ->
@@ -308,198 +333,200 @@ fun PlayerScreen(
 
     val gutter = adaptiveGutter(AdaptiveLayout.PlayerMaxWidth)
     CompositionLocalProvider(LocalCoverPalette provides CoverPalette.Neutral) {
-    AcrylicHost(
-        Modifier
-            .fillMaxSize()
-            .background(CoverPalette.Neutral.base)
-            .then(if (lyricsPanelOpen) Modifier else Modifier.swipeVolumeGesture(volumeHud)),
-    ) {
-        if (artUrl != null) PlayerBackdrop(artUrl, animateChanges = active)
+        AcrylicHost(
+            Modifier
+                .fillMaxSize()
+                .background(CoverPalette.Neutral.base)
+                .then(if (lyricsPanelOpen) Modifier else Modifier.swipeVolumeGesture(volumeHud)),
+        ) {
+            if (artUrl != null) PlayerBackdrop(artUrl, animateChanges = active)
 
-        val wide = isWideLayout()
-        val edge = if (wide) 0.dp else gutter
+            val wide = isWideLayout()
+            val edge = if (wide) 0.dp else gutter
 
-        val playerContent: @Composable (Dp) -> Unit = { coverMax ->
-            Spacer(Modifier.height(10.dp))
-            Box(Modifier.volumeHudHeaderAnchor(volumeHud)) {
-                TrackHeader(
-                    title = track?.title.orEmpty(),
-                    artist = track?.artist.orEmpty(),
-                    albumTitle = track?.album,
-                    onArtist = { name -> track?.let { t -> onGoToArtist(t.copy(artist = name)) } },
-                    isFavorite = track?.isrc?.let { it in favoriteIsrcs } == true,
-                    onToggleFavorite = { track?.let(onToggleFavorite) },
-                )
-            }
-            Spacer(Modifier.height(36.dp))
-
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .layout { measurable, constraints ->
-                        val extra = ArtworkExtraWidth.roundToPx()
-                        val w = constraints.maxWidth + extra * 2
-                        val placeable = measurable.measure(Constraints(minWidth = w, maxWidth = w))
-                        layout(constraints.maxWidth, placeable.height) { placeable.place(-extra, 0) }
-                    },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                DepthIcon(
-                    PhosphorIcons.Regular.SkipBack, "Previous",
-                    Modifier.bounceTap(onClick = player::skipPrevious).padding(SideButtonPadding),
-                    size = SideButtonSize,
-                )
-                Box(Modifier.weight(1f).volumeHudAnchor(volumeHud), contentAlignment = Alignment.Center) {
-                    ArtworkWithRing(
-                        modifier = Modifier.fillMaxWidth().widthIn(max = coverMax).focusRequester(coverFocus),
-                        url = rawArt,
-                        progress = progressProvider,
-                        onScrub = { scrubFraction = it },
-                        isPlaying = shownPlaying,
-                        enabled = true,
-                        loading = spinnerOn,
-                        waveform = waveform,
-                        onTogglePlay = togglePlay,
-                        onSeekFraction = seekToFraction,
-                        seekStep = if (duration > 0) (10_000f / duration).coerceIn(0.005f, 0.1f) else 0.04f,
+            val playerContent: @Composable (Dp) -> Unit = { coverMax ->
+                Spacer(Modifier.height(10.dp))
+                Box(Modifier.volumeHudHeaderAnchor(volumeHud)) {
+                    TrackHeader(
+                        title = track?.title.orEmpty(),
+                        artist = track?.artist.orEmpty(),
+                        albumTitle = track?.album,
+                        onArtist = { name -> track?.let { t -> onGoToArtist(t.copy(artist = name)) } },
+                        isFavorite = track?.isrc?.let { it in favoriteIsrcs } == true,
+                        onToggleFavorite = { track?.let(onToggleFavorite) },
                     )
                 }
-                DepthIcon(
-                    PhosphorIcons.Regular.SkipForward, "Next",
-                    Modifier.bounceTap(onClick = player::skipNext).padding(SideButtonPadding),
-                    size = SideButtonSize,
-                )
-            }
+                Spacer(Modifier.height(36.dp))
 
-            Spacer(Modifier.height(10.dp))
-            TimeRow(positionProvider, effectiveDurationMs)
-
-            if (lyricsOn) CurrentLyricLine(shownLyrics, activeIndex, lyricsPosition, tint, highlight = lyricHighlight)
-
-            Spacer(Modifier.height(4.dp))
-            ControlsGrid(
-                shuffleOn = shuffleOn,
-                repeatMode = repeatMode,
-                accent = accent,
-                modActive = modState.preset != ModPreset.ORIGINAL,
-                onShuffle = { player.setShuffle(!shuffleOn) },
-                onQueue = { showQueue = true },
-                onAddToPlaylist = { showAddToPlaylist = true },
-                onRepeat = {
-                    player.setRepeatMode(
-                        when (repeatMode) {
-                            PlaybackRepeatMode.OFF -> PlaybackRepeatMode.ALL
-                            PlaybackRepeatMode.ALL -> PlaybackRepeatMode.ONE
-                            PlaybackRepeatMode.ONE -> PlaybackRepeatMode.OFF
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .layout { measurable, constraints ->
+                            val extra = ArtworkExtraWidth.roundToPx()
+                            val w = constraints.maxWidth + extra * 2
+                            val placeable = measurable.measure(Constraints(minWidth = w, maxWidth = w))
+                            layout(constraints.maxWidth, placeable.height) { placeable.place(-extra, 0) }
                         },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    DepthIcon(
+                        PhosphorIcons.Regular.SkipBack,
+                        "Previous",
+                        Modifier.bounceTap(onClick = player::skipPrevious).padding(SideButtonPadding),
+                        size = SideButtonSize,
                     )
-                },
-                onShare = { showShare = true },
-                onMod = { showMod = true },
-            )
-        }
+                    Box(Modifier.weight(1f).volumeHudAnchor(volumeHud), contentAlignment = Alignment.Center) {
+                        ArtworkWithRing(
+                            modifier = Modifier.fillMaxWidth().widthIn(max = coverMax).focusRequester(coverFocus),
+                            url = rawArt,
+                            progress = progressProvider,
+                            onScrub = { scrubFraction = it },
+                            isPlaying = shownPlaying,
+                            enabled = true,
+                            loading = spinnerOn,
+                            waveform = waveform,
+                            onTogglePlay = togglePlay,
+                            onSeekFraction = seekToFraction,
+                            seekStep = if (duration > 0) (10_000f / duration).coerceIn(0.005f, 0.1f) else 0.04f,
+                        )
+                    }
+                    DepthIcon(
+                        PhosphorIcons.Regular.SkipForward,
+                        "Next",
+                        Modifier.bounceTap(onClick = player::skipNext).padding(SideButtonPadding),
+                        size = SideButtonSize,
+                    )
+                }
 
-        val extrasContent: @Composable () -> Unit = {
-            if (lyricsOn) {
-                LyricsPreviewCard(
-                    lyricsState = lyricsState,
-                    activeIndex = activeIndex,
-                    tint = tint,
-                    onShowLyrics = { lyricsPanelOpen = true },
-                    onRetry = { lyricsRetry++ },
+                Spacer(Modifier.height(10.dp))
+                TimeRow(positionProvider, effectiveDurationMs)
+
+                if (lyricsOn) CurrentLyricLine(shownLyrics, activeIndex, lyricsPosition, tint, highlight = lyricHighlight)
+
+                Spacer(Modifier.height(4.dp))
+                ControlsGrid(
+                    shuffleOn = shuffleOn,
+                    repeatMode = repeatMode,
+                    accent = accent,
+                    modActive = modState.preset != ModPreset.ORIGINAL,
+                    onShuffle = { player.setShuffle(!shuffleOn) },
+                    onQueue = { showQueue = true },
+                    onAddToPlaylist = { showAddToPlaylist = true },
+                    onRepeat = {
+                        player.setRepeatMode(
+                            when (repeatMode) {
+                                PlaybackRepeatMode.OFF -> PlaybackRepeatMode.ALL
+                                PlaybackRepeatMode.ALL -> PlaybackRepeatMode.ONE
+                                PlaybackRepeatMode.ONE -> PlaybackRepeatMode.OFF
+                            },
+                        )
+                    },
+                    onShare = { showShare = true },
+                    onMod = { showMod = true },
                 )
-                Spacer(Modifier.height(24.dp))
             }
-            if (track != null) {
-                ArtistAboutSection(
-                    artistName = track.artist,
-                    info = artistInfo,
-                    loading = artistLoading,
-                    fallbackArtUrl = rawArt,
-                    onArtistClick = goToArtist,
-                )
+
+            val extrasContent: @Composable () -> Unit = {
+                if (lyricsOn) {
+                    LyricsPreviewCard(
+                        lyricsState = lyricsState,
+                        activeIndex = activeIndex,
+                        tint = tint,
+                        onShowLyrics = { lyricsPanelOpen = true },
+                        onRetry = { lyricsRetry++ },
+                    )
+                    Spacer(Modifier.height(24.dp))
+                }
+                if (track != null) {
+                    ArtistAboutSection(
+                        artistName = track.artist,
+                        info = artistInfo,
+                        loading = artistLoading,
+                        fallbackArtUrl = rawArt,
+                        onArtistClick = goToArtist,
+                    )
+                }
             }
-        }
 
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            FocusLive(!lyricsPanelOpen) {
-            PlayerTopBar(leave, onMore = { showMore = true }, modifier = Modifier.fillMaxWidth().padding(start = 24.dp + edge, end = 24.dp + edge, top = 14.dp))
+            Column(Modifier.fillMaxSize().statusBarsPadding()) {
+                FocusLive(!lyricsPanelOpen) {
+                    PlayerTopBar(leave, onMore = { showMore = true }, modifier = Modifier.fillMaxWidth().padding(start = 24.dp + edge, end = 24.dp + edge, top = 14.dp))
 
-            if (wide) {
-                Row(Modifier.weight(1f).fillMaxWidth()) {
-                    BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
-                        val coverMax = (maxHeight - 360.dp).coerceIn(220.dp, 560.dp)
+                    if (wide) {
+                        Row(Modifier.weight(1f).fillMaxWidth()) {
+                            BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+                                val coverMax = (maxHeight - 360.dp).coerceIn(220.dp, 560.dp)
+                                Column(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(start = 32.dp, end = 16.dp),
+                                ) {
+                                    playerContent(coverMax)
+                                    Spacer(Modifier.height(32.dp).navigationBarsPadding())
+                                }
+                            }
+                            Column(
+                                Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(start = 16.dp, end = 32.dp),
+                            ) {
+                                Spacer(Modifier.height(10.dp))
+                                extrasContent()
+                                Spacer(Modifier.height(32.dp).navigationBarsPadding())
+                            }
+                        }
+                    } else {
                         Column(
                             Modifier
-                                .fillMaxSize()
+                                .weight(1f)
+                                .fillMaxWidth()
                                 .verticalScroll(rememberScrollState())
-                                .padding(start = 32.dp, end = 16.dp),
+                                .padding(horizontal = 24.dp + gutter),
                         ) {
-                            playerContent(coverMax)
+                            playerContent(Dp.Infinity)
+                            Spacer(Modifier.height(28.dp))
+                            extrasContent()
                             Spacer(Modifier.height(32.dp).navigationBarsPadding())
                         }
                     }
-                    Column(
-                        Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .verticalScroll(rememberScrollState())
-                            .padding(start = 16.dp, end = 32.dp),
-                    ) {
-                        Spacer(Modifier.height(10.dp))
-                        extrasContent()
-                        Spacer(Modifier.height(32.dp).navigationBarsPadding())
-                    }
-                }
-            } else {
-                Column(
-                    Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 24.dp + gutter),
-                ) {
-                    playerContent(Dp.Infinity)
-                    Spacer(Modifier.height(28.dp))
-                    extrasContent()
-                    Spacer(Modifier.height(32.dp).navigationBarsPadding())
                 }
             }
-                }
-}
 
-        VolumeHudOverlay(volumeHud)
+            VolumeHudOverlay(volumeHud)
 
-        AnimatedVisibility(
-            visible = lyricsPanelOpen && track != null,
-            enter = slideInVertically(tween(GamutMotion.PLAYER_IN_MS, easing = GamutMotion.EmphasizedDecelerate)) { it } + fadeIn(tween(200)),
-            exit = slideOutVertically(tween(GamutMotion.PLAYER_OUT_MS, easing = GamutMotion.EmphasizedAccelerate)) { it } + fadeOut(tween(200)),
-        ) {
-            FullLyricsPanel(
-                title = track?.title.orEmpty(),
-                artist = track?.artist.orEmpty(),
-                lyricsState = shownLyrics,
-                positionMs = lyricsPosition,
-                activeIndex = activeIndex,
-                tint = tint,
-                isPlaying = shownPlaying,
-                isLoading = spinnerOn,
-                progress = progressProvider,
-                labelPositionMs = positionProvider,
-                durationMs = effectiveDurationMs,
-                onScrub = { scrubFraction = it },
-                onSeekFraction = seekToFraction,
-                onSeekToMs = seekToMs,
-                onClose = { lyricsPanelOpen = false },
-                onShare = { showShare = true },
-                onMore = { showMore = true },
-                onTogglePlay = togglePlay,
-                onPrevious = player::skipPrevious,
-                onNext = player::skipNext,
-                onRetry = { lyricsRetry++ },
-            )
+            AnimatedVisibility(
+                visible = lyricsPanelOpen && track != null,
+                enter = slideInVertically(tween(GamutMotion.PLAYER_IN_MS, easing = GamutMotion.EmphasizedDecelerate)) { it } + fadeIn(tween(200)),
+                exit = slideOutVertically(tween(GamutMotion.PLAYER_OUT_MS, easing = GamutMotion.EmphasizedAccelerate)) { it } + fadeOut(tween(200)),
+            ) {
+                FullLyricsPanel(
+                    title = track?.title.orEmpty(),
+                    artist = track?.artist.orEmpty(),
+                    lyricsState = shownLyrics,
+                    positionMs = lyricsPosition,
+                    activeIndex = activeIndex,
+                    tint = tint,
+                    isPlaying = shownPlaying,
+                    isLoading = spinnerOn,
+                    progress = progressProvider,
+                    labelPositionMs = positionProvider,
+                    durationMs = effectiveDurationMs,
+                    onScrub = { scrubFraction = it },
+                    onSeekFraction = seekToFraction,
+                    onSeekToMs = seekToMs,
+                    onClose = { lyricsPanelOpen = false },
+                    onShare = { showShare = true },
+                    onMore = { showMore = true },
+                    onTogglePlay = togglePlay,
+                    onPrevious = player::skipPrevious,
+                    onNext = player::skipNext,
+                    onRetry = { lyricsRetry++ },
+                )
+            }
         }
-    }
     }
 
     if (showMore) {
@@ -508,17 +535,32 @@ fun PlayerScreen(
             lyricsOn = lyricsOn,
             eqActive = eqState.enabled,
             sleepActive = sleepEndsAt != null,
-            onShare = { showMore = false; showShare = true },
+            onShare = {
+                showMore = false
+                showShare = true
+            },
             onToggleLyrics = {
                 lyricsOn = !lyricsOn
                 prefs.edit().putBoolean(PrefLyricsOn, lyricsOn).apply()
                 if (!lyricsOn) lyricsPanelOpen = false
             },
             onToggleFavorite = { track?.let(onToggleFavorite) },
-            onAddToPlaylist = { showMore = false; showAddToPlaylist = true },
-            onGoToArtist = { showMore = false; goToArtist() },
-            onEqualizer = { showMore = false; showEq = true },
-            onSleepTimer = { showMore = false; showSleep = true },
+            onAddToPlaylist = {
+                showMore = false
+                showAddToPlaylist = true
+            },
+            onGoToArtist = {
+                showMore = false
+                goToArtist()
+            },
+            onEqualizer = {
+                showMore = false
+                showEq = true
+            },
+            onSleepTimer = {
+                showMore = false
+                showSleep = true
+            },
             onDismiss = { showMore = false },
         )
     }
@@ -554,8 +596,14 @@ fun PlayerScreen(
     if (showMod) ModSheet(accent, onDismiss = { showMod = false })
     if (showSleep) {
         SleepTimerSheet(
-            onPick = { minutes -> SleepTimer.start(minutes) { player.pause() }; showSleep = false },
-            onTurnOff = { SleepTimer.cancel(); showSleep = false },
+            onPick = { minutes ->
+                SleepTimer.start(minutes) { player.pause() }
+                showSleep = false
+            },
+            onTurnOff = {
+                SleepTimer.cancel()
+                showSleep = false
+            },
             onDismiss = { showSleep = false },
         )
     }
@@ -724,8 +772,16 @@ internal class PlayerClock {
             val reported: Long
             val track: Track
             when (s) {
-                is PlaybackState.Playing -> { reported = player.currentPositionMs().takeIf { it >= 0L } ?: s.positionMs; track = s.track }
-                is PlaybackState.Paused -> { reported = player.currentPositionMs().takeIf { it >= 0L } ?: s.positionMs; track = s.track }
+                is PlaybackState.Playing -> {
+                    reported = player.currentPositionMs().takeIf { it >= 0L } ?: s.positionMs
+                    track = s.track
+                }
+
+                is PlaybackState.Paused -> {
+                    reported = player.currentPositionMs().takeIf { it >= 0L } ?: s.positionMs
+                    track = s.track
+                }
+
                 else -> {
                     live = false
                     wasLive = false
@@ -772,7 +828,10 @@ internal fun PlayerBackdrop(artUrl: String, animateChanges: Boolean = true) {
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { scaleX = 1.3f; scaleY = 1.3f }
+                    .graphicsLayer {
+                        scaleX = 1.3f
+                        scaleY = 1.3f
+                    }
                     .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(BackgroundBlur) else Modifier),
             )
         }

@@ -111,7 +111,10 @@ fun SupportRow() {
     Box(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 16.dp), contentAlignment = Alignment.Center) {
         Row(
             Modifier
-                .pressScale(onClick = { vm.store.clearNudge(); open() }, scaleDown = 0.95f)
+                .pressScale(onClick = {
+                    vm.store.clearNudge()
+                    open()
+                }, scaleDown = 0.95f)
                 .clip(CircleShape)
                 .background(ink(0.05f))
                 .flowingBorder()
@@ -130,10 +133,14 @@ private fun Modifier.flowingBorder(width: Dp = 1.5.dp): Modifier {
     val live = LocalPageActive.current
     val angle: State<Float> = if (live) {
         rememberInfiniteTransition(label = "flow").animateFloat(
-            initialValue = 0f, targetValue = 360f,
-            animationSpec = infiniteRepeatable(tween(3800, easing = LinearEasing)), label = "angle",
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(tween(3800, easing = LinearEasing)),
+            label = "angle",
         )
-    } else remember { mutableStateOf(0f) }
+    } else {
+        remember { mutableStateOf(0f) }
+    }
     val colors = remember { listOf(KoFiCoral, KoFiPink, Color(0xFFFFB38A), KoFiPink, KoFiCoral) }
     return drawWithContent {
         drawContent()
@@ -170,11 +177,14 @@ fun Modifier.supportNudgeCorona(avatarSize: Dp = 34.dp): Modifier {
     )
     val breathe: State<Float> = if (active) {
         rememberInfiniteTransition(label = "corona").animateFloat(
-            initialValue = 0.6f, targetValue = 1f,
+            initialValue = 0.6f,
+            targetValue = 1f,
             animationSpec = infiniteRepeatable(tween(2400, easing = FastOutSlowInEasing), RepeatMode.Reverse),
             label = "breathe",
         )
-    } else remember { mutableStateOf(1f) }
+    } else {
+        remember { mutableStateOf(1f) }
+    }
 
     return drawWithContent {
         val a = appear.value
@@ -192,9 +202,11 @@ fun Modifier.supportNudgeCorona(avatarSize: Dp = 34.dp): Modifier {
                 (r / outer) to KoFiCoral.copy(alpha = 0.34f * a * b),
                 0.62f to KoFiPink.copy(alpha = 0.14f * a * b),
                 1f to Color.Transparent,
-                center = c, radius = outer,
+                center = c,
+                radius = outer,
             ),
-            radius = outer, center = c,
+            radius = outer,
+            center = c,
         )
         drawContent()
         drawCircle(
@@ -202,7 +214,8 @@ fun Modifier.supportNudgeCorona(avatarSize: Dp = 34.dp): Modifier {
                 listOf(KoFiCoral, KoFiPink, Color(0xFFFFB38A), KoFiPink, KoFiCoral),
                 center = c,
             ),
-            radius = r + 2.dp.toPx(), center = c,
+            radius = r + 2.dp.toPx(),
+            center = c,
             alpha = (0.45f + 0.35f * b) * a,
             style = Stroke(width = 1.6.dp.toPx()),
         )

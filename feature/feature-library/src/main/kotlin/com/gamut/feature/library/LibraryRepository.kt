@@ -11,10 +11,14 @@ import com.gamut.core.database.PlaylistTrackCrossRef
 import com.gamut.core.database.PlaylistTrackDao
 import com.gamut.core.database.SyncTypes
 import com.gamut.core.database.TrackDao
-import com.gamut.core.database.toEntity
 import com.gamut.core.database.toDomain
+import com.gamut.core.database.toEntity
 import com.gamut.core.model.Playlist
 import com.gamut.core.model.Track
+import dagger.Binds
+import dagger.Module
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
 import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -22,10 +26,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
-import dagger.Binds
-import dagger.Module
-import dagger.hilt.InstallIn
-import dagger.hilt.components.SingletonComponent
 
 interface LibraryRepository {
     fun observePlaylists(): Flow<List<Playlist>>
@@ -144,4 +144,6 @@ private fun List<String>.toTagColumn(): String = joinToString("\n") { it.trim() 
 
 @Module
 @InstallIn(SingletonComponent::class)
-abstract class LibraryRepositoryModule { @Binds abstract fun bindLibraryRepository(impl: LibraryRepositoryImpl): LibraryRepository }
+abstract class LibraryRepositoryModule {
+    @Binds abstract fun bindLibraryRepository(impl: LibraryRepositoryImpl): LibraryRepository
+}

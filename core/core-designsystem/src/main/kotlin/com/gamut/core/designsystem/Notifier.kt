@@ -137,6 +137,7 @@ fun NoticeHost(modifier: Modifier = Modifier, notifier: Notifier = LocalNotifier
                     shown = null
                     drag.snapTo(0f)
                 }
+
                 onScreen == null -> {
                     drag.snapTo(0f)
                     hide.snapTo(1f)
@@ -144,10 +145,12 @@ fun NoticeHost(modifier: Modifier = Modifier, notifier: Notifier = LocalNotifier
                     shownAt = SystemClock.elapsedRealtime()
                     hide.animateTo(0f, enter)
                 }
+
                 onScreen.key == target.key -> {
                     shown = target
                     if (hide.value > 0.001f) hide.animateTo(0f, enter)
                 }
+
                 else -> {
                     val wait = MIN_VISIBLE_MS - (SystemClock.elapsedRealtime() - shownAt)
                     if (wait > 0L) delay(wait)

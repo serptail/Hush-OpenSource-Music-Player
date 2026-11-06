@@ -47,10 +47,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.fill.CheckCircle
+import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.ArrowCircleDown
+import com.adamglin.phosphoricons.fill.CheckCircle
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.feature.resolver.DownloadState
@@ -73,9 +73,18 @@ fun playlistDownloadUi(isrcs: List<String>, states: Map<String, DownloadState>):
     var fraction = 0f
     isrcs.forEach { isrc ->
         when (val state = states[isrc]) {
-            DownloadState.Done -> { done++; fraction += 1f }
-            is DownloadState.Active -> { busy = true; fraction += state.progress }
+            DownloadState.Done -> {
+                done++
+                fraction += 1f
+            }
+
+            is DownloadState.Active -> {
+                busy = true
+                fraction += state.progress
+            }
+
             DownloadState.Queued -> busy = true
+
             else -> Unit
         }
     }
@@ -110,7 +119,10 @@ fun DownloadButton(
     Box(
         modifier
             .size(size)
-            .graphicsLayer { scaleX = press; scaleY = press }
+            .graphicsLayer {
+                scaleX = press
+                scaleY = press
+            }
             .clip(CircleShape)
             .clickable(
                 interactionSource = interaction,
@@ -129,8 +141,10 @@ fun DownloadButton(
             when (status) {
                 PlaylistDownloadStatus.Idle ->
                     Icon(idleIcon, "Download playlist", tint = tint, modifier = Modifier.size(glyphSize))
+
                 PlaylistDownloadStatus.Active ->
                     ActiveRing(ui.progress.coerceAtLeast(0.04f), tint.copy(alpha = 0.2f), accent, glyphSize)
+
                 PlaylistDownloadStatus.Done ->
                     CheckCirclePop(animate = watched, color = accent, size = glyphSize, icon = doneIcon)
             }
@@ -226,7 +240,10 @@ private fun CheckCirclePop(animate: Boolean, color: Color, size: Dp, icon: Image
         icon,
         "Downloaded",
         tint = color,
-        modifier = Modifier.size(size).graphicsLayer { scaleX = scale.value; scaleY = scale.value },
+        modifier = Modifier.size(size).graphicsLayer {
+            scaleX = scale.value
+            scaleY = scale.value
+        },
     )
 }
 

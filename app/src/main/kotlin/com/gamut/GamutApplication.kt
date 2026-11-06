@@ -24,54 +24,65 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 @HiltAndroidApp
-class GamutApplication : Application(), Configuration.Provider {
-	override val workManagerConfiguration: Configuration get() = Configuration.Builder().build()
+class GamutApplication :
+    Application(),
+    Configuration.Provider {
+    override val workManagerConfiguration: Configuration get() = Configuration.Builder().build()
 
-	@Inject lateinit var ytDlp: AndroidYtDlpEngine
-	@Inject lateinit var player: MusicPlayer
-	@Inject lateinit var resolveTrackSource: ResolveTrackSourceUseCase
-	@Inject lateinit var audioSources: AudioSourceRepository
-	@Inject lateinit var downloadIndex: DownloadIndex
-	@Inject lateinit var syncManager: SyncManager
-	@Inject lateinit var profileStore: ProfileStore
-	@Inject lateinit var shazamSession: ShazamSession
+    @Inject lateinit var ytDlp: AndroidYtDlpEngine
 
-	override fun onCreate() {
-		super.onCreate()
-		player.setSourceResolver { track, forceRefresh, onProgress ->
-			if (!forceRefresh) {
-				downloadIndex.pathFor(track.isrc)?.let(::File)?.takeIf { it.exists() }?.let {
-					return@setSourceResolver Uri.fromFile(it).toString()
-				}
-			}
-			val source = resolveTrackSource(track).getOrNull() ?: return@setSourceResolver null
-			onProgress(0.5f)
-			audioSources.audioUrl(source.youtubeVideoId, forceRefresh).getOrNull()
-		}
-		CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-			ytDlp.warmUp()
-			YtDlpUpdateWorker.schedule(applicationContext)
-		}
-		syncManager.start(CoroutineScope(SupervisorJob() + Dispatchers.Default))
-		registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
-			private var started = 0
-			private var lastSyncAt = 0L
-			override fun onActivityStarted(activity: Activity) {
-				if (started++ == 0) shazamSession.appVisible = true
-				if (started == 1 && System.currentTimeMillis() - lastSyncAt > 30_000) {
-					lastSyncAt = System.currentTimeMillis()
-					syncManager.syncNow()
-				}
-			}
-			override fun onActivityStopped(activity: Activity) { if (--started == 0) shazamSession.appVisible = false }
-			override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
-			override fun onActivityResumed(activity: Activity) {}
-			override fun onActivityPaused(activity: Activity) {}
-			override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
-			override fun onActivityDestroyed(activity: Activity) {}
-		})
-		CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
-			profileStore.autoBackup.collect { AutoBackup.apply(applicationContext, it) }
-		}
-	}
+    @Inject lateinit var player: MusicPlayer
+
+    @Inject lateinit var resolveTrackSource: ResolveTrackSourceUseCase
+
+    @Inject lateinit var audioSources: AudioSourceRepository
+
+    @Inject lateinit var downloadIndex: DownloadIndex
+
+    @Inject lateinit var syncManager: SyncManager
+
+    @Inject lateinit var profileStore: ProfileStore
+
+    @Inject lateinit var shazamSession: ShazamSession
+
+    override fun onCreate() {
+        super.onCreate()
+        player.setSourceResolver { track, forceRefresh, onProgress ->
+            if (!forceRefresh) {
+                downloadIndex.pathFor(track.isrc)?.let(::File)?.takeIf { it.exists() }?.let {
+                    return@setSourceResolver Uri.fromFile(it).toString()
+                }
+            }
+            val source = resolveTrackSource(track).getOrNull() ?: return@setSourceResolver null
+            onProgress(0.5f)
+            audioSources.audioUrl(source.youtubeVideoId, forceRefresh).getOrNull()
+        }
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            ytDlp.warmUp()
+            YtDlpUpdateWorker.schedule(applicationContext)
+        }
+        syncManager.start(CoroutineScope(SupervisorJob() + Dispatchers.Default))
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            private var started = 0
+            private var lastSyncAt = 0L
+            override fun onActivityStarted(activity: Activity) {
+                if (started++ == 0) shazamSession.appVisible = true
+                if (started == 1 && System.currentTimeMillis() - lastSyncAt > 30_000) {
+                    lastSyncAt = System.currentTimeMillis()
+                    syncManager.syncNow()
+                }
+            }
+            override fun onActivityStopped(activity: Activity) {
+                if (--started == 0) shazamSession.appVisible = false
+            }
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+            override fun onActivityResumed(activity: Activity) {}
+            override fun onActivityPaused(activity: Activity) {}
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+            override fun onActivityDestroyed(activity: Activity) {}
+        })
+        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            profileStore.autoBackup.collect { AutoBackup.apply(applicationContext, it) }
+        }
+    }
 }

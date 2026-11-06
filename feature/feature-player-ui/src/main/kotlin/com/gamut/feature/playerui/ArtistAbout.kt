@@ -113,7 +113,8 @@ object ArtistInfoRepository {
                     val t = norm(h.optString("title_short").ifBlank { h.optString("title") })
                     val a = norm(h.optJSONObject("artist")?.optString("name").orEmpty())
                     if ((t == wantTitle || t.startsWith(wantTitle)) && a.isNotEmpty() && (a.contains(wantArtist) || wantArtist.contains(a))) {
-                        id = h.optLong("id"); break
+                        id = h.optLong("id")
+                        break
                     }
                 }
                 if (id > 0) deezer = json("https://api.deezer.com/track/$id")?.takeIf { !it.has("error") }
@@ -161,21 +162,24 @@ object ArtistInfoRepository {
                 delay(1_100)
                 val rels = json("https://musicbrainz.org/ws/2/recording/$rec?inc=artist-rels+work-rels&fmt=json")?.optJSONArray("relations")
                 var workId: String? = null
-                if (rels != null) for (i in 0 until rels.length()) {
-                    val r = rels.optJSONObject(i) ?: continue
-                    when (r.optString("target-type")) {
-                        "artist" -> {
-                            val role = when (r.optString("type")) {
-                                "producer" -> "Producer"
-                                "mix" -> "Mixer"
-                                "engineer" -> "Engineer"
-                                "recording" -> "Recording engineer"
-                                "mastering" -> "Mastering engineer"
-                                else -> null
+                if (rels != null) {
+                    for (i in 0 until rels.length()) {
+                        val r = rels.optJSONObject(i) ?: continue
+                        when (r.optString("target-type")) {
+                            "artist" -> {
+                                val role = when (r.optString("type")) {
+                                    "producer" -> "Producer"
+                                    "mix" -> "Mixer"
+                                    "engineer" -> "Engineer"
+                                    "recording" -> "Recording engineer"
+                                    "mastering" -> "Mastering engineer"
+                                    else -> null
+                                }
+                                if (role != null) add(r.optJSONObject("artist")?.optString("name"), role)
                             }
-                            if (role != null) add(r.optJSONObject("artist")?.optString("name"), role)
+
+                            "work" -> if (workId == null) workId = r.optJSONObject("work")?.optString("id")
                         }
-                        "work" -> if (workId == null) workId = r.optJSONObject("work")?.optString("id")
                     }
                 }
                 if (!workId.isNullOrBlank()) {

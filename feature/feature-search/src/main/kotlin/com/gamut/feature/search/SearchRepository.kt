@@ -3,11 +3,11 @@ package com.gamut.feature.search
 import com.gamut.core.common.TextMatch
 import com.gamut.core.model.Track
 import com.gamut.core.model.TrackSource
-import com.gamut.core.network.ItunesApi
-import com.gamut.core.network.ItunesTrackDto
 import com.gamut.core.network.DeezerApi
 import com.gamut.core.network.DeezerArtistDto
 import com.gamut.core.network.DeezerTrackDto
+import com.gamut.core.network.ItunesApi
+import com.gamut.core.network.ItunesTrackDto
 import com.gamut.core.network.YoutubeCandidate
 import com.gamut.core.network.YoutubeMusicSearchSource
 import com.gamut.core.network.isValidYoutubeVideoId
@@ -19,11 +19,11 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.channelFlow
 
 data class SearchResult(val tracks: List<Track>, val isFinal: Boolean, val artist: ArtistSignal? = null)
 
@@ -40,7 +40,9 @@ class SearchRepositoryImpl @Inject constructor(
 ) : SearchRepository {
     private val resultCache = ConcurrentHashMap<String, CachedResult>()
 
-    override fun clearCache() { resultCache.clear() }
+    override fun clearCache() {
+        resultCache.clear()
+    }
 
     private val itunesRateGate = Mutex()
     private val itunesRequestTimes = ArrayDeque<Long>()
@@ -291,9 +293,10 @@ private fun DeezerTrackDto.toDomain(): Track = Track(
     source = TrackSource.ITUNES,
 )
 
-private fun String.upscaleArtwork(size: Int = 600): String =
-    replace(Regex("/\\d+x\\d+bb\\."), "/${size}x${size}bb.")
+private fun String.upscaleArtwork(size: Int = 600): String = replace(Regex("/\\d+x\\d+bb\\."), "/${size}x${size}bb.")
 
 @Module
 @InstallIn(SingletonComponent::class)
-abstract class SearchRepositoryModule { @Binds abstract fun bindSearchRepository(impl: SearchRepositoryImpl): SearchRepository }
+abstract class SearchRepositoryModule {
+    @Binds abstract fun bindSearchRepository(impl: SearchRepositoryImpl): SearchRepository
+}

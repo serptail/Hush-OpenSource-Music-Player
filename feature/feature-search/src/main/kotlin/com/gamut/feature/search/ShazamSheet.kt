@@ -1,15 +1,12 @@
 package com.gamut.feature.search
 
-import com.gamut.core.designsystem.GamutSheet
-import com.gamut.core.designsystem.LocalCoverPalette
-import com.gamut.core.designsystem.ink
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -49,19 +46,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.fill.Heart
+import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.DotsThree
 import com.adamglin.phosphoricons.bold.Heart
+import com.adamglin.phosphoricons.fill.Heart
 import com.gamut.core.designsystem.AlertTick
 import com.gamut.core.designsystem.ArtistPickerSheet
-import com.gamut.core.designsystem.ShareSheet
-import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.designsystem.CoverPalette
-import com.gamut.core.designsystem.R
 import com.gamut.core.designsystem.ErrorTick
+import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.R
+import com.gamut.core.designsystem.ShareSheet
+import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
+import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.model.Track
 
 private val FavoriteRed = Color(0xFFFF4D6D)
@@ -85,6 +85,7 @@ fun ShazamSheet(
     GamutSheet(onDismiss = onDismiss) {
         when (state) {
             is ShazamState.Listening -> ListeningContent(level, state.searching, onDismiss)
+
             is ShazamState.Found -> FoundContent(
                 track = state.track,
                 isFavorite = state.track.isrc in favoriteIsrcs,
@@ -95,6 +96,7 @@ fun ShazamSheet(
                 onAddToPlaylist = onAddToPlaylist,
                 onTrackArtist = onTrackArtist,
             )
+
             ShazamState.NotFound -> MessageContent(
                 icon = AlertTick,
                 title = "Couldn't recognize this one",
@@ -102,6 +104,7 @@ fun ShazamSheet(
                 action = "Try again",
                 onAction = onRetry,
             )
+
             is ShazamState.Failed -> MessageContent(
                 icon = ErrorTick,
                 title = "Something went wrong",
@@ -109,6 +112,7 @@ fun ShazamSheet(
                 action = "Try again",
                 onAction = onRetry,
             )
+
             ShazamState.PermissionDenied -> MessageContent(
                 icon = AlertTick,
                 title = "Microphone access is off",
@@ -116,6 +120,7 @@ fun ShazamSheet(
                 action = "Open settings",
                 onAction = onOpenSettings,
             )
+
             ShazamState.Idle -> Unit
         }
     }
@@ -293,7 +298,10 @@ private fun FoundContent(
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
             )
         }
-        ActionRow("Add to queue") { onAddToQueue(track); note = "Added to the queue" }
+        ActionRow("Add to queue") {
+            onAddToQueue(track)
+            note = "Added to the queue"
+        }
     }
 
     if (actionsOpen) {
@@ -301,9 +309,15 @@ private fun FoundContent(
             track = track,
             isFavorite = isFavorite,
             onDismiss = { actionsOpen = false },
-            onShare = { actionsOpen = false; shareOpen = true },
+            onShare = {
+                actionsOpen = false
+                shareOpen = true
+            },
             onToggleFavorite = { onToggleFavorite(track) },
-            onAddToPlaylist = { actionsOpen = false; pickerOpen = true },
+            onAddToPlaylist = {
+                actionsOpen = false
+                pickerOpen = true
+            },
             onGoToArtist = {
                 actionsOpen = false
                 if (splitArtists(track.artist).size > 1) artistPickOpen = true else onTrackArtist(track)

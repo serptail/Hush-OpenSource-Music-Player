@@ -1,11 +1,5 @@
 package com.gamut.feature.search
 
-import com.gamut.core.designsystem.focusRing
-import com.gamut.core.designsystem.isWideLayout
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -19,14 +13,13 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.runtime.remember
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -35,23 +28,29 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,30 +61,31 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.SubcomposeAsyncImage
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.fill.Play
+import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.ArrowLeft
 import com.adamglin.phosphoricons.bold.DotsThreeVertical
+import com.adamglin.phosphoricons.fill.Play
 import com.gamut.core.designsystem.AcrylicCircleButton
 import com.gamut.core.designsystem.AcrylicHost
-import com.gamut.core.designsystem.CoverTheme
-import com.gamut.core.designsystem.ShareSheet
+import com.gamut.core.designsystem.ArtPlaceholder
 import com.gamut.core.designsystem.ArtistLine
 import com.gamut.core.designsystem.ArtistPickerSheet
-import com.gamut.core.designsystem.rememberArtistTap
-import com.gamut.core.designsystem.splitArtists
+import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.HeroListSkeleton
 import com.gamut.core.designsystem.LocalCoverPalette
-import com.gamut.core.designsystem.NowPlayingBars
-import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.LocalNavSettled
-import androidx.compose.ui.draw.drawBehind
-import com.gamut.core.designsystem.glass
-import com.gamut.core.designsystem.ArtPlaceholder
+import com.gamut.core.designsystem.NowPlayingBars
+import com.gamut.core.designsystem.ShareSheet
+import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.artTileColor
+import com.gamut.core.designsystem.focusRing
+import com.gamut.core.designsystem.glass
 import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.isWideLayout
 import com.gamut.core.designsystem.pressScale
+import com.gamut.core.designsystem.rememberArtistTap
+import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -155,11 +155,11 @@ fun AlbumScreen(
                         value != null && settled -> {
                             val heroContent: @Composable () -> Unit = {
                                 AlbumHero(
-                                        album = value,
-                                        artistImageUrl = artistImage,
-                                        onPlay = { value.tracks.firstOrNull()?.let { onTrackSelected(it, value.tracks) } },
-                                        onArtist = { name -> value.tracks.firstOrNull()?.let { onTrackArtist(it.copy(artist = name)) } },
-                                    )
+                                    album = value,
+                                    artistImageUrl = artistImage,
+                                    onPlay = { value.tracks.firstOrNull()?.let { onTrackSelected(it, value.tracks) } },
+                                    onArtist = { name -> value.tracks.firstOrNull()?.let { onTrackArtist(it.copy(artist = name)) } },
+                                )
                             }
                             val trackItems: LazyListScope.() -> Unit = {
                                 itemsIndexed(value.tracks, key = { i, t -> "${t.isrc}-$i" }) { index, track ->
@@ -193,6 +193,7 @@ fun AlbumScreen(
                             }
                             BackButton(onBack)
                         }
+
                         value == null && failed -> {
                             BackButton(onBack)
                             Text(
@@ -202,6 +203,7 @@ fun AlbumScreen(
                                 modifier = Modifier.align(Alignment.Center).padding(24.dp),
                             )
                         }
+
                         else -> {
                             HeroListSkeleton()
                             BackButton(onBack)
@@ -217,9 +219,15 @@ fun AlbumScreen(
                 track = t,
                 isFavorite = t.isrc in favoriteIsrcs,
                 onDismiss = { actionsTrack = null },
-                onShare = { actionsTrack = null; shareTrack = t },
+                onShare = {
+                    actionsTrack = null
+                    shareTrack = t
+                },
                 onToggleFavorite = { onToggleFavorite(t) },
-                onAddToPlaylist = { actionsTrack = null; pickerTrack = t },
+                onAddToPlaylist = {
+                    actionsTrack = null
+                    pickerTrack = t
+                },
                 onGoToArtist = {
                     actionsTrack = null
                     if (splitArtists(t.artist).size > 1) artistPickTrack = t else onTrackArtist(t)
@@ -386,7 +394,15 @@ private fun AlbumTrackRow(
         label = "rowScale",
     )
     val tint by animateColorAsState(
-        targetValue = ink(if (pressed) 0.10f else if (hovered) 0.06f else 0f),
+        targetValue = ink(
+            if (pressed) {
+                0.10f
+            } else if (hovered) {
+                0.06f
+            } else {
+                0f
+            },
+        ),
         animationSpec = tween(140),
         label = "rowTint",
     )
@@ -395,7 +411,10 @@ private fun AlbumTrackRow(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .clip(RoundedCornerShape(12.dp))
             .drawBehind { drawRect(tint) }
             .focusRing(RoundedCornerShape(12.dp))

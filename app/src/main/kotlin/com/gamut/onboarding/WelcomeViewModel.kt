@@ -39,7 +39,8 @@ class WelcomeViewModel @Inject constructor(
             else -> Gate.Loading
         }
     }.stateIn(
-        viewModelScope, SharingStarted.Eagerly,
+        viewModelScope,
+        SharingStarted.Eagerly,
         if (store.localMode.value || !SyncConfig.enabled) Gate.Ready else Gate.Loading,
     )
 
@@ -64,8 +65,11 @@ class WelcomeViewModel @Inject constructor(
                 onSuccess = { _ui.value = WelcomeUi() },
                 onFailure = {
                     _ui.value = WelcomeUi(
-                        error = if (it is GetCredentialCancellationException) null
-                        else "Couldn\u2019t sign in. Check your connection and try again.",
+                        error = if (it is GetCredentialCancellationException) {
+                            null
+                        } else {
+                            "Couldn\u2019t sign in. Check your connection and try again."
+                        },
                     )
                 },
             )

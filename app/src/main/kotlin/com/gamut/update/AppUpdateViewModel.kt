@@ -131,20 +131,26 @@ class AppUpdateViewModel @Inject constructor(
                         sawRunning = true
                         val p = work.progress.getFloat(UpdateDownloadWorker.K_PROGRESS, -1f)
                         _state.update {
-                            if (it.phase == UpdatePhase.INSTALLING) it
-                            else it.copy(phase = UpdatePhase.DOWNLOADING, error = null, progress = if (p >= 0f) p else it.progress)
+                            if (it.phase == UpdatePhase.INSTALLING) {
+                                it
+                            } else {
+                                it.copy(phase = UpdatePhase.DOWNLOADING, error = null, progress = if (p >= 0f) p else it.progress)
+                            }
                         }
                     }
+
                     WorkInfo.State.SUCCEEDED ->
                         if ((sawRunning || expectedWork != null) && installedWork != work.id) {
                             installedWork = work.id
                             install(info)
                         }
+
                     WorkInfo.State.FAILED ->
                         if (sawRunning || expectedWork != null) {
                             val message = work.outputData.getString(UpdateDownloadWorker.K_ERROR) ?: "The download failed."
                             _state.update { it.copy(phase = UpdatePhase.FAILED, error = message) }
                         }
+
                     WorkInfo.State.CANCELLED -> Unit
                 }
             }

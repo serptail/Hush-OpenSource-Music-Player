@@ -58,7 +58,10 @@ internal fun TagsEditor(tags: List<String>, onChange: (List<String>) -> Unit, mo
                     textStyle = MaterialTheme.typography.labelLarge.copy(color = ink()),
                     cursorBrush = SolidColor(ink()),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { add(draft); draft = "" }),
+                    keyboardActions = KeyboardActions(onDone = {
+                        add(draft)
+                        draft = ""
+                    }),
                     decorationBox = { inner ->
                         Row(
                             Modifier.background(ink(0.04f), TagShape).padding(horizontal = 16.dp, vertical = 9.dp),

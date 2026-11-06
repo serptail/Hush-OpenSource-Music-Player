@@ -44,11 +44,14 @@ internal const val SYNC_OWNER_KEY = "owner"
 
 class SessionEndedException : Exception("This account was signed out elsewhere or deleted")
 
-class SyncFailure(errors: List<Throwable>) : Exception(
-    errors.first().let { (it.message ?: it::class.java.simpleName) + if (errors.size > 1) " (+${errors.size - 1} more)" else "" },
-    errors.first(),
-) {
-    init { errors.drop(1).forEach { addSuppressed(it) } }
+class SyncFailure(errors: List<Throwable>) :
+    Exception(
+        errors.first().let { (it.message ?: it::class.java.simpleName) + if (errors.size > 1) " (+${errors.size - 1} more)" else "" },
+        errors.first(),
+    ) {
+    init {
+        errors.drop(1).forEach { addSuppressed(it) }
+    }
 }
 
 @Singleton
@@ -94,16 +97,18 @@ class SyncEngine @Inject constructor(
             throw e
         } catch (e: RestException) {
             if (!e.isPermanent()) throw e
-            if (rows.size == 1) { android.util.Log.w("SyncEngine", "Dropping a row the server rejects: ${e.message}"); return }
+            if (rows.size == 1) {
+                android.util.Log.w("SyncEngine", "Dropping a row the server rejects: ${e.message}")
+                return
+            }
             val mid = rows.size / 2
             sendResilient(rows.subList(0, mid), send)
             sendResilient(rows.subList(mid, rows.size), send)
         }
     }
 
-    private fun RestException.isPermanent() =
-        (statusCode in 400..499 && statusCode != 401 && statusCode != 408 && statusCode != 429) ||
-            message.orEmpty().contains("quota exceeded", ignoreCase = true)
+    private fun RestException.isPermanent() = (statusCode in 400..499 && statusCode != 401 && statusCode != 408 && statusCode != 429) ||
+        message.orEmpty().contains("quota exceeded", ignoreCase = true)
 
     private suspend fun ensureSessionValid() {
         try {
@@ -120,11 +125,13 @@ class SyncEngine @Inject constructor(
     }
 
     private suspend fun guarded(errors: MutableList<Throwable>, block: suspend () -> Unit): Boolean = try {
-        block(); true
+        block()
+        true
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        errors += e; false
+        errors += e
+        false
     }
 
     private suspend fun claimOwner(uid: String) {
@@ -137,8 +144,7 @@ class SyncEngine @Inject constructor(
         }
         adoptRemotePlaylists()
         val now = System.currentTimeMillis()
-        suspend fun mark(type: String, key: String, payload: String? = null) =
-            pending.put(PendingSyncEntity(type = type, itemKey = key, payload = payload, createdAtEpochMs = now))
+        suspend fun mark(type: String, key: String, payload: String? = null) = pending.put(PendingSyncEntity(type = type, itemKey = key, payload = payload, createdAtEpochMs = now))
         playlists.getAll().forEach { p ->
             mark(SyncTypes.PL, p.id.toString())
             playlistTracks.isrcsFor(p.id).forEachIndexed { i, isrc -> mark(SyncTypes.PLS, "${p.id}|$isrc", i.toString()) }
@@ -183,12 +189,17 @@ class SyncEngine @Inject constructor(
             try {
                 tmp.writeBytes(bytes)
                 if (!tmp.renameTo(file)) throw IOException("Could not save the previous account's backup")
-            } finally { tmp.delete() }
+            } finally {
+                tmp.delete()
+            }
         }
     }
 
     private suspend fun wipeLocalLibrary() {
-        playlists.getAll().forEach { playlistTracks.clear(it.id); playlists.delete(it.id) }
+        playlists.getAll().forEach {
+            playlistTracks.clear(it.id)
+            playlists.delete(it.id)
+        }
         favorites.all().forEach { favorites.remove(it.isrc) }
         follows.all().forEach { follows.remove(it.artistKey) }
         pending.all().map { it.id }.chunked(500).forEach { pending.deleteIds(it) }
@@ -203,7 +214,9 @@ class SyncEngine @Inject constructor(
         val now = Instant.now().toString()
         val nowMs = System.currentTimeMillis()
 
-        suspend fun finish(ids: List<Long>) { ids.chunked(500).forEach { pending.deleteIds(it) } }
+        suspend fun finish(ids: List<Long>) {
+            ids.chunked(500).forEach { pending.deleteIds(it) }
+        }
         fun retryable(e: PendingSyncEntity, isrc: String) = parseIsrc(isrc) != null && nowMs - e.createdAtEpochMs < RETRY_WINDOW_MS
 
         val delEntries = byType[SyncTypes.PL_DEL].orEmpty()
@@ -221,10 +234,16 @@ class SyncEngine @Inject constructor(
             val dropIds = ArrayList<Long>()
             for (e in byType[SyncTypes.PL].orEmpty()) {
                 val local = e.itemKey.toLongOrNull()?.let { playlists.get(it) }
-                if (local == null) { dropIds += e.id; continue }
+                if (local == null) {
+                    dropIds += e.id
+                    continue
+                }
                 val remote = local.remoteId ?: UUID.randomUUID().toString().also { playlists.setRemoteId(local.id, it) }
                 rows += PlaylistRow(
-                    remote, uid, local.name.trim().take(100).ifBlank { "Untitled" }, local.tags.take(500),
+                    remote,
+                    uid,
+                    local.name.trim().take(100).ifBlank { "Untitled" },
+                    local.tags.take(500),
                     Instant.ofEpochMilli(local.createdAtEpochMs).toString(),
                 )
                 doneIds += e.id
@@ -247,15 +266,24 @@ class SyncEngine @Inject constructor(
                 val songId = ids[e.itemKey]
                 if (songId == null) {
                     if (local != null && retryable(e, e.itemKey)) continue
-                    doneIds += e.id; continue
+                    doneIds += e.id
+                    continue
                 }
                 doneIds += e.id
-                if (local != null) upserts += FavoriteRow(uid, songId, Instant.ofEpochMilli(local.addedAtEpochMs).toString())
-                else removals += songId
+                if (local != null) {
+                    upserts += FavoriteRow(uid, songId, Instant.ofEpochMilli(local.addedAtEpochMs).toString())
+                } else {
+                    removals += songId
+                }
             }
             upsertResilient("favorites", upserts, "user_id,song_id", 200)
             removals.chunked(100).forEach { chunk ->
-                supabase.from("favorites").update({ set("deleted_at", now) }) { filter { eq("user_id", uid); isIn("song_id", chunk) } }
+                supabase.from("favorites").update({ set("deleted_at", now) }) {
+                    filter {
+                        eq("user_id", uid)
+                        isIn("song_id", chunk)
+                    }
+                }
             }
             finish(doneIds)
         }
@@ -269,52 +297,74 @@ class SyncEngine @Inject constructor(
                 doneIds += e.id
                 val (provider, pid) = parseArtistKey(e.itemKey) ?: continue
                 val local = follows.get(e.itemKey)
-                if (local != null) upserts += FollowRow(
-                    uid, provider, pid, local.name.trim().take(200).ifBlank { "Unknown artist" },
-                    local.imageUrl?.takeIf { it.startsWith("https://") }?.take(500),
-                    Instant.ofEpochMilli(local.followedAtEpochMs).toString(),
-                )
-                else removals.getOrPut(provider) { ArrayList() } += pid
+                if (local != null) {
+                    upserts += FollowRow(
+                        uid,
+                        provider,
+                        pid,
+                        local.name.trim().take(200).ifBlank { "Unknown artist" },
+                        local.imageUrl?.takeIf { it.startsWith("https://") }?.take(500),
+                        Instant.ofEpochMilli(local.followedAtEpochMs).toString(),
+                    )
+                } else {
+                    removals.getOrPut(provider) { ArrayList() } += pid
+                }
             }
             upsertResilient("artist_follows", upserts, "user_id,provider,provider_artist_id", 200)
             removals.forEach { (provider, pids) ->
                 pids.chunked(100).forEach { chunk ->
                     supabase.from("artist_follows").update({ set("deleted_at", now) }) {
-                        filter { eq("user_id", uid); eq("provider", provider); isIn("provider_artist_id", chunk) }
+                        filter {
+                            eq("user_id", uid)
+                            eq("provider", provider)
+                            isIn("provider_artist_id", chunk)
+                        }
                     }
                 }
             }
             finish(doneIds)
         }
 
-        if (plOk) guarded(errors) {
-            val upserts = ArrayList<PlaylistSongRow>()
-            val removals = HashMap<String, MutableList<String>>()
-            val doneIds = ArrayList<Long>()
-            for (e in plsEntries) {
-                val local = playlists.get(e.itemKey.substringBefore('|').toLongOrNull() ?: -1)
-                if (local == null) { doneIds += e.id; continue }
-                val remote = local.remoteId ?: continue
-                val isrc = e.itemKey.substringAfter('|')
-                val position = e.payload?.toIntOrNull()
-                val songId = ids[isrc]
-                if (songId == null) {
-                    if (position != null && retryable(e, isrc)) continue
-                    doneIds += e.id; continue
-                }
-                doneIds += e.id
-                if (position != null) upserts += PlaylistSongRow(remote, songId, position.coerceAtLeast(0))
-                else removals.getOrPut(remote) { ArrayList() } += songId
-            }
-            upsertResilient("playlist_songs", upserts, "playlist_id,song_id", 200)
-            removals.forEach { (remote, songs) ->
-                songs.chunked(100).forEach { chunk ->
-                    supabase.from("playlist_songs").update({ set("deleted_at", now) }) {
-                        filter { eq("playlist_id", remote); isIn("song_id", chunk) }
+        if (plOk) {
+            guarded(errors) {
+                val upserts = ArrayList<PlaylistSongRow>()
+                val removals = HashMap<String, MutableList<String>>()
+                val doneIds = ArrayList<Long>()
+                for (e in plsEntries) {
+                    val local = playlists.get(e.itemKey.substringBefore('|').toLongOrNull() ?: -1)
+                    if (local == null) {
+                        doneIds += e.id
+                        continue
+                    }
+                    val remote = local.remoteId ?: continue
+                    val isrc = e.itemKey.substringAfter('|')
+                    val position = e.payload?.toIntOrNull()
+                    val songId = ids[isrc]
+                    if (songId == null) {
+                        if (position != null && retryable(e, isrc)) continue
+                        doneIds += e.id
+                        continue
+                    }
+                    doneIds += e.id
+                    if (position != null) {
+                        upserts += PlaylistSongRow(remote, songId, position.coerceAtLeast(0))
+                    } else {
+                        removals.getOrPut(remote) { ArrayList() } += songId
                     }
                 }
+                upsertResilient("playlist_songs", upserts, "playlist_id,song_id", 200)
+                removals.forEach { (remote, songs) ->
+                    songs.chunked(100).forEach { chunk ->
+                        supabase.from("playlist_songs").update({ set("deleted_at", now) }) {
+                            filter {
+                                eq("playlist_id", remote)
+                                isIn("song_id", chunk)
+                            }
+                        }
+                    }
+                }
+                finish(doneIds)
             }
-            finish(doneIds)
         }
     }
 
@@ -325,7 +375,10 @@ class SyncEngine @Inject constructor(
             for (chunk in all.chunked(100)) {
                 val ok = guarded(errors) {
                     supabase.from("songs").select(Columns.list("id", "provider", "provider_song_id")) {
-                        filter { eq("provider", provider); isIn("provider_song_id", chunk) }
+                        filter {
+                            eq("provider", provider)
+                            isIn("provider_song_id", chunk)
+                        }
                     }.decodeList<SongRef>().forEach { songIds["${it.provider}:${it.providerSongId}"] = it.id }
                 }
                 if (!ok) break@lookup
@@ -334,7 +387,8 @@ class SyncEngine @Inject constructor(
         for (chunk in need.filter { songIds[it.first] == null }.chunked(50)) {
             val ok = guarded(errors) {
                 val response = supabase.functions.invoke(
-                    "resolve-metadata", ResolveRequest(chunk.map { ResolveItem(it.second.first, it.second.second) }),
+                    "resolve-metadata",
+                    ResolveRequest(chunk.map { ResolveItem(it.second.first, it.second.second) }),
                 )
                 response.body<ResolveResponse>().songs.forEach { songIds["${it.provider}:${it.providerSongId}"] = it.id }
             }
@@ -346,7 +400,11 @@ class SyncEngine @Inject constructor(
     private suspend fun pull(errors: MutableList<Throwable>) {
         val playlistsOk = guarded(errors) {
             pageThrough<PlaylistPull>(
-                "playlists", "id,name,tags,created_at,updated_at,deleted_at", CUR_PLAYLISTS, listOf("id"), { it.updatedAt },
+                "playlists",
+                "id,name,tags,created_at,updated_at,deleted_at",
+                CUR_PLAYLISTS,
+                listOf("id"),
+                { it.updatedAt },
             ) { rows ->
                 for (r in rows) {
                     val local = playlists.getByRemoteId(r.id)
@@ -357,35 +415,49 @@ class SyncEngine @Inject constructor(
                             pending.delete(SyncTypes.PL, local.id.toString())
                             pending.deleteByPrefix(SyncTypes.PLS, "${local.id}|%")
                         }
+
                         local == null -> playlists.insert(
                             PlaylistEntity(name = r.name, createdAtEpochMs = ms(r.createdAt), tags = r.tags, remoteId = r.id),
                         )
+
                         !pending.has(SyncTypes.PL, local.id.toString()) -> playlists.updateMeta(local.id, r.name, r.tags)
                     }
                 }
             }
         }
 
-        if (playlistsOk) guarded(errors) {
-            pageThrough<PlaylistSongPull>(
-                "playlist_songs", "playlist_id,position,updated_at,deleted_at,$SONG_EMBED", CUR_PLAYLIST_SONGS,
-                listOf("playlist_id", "song_id"), { it.updatedAt },
-            ) { rows ->
-                trackDao.insertIgnore(rows.filter { it.deletedAt == null }.mapNotNull { it.songs?.toTrack()?.toEntity() })
-                for (r in rows) {
-                    val song = r.songs ?: continue
-                    val local = playlists.getByRemoteId(r.playlistId) ?: continue
-                    val isrc = song.isrc()
-                    if (pending.has(SyncTypes.PLS, "${local.id}|$isrc")) continue
-                    if (r.deletedAt != null) playlistTracks.remove(local.id, isrc)
-                    else playlistTracks.upsert(PlaylistTrackCrossRef(local.id, isrc, r.position))
+        if (playlistsOk) {
+            guarded(errors) {
+                pageThrough<PlaylistSongPull>(
+                    "playlist_songs",
+                    "playlist_id,position,updated_at,deleted_at,$SONG_EMBED",
+                    CUR_PLAYLIST_SONGS,
+                    listOf("playlist_id", "song_id"),
+                    { it.updatedAt },
+                ) { rows ->
+                    trackDao.insertIgnore(rows.filter { it.deletedAt == null }.mapNotNull { it.songs?.toTrack()?.toEntity() })
+                    for (r in rows) {
+                        val song = r.songs ?: continue
+                        val local = playlists.getByRemoteId(r.playlistId) ?: continue
+                        val isrc = song.isrc()
+                        if (pending.has(SyncTypes.PLS, "${local.id}|$isrc")) continue
+                        if (r.deletedAt != null) {
+                            playlistTracks.remove(local.id, isrc)
+                        } else {
+                            playlistTracks.upsert(PlaylistTrackCrossRef(local.id, isrc, r.position))
+                        }
+                    }
                 }
             }
         }
 
         guarded(errors) {
             pageThrough<FavoritePull>(
-                "favorites", "created_at,updated_at,deleted_at,$SONG_EMBED", CUR_FAVORITES, listOf("song_id"), { it.updatedAt },
+                "favorites",
+                "created_at,updated_at,deleted_at,$SONG_EMBED",
+                CUR_FAVORITES,
+                listOf("song_id"),
+                { it.updatedAt },
             ) { rows ->
                 trackDao.insertIgnore(rows.filter { it.deletedAt == null }.mapNotNull { it.songs?.toTrack()?.toEntity() })
                 for (r in rows) {
@@ -398,8 +470,11 @@ class SyncEngine @Inject constructor(
 
         guarded(errors) {
             pageThrough<FollowPull>(
-                "artist_follows", "provider,provider_artist_id,name,artwork_url,created_at,updated_at,deleted_at",
-                CUR_FOLLOWS, listOf("provider", "provider_artist_id"), { it.updatedAt },
+                "artist_follows",
+                "provider,provider_artist_id,name,artwork_url,created_at,updated_at,deleted_at",
+                CUR_FOLLOWS,
+                listOf("provider", "provider_artist_id"),
+                { it.updatedAt },
             ) { rows ->
                 for (r in rows) {
                     val key = "${r.provider}:${r.providerArtistId}"
@@ -438,9 +513,11 @@ class SyncEngine @Inject constructor(
         state.put(SyncStateEntity(cursorName, max))
     }
 
-    private fun overlapStart(cursor: String): String =
-        if (cursor == EPOCH) EPOCH
-        else runCatching { OffsetDateTime.parse(cursor).toInstant().minusSeconds(OVERLAP_SECONDS).toString() }.getOrDefault(EPOCH)
+    private fun overlapStart(cursor: String): String = if (cursor == EPOCH) {
+        EPOCH
+    } else {
+        runCatching { OffsetDateTime.parse(cursor).toInstant().minusSeconds(OVERLAP_SECONDS).toString() }.getOrDefault(EPOCH)
+    }
 
     private fun ms(timestamp: String): Long = OffsetDateTime.parse(timestamp).toInstant().toEpochMilli()
 

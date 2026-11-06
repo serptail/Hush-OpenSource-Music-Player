@@ -4,6 +4,9 @@ import com.gamut.core.network.YoutubeCandidate
 import com.gamut.core.network.YoutubeMusicSearchSource
 import com.gamut.core.network.isValidYoutubeVideoId
 import com.gamut.core.player.StreamQuality
+import javax.inject.Inject
+import javax.inject.Named
+import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import okhttp3.Headers
 import okhttp3.OkHttpClient
@@ -16,11 +19,8 @@ import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.search.SearchInfo
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
 import org.schabi.newpipe.extractor.stream.AudioStream
-import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import org.schabi.newpipe.extractor.stream.StreamInfo
-import javax.inject.Inject
-import javax.inject.Named
-import javax.inject.Singleton
+import org.schabi.newpipe.extractor.stream.StreamInfoItem
 
 @Singleton
 class NewPipeYoutubeSource @Inject constructor(
@@ -47,9 +47,11 @@ class NewPipeYoutubeSource @Inject constructor(
                 compareByDescending<AudioStream> { it.format == MediaFormat.M4A }
                     .thenBy { if (it.averageBitrate > 0) it.averageBitrate else Int.MAX_VALUE },
             )
+
             StreamQuality.NORMAL -> usable.sortedWith(
                 compareByDescending<AudioStream> { it.format == MediaFormat.M4A }.thenByDescending { it.averageBitrate },
             )
+
             else -> usable.sortedByDescending { it.averageBitrate }
         }
         return ordered.firstOrNull()?.content
@@ -75,26 +77,25 @@ class NewPipeYoutubeSource @Inject constructor(
         }
     }
 
-    override suspend fun searchSongs(query: String): List<YoutubeCandidate> =
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                ensureInitialized()
-                val service = NewPipe.getService("YouTube")
-                val handler = service.getSearchQHFactory().fromQuery(
-                    query,
-                    listOf(YoutubeSearchQueryHandlerFactory.MUSIC_SONGS),
-                    "",
-                )
-                SearchInfo.getInfo(service, handler).relatedItems
-                    .filterIsInstance<StreamInfoItem>()
-                    .mapNotNull { it.toCandidate() }
-                    .take(25)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                emptyList()
-            }
+    override suspend fun searchSongs(query: String): List<YoutubeCandidate> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            ensureInitialized()
+            val service = NewPipe.getService("YouTube")
+            val handler = service.getSearchQHFactory().fromQuery(
+                query,
+                listOf(YoutubeSearchQueryHandlerFactory.MUSIC_SONGS),
+                "",
+            )
+            SearchInfo.getInfo(service, handler).relatedItems
+                .filterIsInstance<StreamInfoItem>()
+                .mapNotNull { it.toCandidate() }
+                .take(25)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
         }
+    }
 
     override suspend fun searchBroad(query: String): List<YoutubeCandidate> = emptyList()
 

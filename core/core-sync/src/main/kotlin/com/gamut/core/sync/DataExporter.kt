@@ -36,9 +36,13 @@ data class ExportTrack(
     val artworkUrl: String? = null,
     val source: String? = null,
 )
+
 @Serializable data class ExportFavorite(val track: ExportTrack, val addedAt: Long)
+
 @Serializable data class ExportFollow(val id: String, val name: String, val artworkUrl: String? = null, val followedAt: Long)
+
 @Serializable data class ExportPlaylist(val name: String, val tags: List<String> = emptyList(), val tracks: List<ExportTrack> = emptyList())
+
 @Serializable
 data class ExportDocument(
     val schemaVersion: Int = SCHEMA_VERSION,
@@ -47,7 +51,11 @@ data class ExportDocument(
     val playlists: List<ExportPlaylist>,
     val follows: List<ExportFollow> = emptyList(),
     val settings: JsonObject = JsonObject(emptyMap()),
-) { companion object { const val SCHEMA_VERSION = 2 } }
+) {
+    companion object {
+        const val SCHEMA_VERSION = 2
+    }
+}
 
 @Serializable private data class Envelope(val enc: Int, val salt: String, val iv: String, val data: String)
 
@@ -94,7 +102,10 @@ class DataExporter @Inject constructor(
     private val followRepository: FollowRepository,
     private val favoriteDao: FavoriteDao,
 ) {
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private val json = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+    }
 
     private suspend fun buildDocument(): ExportDocument {
         val now = System.currentTimeMillis()
@@ -123,35 +134,31 @@ class DataExporter @Inject constructor(
         return if (doc.favorites.isEmpty() && doc.playlists.isEmpty() && doc.follows.isEmpty()) null else encode(doc, password)
     }
 
-    fun isEncrypted(bytes: ByteArray): Boolean =
-        runCatching { json.parseToJsonElement(bytes.decodeToString()).jsonObject.containsKey("enc") }.getOrDefault(false)
+    fun isEncrypted(bytes: ByteArray): Boolean = runCatching { json.parseToJsonElement(bytes.decodeToString()).jsonObject.containsKey("enc") }.getOrDefault(false)
 
-    suspend fun preview(bytes: ByteArray, password: CharArray?, replace: Boolean = false): ImportReport =
-        run(bytes, password, commit = false, replace = replace)
+    suspend fun preview(bytes: ByteArray, password: CharArray?, replace: Boolean = false): ImportReport = run(bytes, password, commit = false, replace = replace)
 
-    suspend fun import(bytes: ByteArray, password: CharArray?, replace: Boolean = false): ImportReport =
-        run(bytes, password, commit = true, replace = replace)
+    suspend fun import(bytes: ByteArray, password: CharArray?, replace: Boolean = false): ImportReport = run(bytes, password, commit = true, replace = replace)
 
-    private suspend fun run(bytes: ByteArray, password: CharArray?, commit: Boolean, replace: Boolean): ImportReport =
-        importLock.withLock {
-            val doc = withContext(Dispatchers.Default) { parse(bytes, password) }
-            if (!replace) return@withLock apply(doc, commit, simulateEmpty = false)
+    private suspend fun run(bytes: ByteArray, password: CharArray?, commit: Boolean, replace: Boolean): ImportReport = importLock.withLock {
+        val doc = withContext(Dispatchers.Default) { parse(bytes, password) }
+        if (!replace) return@withLock apply(doc, commit, simulateEmpty = false)
 
-            val favs = library.observeFavorites().first().size
-            val pls = library.observePlaylists().first().size
-            val fols = followRepository.observeAll().first().size
-            fun ImportReport.marked() = copy(replaced = true, removedFavorites = favs, removedPlaylists = pls, removedFollows = fols)
-            if (!commit) return@withLock apply(doc, commit = false, simulateEmpty = true).marked()
+        val favs = library.observeFavorites().first().size
+        val pls = library.observePlaylists().first().size
+        val fols = followRepository.observeAll().first().size
+        fun ImportReport.marked() = copy(replaced = true, removedFavorites = favs, removedPlaylists = pls, removedFollows = fols)
+        if (!commit) return@withLock apply(doc, commit = false, simulateEmpty = true).marked()
 
-            val snapshot = buildDocument()
-            wipeLibrary()
-            try {
-                apply(doc, commit = true, simulateEmpty = false).marked()
-            } catch (e: Throwable) {
-                withContext(NonCancellable) { runCatching { apply(snapshot, commit = true, simulateEmpty = false) } }
-                throw e
-            }
+        val snapshot = buildDocument()
+        wipeLibrary()
+        try {
+            apply(doc, commit = true, simulateEmpty = false).marked()
+        } catch (e: Throwable) {
+            withContext(NonCancellable) { runCatching { apply(snapshot, commit = true, simulateEmpty = false) } }
+            throw e
         }
+    }
 
     private suspend fun wipeLibrary() {
         library.observeFavorites().first().forEach { library.toggleFavorite(it) }
@@ -169,16 +176,22 @@ class DataExporter @Inject constructor(
         }
         if (root.containsKey("enc")) {
             if (password == null || password.isEmpty()) throw BackupPasswordException(false, "This backup is encrypted: enter its password")
-            val env = try { json.decodeFromJsonElement(Envelope.serializer(), root) } catch (e: Exception) {
+            val env = try {
+                json.decodeFromJsonElement(Envelope.serializer(), root)
+            } catch (e: Exception) {
                 throw IllegalArgumentException("The backup file is damaged")
             }
             require(env.enc == 1) { "Unsupported encryption version" }
             val plain = decrypt(env, password)
-            root = try { json.parseToJsonElement(plain.decodeToString()).jsonObject } catch (e: Exception) {
+            root = try {
+                json.parseToJsonElement(plain.decodeToString()).jsonObject
+            } catch (e: Exception) {
                 throw IllegalArgumentException("The backup file is damaged")
             }
         }
-        val doc = try { json.decodeFromJsonElement(ExportDocument.serializer(), root) } catch (e: Exception) {
+        val doc = try {
+            json.decodeFromJsonElement(ExportDocument.serializer(), root)
+        } catch (e: Exception) {
             throw IllegalArgumentException("This isn't a valid Gamut backup")
         }
         require(doc.schemaVersion in 1..ExportDocument.SCHEMA_VERSION) {
@@ -192,25 +205,50 @@ class DataExporter @Inject constructor(
     private suspend fun apply(doc: ExportDocument, commit: Boolean, simulateEmpty: Boolean): ImportReport {
         val now = System.currentTimeMillis()
         val warnings = ArrayList<String>()
-        fun warn(m: String) { if (warnings.size < MAX_WARNINGS) warnings += m }
+        fun warn(m: String) {
+            if (warnings.size < MAX_WARNINGS) warnings += m
+        }
         var duplicates = 0
 
         val haveFavs = HashSet<String>().also { set -> if (!simulateEmpty) library.observeFavorites().first().mapTo(set) { it.isrc } }
         val seenFav = HashSet<String>()
-        var fAdded = 0; var fThere = 0; var fSkipped = 0; var fCap = 0
+        var fAdded = 0
+        var fThere = 0
+        var fSkipped = 0
+        var fCap = 0
         for (f in doc.favorites) {
             val k = f.track.key
-            if (!seenFav.add(k)) { duplicates++; continue }
-            if (k in haveFavs) { fThere++; continue }
-            val track = f.track.toTrackOrNull()
-            if (track == null) { fSkipped++; continue }
-            if (haveFavs.size >= MAX_FAVORITES) { fSkipped++; fCap++; continue }
-            if (commit) {
-                try { library.addFavorite(track, f.addedAt.sane(now)) }
-                catch (e: CancellationException) { throw e }
-                catch (e: Exception) { fSkipped++; warn("Couldn't add favorite “${track.title.take(40)}”"); continue }
+            if (!seenFav.add(k)) {
+                duplicates++
+                continue
             }
-            haveFavs += k; fAdded++
+            if (k in haveFavs) {
+                fThere++
+                continue
+            }
+            val track = f.track.toTrackOrNull()
+            if (track == null) {
+                fSkipped++
+                continue
+            }
+            if (haveFavs.size >= MAX_FAVORITES) {
+                fSkipped++
+                fCap++
+                continue
+            }
+            if (commit) {
+                try {
+                    library.addFavorite(track, f.addedAt.sane(now))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    fSkipped++
+                    warn("Couldn't add favorite “${track.title.take(40)}”")
+                    continue
+                }
+            }
+            haveFavs += k
+            fAdded++
         }
         if (fCap > 0) warn("$fCap favorites skipped: the limit is $MAX_FAVORITES")
 
@@ -221,7 +259,10 @@ class DataExporter @Inject constructor(
         var plSkipped = 0
         for (p in doc.playlists) {
             val name = p.name.trim().take(100)
-            if (name.isBlank()) { plSkipped++; continue }
+            if (name.isBlank()) {
+                plSkipped++
+                continue
+            }
             val match = pool[norm(name)]?.removeFirstOrNull()
             val id: Long
             val have: MutableSet<String>
@@ -232,53 +273,100 @@ class DataExporter @Inject constructor(
                 created = false
             } else {
                 if (playlistCount >= MAX_PLAYLISTS) {
-                    plSkipped++; warn("Playlist “$name” skipped: the limit is $MAX_PLAYLISTS playlists"); continue
+                    plSkipped++
+                    warn("Playlist “$name” skipped: the limit is $MAX_PLAYLISTS playlists")
+                    continue
                 }
                 val tags = p.tags.map { it.trim().take(50) }.filter { it.isNotBlank() }.distinct().take(20)
                 id = if (commit) {
-                    try { library.createPlaylist(name, tags) }
-                    catch (e: CancellationException) { throw e }
-                    catch (e: Exception) { plSkipped++; warn("Couldn't create playlist “$name”"); continue }
-                } else -1L
+                    try {
+                        library.createPlaylist(name, tags)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        plSkipped++
+                        warn("Couldn't create playlist “$name”")
+                        continue
+                    }
+                } else {
+                    -1L
+                }
                 have = HashSet()
                 created = true
                 playlistCount++
             }
-            var added = 0; var there = 0; var skipped = 0
+            var added = 0
+            var there = 0
+            var skipped = 0
             val seen = HashSet<String>()
             for (t in p.tracks) {
                 val k = t.key
-                if (!seen.add(k)) { duplicates++; continue }
-                if (k in have) { there++; continue }
-                val track = t.toTrackOrNull()
-                if (track == null || have.size >= MAX_PLAYLIST_TRACKS) { skipped++; continue }
-                if (commit) {
-                    try { library.appendTrack(id, track) }
-                    catch (e: CancellationException) { throw e }
-                    catch (e: Exception) { skipped++; continue }
+                if (!seen.add(k)) {
+                    duplicates++
+                    continue
                 }
-                have += k; added++
+                if (k in have) {
+                    there++
+                    continue
+                }
+                val track = t.toTrackOrNull()
+                if (track == null || have.size >= MAX_PLAYLIST_TRACKS) {
+                    skipped++
+                    continue
+                }
+                if (commit) {
+                    try {
+                        library.appendTrack(id, track)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        skipped++
+                        continue
+                    }
+                }
+                have += k
+                added++
             }
             outcomes += PlaylistOutcome(name, created, added, there, skipped)
         }
 
         val haveFollows = HashSet<String>().also { set -> if (!simulateEmpty) followRepository.observeAll().first().mapTo(set) { it.artistKey } }
         val seenFollow = HashSet<String>()
-        var folAdded = 0; var folThere = 0; var folSkipped = 0
+        var folAdded = 0
+        var folThere = 0
+        var folSkipped = 0
         for (f in doc.follows) {
             val k = f.id.trim()
-            if (!seenFollow.add(k)) { duplicates++; continue }
-            if (k in haveFollows) { folThere++; continue }
+            if (!seenFollow.add(k)) {
+                duplicates++
+                continue
+            }
+            if (k in haveFollows) {
+                folThere++
+                continue
+            }
             val name = f.name.trim().take(200)
-            if (parseArtistKey(k) == null || name.isBlank() || haveFollows.size >= MAX_FOLLOWS) { folSkipped++; continue }
+            if (parseArtistKey(k) == null || name.isBlank() || haveFollows.size >= MAX_FOLLOWS) {
+                folSkipped++
+                continue
+            }
             val art = f.artworkUrl?.takeIf { it.startsWith("https://") }?.take(500)
             if (commit) {
-                val added = try { followRepository.importFollow(k, name, art, f.followedAt.sane(now)) }
-                catch (e: CancellationException) { throw e }
-                catch (e: Exception) { folSkipped++; continue }
-                if (!added) { folThere++; continue }
+                val added = try {
+                    followRepository.importFollow(k, name, art, f.followedAt.sane(now))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    folSkipped++
+                    continue
+                }
+                if (!added) {
+                    folThere++
+                    continue
+                }
             }
-            haveFollows += k; folAdded++
+            haveFollows += k
+            folAdded++
         }
 
         return ImportReport(
@@ -333,7 +421,9 @@ class DataExporter @Inject constructor(
         val spec = PBEKeySpec(password, salt, 210_000, 256)
         try {
             return SecretKeySpec(SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded, "AES")
-        } finally { spec.clearPassword() }
+        } finally {
+            spec.clearPassword()
+        }
     }
 
     private fun b64(bytes: ByteArray) = Base64.encodeToString(bytes, Base64.NO_WRAP)

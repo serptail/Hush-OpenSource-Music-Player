@@ -3,12 +3,12 @@ package com.gamut.core.player
 import android.app.PendingIntent
 import android.content.Intent
 import android.net.Uri
-import android.util.Log
 import android.os.Bundle
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.session.CommandButton
+import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
@@ -35,6 +35,7 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class GamutMediaSessionService : MediaLibraryService() {
     @Inject lateinit var musicPlayer: MusicPlayer
+
     @Inject lateinit var browseTree: BrowseTreeProvider
     private var session: MediaLibrarySession? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -117,6 +118,7 @@ class GamutMediaSessionService : MediaLibraryService() {
         ): ListenableFuture<SessionResult> {
             when (customCommand.customAction) {
                 ACTION_SHUFFLE -> musicPlayer.setShuffle(!musicPlayer.shuffleEnabled.value)
+
                 ACTION_REPEAT -> musicPlayer.setRepeatMode(
                     when (musicPlayer.repeatMode.value) {
                         RepeatMode.OFF -> RepeatMode.ALL
@@ -157,8 +159,11 @@ class GamutMediaSessionService : MediaLibraryService() {
             mediaId: String,
         ): ListenableFuture<LibraryResult<MediaItem>> = future {
             val entry = browseTree.item(mediaId)
-            if (entry == null) LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
-            else LibraryResult.ofItem(toItem(entry), null)
+            if (entry == null) {
+                LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
+            } else {
+                LibraryResult.ofItem(toItem(entry), null)
+            }
         }
 
         override fun onSearch(
@@ -280,7 +285,9 @@ class GamutMediaSessionService : MediaLibraryService() {
     override fun onDestroy() {
         (musicPlayer as Media3MusicPlayer).onSessionPlayerChanged = null
         scope.cancel()
-        session?.release(); session = null; super.onDestroy()
+        session?.release()
+        session = null
+        super.onDestroy()
     }
 
     private companion object {

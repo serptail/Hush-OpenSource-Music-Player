@@ -146,7 +146,10 @@ internal fun rememberCoverTint(url: String?): CoverTint {
             tint = CoverTint.Neutral
             return@LaunchedEffect
         }
-        tintCache[url]?.let { tint = it; return@LaunchedEffect }
+        tintCache[url]?.let {
+            tint = it
+            return@LaunchedEffect
+        }
         val found = withContext(Dispatchers.IO) {
             runCatching {
                 val request = ImageRequest.Builder(context).data(url).allowHardware(false).build()
@@ -170,17 +173,19 @@ private fun tintFromBitmap(bitmap: Bitmap): CoverTint {
     var hx = 0f
     var hy = 0f
     var sat = 0f
-    for (x in 0 until size) for (y in 0 until size) {
-        android.graphics.Color.colorToHSV(sample[x, y], hsv)
-        val s = hsv[1]
-        val v = hsv[2]
-        if (v < 0.15f || s < 0.15f) continue
-        val w = s * s * v
-        val rad = Math.toRadians(hsv[0].toDouble())
-        hx += (cos(rad) * w).toFloat()
-        hy += (sin(rad) * w).toFloat()
-        sat += s * w
-        weight += w
+    for (x in 0 until size) {
+        for (y in 0 until size) {
+            android.graphics.Color.colorToHSV(sample[x, y], hsv)
+            val s = hsv[1]
+            val v = hsv[2]
+            if (v < 0.15f || s < 0.15f) continue
+            val w = s * s * v
+            val rad = Math.toRadians(hsv[0].toDouble())
+            hx += (cos(rad) * w).toFloat()
+            hy += (sin(rad) * w).toFloat()
+            sat += s * w
+            weight += w
+        }
     }
     if (weight < 20f) return CoverTint.Neutral
     var hue = Math.toDegrees(atan2(hy.toDouble(), hx.toDouble())).toFloat()

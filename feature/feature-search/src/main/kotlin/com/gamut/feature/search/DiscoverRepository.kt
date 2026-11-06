@@ -7,20 +7,20 @@ import com.gamut.core.network.AppleChartItem
 import com.gamut.core.network.AppleChartsApi
 import com.gamut.core.network.ItunesApi
 import java.time.LocalDate
-import javax.inject.Inject
 import java.util.concurrent.ConcurrentHashMap
+import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.async
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 data class DiscoverState(
@@ -76,8 +76,13 @@ class DiscoverRepository @Inject constructor(
         feedRepo.clearCache()
     }
 
-    private inline fun <T> safe(block: () -> T): Result<T> =
-        try { Result.success(block()) } catch (e: CancellationException) { throw e } catch (e: Exception) { Result.failure(e) }
+    private inline fun <T> safe(block: () -> T): Result<T> = try {
+        Result.success(block())
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
 
     private suspend fun <T> fetchList(label: String, timeoutMs: Long, attempts: Int = 3, block: suspend () -> List<T>): List<T> {
         repeat(attempts) { n ->
@@ -109,11 +114,16 @@ class DiscoverRepository @Inject constructor(
     }
 
     private fun logW(message: String) {
-        try { Log.w(TAG, message) } catch (_: Throwable) { }
+        try {
+            Log.w(TAG, message)
+        } catch (_: Throwable) { }
     }
 
     fun discoverFlow(): Flow<DiscoverState> = channelFlow {
-        cachedDiscover?.let { send(it.copy(isLoading = false)); return@channelFlow }
+        cachedDiscover?.let {
+            send(it.copy(isLoading = false))
+            return@channelFlow
+        }
         val stale = diskCache.read()
         if (stale != null) send(stale)
         val (songs, rawAlbums, bb) = coroutineScope {
@@ -157,7 +167,11 @@ class DiscoverRepository @Inject constructor(
             .distinctBy { it.first }.take(10)
         val slots = arrayOfNulls<DiscoverItem>(seeds.size)
         fun placeholder(seed: Triple<Long, String, AppleChartItem>) = DiscoverItem(
-            id = "artist-seed:${seed.first}", title = seed.second, subtitle = "", imageUrl = seed.third.artworkUrl100.big(), artistId = seed.first,
+            id = "artist-seed:${seed.first}",
+            title = seed.second,
+            subtitle = "",
+            imageUrl = seed.third.artworkUrl100.big(),
+            artistId = seed.first,
         )
         fun shown(): List<DiscoverItem> = seeds.mapIndexed { i, s -> slots[i] ?: placeholder(s) }
 
@@ -175,7 +189,12 @@ class DiscoverRepository @Inject constructor(
                 withTimeoutOrNull(FEED_TIMEOUT_MS) {
                     safe {
                         val known = lock.withLock { artistsNow.map { artistKey(it.title) }.toSet() }
-                        feedRepo.head(known) { section -> lock.withLock { putFeed(section); send(state()) } }
+                        feedRepo.head(known) { section ->
+                            lock.withLock {
+                                putFeed(section)
+                                send(state())
+                            }
+                        }
                     }
                 }
             }
@@ -187,29 +206,37 @@ class DiscoverRepository @Inject constructor(
                                 val card = gate.withPermit { fetchOne(label = "artist card $name") { catalog.artistCard(id, name) } } ?: return@launch
                                 lock.withLock {
                                     slots[index] = card
-                                    if (progressive) { artistsNow = shown(); send(state()) }
+                                    if (progressive) {
+                                        artistsNow = shown()
+                                        send(state())
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-            if (bb.isNotEmpty()) launch {
-                var lastPushMs = 0L
-                withTimeoutOrNull(BILLBOARD_RESOLVE_TIMEOUT_MS) {
-                    billboard.resolve(bb.take(BILLBOARD_TAB_LIMIT)) { entry, track ->
-                        lock.withLock {
-                            resolved[entry.key] = track
-                            val now = System.currentTimeMillis()
-                            if (now - lastPushMs >= PUSH_THROTTLE_MS) {
-                                lastPushMs = now
-                                tabsNow = buildTabs()
-                                send(state())
+            if (bb.isNotEmpty()) {
+                launch {
+                    var lastPushMs = 0L
+                    withTimeoutOrNull(BILLBOARD_RESOLVE_TIMEOUT_MS) {
+                        billboard.resolve(bb.take(BILLBOARD_TAB_LIMIT)) { entry, track ->
+                            lock.withLock {
+                                resolved[entry.key] = track
+                                val now = System.currentTimeMillis()
+                                if (now - lastPushMs >= PUSH_THROTTLE_MS) {
+                                    lastPushMs = now
+                                    tabsNow = buildTabs()
+                                    send(state())
+                                }
                             }
                         }
                     }
+                    lock.withLock {
+                        tabsNow = buildTabs()
+                        send(state())
+                    }
                 }
-                lock.withLock { tabsNow = buildTabs(); send(state()) }
             }
         }
         val portraitsComplete = seeds.isNotEmpty() && slots.all { it != null }
@@ -227,8 +254,7 @@ class DiscoverRepository @Inject constructor(
         }
     }
 
-    private fun DiscoverState.quality(): Int =
-        tabs.size * 10 + (if (albums.isNotEmpty()) 5 else 0) + artists.count { !it.id.startsWith("artist-seed:") } + feed.size * 2
+    private fun DiscoverState.quality(): Int = tabs.size * 10 + (if (albums.isNotEmpty()) 5 else 0) + artists.count { !it.id.startsWith("artist-seed:") } + feed.size * 2
 
     private fun blendTrending(apple: List<AppleChartItem>, bb: List<BillboardEntry>, resolved: Map<String, Track>): List<DiscoverItem> {
         val bbByKey = bb.associateBy { it.key }
@@ -268,8 +294,7 @@ class DiscoverRepository @Inject constructor(
 
     suspend fun artistSongs(base: ArtistDetails): ArtistDetails = catalog.artistSongs(base)
 
-    suspend fun artistPhoto(base: ArtistDetails): String? =
-        catalog.artistPhoto(base.id, base.name, base.albums.map { it.title }.take(40))
+    suspend fun artistPhoto(base: ArtistDetails): String? = catalog.artistPhoto(base.id, base.name, base.albums.map { it.title }.take(40))
 
     suspend fun similarArtists(base: ArtistDetails): List<DiscoverItem> = catalog.similarArtists(base)
 
@@ -305,16 +330,28 @@ class DiscoverRepository @Inject constructor(
     }
 
     private fun AppleChartItem.toDiscoverItem() = DiscoverItem(
-        id = "apple-track:$id", title = name, subtitle = artistName, imageUrl = artworkUrl100.big(), track = toTrack(),
+        id = "apple-track:$id",
+        title = name,
+        subtitle = artistName,
+        imageUrl = artworkUrl100.big(),
+        track = toTrack(),
     )
 
     private fun AppleChartItem.toTrack() = Track(
-        isrc = "apple:$id", title = name, artist = artistName, album = null,
-        durationMs = 0L, albumArtUrl = artworkUrl100.big(), source = TrackSource.ITUNES,
+        isrc = "apple:$id",
+        title = name,
+        artist = artistName,
+        album = null,
+        durationMs = 0L,
+        albumArtUrl = artworkUrl100.big(),
+        source = TrackSource.ITUNES,
     )
 
     private fun AppleChartItem.toDiscoverAlbum() = DiscoverItem(
-        id = "apple-album:$id", title = name, subtitle = artistName, imageUrl = artworkUrl100.big(),
+        id = "apple-album:$id",
+        title = name,
+        subtitle = artistName,
+        imageUrl = artworkUrl100.big(),
     )
 
     private companion object {

@@ -29,8 +29,11 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            if (runAttemptCount < MAX_ATTEMPTS) Result.retry()
-            else Result.failure(workDataOf(K_ERROR to (e.message ?: "The download failed.")))
+            if (runAttemptCount < MAX_ATTEMPTS) {
+                Result.retry()
+            } else {
+                Result.failure(workDataOf(K_ERROR to (e.message ?: "The download failed.")))
+            }
         }
     }
 

@@ -41,8 +41,7 @@ class AvatarRepository @Inject constructor(
     private fun key(userId: String?) = userId ?: "local"
     private fun urlKey(userId: String?) = "url_${key(userId)}"
     private fun dirtyKey(userId: String) = "dirty_$userId"
-    private fun localFile(userId: String?): File? =
-        dir.listFiles { f -> f.name.startsWith("${key(userId)}_") }?.maxByOrNull { it.lastModified() }
+    private fun localFile(userId: String?): File? = dir.listFiles { f -> f.name.startsWith("${key(userId)}_") }?.maxByOrNull { it.lastModified() }
 
     fun model(userId: String?): Flow<Any?> = tick.map { localFile(userId) ?: prefs.getString(urlKey(userId), null) }
 
@@ -75,7 +74,10 @@ class AvatarRepository @Inject constructor(
         runCatching {
             if (prefs.getBoolean(dirtyKey(userId), false)) {
                 val file = localFile(userId)
-                if (file != null) { upload(userId, withContext(Dispatchers.IO) { file.readBytes() }); return@runCatching }
+                if (file != null) {
+                    upload(userId, withContext(Dispatchers.IO) { file.readBytes() })
+                    return@runCatching
+                }
                 prefs.edit().putBoolean(dirtyKey(userId), false).apply()
             }
             val remote = supabase.from("profiles").select(Columns.list("avatar_url")) { filter { eq("id", userId) } }
@@ -96,7 +98,10 @@ class AvatarRepository @Inject constructor(
 
     private suspend fun upload(uid: String, bytes: ByteArray) {
         val bucket = supabase.storage.from(BUCKET)
-        bucket.upload("$uid.webp", bytes) { upsert = true; contentType = ContentType.parse("image/webp") }
+        bucket.upload("$uid.webp", bytes) {
+            upsert = true
+            contentType = ContentType.parse("image/webp")
+        }
         val url = "${bucket.publicUrl("$uid.webp")}?v=${System.currentTimeMillis()}"
         supabase.from("profiles").update({ set("avatar_url", url) }) { filter { eq("id", uid) } }
         prefs.edit().putString(urlKey(uid), url).putBoolean(dirtyKey(uid), false).apply()
@@ -122,6 +127,7 @@ class AvatarRepository @Inject constructor(
         val side = min(upright.width, upright.height)
         val square = Bitmap.createBitmap(upright, (upright.width - side) / 2, (upright.height - side) / 2, side, side)
         val out = Bitmap.createScaledBitmap(square, SIZE, SIZE, true)
+
         @Suppress("DEPRECATION")
         val format = if (Build.VERSION.SDK_INT >= 30) Bitmap.CompressFormat.WEBP_LOSSY else Bitmap.CompressFormat.WEBP
         return ByteArrayOutputStream().also { out.compress(format, 85, it) }.toByteArray()

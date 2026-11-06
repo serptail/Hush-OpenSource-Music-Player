@@ -5,14 +5,17 @@ import android.content.Context
 import android.content.ContextWrapper
 import androidx.fragment.app.FragmentActivity
 import com.hcaptcha.sdk.HCaptcha
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 private const val SITE_KEY = "50b2fe65-b00b-4b9e-ad62-3ba471098be2"
 
 fun Context.findActivity(): Activity? {
     var c = this
-    while (c is ContextWrapper) { if (c is Activity) return c; c = c.baseContext }
+    while (c is ContextWrapper) {
+        if (c is Activity) return c
+        c = c.baseContext
+    }
     return null
 }
 

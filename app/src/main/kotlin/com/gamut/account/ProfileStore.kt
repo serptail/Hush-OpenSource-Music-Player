@@ -31,5 +31,7 @@ class ProfileStore @Inject constructor(@ApplicationContext context: Context) {
 
     private fun nameKey(userId: String?) = "name_${userId ?: "local"}"
 
-    private companion object { const val KEY_AUTO_BACKUP = "auto_backup" }
+    private companion object {
+        const val KEY_AUTO_BACKUP = "auto_backup"
+    }
 }

@@ -66,13 +66,16 @@ class SearchViewModel @Inject constructor(
     private val consumedFeedIds = HashSet<String>()
 
     val discover: StateFlow<DiscoverState> = combine(_discover, _tail) { base, tail ->
-        if (base.tabs.isEmpty()) base
-        else base.copy(
-            feed = base.feed + tail.sections,
-            feedLoadingMore = tail.loading,
-            feedExhausted = tail.exhausted,
-            feedFailed = tail.failed,
-        )
+        if (base.tabs.isEmpty()) {
+            base
+        } else {
+            base.copy(
+                feed = base.feed + tail.sections,
+                feedLoadingMore = tail.loading,
+                feedExhausted = tail.exhausted,
+                feedFailed = tail.failed,
+            )
+        }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, DiscoverState())
 
     private val artistSignal = MutableStateFlow<ArtistSignal?>(null)
@@ -81,13 +84,16 @@ class SearchViewModel @Inject constructor(
         .debounce(300)
         .distinctUntilChanged()
         .mapLatest { value ->
-            if (value.trim().length < MIN_QUERY_LENGTH) null
-            else try {
-                discoverRepository.artistHit(value)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
+            if (value.trim().length < MIN_QUERY_LENGTH) {
                 null
+            } else {
+                try {
+                    discoverRepository.artistHit(value)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
             }
         }
 
@@ -168,10 +174,13 @@ class SearchViewModel @Inject constructor(
         loadDiscover()
         viewModelScope.launch {
             query.debounce(250).flatMapLatest { value ->
-                if (value.trim().length < MIN_QUERY_LENGTH) flowOf(SearchResult(emptyList(), true) to false)
-                else repository.search(value)
-                    .map { it to false }
-                    .catch { emit(SearchResult(emptyList(), true) to true) }
+                if (value.trim().length < MIN_QUERY_LENGTH) {
+                    flowOf(SearchResult(emptyList(), true) to false)
+                } else {
+                    repository.search(value)
+                        .map { it to false }
+                        .catch { emit(SearchResult(emptyList(), true) to true) }
+                }
             }.collect { (result, failed) ->
                 val stillSearching = query.value.trim().length >= MIN_QUERY_LENGTH
                 val tracks = if (stillSearching) result.tracks else emptyList()
@@ -196,8 +205,11 @@ class SearchViewModel @Inject constructor(
         if (value.isBlank()) artistSignal.value = null
         val searching = value.trim().length >= MIN_QUERY_LENGTH
         _state.update {
-            if (value.isBlank()) SearchUiState()
-            else it.copy(query = value, error = null, isLoading = if (searching) changed || it.isLoading else false)
+            if (value.isBlank()) {
+                SearchUiState()
+            } else {
+                it.copy(query = value, error = null, isLoading = if (searching) changed || it.isLoading else false)
+            }
         }
     }
 }

@@ -116,7 +116,8 @@ fun FeedbackScreen(
         if (ui.emailError) {
             Text(
                 "That email address doesn\u2019t look right.",
-                style = MaterialTheme.typography.bodyMedium, color = GamutDestructive,
+                style = MaterialTheme.typography.bodyMedium,
+                color = GamutDestructive,
                 modifier = Modifier.padding(top = 8.dp, start = 4.dp),
             )
         }
@@ -135,15 +136,23 @@ fun FeedbackScreen(
         Column(Modifier.softResize()) {
             if (ui.error != null) {
                 Text(
-                    ui.error!!, style = MaterialTheme.typography.bodyMedium, color = GamutDestructive,
-                    textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+                    ui.error!!,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = GamutDestructive,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
                 )
             }
         }
         Spacer(Modifier.height(if (ui.error != null) 12.dp else 24.dp))
         GamutButton(
             label = if (sending) "Sending\u2026" else "Send",
-            onClick = { if (canSend && activity != null) { focus.clearFocus(); vm.send { activity.solveHCaptcha() } } },
+            onClick = {
+                if (canSend && activity != null) {
+                    focus.clearFocus()
+                    vm.send { activity.solveHCaptcha() }
+                }
+            },
             modifier = Modifier.fillMaxWidth().alpha(if (canSend) 1f else 0.45f),
         )
         Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.ime))
@@ -195,7 +204,8 @@ private fun StarRating(rating: Int, onChange: (Int) -> Unit) {
         }
         Hint(
             if (rating in 1..5) StarLabels[rating - 1] else "Optional",
-            Modifier.fillMaxWidth().padding(top = 6.dp), TextAlign.Center,
+            Modifier.fillMaxWidth().padding(top = 6.dp),
+            TextAlign.Center,
         )
     }
 }

@@ -8,9 +8,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -33,8 +33,8 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -52,21 +52,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.fill.CheckCircle
-import com.adamglin.phosphoricons.fill.DeviceMobileCamera
-import com.adamglin.phosphoricons.fill.Heart
+import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.CaretRight
 import com.adamglin.phosphoricons.bold.MagnifyingGlass
 import com.adamglin.phosphoricons.bold.MusicNote
-import com.adamglin.phosphoricons.bold.PlusCircle
+import com.adamglin.phosphoricons.bold.MusicNoteSimple
 import com.adamglin.phosphoricons.bold.Plus
+import com.adamglin.phosphoricons.bold.PlusCircle
 import com.adamglin.phosphoricons.bold.Rows
 import com.adamglin.phosphoricons.bold.SquaresFour
-import com.adamglin.phosphoricons.bold.MusicNoteSimple
-import com.gamut.core.designsystem.adaptiveGutter
-import com.gamut.core.designsystem.isWideLayout
+import com.adamglin.phosphoricons.fill.CheckCircle
+import com.adamglin.phosphoricons.fill.DeviceMobileCamera
+import com.adamglin.phosphoricons.fill.Heart
 import com.gamut.core.designsystem.AcrylicMaterials
 import com.gamut.core.designsystem.AcrylicTone
 import com.gamut.core.designsystem.BottomBarItem
@@ -76,15 +74,19 @@ import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.acrylicFill
+import com.gamut.core.designsystem.adaptiveGutter
 import com.gamut.core.designsystem.fadeEdges
 import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.isWideLayout
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.model.Track
 
 private val TextPrimary: Color
-    @Composable @ReadOnlyComposable get() = ink()
+    @Composable @ReadOnlyComposable
+    get() = ink()
 private val TextSecondary: Color
-    @Composable @ReadOnlyComposable get() = ink(0.6f)
+    @Composable @ReadOnlyComposable
+    get() = ink(0.6f)
 
 private val PanelShape = RoundedCornerShape(12.dp)
 private val ButtonShape = RoundedCornerShape(8.dp)

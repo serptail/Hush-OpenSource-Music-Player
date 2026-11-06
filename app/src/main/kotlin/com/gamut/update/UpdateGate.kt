@@ -73,7 +73,10 @@ fun UpdateGate(vm: AppUpdateViewModel = hiltViewModel(), content: @Composable ()
                 val info = ui.required
                 if (info == null) {
                     var showSpinner by remember { mutableStateOf(false) }
-                    LaunchedEffect(Unit) { delay(500); showSpinner = true }
+                    LaunchedEffect(Unit) {
+                        delay(500)
+                        showSpinner = true
+                    }
                     if (showSpinner) CircularProgressIndicator(Modifier.size(28.dp), color = ink(0.6f), strokeWidth = 2.dp)
                 } else {
                     UpdateRequired(ui, info, onUpdate = vm::startUpdate, onSkip = vm::skip)
@@ -89,18 +92,23 @@ private fun UpdateRequired(ui: UpdateUiState, info: UpdateInfo, onUpdate: () -> 
         Text("Update required", style = GamutHeading, color = ink())
         Text(
             "Gamut ${info.versionName} is out. YouTube changes all the time, so every update has to be installed to keep playback working.",
-            style = MaterialTheme.typography.bodyLarge, color = ink(0.7f), modifier = Modifier.padding(top = 12.dp),
+            style = MaterialTheme.typography.bodyLarge,
+            color = ink(0.7f),
+            modifier = Modifier.padding(top = 12.dp),
         )
         if (info.notes.isNotBlank()) ReleaseNotes(info.notes.take(400))
         Spacer(Modifier.height(28.dp))
 
         when (ui.phase) {
             UpdatePhase.DOWNLOADING -> UpdateProgress(ui.progress, "Downloading")
+
             UpdatePhase.INSTALLING -> UpdateProgress(1f, "Installing")
+
             UpdatePhase.NEEDS_PERMISSION -> InfoBlock(
                 "Android needs your OK before Gamut can install updates. Allow it on the next screen, then come back.",
                 color = ink(0.7f),
             )
+
             else -> Unit
         }
         if (ui.error != null) InfoBlock(ui.error, color = GamutDestructive)
