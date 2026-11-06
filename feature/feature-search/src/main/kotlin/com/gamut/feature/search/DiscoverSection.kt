@@ -144,7 +144,7 @@ internal fun LazyListScope.discoverFeaturedItems(
         item(key = "artists-title") { DiscoverSectionTitle("Artists to know") }
         item(key = "artists-row") {
             LazyRow(
-                contentPadding = PaddingValues(horizontal = 24.dp),
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(18.dp),
             ) {
                 items(state.artists, key = { it.id }) { artist -> ArtistBubble(artist) { artist.artistId?.let(onArtistClick) } }
@@ -157,7 +157,7 @@ internal fun LazyListScope.discoverFeaturedItems(
         item(key = "albums-title") { DiscoverSectionTitle("Albums on the rise") }
         item(key = "albums-row") {
             LazyRow(
-                contentPadding = PaddingValues(horizontal = 24.dp),
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 items(state.albums, key = { it.id }) { album -> AlbumCard(album) { onAlbumClick(album) } }
@@ -216,7 +216,7 @@ internal fun LazyListScope.discoverChartItems(
     item(key = "charts-title") { DiscoverSectionTitle("Charts") }
     item(key = "charts-tabs") {
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 24.dp),
+            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             itemsIndexed(state.tabs, key = { _, t -> t.label }) { i, t -> Pill(t.label, i == tabIndex) { onSelectTab(i) } }
@@ -535,19 +535,19 @@ private fun LazyListScope.feedSectionItems(
                 FeedKind.QUICK_PICKS -> QuickPicksGrid(section.items, playing, play)
                 FeedKind.TRACK_RAILS -> TrackRails(section.items, playing, play, onMoreClick)
                 FeedKind.TRACK_CAROUSEL -> LazyRow(
-                    contentPadding = PaddingValues(horizontal = 24.dp),
+                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     items(section.items, key = { it.id }) { song -> AlbumCard(song, isPlaying = playing(song)) { play(song) } }
                 }
                 FeedKind.ALBUM_CAROUSEL -> LazyRow(
-                    contentPadding = PaddingValues(horizontal = 24.dp),
+                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     items(section.items, key = { it.id }) { album -> AlbumCard(album) { onAlbumClick(album) } }
                 }
                 FeedKind.ARTIST_CAROUSEL -> LazyRow(
-                    contentPadding = PaddingValues(horizontal = 24.dp),
+                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(18.dp),
                 ) {
                     items(section.items, key = { it.id }) { artist -> ArtistBubble(artist) { onArtistItemClick(artist) } }
@@ -612,7 +612,7 @@ private fun TrackRails(
 ) {
     val pages = remember(items) { items.chunked(3) }
     // 16dp gutter + the row's own 8dp padding = the same 24dp text edge as everything else.
-    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         itemsIndexed(pages, key = { index, _ -> index }) { _, page ->
             Column(Modifier.fillParentMaxWidth(0.9f)) {
                 page.forEach { item ->

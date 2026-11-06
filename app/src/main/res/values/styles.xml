@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="gamut_dark">#0B0B0D</color>
+    <color name="gamut_dark">#0F0F10</color>
 
     <style name="Theme.Gamut" parent="android:Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#1B6B5B</item>
+        <item name="android:colorAccent">#7048D8</item>
         <item name="android:windowBackground">@color/gamut_dark</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>

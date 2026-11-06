@@ -9,15 +9,16 @@ Copy the res/ folder into app/src/main/res/. Default sizes: mark 120dp wide, hor
 Override with layout_width / layout_height as needed (aspect ratio is preserved with fitCenter).
 
 ## res/drawable-*dpi  (exact ribbon, lossless WebP)
-ic_gamut_mark_color_exact.webp – pixel-faithful to wave_ribbon.svg (incl. blur + glossy shading).
+ic_gamut_mark_color_exact.webp – lossless render of the new Gamut ribbon (blue -> violet -> magenta).
 Baseline 120dp wide: mdpi 120px … xxxhdpi 480px.
 Use this where exact colors matter; use the VectorDrawable where size/scaling matter.
 
-## png  (transparent masters, exact ribbon)
+## png  (transparent masters, new logos)
 mark 1600w; horizontal + stacked at 2400w, darktext/lighttext. For splash screens, store listings, etc.
 
 ## svg  (lightweight web/design versions, gradient ribbon, 5–6 KB)
 Same variants as the VectorDrawables.
 
-Note: the gradient vectors approximate the ribbon with one linear gradient (≈18/255 RMS color error);
-they lose the glossy highlights. Exact artwork = the WebP/PNG files.
+Note: every file in this pack is rebuilt from the new Gamut brand-kit logos (lowercase wordmark with the curvy "m";
+ribbon gradient #3752DB -> #7048D8 -> #B8329E). File names are unchanged, so it drops in over the old pack. The PNG/WebP files
+are renders of the same vector artwork, so they match the VectorDrawables exactly.

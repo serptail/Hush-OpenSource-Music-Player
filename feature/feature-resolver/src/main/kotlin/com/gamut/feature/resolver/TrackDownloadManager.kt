@@ -338,8 +338,8 @@ class TrackDownloadManager @Inject constructor(
         if (!storageSettings.current.wifiOnly) return true
         return try {
             val cm = context.getSystemService(ConnectivityManager::class.java) ?: return true
-            val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+            if (cm.activeNetwork == null) return false
+            !cm.isActiveNetworkMetered
         } catch (_: SecurityException) {
             true   // ACCESS_NETWORK_STATE missing: do not block downloads over it
         }

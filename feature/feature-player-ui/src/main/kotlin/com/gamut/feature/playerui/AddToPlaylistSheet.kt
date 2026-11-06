@@ -1,5 +1,6 @@
 package com.gamut.feature.playerui
 
+import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.ink
 import androidx.compose.animation.AnimatedVisibility
@@ -84,6 +85,7 @@ internal fun AddToPlaylistSheet(
                 Row(
                     Modifier
                         .fillMaxWidth()
+                        .focusRing(RoundedCornerShape(12.dp))
                         .clickable { if (added) onRemove(playlist) else onPick(playlist) }
                         .padding(horizontal = 24.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,

@@ -30,6 +30,15 @@ import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.focusProperties
+import com.gamut.core.designsystem.LocalFocusLive
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import com.gamut.core.designsystem.focusRing
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -106,7 +115,10 @@ internal fun ArtworkWithRing(
     onTogglePlay: () -> Unit,
     onScrub: (Float?) -> Unit,
     onSeekFraction: (Float) -> Unit,
+    /** Fraction of the song one remote fast-forward / rewind key press moves (about 10 s). */
+    seekStep: Float = 0.04f,
 ) {
+    val live = LocalFocusLive.current   // false while the player is parked or covered: the cover must not take D-pad focus
     // Stretched + exaggerated once, so loud and quiet parts of the song look clearly different.
     val shapedWaveform = remember(waveform) { shapeWaveform(waveform) }
     // Read at draw time (not baked into drawWithCache), so bars update when the waveform finishes decoding.
@@ -259,6 +271,20 @@ internal fun ArtworkWithRing(
                 Modifier
                     .fillMaxSize()
                     .onSizeChanged { ringSize = it }
+                    // TV remote: the cover is a focus stop. OK / Enter / play-pause key toggles playback, fast-forward and
+                    // rewind keys seek. D-pad left / right stay free for moving to Previous / Next.
+                    .focusRing(RoundedCornerShape(CoverCornerRadius))
+                    .onKeyEvent { e ->
+                        if (!enabled || e.type != KeyEventType.KeyDown) return@onKeyEvent false
+                        when (e.key) {
+                            Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.MediaPlayPause -> { currentToggle(); tapTrigger++; true }
+                            Key.MediaFastForward, Key.MediaStepForward -> { currentSeek((progress() + seekStep).coerceIn(0f, 1f)); true }
+                            Key.MediaRewind, Key.MediaStepBackward -> { currentSeek((progress() - seekStep).coerceIn(0f, 1f)); true }
+                            else -> false
+                        }
+                    }
+                    .focusProperties { if (!live) canFocus = false }
+                    .focusable(enabled)
                     .pointerInput(enabled, ringSize) {
                         if (!enabled || ringSize.width == 0) return@pointerInput
                         val marginPx = RingInset.toPx()

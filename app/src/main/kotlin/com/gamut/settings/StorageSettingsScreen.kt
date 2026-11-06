@@ -159,6 +159,7 @@ fun StorageSettingsScreen(
             onCancelAll = vm.downloads::cancelAll,
             onRetry = vm.downloads::retryFailed,
             onClearFailed = vm.downloads::clearFailed,
+            onAllowMobile = { vm.settings.update { it.copy(wifiOnly = false) } },
         )
 
         // ---------------- Downloads ----------------
@@ -421,7 +422,7 @@ private fun LegendItem(color: Color, label: String, value: String) {
 
 /** Collects the fast-changing download state itself, so only this card recomposes while a song downloads. */
 @Composable
-private fun QueueCard(manager: TrackDownloadManager, onCancelAll: () -> Unit, onRetry: () -> Unit, onClearFailed: () -> Unit) {
+private fun QueueCard(manager: TrackDownloadManager, onCancelAll: () -> Unit, onRetry: () -> Unit, onClearFailed: () -> Unit, onAllowMobile: () -> Unit) {
     val batch by manager.batch.collectAsState()
     val live by manager.states.collectAsState()
     val failed = live.values.count { it is DownloadState.Failed }
@@ -449,7 +450,7 @@ private fun QueueCard(manager: TrackDownloadManager, onCancelAll: () -> Unit, on
                             style = MaterialTheme.typography.titleMedium, color = ink(),
                         )
                         Text(
-                            if (shownBatch.waitingForWifi) "Downloads continue when you are on an unmetered network." else shownBatch.current.orEmpty(),
+                            if (shownBatch.waitingForWifi) "\u201CDownload on Wi-Fi only\u201D is on, so nothing downloads over mobile data." else shownBatch.current.orEmpty(),
                             style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), maxLines = 1,
                             overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp),
                         )
@@ -458,6 +459,10 @@ private fun QueueCard(manager: TrackDownloadManager, onCancelAll: () -> Unit, on
                             Box(Modifier.fillMaxWidth(bar.coerceAtLeast(0.02f)).fillMaxHeight().background(MaterialTheme.colorScheme.primary, CircleShape))
                         }
                         Spacer(Modifier.height(14.dp))
+                        if (shownBatch.waitingForWifi) {
+                            GamutButton("Download on mobile data", onAllowMobile, Modifier.fillMaxWidth())
+                            Spacer(Modifier.height(10.dp))
+                        }
                         GamutButton("Cancel all", onCancelAll, Modifier.fillMaxWidth(), filled = false)
                     }
                     if (shownFailed > 0) {

@@ -6,12 +6,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.FocusInteraction
 import androidx.compose.animation.core.Animatable
@@ -64,14 +68,16 @@ import kotlinx.coroutines.launch
  *  - press:   shrinks fast and firm (critically damped, no wobble while the finger is down)
  *  - release: springs back with a small overshoot, which is the soft bounce
  *  - hover:   mouse / stylus / trackpad (ChromeOS, tablets, desktop mode) gets a gentle lift; touch never hovers
- *  - focus:   D-pad / keyboard focus lifts the item and draws a ring; Enter / D-pad center clicks (clickable handles that)
+ *  - focus:   D-pad / keyboard focus NEVER resizes the item (scaling pushed rows past screen / card edges and shifted their
+ *             text). It draws a soft fill plus a 2dp ring entirely INSIDE the item's own bounds, so no parent can clip it
+ *             and nothing around it moves. Enter / D-pad center clicks (clickable handles that)
  *  - a light haptic tick on click
  */
 fun Modifier.pressScale(
     onClick: () -> Unit,
     scaleDown: Float = 0.94f,
     hoverScale: Float = 1.02f,
-    focusScale: Float = 1.06f,
+    focusScale: Float = 1f,
     enabled: Boolean = true,
     haptics: Boolean = true,
 ): Modifier = composed {
@@ -80,7 +86,9 @@ fun Modifier.pressScale(
     // 0..1, read only in the draw phase: the D-pad focus ring fades in without recomposing the row.
     val ring = remember { Animatable(0f) }
     val ringColor = ink(0.9f)
+    val fillColor = ink(0.10f)
     val haptic = LocalHapticFeedback.current
+    val live = LocalFocusLive.current
     LaunchedEffect(interaction, scaleDown, hoverScale, focusScale) {
         val pressSpec = spring<Float>(dampingRatio = 1f, stiffness = 900f)
         val releaseSpec = spring<Float>(dampingRatio = 0.42f, stiffness = 420f)
@@ -112,18 +120,31 @@ fun Modifier.pressScale(
             scaleX = scale.value
             scaleY = scale.value
         }
-        // Drawn above the content so a later .background() can't hide it. Round for circles, 16dp otherwise.
+        // Focus look: soft fill behind the content, 2dp ring on top, both inside the item's bounds (never clipped, never
+        // overlapping neighbours). Round for pills / circles, 16dp otherwise.
         .drawWithContent {
-            drawContent()
-            if (ring.value > 0.01f) {
-                val corner = minOf(16.dp.toPx(), size.minDimension / 2f)
+            val a = ring.value
+            val corner = minOf(16.dp.toPx(), size.minDimension / 2f)
+            if (a > 0.01f) {
                 drawRoundRect(
-                    color = ringColor.copy(alpha = ringColor.alpha * ring.value),
+                    color = fillColor.copy(alpha = fillColor.alpha * a),
                     cornerRadius = CornerRadius(corner, corner),
-                    style = Stroke(width = 2.dp.toPx()),
+                )
+            }
+            drawContent()
+            if (a > 0.01f) {
+                val stroke = 2.dp.toPx()
+                val half = stroke / 2f
+                drawRoundRect(
+                    color = ringColor.copy(alpha = ringColor.alpha * a),
+                    topLeft = Offset(half, half),
+                    size = Size(size.width - stroke, size.height - stroke),
+                    cornerRadius = CornerRadius((corner - half).coerceAtLeast(0f), (corner - half).coerceAtLeast(0f)),
+                    style = Stroke(width = stroke),
                 )
             }
         }
+        .focusProperties { if (!live) canFocus = false }
         .hoverable(interaction, enabled)
         .clickable(interactionSource = interaction, indication = null, enabled = enabled) {
             if (haptics) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -138,9 +159,12 @@ fun Modifier.pressScale(
 fun Modifier.focusRing(shape: Shape = RoundedCornerShape(14.dp)): Modifier = composed {
     var focused by remember { mutableStateOf(false) }
     val color = ink(0.9f)
+    val fill = ink(0.10f)
+    val live = LocalFocusLive.current
     this
+        .focusProperties { if (!live) canFocus = false }
         .onFocusChanged { focused = it.isFocused }
-        .then(if (focused) Modifier.border(2.dp, color, shape) else Modifier)
+        .then(if (focused) Modifier.background(fill, shape).border(2.dp, color, shape) else Modifier)
 }
 
 /** Moving highlight for placeholders. Needs CoverTheme (uses [ink]). */

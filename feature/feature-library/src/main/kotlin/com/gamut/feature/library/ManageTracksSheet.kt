@@ -1,5 +1,13 @@
 package com.gamut.feature.library
 
+import com.gamut.core.designsystem.focusRing
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
@@ -321,6 +329,21 @@ internal fun ManageTracksSheet(
                             dragOffset = 0f
                             if (draft.map { it.isrc } != tracks.map { it.isrc }) onReorder(draft.toList())
                         },
+                        // Remote: a grabbed row moves one place per Up / Down press.
+                        onMove = { delta ->
+                            val at = draft.indexOfFirst { it.isrc == track.isrc }
+                            val to = at + delta
+                            if (at >= 0 && to in draft.indices) {
+                                val firstIndex = listState.firstVisibleItemIndex
+                                val firstOffset = listState.firstVisibleItemScrollOffset
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                draft.add(to, draft.removeAt(at))
+                                listState.requestScrollToItem(firstIndex, firstOffset)
+                            }
+                        },
+                        onMoveDone = {
+                            if (draft.map { it.isrc } != tracks.map { it.isrc }) onReorder(draft.toList())
+                        },
                     )
                 }
             }
@@ -386,7 +409,13 @@ private fun ManageRow(
     onDragStart: () -> Unit,
     onDrag: (Float) -> Unit,
     onDragEnd: () -> Unit,
+    onMove: (Int) -> Unit,
+    onMoveDone: () -> Unit,
 ) {
+    // Remote: OK grabs this row, Up / Down then move it, OK (or moving focus away) drops it. Right goes to the trash button.
+    var grabbed by remember { mutableStateOf(false) }
+    val moveNow by rememberUpdatedState(onMove)
+    val doneNow by rememberUpdatedState(onMoveDone)
     val start by rememberUpdatedState(onDragStart)
     val dragBy by rememberUpdatedState(onDrag)
     val end by rememberUpdatedState(onDragEnd)
@@ -397,7 +426,28 @@ private fun ManageRow(
             .padding(horizontal = 12.dp, vertical = 2.dp)
             .graphicsLayer { val s = if (dragging) 1.03f else 1f; scaleX = s; scaleY = s }
             .shadow(if (dragging) 10.dp else 0.dp, shape)
-            .background(if (dragging) androidx.compose.ui.graphics.lerp(LocalCoverPalette.current.base, ink(), 0.12f) else Color.Transparent, shape)
+            .background(if (dragging || grabbed) androidx.compose.ui.graphics.lerp(LocalCoverPalette.current.base, ink(), 0.12f) else Color.Transparent, shape)
+            .focusRing(shape)
+            .onFocusChanged { if (!it.isFocused && grabbed) { grabbed = false; doneNow() } }
+            .onKeyEvent { e ->
+                when (e.key) {
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                        if (e.type == KeyEventType.KeyUp) {
+                            if (grabbed) { grabbed = false; doneNow() } else grabbed = true
+                        }
+                        true
+                    }
+                    Key.DirectionUp, Key.DirectionDown -> {
+                        if (!grabbed) false
+                        else {
+                            if (e.type == KeyEventType.KeyDown) moveNow(if (e.key == Key.DirectionUp) -1 else 1)
+                            true
+                        }
+                    }
+                    else -> false
+                }
+            }
+            .focusable()
             .pointerInput(track.isrc) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)

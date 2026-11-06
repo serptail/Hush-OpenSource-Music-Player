@@ -92,7 +92,7 @@ private val ButtonShape = RoundedCornerShape(8.dp)
 /** An artist the user follows. Feed these in from wherever follows are stored. */
 data class LibraryArtist(val id: String, val name: String, val imageUrl: String? = null)
 
-private enum class LibraryFilter(val label: String) { Playlists("Playlists"), Artists("Artists") }
+private enum class LibraryFilter(val label: String) { Playlists("Playlists"), Artists("Artists"), Offline("Offline") }
 
 /**
  * Library: Liked songs, your playlists and the artists you follow.
@@ -121,7 +121,10 @@ fun LibraryScreen(
     onOpenSearch: () -> Unit = {},
     /** The "On this device" row: opens the screen with the songs stored on the phone. */
     onOpenLocal: () -> Unit = {},
+    /** Offline tab: the tapped downloaded song plus the list it came from (the queue). */
+    onPlayTrack: (Track, List<Track>) -> Unit = { _, _ -> },
 ) {
+    val downloaded by viewModel.downloadedTracks.collectAsStateWithLifecycle()
     val userPlaylists by viewModel.playlists.collectAsStateWithLifecycle()
     val playlistInfo by viewModel.playlistInfo.collectAsStateWithLifecycle()
     val likedOffline by viewModel.likedOffline.collectAsStateWithLifecycle()
@@ -136,8 +139,9 @@ fun LibraryScreen(
     val addedTo = remember(selectedTrack?.isrc) { mutableStateListOf<Long>() }
 
     CoverTheme(palette) {
-        val showPlaylists = filter != LibraryFilter.Artists
-        val showArtists = filter != LibraryFilter.Playlists
+        val showPlaylists = filter == null || filter == LibraryFilter.Playlists
+        val showArtists = filter == null || filter == LibraryFilter.Artists
+        val showOffline = filter == LibraryFilter.Offline
         val fullSpan: LazyGridItemSpanScope.() -> GridItemSpan = { GridItemSpan(maxLineSpan) }
 
         // Phones: one column (list) or 3 columns (grid), as before. Wide windows: the grid fills the width, with as many
@@ -194,6 +198,38 @@ fun LibraryScreen(
                         verticalArrangement = Arrangement.spacedBy(if (isGrid) 18.dp else 2.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
+                        if (showOffline) {
+                            if (downloaded.isEmpty()) {
+                                item(key = "offline-empty", span = fullSpan) {
+                                    EmptyStateCard(
+                                        title = "No downloaded songs yet",
+                                        subtitle = "Songs you download show up here and play without internet.",
+                                        modifier = Modifier.padding(top = 8.dp),
+                                        buttonLabel = "Find songs",
+                                        onButton = onOpenSearch,
+                                    )
+                                }
+                            }
+                            items(downloaded, key = { "off-${it.isrc}" }, contentType = { "offline" }) { song ->
+                                if (isGrid) {
+                                    GridCell(song.title, { onPlayTrack(song, downloaded) }, offline = true) {
+                                        TileCover(song.albumArtUrl, PhosphorIcons.Bold.MusicNoteSimple)
+                                    }
+                                } else {
+                                    LibraryRow(
+                                        title = song.title,
+                                        meta = {
+                                            Text(song.artist, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        },
+                                        onClick = { onPlayTrack(song, downloaded) },
+                                        cover = { RowCover(song.albumArtUrl, PhosphorIcons.Bold.MusicNoteSimple) },
+                                        offline = true,
+                                        trailing = {},
+                                    )
+                                }
+                            }
+                        }
+
                         if (showPlaylists) {
                             item(key = "liked") {
                                 if (isGrid) {

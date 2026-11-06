@@ -5,6 +5,14 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import com.gamut.core.designsystem.focusRing
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -17,9 +25,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.requiredHeight
-import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -50,11 +55,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,8 +68,6 @@ import com.gamut.core.designsystem.GamutBackdrop
 import com.gamut.core.designsystem.GamutDisplayFont
 import com.gamut.core.designsystem.GamutMotion
 import com.gamut.core.designsystem.GamutTheme
-import com.gamut.core.designsystem.GradientBlob
-import com.gamut.core.designsystem.PulsingBorderFrame
 import com.gamut.core.designsystem.LocalAppearance
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.TransparentStatusBar
@@ -114,34 +114,43 @@ private fun AppearanceRoot(content: @Composable () -> Unit) {
 /** Width at which the screen switches from the phone layout to logo-left / copy-and-buttons-right. */
 private val WideBreakpoint = AdaptiveLayout.WideBreakpoint
 
-/** Width of the text + button column on wide windows, so it stays tidy on tablets and unfolded foldables. */
-private val ActionsWidth = 420.dp
+/** Width of the text + button column on wide windows, so it stays tidy on tablets, TVs and unfolded foldables. */
+private val ActionsWidth = 440.dp
 
-/** Largest the logo gets, so it never dominates tablets. */
-private val HeroMaxSize = 320.dp
+/** Widest the wide (two-pane) layout gets; beyond it the content is centered with empty gutters. */
+private val WideContentMax = 1120.dp
 
-/** How far the blob's hot spot sits above the screen top, as a fraction of its radius. Raise it to calm the buttons area. */
-private const val BlobSink = 0.35f
-private const val BlobIntensityDark = 0.9f
-private const val BlobIntensityLight = 0.6f
+/** Largest the logo gets on a wide window / on a phone. */
+private val HeroMaxWide = 380.dp
+private val HeroMaxCompact = 240.dp
+private val HeroMin = 104.dp
+
+/** Windows shorter than this (landscape phones, split screen) drop the secondary copy so the buttons stay in view. */
+private val ShortWindow = 520.dp
 
 /**
- * Welcome: theme background with a gradient blob pouring down from the top. The logo, headline, copy and buttons
- * stagger in from below.
- * Wide windows (tablet, unfolded fold, landscape): artwork on the left, copy and buttons on the right.
- * Scrolls when the window is short.
+ * Welcome: a calm, single-colour screen. Theme background, the logo, one headline, one line of copy and two buttons.
+ * No gradients, no chips, no accent colours: the only colour on screen is the Google button's own icon.
+ *
+ * Three layouts, all from the window size (so rotation, split screen, foldables and TVs just work):
+ *  - phone (narrower than [WideBreakpoint]): everything centered, logo floating in the free space, buttons at the bottom.
+ *  - wide and tall (tablet, TV, unfolded fold): logo on the left, copy + buttons on the right, centered with a max width.
+ *  - wide and short (landscape phone): same two panes, but the logo shrinks to the available height and the secondary
+ *    copy is dropped so nothing needs scrolling.
+ * It scrolls as a last resort (huge font size, tiny window). With a remote, the Google button starts focused.
  */
 @Composable
 fun WelcomeScreen(
     vm: WelcomeViewModel,
     // The stacked brand logo, in the variant that reads on the current background (dark text on light, light text on dark).
+    // It fills the box the layout gives it (Fit), so the screen decides how big it is.
     logo: @Composable () -> Unit = {
         val res = if (LocalCoverPalette.current.isLight) R.drawable.ic_gamut_stacked_black
         else R.drawable.ic_gamut_stacked_white
         Image(
             painterResource(res),
             contentDescription = "Gamut",
-            modifier = Modifier.height(130.dp),
+            modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Fit,
         )
     },
@@ -151,65 +160,68 @@ fun WelcomeScreen(
     val palette = LocalCoverPalette.current
 
     GamutBackdrop {
-        // Outer box: base colour + the gradient blob pouring down from the top edge (it bleeds under the status bar).
+        // Flat theme background. The logo and the type do all the work.
         BoxWithConstraints(Modifier.fillMaxSize().background(palette.base)) {
-            val blobReveal = rememberReveal(120)
-            // Spans the full width (a little past it so the edges stay lit). Wide screens get an ellipse.
-            val blobWidth = maxWidth * 1.25f
-            val blobHeight = if (maxWidth >= WideBreakpoint) minOf(maxHeight * 0.95f, maxWidth * 0.9f) else maxWidth * 1.35f
-            GradientBlob(
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .requiredWidth(blobWidth)
-                    .requiredHeight(blobHeight)
-                    // Push the hot spot just above the screen edge so the light seems to pour in from it.
-                    .offset(y = -(blobHeight / 2f * BlobSink))
-                    .graphicsLayer {
-                        alpha = blobReveal.value
-                        translationY = -(1f - blobReveal.value) * 48.dp.toPx()
-                    },
-                intensity = if (palette.isLight) BlobIntensityLight else BlobIntensityDark,
-            )
             BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding()) {
                 val wide = maxWidth >= WideBreakpoint
+                val windowWidth: Dp = maxWidth
                 val windowHeight: Dp = maxHeight
+                val short = windowHeight < ShortWindow
 
                 Column(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     if (wide) {
+                        val sidePadding = 40.dp
+                        val gap = 56.dp
+                        val paneWidth = (minOf(windowWidth, WideContentMax) - sidePadding * 2 - gap) / 2f
+                        val heroSize = maxOf(minOf(HeroMaxWide, windowHeight - 96.dp, paneWidth), HeroMin)
                         Row(
                             Modifier
-                                .widthIn(max = AdaptiveLayout.ContentMaxWidth + 240.dp)
+                                .widthIn(max = WideContentMax)
                                 .fillMaxWidth()
                                 .heightIn(min = windowHeight)
-                                .padding(horizontal = 40.dp, vertical = 32.dp),
+                                .padding(horizontal = sidePadding, vertical = if (short) 16.dp else 32.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(48.dp),
+                            horizontalArrangement = Arrangement.spacedBy(gap),
                         ) {
-                            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Hero(logo) }
+                            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Hero(heroSize, logo) }
                             Column(Modifier.weight(1f).widthIn(max = ActionsWidth)) {
-                                WelcomeCopy()
-                                Spacer(Modifier.height(32.dp))
-                                WelcomeActions(vm, ui, context)
+                                WelcomeCopy(
+                                    headlineSize = when {
+                                        short -> 32.sp
+                                        windowWidth >= 1000.dp -> 54.sp
+                                        else -> 46.sp
+                                    },
+                                    centered = false,
+                                    compactCopy = short,
+                                )
+                                Spacer(Modifier.height(if (short) 20.dp else 32.dp))
+                                WelcomeActions(vm, ui, context, centered = false, showFootnote = !short)
                             }
                         }
                     } else {
+                        val heroSize = maxOf(minOf(windowHeight * 0.27f, windowWidth * 0.62f, HeroMaxCompact), HeroMin)
                         Column(
                             Modifier
                                 .widthIn(max = 480.dp)
                                 .fillMaxWidth()
                                 .heightIn(min = windowHeight)
                                 .padding(start = 28.dp, end = 28.dp, top = 24.dp, bottom = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Spacer(Modifier.height(1.dp))
-                            Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) { Hero(logo) }
-                            Column {
-                                WelcomeCopy()
-                                Spacer(Modifier.height(32.dp))
-                                WelcomeActions(vm, ui, context)
+                            Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) { Hero(heroSize, logo) }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                WelcomeCopy(
+                                    headlineSize = if (windowWidth < 360.dp || short) 34.sp else 40.sp,
+                                    centered = true,
+                                    compactCopy = short,
+                                )
+                                Spacer(Modifier.height(if (short) 20.dp else 28.dp))
+                                WelcomeActions(vm, ui, context, centered = true, showFootnote = true)
                             }
                         }
                     }
@@ -244,14 +256,13 @@ private fun Modifier.slideUpReveal(p: Animatable<Float, *>): Modifier = graphics
 // Hero: the logo
 // ---------------------------------------------------------------------------------------------------------------------
 
+/** The logo in a square of [size] (the layout picks it from the window), easing in with a slight zoom. */
 @Composable
-private fun Hero(logo: @Composable () -> Unit) {
+private fun Hero(size: Dp, logo: @Composable () -> Unit) {
     val reveal = rememberReveal(0)
     Box(
         Modifier
-            .widthIn(max = HeroMaxSize)
-            .fillMaxWidth()
-            .aspectRatio(1f)
+            .size(size)
             .graphicsLayer {
                 alpha = reveal.value
                 val s = 0.88f + 0.12f * reveal.value
@@ -267,31 +278,36 @@ private fun Hero(logo: @Composable () -> Unit) {
 // ---------------------------------------------------------------------------------------------------------------------
 
 @Composable
-private fun WelcomeCopy() {
+private fun WelcomeCopy(headlineSize: TextUnit, centered: Boolean, compactCopy: Boolean) {
     val headline = rememberReveal(150)
     val body = rememberReveal(260)
+    val align = if (centered) TextAlign.Center else TextAlign.Start
 
-    Text(
-        buildAnnotatedString {
-            withStyle(SpanStyle(color = ink(0.55f))) { append("Listen freely,\n") }
-            append("Music without limits.")
-        },
-        style = MaterialTheme.typography.displaySmall.copy(
-            fontFamily = GamutDisplayFont,
-            fontSize = 42.sp,
-            lineHeight = 44.sp,
-            letterSpacing = (-1.5).sp,
-            fontWeight = FontWeight.ExtraBold,
-        ),
-        color = ink(),
-        modifier = Modifier.slideUpReveal(headline),
-    )
-    Text(
-        "Stream, download, and sync your favorite music across all your devices \u2014 free forever and open source.",
-        style = MaterialTheme.typography.bodyLarge,
-        color = ink(0.6f),
-        modifier = Modifier.padding(top = 14.dp).slideUpReveal(body),
-    )
+    Column(horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start) {
+        // One headline, one colour, one weight. (Was a faded first line + a bold second line.)
+        Text(
+            "Music without limits.",
+            style = MaterialTheme.typography.displaySmall.copy(
+                fontFamily = GamutDisplayFont,
+                fontSize = headlineSize,
+                lineHeight = headlineSize * 1.06f,
+                letterSpacing = (headlineSize.value * -0.035f).sp,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = align,
+            ),
+            color = ink(),
+            modifier = Modifier.slideUpReveal(headline),
+        )
+        if (!compactCopy) {
+            Text(
+                "Stream, download and sync across all your devices. Free and open source.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = ink(0.6f),
+                textAlign = align,
+                modifier = Modifier.padding(top = 14.dp).slideUpReveal(body),
+            )
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -299,8 +315,15 @@ private fun WelcomeCopy() {
 // ---------------------------------------------------------------------------------------------------------------------
 
 @Composable
-private fun WelcomeActions(vm: WelcomeViewModel, ui: WelcomeUi, context: android.content.Context) {
+private fun WelcomeActions(
+    vm: WelcomeViewModel,
+    ui: WelcomeUi,
+    context: android.content.Context,
+    centered: Boolean,
+    showFootnote: Boolean,
+) {
     val reveal = rememberReveal(470)
+    val align = if (centered) TextAlign.Center else TextAlign.Start
 
     // Only show the spinner if the work lasts a moment. A sign-in that returns almost instantly used to flash it.
     var showSpinner by remember { mutableStateOf(false) }
@@ -313,60 +336,66 @@ private fun WelcomeActions(vm: WelcomeViewModel, ui: WelcomeUi, context: android
         }
     }
 
+    // TV remote: the primary button starts focused once the entrance has played, so OK works straight away.
+    val remote = LocalInputModeManager.current.inputMode == InputMode.Keyboard
+    val primaryFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        if (remote) {
+            delay(900)
+            runCatching { primaryFocus.requestFocus() }
+        }
+    }
+
     Column(Modifier.slideUpReveal(reveal)) {
-        // Google's button stays white in both modes; the pulsing Google-colour border replaces the old hairline.
-        PulsingBorderFrame(
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            cornerRadius = 28.dp,
-            active = !ui.busy,
+        // Google's button stays white in both modes. No glow: the focus ring already handles remote / keyboard focus.
+        Button(
+            onClick = { vm.signIn(context) },
+            enabled = !ui.busy,
+            modifier = Modifier.fillMaxWidth().height(56.dp).focusRing(CircleShape).focusRequester(primaryFocus),
+            shape = CircleShape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.White,
+                contentColor = Color(0xFF1F1F1F),
+                // Stay fully white while busy: the old 60% fade read as a flash right as the spinner appeared.
+                disabledContainerColor = Color.White,
+                disabledContentColor = Color(0xFF1F1F1F),
+            ),
         ) {
-            Button(
-                onClick = { vm.signIn(context) },
-                enabled = !ui.busy,
-                modifier = Modifier.fillMaxSize(),
-                shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White,
-                    contentColor = Color(0xFF1F1F1F),
-                    // Stay fully white while busy: the old 60% fade read as a flash right as the spinner appeared.
-                    disabledContainerColor = Color.White,
-                    disabledContentColor = Color(0xFF1F1F1F),
-                ),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Fixed 20dp slot: the spinner replaces the Google icon in place, so nothing overlaps or shifts.
-                    Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
-                        Crossfade(targetState = showSpinner, animationSpec = tween(GamutMotion.CONTENT_MS), label = "google-busy") { spinning ->
-                            if (spinning) {
-                                CircularProgressIndicator(Modifier.fillMaxSize(), strokeWidth = 2.dp, color = Color(0xFF1F1F1F))
-                            } else {
-                                // Image, not Icon: Icon would tint the four Google colours into one.
-                                Image(painterResource(R.drawable.ic_google), contentDescription = null, modifier = Modifier.fillMaxSize())
-                            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Fixed 20dp slot: the spinner replaces the Google icon in place, so nothing overlaps or shifts.
+                Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+                    Crossfade(targetState = showSpinner, animationSpec = tween(GamutMotion.CONTENT_MS), label = "google-busy") { spinning ->
+                        if (spinning) {
+                            CircularProgressIndicator(Modifier.fillMaxSize(), strokeWidth = 2.dp, color = Color(0xFF1F1F1F))
+                        } else {
+                            // Image, not Icon: Icon would tint the four Google colours into one.
+                            Image(painterResource(R.drawable.ic_google), contentDescription = null, modifier = Modifier.fillMaxSize())
                         }
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Text("Continue with Google", fontWeight = FontWeight.Medium)
                 }
+                Spacer(Modifier.width(12.dp))
+                Text("Continue with Google", fontWeight = FontWeight.Medium)
             }
         }
         Spacer(Modifier.height(12.dp))
         OutlinedButton(
             onClick = vm::continueLocally,
             enabled = !ui.busy,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
+            modifier = Modifier.fillMaxWidth().height(56.dp).focusRing(CircleShape),
             shape = CircleShape,
-            border = BorderStroke(1.dp, ink(0.3f)),
+            border = BorderStroke(1.dp, ink(0.25f)),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = ink()),
         ) { Text("Continue locally", fontWeight = FontWeight.Medium) }
 
-        Text(
-            "Sign in to sync across devices. Local mode stays on this device and backs up daily.",
-            style = MaterialTheme.typography.bodySmall,
-            color = ink(0.5f),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-        )
+        if (showFootnote) {
+            Text(
+                "Local mode stays on this device and backs up daily.",
+                style = MaterialTheme.typography.bodySmall,
+                color = ink(0.45f),
+                textAlign = align,
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+            )
+        }
 
         // Keep the last message while the box collapses, so the text does not blank out mid-animation.
         var lastError by remember { mutableStateOf<String?>(null) }
@@ -376,7 +405,7 @@ private fun WelcomeActions(vm: WelcomeViewModel, ui: WelcomeUi, context: android
                 lastError.orEmpty(),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.error,
-                textAlign = TextAlign.Center,
+                textAlign = align,
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
             )
         }

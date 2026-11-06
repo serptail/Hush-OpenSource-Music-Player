@@ -1,5 +1,12 @@
 package com.gamut.feature.playerui
 
+import com.gamut.core.designsystem.focusRing
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
@@ -236,6 +243,7 @@ private fun TogglePill(on: Boolean, accent: Color, onClick: () -> Unit) {
                 if (on) Modifier.background(accent)
                 else Modifier.border(1.dp, ink(0.18f), shape),
             )
+            .focusRing(shape)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 7.dp),
     )
@@ -250,6 +258,19 @@ private fun LineSlider(value: Float, min: Float, max: Float, step: Float, accent
         Modifier
             .fillMaxWidth()
             .height(32.dp)
+            // Remote: the slider is a focus stop. Left / Right change the value by one step (holding the key speeds up);
+            // Up / Down are not consumed, so they move to the previous / next control.
+            .focusRing(RoundedCornerShape(12.dp))
+            .onKeyEvent { e ->
+                val dir = when (e.key) { Key.DirectionLeft -> -1; Key.DirectionRight -> 1; else -> 0 }
+                if (dir == 0) return@onKeyEvent false
+                if (e.type == KeyEventType.KeyDown) {
+                    val mult = (1 + e.nativeKeyEvent.repeatCount / 4).coerceAtMost(8)
+                    onChangeNow((value + dir * step * mult).coerceIn(min, max))
+                }
+                true
+            }
+            .focusable()
             .pointerInput(min, max, step) {
                 awaitEachGesture {
                     val pad = 6.dp.toPx()

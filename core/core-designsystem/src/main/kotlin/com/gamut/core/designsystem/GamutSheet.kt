@@ -10,6 +10,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
@@ -52,12 +53,17 @@ fun GamutSheet(
         },
     ) {
         CoverTheme(palette) {
+            // The sheet is its own window and the only thing that takes input while it is open. It inherits composition locals
+            // from wherever it was declared, which can be a layer that is covered (not live), so reset the focus gate here:
+            // otherwise its rows would refuse D-pad focus and never show a highlight.
+            CompositionLocalProvider(LocalFocusLive provides true) {
             if (centerContent) {
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                     Column(Modifier.widthIn(max = AdaptiveLayout.SheetContentMaxWidth).fillMaxWidth()) { content() }
                 }
             } else {
                 content()
+            }
             }
         }
     }

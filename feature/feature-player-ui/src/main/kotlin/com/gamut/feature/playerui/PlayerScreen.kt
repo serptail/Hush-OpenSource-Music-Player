@@ -1,5 +1,6 @@
 package com.gamut.feature.playerui
 
+import com.gamut.core.designsystem.FocusLive
 import android.content.Context
 import android.media.AudioManager
 import android.os.Build
@@ -16,6 +17,10 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.BoxWithConstraints
 import com.gamut.core.designsystem.isWideLayout
 import com.gamut.core.designsystem.GamutMotion
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -259,6 +264,15 @@ fun PlayerScreen(
         if (shownPlaying) player.pause() else player.resume()
         shownPlaying = !shownPlaying
     }
+    // TV remote: when the player opens, focus starts on the cover (OK = play / pause). Touch devices never get a focus ring.
+    val coverFocus = remember { FocusRequester() }
+    val inputMode = LocalInputModeManager.current
+    LaunchedEffect(active) {
+        if (active && inputMode.inputMode == InputMode.Keyboard) {
+            delay(GamutMotion.PLAYER_LAYER_IN_MS + 60L)
+            runCatching { coverFocus.requestFocus() }
+        }
+    }
 
     // Lyrics. Keyed on the track so the previous song's lines never show for a frame on a track change.
     val lyricsKey = track?.let { it.isrc.orEmpty().ifBlank { "${it.title}|${it.artist}" } }
@@ -396,7 +410,7 @@ fun PlayerScreen(
                 )
                 Box(Modifier.weight(1f).volumeHudAnchor(volumeHud), contentAlignment = Alignment.Center) {
                     ArtworkWithRing(
-                        modifier = Modifier.fillMaxWidth().widthIn(max = coverMax),
+                        modifier = Modifier.fillMaxWidth().widthIn(max = coverMax).focusRequester(coverFocus),
                         url = rawArt,
                         progress = progressProvider,
                         onScrub = { scrubFraction = it },
@@ -406,6 +420,7 @@ fun PlayerScreen(
                         waveform = waveform,
                         onTogglePlay = togglePlay,
                         onSeekFraction = seekToFraction,
+                        seekStep = if (duration > 0) (10_000f / duration).coerceIn(0.005f, 0.1f) else 0.04f,
                     )
                 }
                 DepthIcon(
@@ -468,6 +483,7 @@ fun PlayerScreen(
         }
 
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
+            FocusLive(!lyricsPanelOpen) {   // the full-screen lyrics panel covers the player: its controls must not take the remote
             PlayerTopBar(leave, onMore = { showMore = true }, modifier = Modifier.fillMaxWidth().padding(start = 24.dp + edge, end = 24.dp + edge, top = 14.dp))
 
             if (wide) {
@@ -513,7 +529,8 @@ fun PlayerScreen(
                     Spacer(Modifier.height(32.dp).navigationBarsPadding())
                 }
             }
-        }
+                }
+}
 
         // Volume pill: drawn above the page, takes no touches.
         VolumeHudOverlay(volumeHud)

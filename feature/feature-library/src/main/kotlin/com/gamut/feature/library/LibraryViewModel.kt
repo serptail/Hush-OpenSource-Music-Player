@@ -23,6 +23,9 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.flowOn
+import com.gamut.core.database.toDomain
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -63,7 +66,20 @@ data class PlaylistInfo(val coverUrl: String?, val songCount: Int, /** Every son
 class LibraryViewModel @Inject constructor(
     private val repository: LibraryRepository,
     private val downloadIndex: DownloadIndex,
+    private val trackDao: com.gamut.core.database.TrackDao,
 ) : ViewModel() {
+    /** Every downloaded song (title / artist saved by the download manager), A-Z. Feeds the Library's "Offline" tab. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val downloadedTracks: StateFlow<List<Track>> = downloadIndex.downloads
+        .mapLatest { rows ->
+            rows.keys.toList().chunked(400)
+                .flatMap { trackDao.getByIsrcs(it) }
+                .map { it.toDomain() }
+                .sortedBy { it.title.lowercase() }
+        }
+        .flowOn(kotlinx.coroutines.Dispatchers.IO)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     val playlists: StateFlow<List<Playlist>> =
         repository.observePlaylists().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 

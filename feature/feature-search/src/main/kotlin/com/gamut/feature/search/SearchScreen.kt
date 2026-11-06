@@ -76,6 +76,11 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.platform.LocalInputModeManager
+import com.gamut.core.designsystem.focusRing
+import com.adamglin.phosphoricons.bold.ArrowClockwise
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
@@ -293,6 +298,16 @@ fun SearchScreen(
                         color = TextPrimary,
                         modifier = Modifier.weight(1f),
                     )
+                    // Remote / keyboard: there is no way to drag, so Discover gets a focusable refresh button.
+                    if (showingDiscover && LocalInputModeManager.current.inputMode == InputMode.Keyboard) {
+                        Box(
+                            Modifier.size(44.dp).pressScale(onClick = { viewModel.refreshDiscover() }).semantics { contentDescription = "Refresh Discover" },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(PhosphorIcons.Bold.ArrowClockwise, null, tint = ink(0.9f), modifier = Modifier.size(26.dp))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                    }
                     Box(Modifier.size(44.dp).pressScale(onClick = onShazam), contentAlignment = Alignment.Center) {
                         Icon(
                             painterResource(com.gamut.core.designsystem.R.drawable.ic_shazam),
@@ -321,6 +336,7 @@ fun SearchScreen(
                     focusRequester = searchFocus,
                     onFocusChange = { fieldFocused = it },
                     onSubmit = { saveRecent(state.query) },
+                    armTick = focusSearchTick,
                 )
                 // A hairline progress bar replaces the old dimming-only feedback while a refined search is in flight.
                 Box(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 12.dp).height(2.dp)) {
@@ -608,16 +624,28 @@ private fun SearchField(
     focusRequester: FocusRequester,
     onFocusChange: (Boolean) -> Unit,
     onSubmit: () -> Unit,
+    /** Bumped by "Find songs / artists" buttons: start typing right away, even on a TV. */
+    armTick: Int = 0,
 ) {
     var focused by remember { mutableStateOf(false) }
     val focus by animateFloatAsState(if (focused) 1f else 0f, tween(200), label = "search-focus")
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
+    // TV remote: the field must never grab focus (and pop the big keyboard) on its own, e.g. when the app opens or the tab is
+    // shown. With a remote it is a plain button first; OK arms it, and only then does it take focus and show the keyboard.
+    val remote = LocalInputModeManager.current.inputMode == InputMode.Keyboard
+    var editing by remember { mutableStateOf(false) }
+    val live = com.gamut.core.designsystem.LocalFocusLive.current
+    LaunchedEffect(armTick) { if (armTick > 0) editing = true }
+    LaunchedEffect(editing) {
+        if (editing) { runCatching { focusRequester.requestFocus() }; keyboard?.show() }
+    }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Row(
             Modifier
                 .weight(1f)
                 .height(52.dp)
+                .then(if (remote && !editing && !focused) Modifier.pressScale(onClick = { editing = true }, scaleDown = 0.99f) else Modifier)
                 .glass(PanelShape, fill = 0.07f + 0.03f * focus, borderColor = accent.copy(alpha = 0.55f * focus))
                 .padding(start = 16.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -632,7 +660,11 @@ private fun SearchField(
             BasicTextField(
                 value = query,
                 onValueChange = onQueryChange,
-                modifier = Modifier.weight(1f).focusRequester(focusRequester).onFocusChanged { focused = it.isFocused; onFocusChange(it.isFocused) },
+                modifier = Modifier
+                    .weight(1f)
+                    .focusProperties { canFocus = (!remote || editing) && live }
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { focused = it.isFocused; if (!it.isFocused) editing = false; onFocusChange(it.isFocused) },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = TextPrimary),
                 cursorBrush = SolidColor(accent),
@@ -860,6 +892,7 @@ internal fun InteractiveSurface(
             .clip(shape)
             .background(tint)
             .hoverable(interaction)
+            .focusRing(shape)
             .combinedClickable(
                 interactionSource = interaction,
                 indication = null,
@@ -1028,6 +1061,7 @@ internal fun RowIconButton(icon: ImageVector, description: String, tint: Color, 
         Modifier
             .size(40.dp)
             .clip(CircleShape)
+            .focusRing(CircleShape)
             .clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = description, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Icon(icon, description, tint = tint, modifier = Modifier.size(24.dp)) }

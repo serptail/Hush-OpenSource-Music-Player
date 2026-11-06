@@ -1,6 +1,20 @@
 package com.gamut.feature.library
 
+import androidx.compose.foundation.focusable
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalInputModeManager
+import com.gamut.core.designsystem.FocusLive
+import com.gamut.core.designsystem.LocalFocusLive
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -177,6 +191,7 @@ fun FavoritesScreen(
 ) {
     val songs = tracks
     val downloadStates by downloads.states.collectAsStateWithLifecycle()
+    val batch by downloads.batch.collectAsStateWithLifecycle()
     // Songs stored on the phone count as downloaded (no download call ever touches them), like in a playlist.
     // Local songs never go through the downloader: [remote] is everything a download call may touch.
     val remote = remember(songs) { songs.filter { !it.isLocal } }
@@ -220,7 +235,8 @@ fun FavoritesScreen(
                     }
                     val totalMs = songs.sumOf { it.durationMs }
                     Text(
-                        if (downloading) "Downloading ${minOf(downloadUi.done + 1, downloadUi.total)} of ${downloadUi.total}"
+                        if (downloading && batch.waitingForWifi) "Waiting for Wi\u2011Fi \u00B7 mobile data downloads are off"
+                        else if (downloading) "Downloading ${minOf(downloadUi.done + 1, downloadUi.total)} of ${downloadUi.total}"
                         else (if (songs.size == 1) "1 song" else "${songs.size} songs") + if (totalMs > 0) " \u00B7 ${formatTotal(totalMs)}" else "",
                         style = MaterialTheme.typography.bodyMedium, color = ink(0.6f),
                         maxLines = if (downloading) 1 else Int.MAX_VALUE,
@@ -372,6 +388,31 @@ private fun SongWheel(
         val state = rememberLazyListState(initialFirstVisibleItemIndex = start)
         val scope = rememberCoroutineScope()
 
+        // ---- TV remote ----
+        // The wheel is ONE focus stop. Up / Down step the selected song by one and roll it to the middle with a single
+        // scroll animation; OK plays it (long OK / Menu opens its options). The rows themselves are not focus targets:
+        // geometry-based focus search on rotated, moving rows made the highlight jump and fight the scroll.
+        // At the first / last song Up / Down are not consumed, so focus leaves the wheel (header, bottom strip).
+        val wheelFocus = remember { FocusRequester() }
+        var wheelFocused by remember { mutableStateOf(false) }
+        var target by remember { mutableIntStateOf(start.coerceIn(0, (ordered.size - 1).coerceAtLeast(0))) }
+        var enterLong by remember { mutableStateOf(false) }
+        val live = LocalFocusLive.current
+        val remote = LocalInputModeManager.current.inputMode == InputMode.Keyboard
+        val settledNow = LocalNavSettled.current
+        // Keep the selection in step with touch scrolling: when the wheel comes to rest, the centered song is the selected one.
+        LaunchedEffect(state) {
+            snapshotFlow {
+                val info = state.layoutInfo
+                val c = (info.viewportStartOffset + info.viewportEndOffset) / 2f
+                info.visibleItemsInfo.minByOrNull { abs(it.offset + it.size / 2f - c) }?.key to state.isScrollInProgress
+            }.collect { (key, moving) -> if (!moving && key is Int) target = key }
+        }
+        // Remote: the wheel starts focused once the screen has finished sliding in.
+        LaunchedEffect(settledNow, live) {
+            if (settledNow && live && remote) runCatching { wheelFocus.requestFocus() }
+        }
+
         // A light tick every time a new song rolls into the center.
         LaunchedEffect(state) {
             snapshotFlow {
@@ -384,7 +425,47 @@ private fun SongWheel(
         val showJump by remember(playingIndex) { derivedStateOf { playingIndex >= 0 && state.focusOf(playingIndex) < 0.5f } }
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .focusProperties { if (!live) canFocus = false }
+                .focusRequester(wheelFocus)
+                .onFocusChanged { wheelFocused = it.isFocused }
+                .onKeyEvent { e ->
+                    val last = ordered.lastIndex
+                    when (e.key) {
+                        Key.DirectionDown, Key.DirectionUp -> {
+                            val step = if (e.key == Key.DirectionDown) 1 else -1
+                            val next = target + step
+                            if (next !in 0..last) false   // edge: let focus leave the wheel
+                            else {
+                                if (e.type == KeyEventType.KeyDown) {
+                                    target = next
+                                    scope.launch { state.animateScrollToItem(next) }
+                                }
+                                true
+                            }
+                        }
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                            if (e.type == KeyEventType.KeyDown) {
+                                if (e.nativeKeyEvent.isLongPress) {
+                                    enterLong = true
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    menuTrack = ordered.getOrNull(target)
+                                }
+                            } else if (e.type == KeyEventType.KeyUp) {
+                                if (!enterLong) ordered.getOrNull(target)?.let { onTrackSelected(it, songs) }
+                                enterLong = false
+                            }
+                            true
+                        }
+                        Key.Menu -> {
+                            if (e.type == KeyEventType.KeyDown) menuTrack = ordered.getOrNull(target)
+                            true
+                        }
+                        else -> false
+                    }
+                }
+                .focusable(),
             state = state,
             flingBehavior = rememberSnapFlingBehavior(state),
             contentPadding = PaddingValues(vertical = pad),
@@ -411,8 +492,7 @@ private fun SongWheel(
                         menuTrack = song
                     },
                     onPlay = { if (state.focusOf(index) > 0.5f) onTrackSelected(song, songs) },
-                    // D-pad up/down moves focus row to row; the focused song rolls to the middle.
-                    onFocused = { scope.launch { state.animateScrollToItem(index) } },
+                    ringed = wheelFocused,
                     onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
                 )
             }
@@ -486,7 +566,8 @@ private fun WheelRow(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onPlay: () -> Unit,
-    onFocused: () -> Unit,
+    /** The wheel has remote focus: the centered pill gets the focus ring (it is the only visible pill). */
+    ringed: Boolean,
     onArtist: (String) -> Unit,
 ) {
     val pillHeight = itemHeight - 28.dp
@@ -507,7 +588,7 @@ private fun WheelRow(
             // pill all tilt together as one piece.
             .wheelTransform(state, index, itemHeight, pivotX = SideInset + PillInset + coverSize / 2)
             .graphicsLayer { scaleX = pressScale; scaleY = pressScale }
-            .onFocusChanged { if (it.isFocused) onFocused() }
+            .focusProperties { canFocus = false }   // the wheel is the focus stop, not the rows
             .combinedClickable(
                 interactionSource = interaction,
                 indication = null,
@@ -516,6 +597,7 @@ private fun WheelRow(
             ),
         contentAlignment = Alignment.Center,
     ) {
+        FocusLive(false) {   // row buttons stay touch-only; the wheel handles the remote
         // The soft pill: only visible on the centered song. The cover lives inside it.
         Box(
             Modifier
@@ -524,8 +606,8 @@ private fun WheelRow(
                 .padding(horizontal = SideInset)
                 // Only the centered song has a pill. An off-center pill (even a faint one) swings into the centered one.
                 .graphicsLayer { alpha = state.focusOf(index) }
-                .background(ink(0.07f), WheelPillShape)
-                .border(1.dp, ink(0.08f), WheelPillShape),
+                .background(ink(if (ringed) 0.12f else 0.07f), WheelPillShape)
+                .border(if (ringed) 2.dp else 1.dp, if (ringed) ink(0.9f) else ink(0.08f), WheelPillShape),
         )
         Row(
             Modifier.fillMaxWidth().padding(horizontal = SideInset + PillInset),
@@ -606,6 +688,7 @@ private fun WheelRow(
                 else Icon(PhosphorIcons.Fill.Play, "Play", tint = ink(), modifier = Modifier.size(22.dp))
             }
         }
+            }
     }
 }
 

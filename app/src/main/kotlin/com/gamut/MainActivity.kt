@@ -56,6 +56,8 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import com.gamut.core.designsystem.GamutMotion
 import com.gamut.core.designsystem.LocalNavSettled
+import com.gamut.core.designsystem.focusLayer
+import com.gamut.core.designsystem.FocusLive
 import com.gamut.core.designsystem.LocalArtistPhotoResolver
 import androidx.compose.ui.platform.LocalFocusManager
 import com.gamut.feature.search.DiscoverRepository
@@ -630,6 +632,9 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                 resolvingIsrc = null
                             }
                         }
+                        // The player covers everything below it: none of it may take D-pad focus while it is open.
+                        Box(Modifier.fillMaxSize().focusLayer(!playerOpen)) {
+                        FocusLive(!playerOpen) {
                         HomeTabs(
                             active = (currentRoute == null || currentRoute == "home") && !createOpen,
                             homeAlpha = homeShift,
@@ -658,6 +663,7 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                         SettingsLayer(
                             composed = settingsComposed || currentRoute == "settings",
                             active = currentRoute == "settings",
+                            childOpen = layerOpen,
                             x = settingsX,
                             subPagePos = layerPos,
                         ) {
@@ -860,6 +866,8 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                     )
                                 }
                             }
+                        }
+                        }
                         }
                         // Above the NavHost, below the notices / sheets. Pre-composed once, slid with playerPos.
                         PlayerLayer(composed = playerComposed, open = playerOpen, position = playerPos) { active ->
@@ -1115,8 +1123,10 @@ private fun HomeTabs(
                 translationX = -(1f - shown) * size.width
                 if (shown <= 0f) alpha = 0f
             }
-            .then(if (active) Modifier else Modifier.consumeTouches().clearAndSetSemantics {}),
+            .then(if (active) Modifier else Modifier.consumeTouches().clearAndSetSemantics {})
+            .focusLayer(active),
     ) {
+        FocusLive(active) {
         Box(
             Modifier
                 .fillMaxSize()
@@ -1197,7 +1207,7 @@ private fun HomeTabs(
                 )
             }
         }
-    }
+        }}
 }
 
 /**
@@ -1208,6 +1218,8 @@ private fun HomeTabs(
 private fun SettingsLayer(
     composed: Boolean,
     active: Boolean,
+    /** A Settings sub-page (or anything else) is open on top: Settings stays composed but must not take D-pad focus. */
+    childOpen: Boolean,
     x: Animatable<Float, AnimationVector1D>,
     subPagePos: Animatable<Float, AnimationVector1D>,
     content: @Composable () -> Unit,
@@ -1220,8 +1232,9 @@ private fun SettingsLayer(
                 translationX = (x.value - subPagePos.value) * size.width
                 if (x.value >= 1f) alpha = 0f
             }
-            .then(if (active) Modifier else Modifier.clearAndSetSemantics {}),
-    ) { CompositionLocalProvider(LocalPageActive provides active) { content() } }
+            .then(if (active) Modifier else Modifier.clearAndSetSemantics {})
+            .focusLayer(active && !childOpen),
+    ) { FocusLive(active && !childOpen) { CompositionLocalProvider(LocalPageActive provides active) { content() } } }
 }
 
 /** The Settings sub-pages that live as persistent slide layers (see [SlideLayer]). Order = pre-composition order. */
@@ -1257,6 +1270,7 @@ private fun SlideLayer(
                 if (rel >= 1f) alpha = 0f
             }
             .then(if (live) Modifier else Modifier.clearAndSetSemantics {})
+            .focusLayer(live)
             .draggable(
                 orientation = Orientation.Horizontal,
                 enabled = live,
@@ -1270,7 +1284,7 @@ private fun SlideLayer(
                 },
             ),
     ) {
-        CompositionLocalProvider(LocalPageActive provides live) { content() }
+        FocusLive(live) { CompositionLocalProvider(LocalPageActive provides live) { content() } }
     }
 }
 
@@ -1296,11 +1310,12 @@ private fun PlayerLayer(
                 translationY = rel * size.height
                 if (rel >= 1f) alpha = 0f
             }
+            .focusLayer(open)
             .then(
                 if (open) Modifier.pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
                 else Modifier.clearAndSetSemantics {},
             ),
-    ) { content(open) }
+    ) { FocusLive(open) { content(open) } }
 }
 
 /**
@@ -1317,8 +1332,9 @@ private fun TabLayer(page: Int, position: () -> Float, active: Boolean, content:
                 translationX = rel * size.width
                 if (abs(rel) >= 1f) alpha = 0f
             }
-            .then(if (active) Modifier else Modifier.clearAndSetSemantics {}),
-    ) { content() }
+            .then(if (active) Modifier else Modifier.clearAndSetSemantics {})
+            .focusLayer(active),
+    ) { FocusLive(active) { content() } }
 }
 
 /** Swallows every touch before the children see it (Initial pass), so a hidden tab can never be tapped through. */

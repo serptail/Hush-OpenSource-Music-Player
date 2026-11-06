@@ -52,6 +52,7 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import com.gamut.core.designsystem.focusRing
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
@@ -131,7 +132,7 @@ internal fun TimeRow(position: () -> Long, durationMs: Long) {
 @Composable
 internal fun Modifier.tapTarget(onClick: () -> Unit): Modifier {
     val interaction = remember { MutableInteractionSource() }
-    return this.clickable(interactionSource = interaction, indication = null, onClick = onClick)
+    return this.focusRing().clickable(interactionSource = interaction, indication = null, onClick = onClick)
 }
 
 /** Spring-bounce press feedback — scales down on press, springs back on release. */
@@ -149,7 +150,7 @@ internal fun Modifier.bounceTap(onClick: () -> Unit, scaleDown: Float = 0.88f): 
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
         label = "bounce-tap",
     )
-    this.scale(scale).hoverable(interaction).clickable(interactionSource = interaction, indication = null) {
+    this.scale(scale).hoverable(interaction).focusRing().clickable(interactionSource = interaction, indication = null) {
         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         onClick()
     }

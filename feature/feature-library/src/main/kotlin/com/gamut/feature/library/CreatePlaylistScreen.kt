@@ -1,5 +1,12 @@
 package com.gamut.feature.library
 
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import com.gamut.core.designsystem.LocalFocusLive
 import androidx.compose.foundation.layout.fillMaxHeight
 import com.gamut.core.designsystem.isWideLayout
 import com.gamut.core.designsystem.focusRing
@@ -324,7 +331,21 @@ private fun CoverPreview(url: String?, onPick: () -> Unit, onClear: () -> Unit) 
 private fun NameField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit, onDone: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val style = MaterialTheme.typography.headlineLarge
-    Column(Modifier.fillMaxWidth().padding(horizontal = 32.dp).padding(top = 28.dp)) {
+    // TV remote: the field must not grab focus (and pop the keyboard) when the page opens. With a remote it is a button
+    // first; OK arms it, and only then does it take focus and show the keyboard.
+    val remote = LocalInputModeManager.current.inputMode == InputMode.Keyboard
+    val live = LocalFocusLive.current
+    val fieldFocus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    var editing by remember { mutableStateOf(false) }
+    LaunchedEffect(editing) { if (editing) { runCatching { fieldFocus.requestFocus() }; keyboard?.show() } }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 32.dp)
+            .padding(top = 28.dp)
+            .then(if (remote && !editing && !focused) Modifier.pressScale(onClick = { editing = true }, scaleDown = 0.99f) else Modifier),
+    ) {
         BasicTextField(
             value = value,
             onValueChange = onChange,
@@ -333,7 +354,11 @@ private fun NameField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit,
             cursorBrush = SolidColor(ink()),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { onDone() }),
-            modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusProperties { canFocus = (!remote || editing) && live }
+                .focusRequester(fieldFocus)
+                .onFocusChanged { focused = it.isFocused; if (!it.isFocused) editing = false },
             decorationBox = { inner ->
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     if (value.text.isEmpty()) {
