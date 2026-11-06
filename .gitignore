@@ -1,9 +1,17 @@
+# Gradle
 .gradle/
 build/
 **/build/
-local.properties
-*.iml
+.kotlin/
+
+# Android Studio
 .idea/
+*.iml
 captures/
 .externalNativeBuild/
 .cxx/
+
+# Local configuration
+local.properties
+
+# Other
