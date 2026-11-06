@@ -1,9 +1,5 @@
--- Gamut backend schema. Supabase = source of truth for user data; songs/artists/albums = shared metadata cache
--- written ONLY by the resolve-metadata Edge Function (service role).
-
 create extension if not exists citext with schema extensions;
 
--- ---------- helpers ----------
 create function public.set_updated_at() returns trigger
 language plpgsql as $$
 begin new.updated_at := now(); return new; end $$;
@@ -11,7 +7,6 @@ begin new.updated_at := now(); return new; end $$;
 create function public.ping() returns text language sql stable as $$ select 'ok' $$;
 grant execute on function public.ping() to anon, authenticated;
 
--- ---------- profiles ----------
 create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   username extensions.citext unique check (username is null or username ~ '^[A-Za-z0-9_]{3,24}$'),
@@ -33,7 +28,6 @@ begin insert into public.profiles(id) values (new.id); return new; end $$;
 create trigger on_auth_user_created after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- ---------- shared metadata cache ----------
 create table public.artists (
   id uuid primary key default gen_random_uuid(),
   provider text not null check (provider in ('deezer','itunes','apple','youtube')),
@@ -64,7 +58,7 @@ create table public.songs (
   album_id uuid references public.albums(id) on delete set null,
   duration_ms integer not null default 0,
   artwork_url text,
-  external_ids jsonb not null default '{}',   -- other providers' ids for the same song
+  external_ids jsonb not null default '{}',
   metadata jsonb not null default '{}',
   updated_at timestamptz not null default now(),
   unique (provider, provider_song_id)
@@ -82,7 +76,6 @@ create policy "read songs"   on public.songs   for select to authenticated using
 revoke all on public.artists, public.albums, public.songs from anon, authenticated;
 grant select on public.artists, public.albums, public.songs to authenticated;
 
--- ---------- user data ----------
 create table public.favorites (
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   song_id uuid not null references public.songs(id) on delete cascade,
@@ -150,7 +143,6 @@ create policy "own history" on public.listening_history for all to authenticated
 
 revoke all on public.profiles, public.favorites, public.playlists, public.playlist_songs, public.listening_history from anon;
 
--- ---------- write quota guards (RLS stops cross-user access, not spam) ----------
 create function public.enforce_quota() returns trigger
 language plpgsql security definer set search_path = '' as $$
 declare n integer; lim integer;
@@ -172,7 +164,6 @@ create trigger playlist_songs_quota before insert on public.playlist_songs for e
 create trigger favorites_quota before insert on public.favorites for each row execute function public.enforce_quota();
 create trigger history_quota before insert on public.listening_history for each row execute function public.enforce_quota();
 
--- ---------- per-user rate limit for Edge Functions ----------
 create table public.rate_limits (
   user_id uuid not null,
   bucket text not null,
@@ -180,7 +171,7 @@ create table public.rate_limits (
   count integer not null default 0,
   primary key (user_id, bucket, window_start)
 );
-alter table public.rate_limits enable row level security;   -- no policies: service role only
+alter table public.rate_limits enable row level security;
 revoke all on public.rate_limits from anon, authenticated;
 
 create function public.take_rate_limit(p_user uuid, p_bucket text, p_max integer, p_window_seconds integer)
@@ -195,7 +186,6 @@ end $$;
 revoke execute on function public.take_rate_limit(uuid, text, integer, integer) from public, anon, authenticated;
 grant execute on function public.take_rate_limit(uuid, text, integer, integer) to service_role;
 
--- ---------- retention: purge tombstones (90 d), old history (365 d), old rate-limit windows ----------
 do $$
 begin
   create extension if not exists pg_cron;

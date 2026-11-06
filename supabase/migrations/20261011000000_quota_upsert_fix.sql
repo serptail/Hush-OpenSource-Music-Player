@@ -1,6 +1,3 @@
--- The quota trigger runs BEFORE INSERT, which also fires for an upsert that ends up updating an existing row.
--- At the limit even a harmless update (or re-push) was rejected. Updating a live row never changes the count,
--- so skip the check then. Reviving a soft-deleted row still counts.
 create or replace function public.enforce_quota() returns trigger
 language plpgsql security definer set search_path = '' as $$
 declare n integer; lim integer;

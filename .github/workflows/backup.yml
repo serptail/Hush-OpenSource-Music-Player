@@ -2,38 +2,14 @@ name: db-backup
 
 on:
   schedule:
-    - cron: "0 4 * * *" # Every day at 04:00 UTC
+    - cron: "0 4 * * *"
   workflow_dispatch:
 
-# This workflow does not need a GitHub API token.
 permissions: {}
 
-# Prevent overlapping backups and accidental cancellation.
 concurrency:
   group: db-backup
   cancel-in-progress: false
-
-# ---------------------------------------------------------------------------
-# Required secrets
-#   SUPABASE_DB_URL              Use the SESSION POOLER string (port 5432).
-#                                GitHub runners have no IPv6, and the direct
-#                                db.<ref>.supabase.co host is IPv6-only.
-#                                Do NOT use the transaction pooler (6543).
-#   BACKUP_PASSPHRASE            Also store this in a password manager.
-#                                Without it every backup is unreadable.
-#
-# Supabase Storage as SOURCE (optional; skipped if endpoint is empty)
-#   SUPABASE_S3_ENDPOINT         https://<ref>.storage.supabase.co/storage/v1/s3
-#   SUPABASE_S3_ACCESS_KEY_ID
-#   SUPABASE_S3_SECRET_ACCESS_KEY
-#   SUPABASE_S3_REGION
-#
-# Destination: a PRIVATE GitHub repo that only holds the encrypted backups (one release per run)
-#   BACKUP_REPO                  owner/name of that private repo, e.g. serptail/gamut-backups
-#                                (it must already have one commit, e.g. a README)
-#   BACKUP_REPO_TOKEN            Fine-grained personal access token: only that repo,
-#                                permission "Contents: Read and write". It expires: renew it.
-# ---------------------------------------------------------------------------
 
 jobs:
   dump:

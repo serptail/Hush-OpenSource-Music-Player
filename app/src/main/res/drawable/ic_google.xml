@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Put in app/src/main/res/drawable/ic_google.xml. The SVG viewBox starts at x=-3, so the group shifts it by +3. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"

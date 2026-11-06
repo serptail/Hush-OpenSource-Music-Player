@@ -1,5 +1,3 @@
-// resolve-metadata: the ONLY writer of songs/artists/albums.
-// Input: { items: [{ provider, provider_id }] }. Anything else the client sends is ignored.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, json } from "../_shared/cors.ts";
 
@@ -106,7 +104,6 @@ Deno.serve(async (req) => {
   const raw = Array.isArray(body?.items) ? body.items : null;
   if (!raw || raw.length === 0 || raw.length > MAX_ITEMS) return json({ error: "bad_items" }, 400);
 
-  // validate + dedupe; ignore everything except provider/provider_id
   const wanted = new Map<string, { provider: string; id: string }>();
   for (const it of raw) {
     const provider = String(it?.provider ?? ""), id = String(it?.provider_id ?? "");
@@ -114,7 +111,6 @@ Deno.serve(async (req) => {
     wanted.set(`${provider}:${id}`, { provider, id });
   }
 
-  // skip what is already cached
   const result: { id: string; provider: string; provider_song_id: string }[] = [];
   const byProvider = new Map<string, string[]>();
   for (const w of wanted.values()) byProvider.set(w.provider, [...(byProvider.get(w.provider) ?? []), w.id]);

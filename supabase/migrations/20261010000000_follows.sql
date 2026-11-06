@@ -1,5 +1,3 @@
--- Followed artists. Self-contained (no FK to the shared artists cache), so an artist can be followed without any song
--- being synced first. No follower counts are stored or exposed: this table is per-user and RLS-private.
 create table public.artist_follows (
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   provider text not null check (provider in ('deezer','itunes','apple','youtube')),
@@ -21,7 +19,6 @@ create policy "own follows" on public.artist_follows for all to authenticated
 revoke all on public.artist_follows from anon;
 grant select, insert, update, delete on public.artist_follows to authenticated;
 
--- quota: same guard as the other user tables (adds the artist_follows branch)
 create or replace function public.enforce_quota() returns trigger
 language plpgsql security definer set search_path = '' as $$
 declare n integer; lim integer;
@@ -43,7 +40,6 @@ end $$;
 create trigger artist_follows_quota before insert on public.artist_follows
   for each row execute function public.enforce_quota();
 
--- tombstone purge (90 d), same window the client assumes
 do $$
 begin
   perform cron.schedule('gamut-purge-follows', '23 3 * * *',

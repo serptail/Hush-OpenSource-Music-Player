@@ -1,15 +1,4 @@
 name: extractor-bump
-# Keeps NewPipe Extractor (and the yt-dlp wrapper) current without anyone watching, but never ships anything alone:
-#   1. finds a newer release upstream;  2. waits until it can be downloaded;
-#   3. resolves a few songs with the OLD and the NEW version (tools/extractor-smoke);
-#   4. only if the new one is no worse AND the app still builds: pushes the bump to the branch "extractor-bump",
-#      opens a pull request, and starts release.yml as a DRAFT release (it only reaches users when you publish it,
-#      and then it is mandatory: force_min=true).
-#   5. you get an issue/notification; you test the draft APK, press "Publish release" and merge the PR.
-# While that pull request is open, no further bump is proposed.
-# Note: YouTube often blocks GitHub's servers ("Sign in to confirm you're not a bot"). Those failures say nothing about
-# the library, so they are NOT counted against the new version. Only real failures (parsing errors, crashes, etc.) are
-# compared. If blocking hides the result, it still produces a draft: that is exactly why YOU test it before publishing.
 on:
   schedule:
     - cron: "23 */6 * * *"
@@ -24,10 +13,9 @@ concurrency:
 
 defaults:
   run:
-    shell: bash   # implies -eo pipefail
+    shell: bash
 
 jobs:
-  # Runs the unvetted new library: read-only token, credentials not stored in .git.
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -62,7 +50,7 @@ jobs:
         id: plan
         if: steps.pending.outputs.waiting != 'true'
         env:
-          GH_TOKEN: ${{ github.token }}   # only for GitHub API rate limits
+          GH_TOKEN: ${{ github.token }}
         run: python3 scripts/bump_extractors.py plan
 
       - uses: actions/setup-java@v4
@@ -139,7 +127,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  # Never runs project code: only this job holds a write token.
   propose:
     needs: test
     if: needs.test.outputs.changed == 'true'

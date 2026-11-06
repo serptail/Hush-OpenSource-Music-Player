@@ -10,13 +10,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <!-- "On this device": reads the songs stored on the phone (Android 13+ / older). -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
-    <!-- Lets the in-app updater install the new APK (Android still asks the user to allow it once). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <!-- Share sheet: lets the app list installed apps that accept a shared image / text (hidden by default on Android 11+). -->
     <queries>
         <intent>
             <action android:name="android.intent.action.SEND" />
@@ -40,13 +37,10 @@
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
-        <!-- Android Auto: this app is a media app. -->
         <meta-data android:name="com.google.android.gms.car.application" android:resource="@xml/automotive_app_desc" />
         <service android:name="com.gamut.feature.resolver.DownloadService" android:foregroundServiceType="dataSync" android:exported="false" />
-        <!-- Keeps "What's this song?" listening / identifying while the app is in the background. -->
         <service android:name=".ShazamListenService" android:foregroundServiceType="microphone" android:exported="false" />
         <receiver android:name="com.gamut.update.UpdateInstallReceiver" android:exported="false" />
-        <!-- WorkManager is started on demand (GamutApplication is its Configuration.Provider): skip its startup initializer, so app launch does no work for it. -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
@@ -57,7 +51,6 @@
                 android:value="androidx.startup"
                 tools:node="remove" />
         </provider>
-        <!-- Share sheet: serves the rendered share-card PNG (cache/share/) to the app the user picks. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.share"

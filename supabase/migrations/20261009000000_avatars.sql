@@ -1,9 +1,7 @@
--- Public bucket, one file per user: avatars/<uid>.webp. 200 KB cap, WebP only (the app uploads ~15-30 KB).
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('avatars', 'avatars', true, 204800, array['image/webp'])
 on conflict (id) do update set public = true, file_size_limit = 204800, allowed_mime_types = array['image/webp'];
 
--- Users may only touch the object named after their own uid. (Public reads need no policy.)
 create policy "avatar select own" on storage.objects for select to authenticated
   using (bucket_id = 'avatars' and name = (select auth.uid())::text || '.webp');
 create policy "avatar insert own" on storage.objects for insert to authenticated

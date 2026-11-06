@@ -19,7 +19,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: supabase/setup-cli@v1
-        with: { version: 2.120.0 }   # TODO: pin to a specific CLI version once you know a good one
+        with: { version: 2.120.0 }
       - run: supabase start
       - run: supabase test db
 

@@ -21,13 +21,13 @@ TOML = "gradle/libs.versions.toml"
 PLAN = "bump-plan.json"
 
 DEPS = [
-    {   # NewPipe Extractor: compiled into the app, so only a new app build can bring a new version.
+    {
         "name": "NewPipeExtractor",
         "key": "newpipe-extractor",
         "repo": "TeamNewPipe/NewPipeExtractor",
         "pom": "https://jitpack.io/com/github/teamnewpipe/NewPipeExtractor/{v}/NewPipeExtractor-{v}.pom",
     },
-    {   # The yt-dlp wrapper (Python, ffmpeg, glue). Versions are tagged in yausername/youtubedl-android but published to Maven Central as io.github.junkfood02 (what libs.versions.toml uses). yt-dlp ITSELF updates at runtime, see YtDlpUpdater.kt.
+    {
         "name": "youtubedl-android",
         "key": "youtubedl-android",
         "repo": "yausername/youtubedl-android",
@@ -77,7 +77,6 @@ def latest_tag(repo):
             raise
         print(f"{repo}: no GitHub release, falling back to tags")
     tags = [t["name"] for t in github_json(f"https://api.github.com/repos/{repo}/tags?per_page=100")]
-    # stable = only digits and dots after an optional "v" (skips 1.0.0-rc1, 1.0.0-beta, etc.)
     stable = [t for t in tags if re.fullmatch(r"v?\d+(\.\d+)*", t)]
     if not stable:
         raise RuntimeError(f"{repo}: no stable tags found")
@@ -118,7 +117,7 @@ def plan():
         try:
             have = current(dep["key"], text)
             latest = match_v_style(latest_tag(dep["repo"]), have)
-        except Exception as e:  # one broken lookup must not block the other library
+        except Exception as e:
             print(f"::warning::{dep['name']}: lookup failed: {e}")
             failures.append(dep["name"])
             continue
@@ -148,7 +147,7 @@ def wait():
                         break
             except urllib.error.HTTPError as e:
                 print(f"{e.code}: {url}")
-            except Exception as e:  # network hiccup or JitPack still building
+            except Exception as e:
                 print(f"{e}: {url}")
             if time.time() > deadline:
                 sys.exit(f"{url} did not become available within 30 minutes")
