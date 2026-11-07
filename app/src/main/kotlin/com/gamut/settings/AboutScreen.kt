@@ -44,8 +44,8 @@ import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.R as DesignR
 import com.gamut.core.designsystem.ink
 
-private const val REPO_URL = "https://github.com/serptail/Hush-Open-Source-Music-App"
-private const val REPO_LABEL = "github.com/serptail/Hush-Open-Source-Music-App"
+private const val REPO_URL = "https://github.com/serptail/gamut"
+private const val REPO_LABEL = "github.com/serptail/gamut"
 private const val LICENSE_URL = "$REPO_URL/blob/main/LICENSE"
 private const val AUTHOR_URL = "https://github.com/serptail"
 private const val AUTHOR_NAME = "serptail"
