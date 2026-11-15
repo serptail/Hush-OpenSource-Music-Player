@@ -51,7 +51,10 @@ import com.gamut.settings.GamutHeading
 import kotlinx.coroutines.delay
 
 @Composable
-fun UpdateGate(vm: AppUpdateViewModel = hiltViewModel(), content: @Composable () -> Unit) {
+fun UpdateGate(
+    vm: AppUpdateViewModel = hiltViewModel(),
+    content: @Composable () -> Unit,
+) {
     val ui by vm.state.collectAsState()
 
     val activity = LocalContext.current as? ComponentActivity
@@ -87,7 +90,13 @@ fun UpdateGate(vm: AppUpdateViewModel = hiltViewModel(), content: @Composable ()
 }
 
 @Composable
-private fun UpdateRequired(ui: UpdateUiState, info: UpdateInfo, onUpdate: () -> Unit, onSkip: () -> Unit, onCancel: () -> Unit) {
+private fun UpdateRequired(
+    ui: UpdateUiState,
+    info: UpdateInfo,
+    onUpdate: () -> Unit,
+    onSkip: () -> Unit,
+    onCancel: () -> Unit,
+) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 32.dp)) {
         Text(if (ui.optional) "Update available" else "Update required", style = GamutHeading, color = ink())
         Text(
@@ -104,27 +113,36 @@ private fun UpdateRequired(ui: UpdateUiState, info: UpdateInfo, onUpdate: () -> 
         Spacer(Modifier.height(28.dp))
 
         when (ui.phase) {
-            UpdatePhase.DOWNLOADING -> UpdateProgress(ui.progress, if (ui.waiting) "Waiting for connection\u2026" else "Downloading")
+            UpdatePhase.DOWNLOADING -> {
+                UpdateProgress(ui.progress, if (ui.waiting) "Waiting for connection\u2026" else "Downloading")
+            }
 
-            UpdatePhase.INSTALLING -> UpdateProgress(1f, "Installing")
+            UpdatePhase.INSTALLING -> {
+                UpdateProgress(1f, "Installing")
+            }
 
-            UpdatePhase.NEEDS_PERMISSION -> InfoBlock(
-                "Android needs your OK before Gamut can install updates. Allow it on the next screen, then come back.",
-                color = ink(0.7f),
-            )
+            UpdatePhase.NEEDS_PERMISSION -> {
+                InfoBlock(
+                    "Android needs your OK before Gamut can install updates. Allow it on the next screen, then come back.",
+                    color = ink(0.7f),
+                )
+            }
 
-            else -> Unit
+            else -> {
+                Unit
+            }
         }
         if (ui.error != null) InfoBlock(ui.error, color = GamutDestructive)
 
         GamutButton(
-            label = when (ui.phase) {
-                UpdatePhase.READY -> "Update now"
-                UpdatePhase.NEEDS_PERMISSION -> "Allow installs"
-                UpdatePhase.DOWNLOADING -> "Downloading..."
-                UpdatePhase.INSTALLING -> "Installing..."
-                UpdatePhase.FAILED -> "Try again"
-            },
+            label =
+                when (ui.phase) {
+                    UpdatePhase.READY -> "Update now"
+                    UpdatePhase.NEEDS_PERMISSION -> "Allow installs"
+                    UpdatePhase.DOWNLOADING -> "Downloading..."
+                    UpdatePhase.INSTALLING -> "Installing..."
+                    UpdatePhase.FAILED -> "Try again"
+                },
             onClick = onUpdate,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -135,7 +153,12 @@ private fun UpdateRequired(ui: UpdateUiState, info: UpdateInfo, onUpdate: () -> 
                 style = MaterialTheme.typography.bodyMedium,
                 color = ink(0.7f),
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().clickable(onClick = onCancel).padding(top = 8.dp).padding(vertical = 8.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onCancel)
+                        .padding(top = 8.dp)
+                        .padding(vertical = 8.dp),
             )
         }
         Text(
@@ -143,7 +166,12 @@ private fun UpdateRequired(ui: UpdateUiState, info: UpdateInfo, onUpdate: () -> 
             style = MaterialTheme.typography.bodySmall,
             color = ink(0.4f),
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onSkip).padding(top = 4.dp, bottom = 12.dp).padding(vertical = 8.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onSkip)
+                    .padding(top = 4.dp, bottom = 12.dp)
+                    .padding(vertical = 8.dp),
         )
     }
 }
@@ -168,22 +196,29 @@ private fun ReleaseNotes(notes: String) {
 }
 
 @Composable
-private fun InfoBlock(text: String, color: androidx.compose.ui.graphics.Color) {
+private fun InfoBlock(
+    text: String,
+    color: androidx.compose.ui.graphics.Color,
+) {
     Text(
         text,
         style = MaterialTheme.typography.bodyMedium,
         color = color,
-        modifier = Modifier
-            .padding(bottom = 16.dp)
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(ink(0.07f))
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier =
+            Modifier
+                .padding(bottom = 16.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(ink(0.07f))
+                .padding(horizontal = 16.dp, vertical = 12.dp),
     )
 }
 
 @Composable
-private fun UpdateProgress(progress: Float, label: String) {
+private fun UpdateProgress(
+    progress: Float,
+    label: String,
+) {
     val shown by animateFloatAsState(progress.coerceIn(0f, 1f), animationSpec = tween(250), label = "update-progress")
     Column(Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -198,7 +233,13 @@ private fun UpdateProgress(progress: Float, label: String) {
                 .clip(CircleShape)
                 .background(ink(0.14f)),
         ) {
-            Box(Modifier.fillMaxWidth(shown).fillMaxHeight().clip(CircleShape).background(ink(0.95f)))
+            Box(
+                Modifier
+                    .fillMaxWidth(shown)
+                    .fillMaxHeight()
+                    .clip(CircleShape)
+                    .background(ink(0.95f)),
+            )
         }
     }
 }

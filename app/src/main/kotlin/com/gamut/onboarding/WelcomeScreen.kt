@@ -77,14 +77,22 @@ import com.gamut.settings.AppearanceViewModel
 import kotlinx.coroutines.delay
 
 @Composable
-fun OnboardingGate(vm: WelcomeViewModel = hiltViewModel(), app: @Composable () -> Unit) {
+fun OnboardingGate(
+    vm: WelcomeViewModel = hiltViewModel(),
+    app: @Composable () -> Unit,
+) {
     val rawGate by vm.gate.collectAsState()
     var appShown by remember { mutableStateOf(false) }
     if (rawGate == Gate.Ready) appShown = true
     val gate = if (rawGate == Gate.Loading && appShown) Gate.Ready else rawGate
-    Crossfade(targetState = gate, animationSpec = tween(GamutMotion.CROSSFADE_MS, easing = GamutMotion.Standard), label = "onboarding-gate") { g ->
+    Crossfade(
+        targetState = gate,
+        animationSpec = tween(GamutMotion.CROSSFADE_MS, easing = GamutMotion.Standard),
+        label = "onboarding-gate",
+    ) { g ->
         when (g) {
             Gate.Ready -> app()
+            Gate.Setup -> AppearanceRoot { SetupScreen() }
             Gate.Welcome -> AppearanceRoot { WelcomeScreen(vm) }
             Gate.Loading -> AppearanceRoot { Box(Modifier.fillMaxSize().background(LocalCoverPalette.current.base)) }
         }
@@ -117,11 +125,12 @@ private val ShortWindow = 520.dp
 fun WelcomeScreen(
     vm: WelcomeViewModel,
     logo: @Composable () -> Unit = {
-        val res = if (LocalCoverPalette.current.isLight) {
-            R.drawable.ic_gamut_stacked_black
-        } else {
-            R.drawable.ic_gamut_stacked_white
-        }
+        val res =
+            if (LocalCoverPalette.current.isLight) {
+                R.drawable.ic_gamut_stacked_black
+            } else {
+                R.drawable.ic_gamut_stacked_white
+            }
         Image(
             painterResource(res),
             contentDescription = "Gamut",
@@ -163,11 +172,12 @@ fun WelcomeScreen(
                             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Hero(heroSize, logo) }
                             Column(Modifier.weight(1f).widthIn(max = ActionsWidth)) {
                                 WelcomeCopy(
-                                    headlineSize = when {
-                                        short -> 32.sp
-                                        windowWidth >= 1000.dp -> 54.sp
-                                        else -> 46.sp
-                                    },
+                                    headlineSize =
+                                        when {
+                                            short -> 32.sp
+                                            windowWidth >= 1000.dp -> 54.sp
+                                            else -> 46.sp
+                                        },
                                     centered = false,
                                     compactCopy = short,
                                 )
@@ -187,7 +197,10 @@ fun WelcomeScreen(
                             verticalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Spacer(Modifier.height(1.dp))
-                            Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) { Hero(heroSize, logo) }
+                            Box(
+                                Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                                contentAlignment = Alignment.Center,
+                            ) { Hero(heroSize, logo) }
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 WelcomeCopy(
                                     headlineSize = if (windowWidth < 360.dp || short) 34.sp else 40.sp,
@@ -215,13 +228,17 @@ private fun rememberReveal(delayMs: Int): Animatable<Float, *> {
     return a
 }
 
-private fun Modifier.slideUpReveal(p: Animatable<Float, *>): Modifier = graphicsLayer {
-    alpha = p.value
-    translationY = (1f - p.value) * 28.dp.toPx()
-}
+private fun Modifier.slideUpReveal(p: Animatable<Float, *>): Modifier =
+    graphicsLayer {
+        alpha = p.value
+        translationY = (1f - p.value) * 28.dp.toPx()
+    }
 
 @Composable
-private fun Hero(size: Dp, logo: @Composable () -> Unit) {
+private fun Hero(
+    size: Dp,
+    logo: @Composable () -> Unit,
+) {
     val reveal = rememberReveal(0)
     Box(
         Modifier
@@ -237,7 +254,11 @@ private fun Hero(size: Dp, logo: @Composable () -> Unit) {
 }
 
 @Composable
-private fun WelcomeCopy(headlineSize: TextUnit, centered: Boolean, compactCopy: Boolean) {
+private fun WelcomeCopy(
+    headlineSize: TextUnit,
+    centered: Boolean,
+    compactCopy: Boolean,
+) {
     val headline = rememberReveal(150)
     val body = rememberReveal(260)
     val align = if (centered) TextAlign.Center else TextAlign.Start
@@ -245,14 +266,15 @@ private fun WelcomeCopy(headlineSize: TextUnit, centered: Boolean, compactCopy: 
     Column(horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start) {
         Text(
             "Music without limits.",
-            style = MaterialTheme.typography.displaySmall.copy(
-                fontFamily = GamutDisplayFont,
-                fontSize = headlineSize,
-                lineHeight = headlineSize * 1.06f,
-                letterSpacing = (headlineSize.value * -0.035f).sp,
-                fontWeight = FontWeight.ExtraBold,
-                textAlign = align,
-            ),
+            style =
+                MaterialTheme.typography.displaySmall.copy(
+                    fontFamily = GamutDisplayFont,
+                    fontSize = headlineSize,
+                    lineHeight = headlineSize * 1.06f,
+                    letterSpacing = (headlineSize.value * -0.035f).sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = align,
+                ),
             color = ink(),
             modifier = Modifier.slideUpReveal(headline),
         )
@@ -302,14 +324,20 @@ private fun WelcomeActions(
         Button(
             onClick = { vm.signIn(context) },
             enabled = !ui.busy,
-            modifier = Modifier.fillMaxWidth().height(56.dp).focusRing(CircleShape).focusRequester(primaryFocus),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .focusRing(CircleShape)
+                    .focusRequester(primaryFocus),
             shape = CircleShape,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.White,
-                contentColor = Color(0xFF1F1F1F),
-                disabledContainerColor = Color.White,
-                disabledContentColor = Color(0xFF1F1F1F),
-            ),
+            colors =
+                ButtonDefaults.buttonColors(
+                    containerColor = Color.White,
+                    contentColor = Color(0xFF1F1F1F),
+                    disabledContainerColor = Color.White,
+                    disabledContentColor = Color(0xFF1F1F1F),
+                ),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {

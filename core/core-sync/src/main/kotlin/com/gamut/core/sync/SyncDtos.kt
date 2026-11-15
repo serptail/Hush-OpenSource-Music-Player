@@ -5,13 +5,24 @@ import com.gamut.core.model.TrackSource
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-@Serializable data class ResolveItem(val provider: String, @SerialName("provider_id") val providerId: String)
+@Serializable data class ResolveItem(
+    val provider: String,
+    @SerialName("provider_id") val providerId: String,
+)
 
-@Serializable data class ResolveRequest(val items: List<ResolveItem>)
+@Serializable data class ResolveRequest(
+    val items: List<ResolveItem>,
+)
 
-@Serializable data class SongRef(val id: String, val provider: String, @SerialName("provider_song_id") val providerSongId: String)
+@Serializable data class SongRef(
+    val id: String,
+    val provider: String,
+    @SerialName("provider_song_id") val providerSongId: String,
+)
 
-@Serializable data class ResolveResponse(val songs: List<SongRef> = emptyList())
+@Serializable data class ResolveResponse(
+    val songs: List<SongRef> = emptyList(),
+)
 
 @Serializable
 data class FavoriteRow(
@@ -39,9 +50,13 @@ data class PlaylistSongRow(
     @SerialName("deleted_at") val deletedAt: String? = null,
 )
 
-@Serializable data class ArtistNameDto(val name: String? = null)
+@Serializable data class ArtistNameDto(
+    val name: String? = null,
+)
 
-@Serializable data class AlbumTitleDto(val title: String? = null)
+@Serializable data class AlbumTitleDto(
+    val title: String? = null,
+)
 
 @Serializable
 data class SongDto(
@@ -134,6 +149,7 @@ internal fun parseIsrc(isrc: String): Pair<String, String>? {
     val id = isrc.substringAfter(':', "")
     return if (provider in PROVIDERS && Regex("^[A-Za-z0-9_-]{1,32}$").matches(id)) provider to id else null
 }
+
 private val PROVIDERS = setOf("deezer", "itunes", "apple", "youtube")
 
 internal fun parseArtistKey(key: String): Pair<String, String>? = parseIsrc(key)

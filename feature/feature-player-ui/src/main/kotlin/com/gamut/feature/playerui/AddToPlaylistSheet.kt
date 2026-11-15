@@ -116,7 +116,12 @@ internal fun AddToPlaylistSheet(
                         }
                     }
                     AnimatedVisibility(added, enter = fadeIn(tween(160)) + scaleIn(tween(220), initialScale = 0.5f)) {
-                        Icon(PhosphorIcons.Bold.Check, contentDescription = "In this playlist (tap to remove)", tint = ink(0.85f), modifier = Modifier.size(22.dp))
+                        Icon(
+                            PhosphorIcons.Bold.Check,
+                            contentDescription = "In this playlist (tap to remove)",
+                            tint = ink(0.85f),
+                            modifier = Modifier.size(22.dp),
+                        )
                     }
                 }
             }

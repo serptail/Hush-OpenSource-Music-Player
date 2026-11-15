@@ -1,10 +1,10 @@
 package com.gamut.core.player
 
-import kotlin.math.pow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlin.math.pow
 
 enum class ModControl { SPEED, LINK, PITCH, BASS, REVERB_MIX, DECAY, PREDELAY, DAMPING, LOWPASS, WOBBLE, VINYL }
 
@@ -28,7 +28,10 @@ data class ModSettings(
 private val TEMPO = setOf(ModControl.SPEED, ModControl.LINK, ModControl.PITCH, ModControl.BASS)
 private val SPACE = setOf(ModControl.REVERB_MIX, ModControl.DECAY, ModControl.PREDELAY, ModControl.DAMPING)
 
-enum class ModPreset(val label: String, val controls: Set<ModControl>) {
+enum class ModPreset(
+    val label: String,
+    val controls: Set<ModControl>,
+) {
     ORIGINAL("Original", emptySet()),
     SPED_UP("Sped Up", TEMPO),
     SLOWED("Slowed", TEMPO),
@@ -43,50 +46,78 @@ enum class ModPreset(val label: String, val controls: Set<ModControl>) {
     CUSTOM("Custom", ModControl.entries.toSet()),
     ;
 
-    fun defaults(): ModSettings = when (this) {
-        ORIGINAL, CUSTOM -> ModSettings()
+    fun defaults(): ModSettings =
+        when (this) {
+            ORIGINAL, CUSTOM -> {
+                ModSettings()
+            }
 
-        SPED_UP -> ModSettings(speed = 1.15f, bassDb = 1f)
+            SPED_UP -> {
+                ModSettings(speed = 1.15f, bassDb = 1f)
+            }
 
-        NIGHTCORE -> ModSettings(speed = 1.30f, bassDb = 2f)
+            NIGHTCORE -> {
+                ModSettings(speed = 1.30f, bassDb = 2f)
+            }
 
-        SLOWED -> ModSettings(speed = 0.85f)
+            SLOWED -> {
+                ModSettings(speed = 0.85f)
+            }
 
-        DAYCORE -> ModSettings(speed = 0.75f, lowPassHz = 12_000f)
+            DAYCORE -> {
+                ModSettings(speed = 0.75f, lowPassHz = 12_000f)
+            }
 
-        SLOWED_REVERB -> ModSettings(
-            speed = 0.80f,
-            reverbMix = 0.35f,
-            reverbDecaySec = 3f,
-            reverbPreDelayMs = 25f,
-            reverbDamping = 0.55f,
-        )
+            SLOWED_REVERB -> {
+                ModSettings(
+                    speed = 0.80f,
+                    reverbMix = 0.35f,
+                    reverbDecaySec = 3f,
+                    reverbPreDelayMs = 25f,
+                    reverbDamping = 0.55f,
+                )
+            }
 
-        ULTRA_SLOWED -> ModSettings(
-            speed = 0.60f,
-            bassDb = 2f,
-            reverbMix = 0.45f,
-            reverbDecaySec = 5f,
-            reverbPreDelayMs = 40f,
-            reverbDamping = 0.6f,
-        )
+            ULTRA_SLOWED -> {
+                ModSettings(
+                    speed = 0.60f,
+                    bassDb = 2f,
+                    reverbMix = 0.45f,
+                    reverbDecaySec = 5f,
+                    reverbPreDelayMs = 40f,
+                    reverbDamping = 0.6f,
+                )
+            }
 
-        LO_FI -> ModSettings(
-            speed = 0.95f, bassDb = 2f, lowPassHz = 4_500f, wobbleCents = 12f, vinylNoise = 0.25f,
-            reverbMix = 0.10f, reverbDecaySec = 0.8f, reverbPreDelayMs = 10f, reverbDamping = 0.7f,
-        )
-    }
+            LO_FI -> {
+                ModSettings(
+                    speed = 0.95f,
+                    bassDb = 2f,
+                    lowPassHz = 4_500f,
+                    wobbleCents = 12f,
+                    vinylNoise = 0.25f,
+                    reverbMix = 0.10f,
+                    reverbDecaySec = 0.8f,
+                    reverbPreDelayMs = 10f,
+                    reverbDamping = 0.7f,
+                )
+            }
+        }
 }
 
 object ModController {
-    data class State(val preset: ModPreset = ModPreset.ORIGINAL, val settings: ModSettings = ModSettings())
+    data class State(
+        val preset: ModPreset = ModPreset.ORIGINAL,
+        val settings: ModSettings = ModSettings(),
+    )
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
 
-    fun select(preset: ModPreset) = _state.update { cur ->
-        if (preset == ModPreset.CUSTOM) State(preset, cur.settings) else State(preset, preset.defaults())
-    }
+    fun select(preset: ModPreset) =
+        _state.update { cur ->
+            if (preset == ModPreset.CUSTOM) State(preset, cur.settings) else State(preset, preset.defaults())
+        }
 
     fun edit(transform: (ModSettings) -> ModSettings) = _state.update { it.copy(settings = transform(it.settings)) }
 

@@ -41,8 +41,8 @@ import com.adamglin.phosphoricons.bold.Scales
 import com.adamglin.phosphoricons.bold.User
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNotifier
-import com.gamut.core.designsystem.R as DesignR
 import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.R as DesignR
 
 private const val REPO_URL = "https://github.com/serptail/gamut"
 private const val REPO_LABEL = "github.com/serptail/gamut"
@@ -52,16 +52,18 @@ private const val AUTHOR_NAME = "serptail"
 private const val LOGO_AUTHOR_URL = "https://github.com/serptail"
 private const val LOGO_AUTHOR_NAME = "serptail"
 
-private val Libraries = listOf(
-    Choice("Jetpack Compose, Media3, Hilt", "AndroidX & Google", "Apache License 2.0"),
-    Choice("NewPipe Extractor", "TeamNewPipe", "GPL-3.0"),
-    Choice("Phosphor Icons", "Phosphor Icons", "MIT License"),
-)
+private val Libraries =
+    listOf(
+        Choice("Jetpack Compose, Media3, Hilt", "AndroidX & Google", "Apache License 2.0"),
+        Choice("NewPipe Extractor", "TeamNewPipe", "GPL-3.0"),
+        Choice("Phosphor Icons", "Phosphor Icons", "MIT License"),
+    )
 
-private fun versionLabel(context: Context): String = runCatching {
-    val info = context.packageManager.getPackageInfo(context.packageName, 0)
-    "Version ${info.versionName}"
-}.getOrDefault("")
+private fun versionLabel(context: Context): String =
+    runCatching {
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        "Version ${info.versionName}"
+    }.getOrDefault("")
 
 @Composable
 fun AboutScreen(
@@ -87,11 +89,12 @@ fun AboutScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            val logo = if (LocalCoverPalette.current.isLight) {
-                DesignR.drawable.ic_gamut_stacked_color_darktext
-            } else {
-                DesignR.drawable.ic_gamut_stacked_color_lighttext
-            }
+            val logo =
+                if (LocalCoverPalette.current.isLight) {
+                    DesignR.drawable.ic_gamut_stacked_color_darktext
+                } else {
+                    DesignR.drawable.ic_gamut_stacked_color_lighttext
+                }
             Box {
                 Image(
                     painter = painterResource(logo),

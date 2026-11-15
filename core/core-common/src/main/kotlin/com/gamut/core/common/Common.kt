@@ -1,14 +1,23 @@
 package com.gamut.core.common
 
-import javax.inject.Inject
-import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import javax.inject.Inject
+import javax.inject.Singleton
 
-sealed class AppFailure(message: String, cause: Throwable? = null) : Exception(message, cause) {
-    class Network(cause: Throwable) : AppFailure("Network request failed", cause)
+sealed class AppFailure(
+    message: String,
+    cause: Throwable? = null,
+) : Exception(message, cause) {
+    class Network(
+        cause: Throwable,
+    ) : AppFailure("Network request failed", cause)
+
     class NoMatch : AppFailure("No verified source was found")
-    class Unknown(cause: Throwable) : AppFailure("The operation failed", cause)
+
+    class Unknown(
+        cause: Throwable,
+    ) : AppFailure("The operation failed", cause)
 }
 
 open class DispatcherProvider(
@@ -18,4 +27,6 @@ open class DispatcherProvider(
 )
 
 @Singleton
-class DefaultDispatcherProvider @Inject constructor() : DispatcherProvider()
+class DefaultDispatcherProvider
+    @Inject
+    constructor() : DispatcherProvider()

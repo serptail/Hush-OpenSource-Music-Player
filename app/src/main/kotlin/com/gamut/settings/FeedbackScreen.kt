@@ -100,11 +100,12 @@ fun FeedbackScreen(
         MessageField(
             value = ui.message,
             onChange = vm::setMessage,
-            placeholder = when (ui.type) {
-                FeedbackType.BUG -> "What did you do, what happened, and what did you expect?"
-                FeedbackType.IDEA -> "Describe the feature and how you\u2019d use it."
-                FeedbackType.FEEDBACK -> "Anything you love, or want us to improve."
-            },
+            placeholder =
+                when (ui.type) {
+                    FeedbackType.BUG -> "What did you do, what happened, and what did you expect?"
+                    FeedbackType.IDEA -> "Describe the feature and how you\u2019d use it."
+                    FeedbackType.FEEDBACK -> "Anything you love, or want us to improve."
+                },
             words = ui.words,
         )
 
@@ -162,16 +163,29 @@ fun FeedbackScreen(
 }
 
 @Composable
-private fun Hint(text: String, modifier: Modifier = Modifier, align: TextAlign = TextAlign.Start) {
+private fun Hint(
+    text: String,
+    modifier: Modifier = Modifier,
+    align: TextAlign = TextAlign.Start,
+) {
     Text(text, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), textAlign = align, modifier = modifier)
 }
 
 @Composable
-private fun MessageField(value: String, onChange: (String) -> Unit, placeholder: String, words: Int) {
+private fun MessageField(
+    value: String,
+    onChange: (String) -> Unit,
+    placeholder: String,
+    words: Int,
+) {
     val nearLimit = words >= FeedbackRules.MAX_WORDS - 20
     Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ink(0.07f))
-            .padding(horizontal = 16.dp, vertical = 14.dp).heightIn(min = 140.dp),
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(ink(0.07f))
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+            .heightIn(min = 140.dp),
     ) {
         if (value.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = ink(0.4f))
         BasicTextField(
@@ -195,7 +209,10 @@ private fun MessageField(value: String, onChange: (String) -> Unit, placeholder:
 }
 
 @Composable
-private fun StarRating(rating: Int, onChange: (Int) -> Unit) {
+private fun StarRating(
+    rating: Int,
+    onChange: (Int) -> Unit,
+) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("Rate Gamut", style = MaterialTheme.typography.titleMedium, color = ink(0.9f))
         Spacer(Modifier.height(8.dp))
@@ -211,7 +228,11 @@ private fun StarRating(rating: Int, onChange: (Int) -> Unit) {
 }
 
 @Composable
-private fun Star(filled: Boolean, onClick: () -> Unit, description: String) {
+private fun Star(
+    filled: Boolean,
+    onClick: () -> Unit,
+    description: String,
+) {
     val fill by animateFloatAsState(
         if (filled) 1f else 0f,
         spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
@@ -237,13 +258,20 @@ private fun Star(filled: Boolean, onClick: () -> Unit, description: String) {
             }
             path.close()
             drawPath(path, solid.copy(alpha = solid.alpha * fill.coerceIn(0f, 1f)))
-            drawPath(path, line.copy(alpha = line.alpha * (1f - fill.coerceIn(0f, 1f))), style = Stroke(width = 2.4f * density, join = StrokeJoin.Round))
+            drawPath(
+                path,
+                line.copy(alpha = line.alpha * (1f - fill.coerceIn(0f, 1f))),
+                style = Stroke(width = 2.4f * density, join = StrokeJoin.Round),
+            )
         }
     }
 }
 
 @Composable
-private fun DiagnosticsDialog(vm: FeedbackViewModel, onDismiss: () -> Unit) {
+private fun DiagnosticsDialog(
+    vm: FeedbackViewModel,
+    onDismiss: () -> Unit,
+) {
     val text by produceState("Collecting\u2026") { value = vm.diagnosticsPreview() }
     GamutDialog(
         title = "Diagnostics",
@@ -254,7 +282,11 @@ private fun DiagnosticsDialog(vm: FeedbackViewModel, onDismiss: () -> Unit) {
         dismissLabel = null,
     ) {
         Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-            Text(text, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 15.sp), color = ink(0.75f))
+            Text(
+                text,
+                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 15.sp),
+                color = ink(0.75f),
+            )
         }
     }
 }

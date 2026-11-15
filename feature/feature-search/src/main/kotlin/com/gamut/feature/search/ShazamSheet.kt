@@ -84,56 +84,73 @@ fun ShazamSheet(
 ) {
     GamutSheet(onDismiss = onDismiss) {
         when (state) {
-            is ShazamState.Listening -> ListeningContent(level, state.searching, onDismiss)
+            is ShazamState.Listening -> {
+                ListeningContent(level, state.searching, onDismiss)
+            }
 
-            is ShazamState.Found -> FoundContent(
-                track = state.track,
-                isFavorite = state.track.isrc in favoriteIsrcs,
-                playlists = playlists,
-                onPlay = onPlay,
-                onToggleFavorite = onToggleFavorite,
-                onAddToQueue = onAddToQueue,
-                onAddToPlaylist = onAddToPlaylist,
-                onTrackArtist = onTrackArtist,
-            )
+            is ShazamState.Found -> {
+                FoundContent(
+                    track = state.track,
+                    isFavorite = state.track.isrc in favoriteIsrcs,
+                    playlists = playlists,
+                    onPlay = onPlay,
+                    onToggleFavorite = onToggleFavorite,
+                    onAddToQueue = onAddToQueue,
+                    onAddToPlaylist = onAddToPlaylist,
+                    onTrackArtist = onTrackArtist,
+                )
+            }
 
-            ShazamState.NotFound -> MessageContent(
-                icon = AlertTick,
-                title = "Couldn't recognize this one",
-                message = "Move closer to the speaker and try again.",
-                action = "Try again",
-                onAction = onRetry,
-            )
+            ShazamState.NotFound -> {
+                MessageContent(
+                    icon = AlertTick,
+                    title = "Couldn't recognize this one",
+                    message = "Move closer to the speaker and try again.",
+                    action = "Try again",
+                    onAction = onRetry,
+                )
+            }
 
-            is ShazamState.Failed -> MessageContent(
-                icon = ErrorTick,
-                title = "Something went wrong",
-                message = state.message,
-                action = "Try again",
-                onAction = onRetry,
-            )
+            is ShazamState.Failed -> {
+                MessageContent(
+                    icon = ErrorTick,
+                    title = "Something went wrong",
+                    message = state.message,
+                    action = "Try again",
+                    onAction = onRetry,
+                )
+            }
 
-            ShazamState.PermissionDenied -> MessageContent(
-                icon = AlertTick,
-                title = "Microphone access is off",
-                message = "Turn it on in the app settings so Gamut can listen to the music around you.",
-                action = "Open settings",
-                onAction = onOpenSettings,
-            )
+            ShazamState.PermissionDenied -> {
+                MessageContent(
+                    icon = AlertTick,
+                    title = "Microphone access is off",
+                    message = "Turn it on in the app settings so Gamut can listen to the music around you.",
+                    action = "Open settings",
+                    onAction = onOpenSettings,
+                )
+            }
 
-            ShazamState.Idle -> Unit
+            ShazamState.Idle -> {
+                Unit
+            }
         }
     }
 }
 
 @Composable
-private fun ListeningContent(level: Float, searching: Boolean, onCancel: () -> Unit) {
-    val pulse = rememberInfiniteTransition(label = "shazam-pulse").animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1800, easing = LinearEasing), RepeatMode.Restart),
-        label = "pulse",
-    )
+private fun ListeningContent(
+    level: Float,
+    searching: Boolean,
+    onCancel: () -> Unit,
+) {
+    val pulse =
+        rememberInfiniteTransition(label = "shazam-pulse").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(1800, easing = LinearEasing), RepeatMode.Restart),
+            label = "pulse",
+        )
     val smoothLevel = animateFloatAsState(level, tween(120), label = "level")
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp),
@@ -149,8 +166,7 @@ private fun ListeningContent(level: Float, searching: Boolean, onCancel: () -> U
                             scaleX = 0.5f + 0.5f * p
                             scaleY = 0.5f + 0.5f * p
                             alpha = (1f - p) * 0.35f
-                        }
-                        .border(2.dp, ink(), CircleShape),
+                        }.border(2.dp, ink(), CircleShape),
                 )
             }
             Box(
@@ -160,8 +176,7 @@ private fun ListeningContent(level: Float, searching: Boolean, onCancel: () -> U
                         val s = 1f + 0.3f * smoothLevel.value
                         scaleX = s
                         scaleY = s
-                    }
-                    .background(ink(0.14f), CircleShape),
+                    }.background(ink(0.14f), CircleShape),
             )
             Box(Modifier.size(88.dp), contentAlignment = Alignment.Center) {
                 Box(Modifier.size(82.dp).background(LocalCoverPalette.current.base, CircleShape))
@@ -185,7 +200,13 @@ private fun ListeningContent(level: Float, searching: Boolean, onCancel: () -> U
 }
 
 @Composable
-private fun MessageContent(icon: ImageVector, title: String, message: String, action: String, onAction: () -> Unit) {
+private fun MessageContent(
+    icon: ImageVector,
+    title: String,
+    message: String,
+    action: String,
+    onAction: () -> Unit,
+) {
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 8.dp, bottom = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -240,8 +261,20 @@ private fun FoundContent(
                 modifier = Modifier.size(104.dp).clip(RoundedCornerShape(14.dp)).background(ink(0.08f)),
             )
             Column(Modifier.weight(1f).padding(start = 16.dp)) {
-                Text(track.title, style = MaterialTheme.typography.titleLarge, color = ink(), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(track.artist, style = MaterialTheme.typography.bodyLarge, color = ink(0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    track.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = ink(),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    track.artist,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = ink(0.75f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 track.album?.let {
                     Text(it, style = MaterialTheme.typography.bodyMedium, color = ink(0.5f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -268,8 +301,7 @@ private fun FoundContent(
                             if (!isFavorite) savedOpen = true
                         },
                         scaleDown = 0.88f,
-                    )
-                    .clip(CircleShape)
+                    ).clip(CircleShape)
                     .background(ink(0.12f)),
                 contentAlignment = Alignment.Center,
             ) {
@@ -358,16 +390,20 @@ private fun FoundContent(
 }
 
 @Composable
-private fun ActionRow(label: String, onClick: () -> Unit) {
+private fun ActionRow(
+    label: String,
+    onClick: () -> Unit,
+) {
     Text(
         text = label,
         style = MaterialTheme.typography.bodyLarge,
         color = ink(),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        modifier = Modifier
-            .fillMaxWidth()
-            .pressScale(onClick = onClick, scaleDown = 0.98f)
-            .padding(horizontal = 24.dp, vertical = 14.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .pressScale(onClick = onClick, scaleDown = 0.98f)
+                .padding(horizontal = 24.dp, vertical = 14.dp),
     )
 }

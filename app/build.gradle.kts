@@ -42,7 +42,7 @@ android {
 
     sourceSets {
         getByName("main") {
-            res.srcDir("${rootDir}/gamut-brandkit/res")
+            res.srcDir("$rootDir/gamut-brandkit/res")
         }
     }
 

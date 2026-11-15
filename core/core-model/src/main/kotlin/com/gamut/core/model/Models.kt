@@ -49,10 +49,22 @@ data class DownloadedTrack(
 
 sealed interface PlaybackState {
     data object Idle : PlaybackState
+
     data object Loading : PlaybackState
-    data class Playing(val positionMs: Long, val track: Track) : PlaybackState
-    data class Paused(val positionMs: Long, val track: Track) : PlaybackState
-    data class Error(val message: String) : PlaybackState
+
+    data class Playing(
+        val positionMs: Long,
+        val track: Track,
+    ) : PlaybackState
+
+    data class Paused(
+        val positionMs: Long,
+        val track: Track,
+    ) : PlaybackState
+
+    data class Error(
+        val message: String,
+    ) : PlaybackState
 }
 
 enum class RepeatMode { OFF, ALL, ONE }
@@ -61,6 +73,7 @@ data class QueueState(
     val tracks: List<Track> = emptyList(),
     val currentIndex: Int = -1,
 )
+
 interface LocalAudioIndex {
     fun pathFor(isrc: String): String?
 }

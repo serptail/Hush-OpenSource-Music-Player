@@ -38,7 +38,11 @@ data class PlaylistEntity(
 )
 
 @Entity(primaryKeys = ["playlistId", "isrc"], indices = [Index("isrc")])
-data class PlaylistTrackCrossRef(val playlistId: Long, val isrc: String, val position: Int)
+data class PlaylistTrackCrossRef(
+    val playlistId: Long,
+    val isrc: String,
+    val position: Int,
+)
 
 @Entity(tableName = "downloads")
 data class DownloadEntity(
@@ -71,10 +75,16 @@ data class PendingSyncEntity(
 )
 
 @Entity(tableName = "recently_played")
-data class RecentEntity(@PrimaryKey val isrc: String, val playedAtEpochMs: Long)
+data class RecentEntity(
+    @PrimaryKey val isrc: String,
+    val playedAtEpochMs: Long,
+)
 
 @Entity(tableName = "sync_state")
-data class SyncStateEntity(@PrimaryKey val name: String, val value: String)
+data class SyncStateEntity(
+    @PrimaryKey val name: String,
+    val value: String,
+)
 
 @Entity(tableName = "artist_follows")
 data class FollowEntity(

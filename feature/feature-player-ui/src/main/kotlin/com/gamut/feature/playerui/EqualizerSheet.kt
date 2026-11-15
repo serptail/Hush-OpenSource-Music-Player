@@ -58,7 +58,11 @@ private const val StepMb = 50
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun EqualizerSheet(controller: EqualizerController, accent: Color, onDismiss: () -> Unit) {
+internal fun EqualizerSheet(
+    controller: EqualizerController,
+    accent: Color,
+    onDismiss: () -> Unit,
+) {
     val s by controller.state.collectAsState()
     GamutSheet(
         onDismiss = onDismiss,
@@ -111,11 +115,12 @@ internal fun EqualizerSheet(controller: EqualizerController, accent: Color, onDi
             }
 
             Spacer(Modifier.height(16.dp))
-            val presets = if (s.preset == EqualizerController.CUSTOM) {
-                listOf(EqualizerController.CUSTOM) + EqualizerController.presetNames
-            } else {
-                EqualizerController.presetNames
-            }
+            val presets =
+                if (s.preset == EqualizerController.CUSTOM) {
+                    listOf(EqualizerController.CUSTOM) + EqualizerController.presetNames
+                } else {
+                    EqualizerController.presetNames
+                }
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 presets.forEach { name -> PresetChip(name, selected = s.preset == name, accent = accent) { controller.applyPreset(name) } }
             }
@@ -163,40 +168,54 @@ internal fun EqualizerSheet(controller: EqualizerController, accent: Color, onDi
 }
 
 @Composable
-private fun EnableButton(enabled: Boolean, accent: Color, onClick: () -> Unit) {
+private fun EnableButton(
+    enabled: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+) {
     val shape = RoundedCornerShape(50)
     Text(
         if (enabled) "Disable" else "Enable",
         color = if (enabled) ink(0.75f) else LocalCoverPalette.current.base,
         style = MaterialTheme.typography.labelLarge,
-        modifier = Modifier
-            .clip(shape)
-            .then(
-                if (enabled) {
-                    Modifier.border(1.dp, ink(0.18f), shape)
-                } else {
-                    Modifier.background(accent)
-                },
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 7.dp),
+        modifier =
+            Modifier
+                .clip(shape)
+                .then(
+                    if (enabled) {
+                        Modifier.border(1.dp, ink(0.18f), shape)
+                    } else {
+                        Modifier.background(accent)
+                    },
+                ).clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 7.dp),
     )
 }
 
 @Composable
-private fun PresetChip(text: String, selected: Boolean, accent: Color, onClick: () -> Unit) {
+private fun PresetChip(
+    text: String,
+    selected: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+) {
     val chipText by animateColorAsState(if (selected) accent else ink(0.6f), tween(GamutMotion.CONTENT_MS), label = "chip-text")
-    val chipBg by animateColorAsState(if (selected) accent.copy(alpha = 0.18f) else ink(0.07f), tween(GamutMotion.CONTENT_MS), label = "chip-bg")
+    val chipBg by animateColorAsState(
+        if (selected) accent.copy(alpha = 0.18f) else ink(0.07f),
+        tween(GamutMotion.CONTENT_MS),
+        label = "chip-bg",
+    )
     Text(
         text,
         color = chipText,
         style = MaterialTheme.typography.labelLarge,
         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(chipBg)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(50))
+                .background(chipBg)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 14.dp, vertical = 8.dp),
     )
 }
 
@@ -235,6 +254,7 @@ private fun BandSlider(
                     if (!enabled) return@pointerInput
                     awaitEachGesture {
                         val pad = 10.dp.toPx()
+
                         fun apply(y: Float) {
                             val f = 1f - ((y - pad) / (size.height - 2 * pad)).coerceIn(0f, 1f)
                             val mb = ((minMb + f * (maxMb - minMb)) / StepMb).roundToInt() * StepMb
@@ -253,6 +273,7 @@ private fun BandSlider(
             val pad = 10.dp.toPx()
             val top = pad
             val bottom = size.height - pad
+
             fun yFor(mb: Int) = bottom - (mb - minMb).toFloat() / (maxMb - minMb) * (bottom - top)
             val stroke = 3.dp.toPx()
             val zeroY = yFor(0)
@@ -277,19 +298,43 @@ private fun BandSlider(
 }
 
 @Composable
-private fun EffectSlider(title: String, value: Int, accent: Color, enabled: Boolean, onChange: (Int) -> Unit) {
+private fun EffectSlider(
+    title: String,
+    value: Int,
+    accent: Color,
+    enabled: Boolean,
+    onChange: (Int) -> Unit,
+) {
     Column {
         Row {
             Text(title, color = ink(0.85f), style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.weight(1f))
-            Text("${value / 10}%", color = if (value > 0) accent else ink(0.5f), fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "${value / 10}%",
+                color =
+                    if (value >
+                        0
+                    ) {
+                        accent
+                    } else {
+                        ink(0.5f)
+                    },
+                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.bodyMedium,
+            )
         }
         LineSlider(value, 1000, accent, enabled, onChange)
     }
 }
 
 @Composable
-private fun LineSlider(value: Int, max: Int, accent: Color, enabled: Boolean, onChange: (Int) -> Unit) {
+private fun LineSlider(
+    value: Int,
+    max: Int,
+    accent: Color,
+    enabled: Boolean,
+    onChange: (Int) -> Unit,
+) {
     val onChangeNow by rememberUpdatedState(onChange)
     val trackC = ink(0.16f)
     val dotC = ink()
@@ -301,6 +346,7 @@ private fun LineSlider(value: Int, max: Int, accent: Color, enabled: Boolean, on
                 if (!enabled) return@pointerInput
                 awaitEachGesture {
                     val pad = 8.dp.toPx()
+
                     fun apply(x: Float) {
                         val f = ((x - pad) / (size.width - 2 * pad)).coerceIn(0f, 1f)
                         onChangeNow((f * max).roundToInt())

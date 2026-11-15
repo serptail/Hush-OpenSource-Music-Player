@@ -43,11 +43,11 @@ import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.bold.Pause
 import com.adamglin.phosphoricons.bold.Play
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 @Composable
 internal fun PlayPauseButton(
@@ -97,25 +97,26 @@ internal fun SeekBar(
                 awaitEachGesture {
                     val inset = 7.dp.toPx()
                     val usable = (size.width - inset * 2).coerceAtLeast(1f)
+
                     fun fractionAt(x: Float) = ((x - inset) / usable).coerceIn(0f, 1f)
                     val down = awaitFirstDown(requireUnconsumed = false)
                     var last = fractionAt(down.position.x)
                     dragging = true
                     try {
                         currentScrub(last)
-                        val released = drag(down.id) { change ->
-                            change.consume()
-                            last = fractionAt(change.position.x)
-                            currentScrub(last)
-                        }
+                        val released =
+                            drag(down.id) { change ->
+                                change.consume()
+                                last = fractionAt(change.position.x)
+                                currentScrub(last)
+                            }
                         if (released) currentSeek(last)
                     } finally {
                         dragging = false
                         currentScrub(null)
                     }
                 }
-            }
-            .drawBehind {
+            }.drawBehind {
                 val inset = 7.dp.toPx()
                 val usable = size.width - inset * 2
                 val y = size.height / 2f
@@ -129,7 +130,10 @@ internal fun SeekBar(
 }
 
 @Immutable
-internal data class CoverTint(val top: Color, val bottom: Color) {
+internal data class CoverTint(
+    val top: Color,
+    val bottom: Color,
+) {
     companion object {
         val Neutral = CoverTint(Color(0xFF262626), Color(0xFF3C3C3C))
     }
@@ -150,13 +154,19 @@ internal fun rememberCoverTint(url: String?): CoverTint {
             tint = it
             return@LaunchedEffect
         }
-        val found = withContext(Dispatchers.IO) {
-            runCatching {
-                val request = ImageRequest.Builder(context).data(url).allowHardware(false).build()
-                val result = context.imageLoader.execute(request)
-                (result as? SuccessResult)?.drawable?.toBitmapOrNull()?.let(::tintFromBitmap)
-            }.getOrNull()
-        } ?: CoverTint.Neutral
+        val found =
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val request =
+                        ImageRequest
+                            .Builder(context)
+                            .data(url)
+                            .allowHardware(false)
+                            .build()
+                    val result = context.imageLoader.execute(request)
+                    (result as? SuccessResult)?.drawable?.toBitmapOrNull()?.let(::tintFromBitmap)
+                }.getOrNull()
+            } ?: CoverTint.Neutral
         tintCache[url] = found
         tint = found
     }
@@ -191,6 +201,11 @@ private fun tintFromBitmap(bitmap: Bitmap): CoverTint {
     var hue = Math.toDegrees(atan2(hy.toDouble(), hx.toDouble())).toFloat()
     if (hue < 0f) hue += 360f
     val s = (sat / weight).coerceIn(0.35f, 0.8f)
-    fun hsvColor(h: Float, sv: Float, v: Float) = Color(android.graphics.Color.HSVToColor(floatArrayOf(h, sv.coerceIn(0f, 1f), v)))
+
+    fun hsvColor(
+        h: Float,
+        sv: Float,
+        v: Float,
+    ) = Color(android.graphics.Color.HSVToColor(floatArrayOf(h, sv.coerceIn(0f, 1f), v)))
     return CoverTint(top = hsvColor(hue, s, 0.38f), bottom = hsvColor(hue, s * 0.85f, 0.55f))
 }

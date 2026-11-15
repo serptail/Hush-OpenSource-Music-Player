@@ -59,9 +59,9 @@ fun VerticalTabs(
     }
 }
 
-private fun Modifier.verticalText(): Modifier = this
-    .layout { measurable, _ ->
-        val p = measurable.measure(Constraints())
-        layout(p.height, p.width) { p.place((p.height - p.width) / 2, (p.width - p.height) / 2) }
-    }
-    .rotate(-90f)
+private fun Modifier.verticalText(): Modifier =
+    this
+        .layout { measurable, _ ->
+            val p = measurable.measure(Constraints())
+            layout(p.height, p.width) { p.place((p.height - p.width) / 2, (p.width - p.height) / 2) }
+        }.rotate(-90f)

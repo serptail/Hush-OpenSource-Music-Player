@@ -35,7 +35,10 @@ object GamutBoot {
 }
 
 @Composable
-fun GamutLogo(modifier: Modifier = Modifier, size: Dp = 28.dp) {
+fun GamutLogo(
+    modifier: Modifier = Modifier,
+    size: Dp = 28.dp,
+) {
     Image(painterResource(R.drawable.gamut_logo), contentDescription = "Gamut", modifier = modifier.size(size))
 }
 
@@ -90,9 +93,10 @@ fun GamutLoadingScreen(
             Image(
                 painterResource(filled),
                 contentDescription = null,
-                modifier = Modifier.fillMaxSize().drawWithContent {
-                    clipRect(right = size.width * progress.value) { this@drawWithContent.drawContent() }
-                },
+                modifier =
+                    Modifier.fillMaxSize().drawWithContent {
+                        clipRect(right = size.width * progress.value) { this@drawWithContent.drawContent() }
+                    },
             )
         }
     }

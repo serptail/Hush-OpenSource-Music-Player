@@ -43,11 +43,11 @@ import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.bold.ArrowClockwise
 import com.gamut.core.designsystem.ink
-import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @Stable
 class SlingshotRefreshState internal constructor(
@@ -67,13 +67,14 @@ class SlingshotRefreshState internal constructor(
 
     private fun springTo(target: Float) {
         anim?.cancel()
-        anim = scope.launch {
-            animate(
-                initialValue = pull,
-                targetValue = target,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-            ) { v, _ -> pull = v }
-        }
+        anim =
+            scope.launch {
+                animate(
+                    initialValue = pull,
+                    targetValue = target,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                ) { v, _ -> pull = v }
+            }
     }
 
     fun trigger() {
@@ -98,32 +99,40 @@ class SlingshotRefreshState internal constructor(
         }
     }
 
-    val connection = object : NestedScrollConnection {
-        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-            if (!enabled() || source != NestedScrollSource.UserInput || pull <= 0f || available.y >= 0f) return Offset.Zero
-            anim?.cancel()
-            val next = (pull + available.y).coerceAtLeast(0f)
-            val used = next - pull
-            pull = next
-            return Offset(0f, used)
-        }
-
-        override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-            if (!enabled() || refreshing || source != NestedScrollSource.UserInput || available.y <= 0f) return Offset.Zero
-            anim?.cancel()
-            val resistance = (1f - pull / maxPx).coerceIn(0.12f, 1f) * 0.55f
-            pull = (pull + available.y * resistance).coerceAtMost(maxPx)
-            return Offset(0f, available.y)
-        }
-
-        override suspend fun onPreFling(available: Velocity): Velocity {
-            if (pull > 0f && enabled()) {
-                release()
-                return available
+    val connection =
+        object : NestedScrollConnection {
+            override fun onPreScroll(
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                if (!enabled() || source != NestedScrollSource.UserInput || pull <= 0f || available.y >= 0f) return Offset.Zero
+                anim?.cancel()
+                val next = (pull + available.y).coerceAtLeast(0f)
+                val used = next - pull
+                pull = next
+                return Offset(0f, used)
             }
-            return Velocity.Zero
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                if (!enabled() || refreshing || source != NestedScrollSource.UserInput || available.y <= 0f) return Offset.Zero
+                anim?.cancel()
+                val resistance = (1f - pull / maxPx).coerceIn(0.12f, 1f) * 0.55f
+                pull = (pull + available.y * resistance).coerceAtMost(maxPx)
+                return Offset(0f, available.y)
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (pull > 0f && enabled()) {
+                    release()
+                    return available
+                }
+                return Velocity.Zero
+            }
         }
-    }
 
     private companion object {
         const val MIN_SPIN_MS = 1_100L
@@ -131,7 +140,10 @@ class SlingshotRefreshState internal constructor(
 }
 
 @Composable
-fun rememberSlingshotRefresh(enabled: Boolean, onRefresh: () -> Unit): SlingshotRefreshState {
+fun rememberSlingshotRefresh(
+    enabled: Boolean,
+    onRefresh: () -> Unit,
+): SlingshotRefreshState {
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     val enabledNow by rememberUpdatedState(enabled)
@@ -148,7 +160,10 @@ fun rememberSlingshotRefresh(enabled: Boolean, onRefresh: () -> Unit): Slingshot
 }
 
 @Composable
-fun BoxScope.SlingshotIndicator(state: SlingshotRefreshState, topOffsetPx: Int = -1) {
+fun BoxScope.SlingshotIndicator(
+    state: SlingshotRefreshState,
+    topOffsetPx: Int = -1,
+) {
     val progress = state.pull / state.thresholdPx
     if (state.pull < 1f && !state.refreshing) return
     val ready = progress >= 1f || state.refreshing
@@ -167,8 +182,7 @@ fun BoxScope.SlingshotIndicator(state: SlingshotRefreshState, topOffsetPx: Int =
                 alpha = if (state.refreshing) 1f else p
                 scaleX = 0.55f + 0.45f * p
                 scaleY = 0.55f + 0.45f * p
-            }
-            .size(44.dp)
+            }.size(44.dp)
             .clip(CircleShape)
             .background(ink(if (ready) 0.22f else 0.12f)),
         contentAlignment = Alignment.Center,
@@ -177,7 +191,11 @@ fun BoxScope.SlingshotIndicator(state: SlingshotRefreshState, topOffsetPx: Int =
             PhosphorIcons.Bold.ArrowClockwise,
             "Refresh",
             tint = ink(),
-            modifier = Modifier.size(22.dp).graphicsLayer { rotationZ = if (state.refreshing) spin else progress.coerceIn(0f, 1.2f) * 270f },
+            modifier =
+                Modifier
+                    .size(
+                        22.dp,
+                    ).graphicsLayer { rotationZ = if (state.refreshing) spin else progress.coerceIn(0f, 1.2f) * 270f },
         )
     }
 }

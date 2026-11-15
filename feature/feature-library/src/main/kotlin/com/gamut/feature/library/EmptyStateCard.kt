@@ -91,24 +91,29 @@ fun EmptyStateCard(
                 buttonLabel,
                 style = MaterialTheme.typography.titleSmall,
                 color = if (palette.isLight) Color.White else Color.Black,
-                modifier = Modifier
-                    .pressScale(onClick = onButton)
-                    .background(ink(0.95f), CircleShape)
-                    .padding(horizontal = 28.dp, vertical = 14.dp),
+                modifier =
+                    Modifier
+                        .pressScale(onClick = onButton)
+                        .background(ink(0.95f), CircleShape)
+                        .padding(horizontal = 28.dp, vertical = 14.dp),
             )
         }
     }
 }
 
 @Composable
-private fun CoverSpread(urls: List<String>, circle: Boolean = false) {
-    val slots = listOf(
-        Triple(-96, 62, 0.55f),
-        Triple(-48, 78, 0.8f),
-        Triple(0, 96, 1f),
-        Triple(48, 78, 0.8f),
-        Triple(96, 62, 0.55f),
-    )
+private fun CoverSpread(
+    urls: List<String>,
+    circle: Boolean = false,
+) {
+    val slots =
+        listOf(
+            Triple(-96, 62, 0.55f),
+            Triple(-48, 78, 0.8f),
+            Triple(0, 96, 1f),
+            Triple(48, 78, 0.8f),
+            Triple(96, 62, 0.55f),
+        )
     val fillOrder = listOf(2, 1, 3, 0, 4)
     Box(Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
         listOf(0, 4, 1, 3, 2).forEach { i ->

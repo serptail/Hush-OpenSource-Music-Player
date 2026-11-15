@@ -72,7 +72,6 @@ import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Regular
 import com.adamglin.phosphoricons.bold.CaretDown
 import com.adamglin.phosphoricons.bold.DotsThreeVertical
-import com.adamglin.phosphoricons.fill.Heart as HeartFilled
 import com.adamglin.phosphoricons.regular.Heart
 import com.adamglin.phosphoricons.regular.ListPlus
 import com.adamglin.phosphoricons.regular.Queue
@@ -98,7 +97,6 @@ import com.gamut.core.designsystem.isWideLayout
 import com.gamut.core.designsystem.rememberArtistTap
 import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.model.PlaybackState
-import com.gamut.core.model.RepeatMode as PlaybackRepeatMode
 import com.gamut.core.model.Track
 import com.gamut.core.player.EqualizerController
 import com.gamut.core.player.ModController
@@ -121,9 +119,11 @@ import com.gamut.feature.playerui.components.swipeVolumeGesture
 import com.gamut.feature.playerui.components.tapTarget
 import com.gamut.feature.playerui.components.volumeHudAnchor
 import com.gamut.feature.playerui.components.volumeHudHeaderAnchor
-import kotlin.math.abs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
+import kotlin.math.abs
+import com.adamglin.phosphoricons.fill.Heart as HeartFilled
+import com.gamut.core.model.RepeatMode as PlaybackRepeatMode
 
 private val FavoriteColor = Color(0xFFFF4D6D)
 private const val PrefsName = "player_ui"
@@ -174,8 +174,9 @@ fun PlayerScreen(
 
     val streamDuration by player.streamDurationMs.collectAsState()
     val catalogDuration = track?.durationMs ?: 0L
-    val streamPlausible = streamDuration > 0L &&
-        (catalogDuration <= 0L || streamDuration in (catalogDuration / 2)..(catalogDuration * 2))
+    val streamPlausible =
+        streamDuration > 0L &&
+            (catalogDuration <= 0L || streamDuration in (catalogDuration / 2)..(catalogDuration * 2))
     val effectiveDurationMs = if (streamPlausible) streamDuration else catalogDuration
     val duration = effectiveDurationMs.coerceAtLeast(1L)
     val shuffleOn by player.shuffleEnabled.collectAsState()
@@ -219,17 +220,18 @@ fun PlayerScreen(
     var scrubFraction by remember { mutableStateOf<Float?>(null) }
     val durationKnown = effectiveDurationMs > 0L
     val currentKey = track?.let { it.isrc.orEmpty() + "|" + it.title }
-    val progressProvider = remember(duration, durationKnown, currentKey, showLoading) {
-        {
-            val clockPosition = clock.positionMs
-            val clockKey = clock.anchoredKey
-            scrubFraction ?: when {
-                showLoading -> loadProgressState.value.coerceIn(0f, 1f)
-                durationKnown && clockKey == currentKey -> (clockPosition / duration).coerceIn(0f, 1f)
-                else -> 0f
+    val progressProvider =
+        remember(duration, durationKnown, currentKey, showLoading) {
+            {
+                val clockPosition = clock.positionMs
+                val clockKey = clock.anchoredKey
+                scrubFraction ?: when {
+                    showLoading -> loadProgressState.value.coerceIn(0f, 1f)
+                    durationKnown && clockKey == currentKey -> (clockPosition / duration).coerceIn(0f, 1f)
+                    else -> 0f
+                }
             }
         }
-    }
     val positionProvider = remember(progressProvider, duration) { { (progressProvider() * duration).toLong() } }
     val lyricsPosition = remember(clock) { { clock.positionMs.toLong() + LyricsSyncOffsetMs } }
 
@@ -278,12 +280,13 @@ fun PlayerScreen(
             delay((2_000L * attempt).coerceAtMost(15_000L))
         }
     }
-    val activeLine = remember(lyricsState, clock) {
-        derivedStateOf {
-            val s = lyricsState
-            if (s is LyricsState.Loaded && s.isSynced) activeLineIndex(s.lines, lyricsPosition()) else -1
+    val activeLine =
+        remember(lyricsState, clock) {
+            derivedStateOf {
+                val s = lyricsState
+                if (s is LyricsState.Loaded && s.isSynced) activeLineIndex(s.lines, lyricsPosition()) else -1
+            }
         }
-    }
     val activeIndex: () -> Int = remember(activeLine) { { activeLine.value } }
 
     var artistInfo by remember(lyricsKey) { mutableStateOf(track?.let { ArtistInfoRepository.cached(it) }) }
@@ -317,18 +320,20 @@ fun PlayerScreen(
     }
     val waveform = rememberWaveform(track.takeIf { active })
     val waveformDone = waveform.isNotEmpty() && waveform.indexOfLast { it > 0f } >= waveform.size * 9 / 10
-    val shownLyrics = remember(lyricsState, waveformDone, effectiveDurationMs) {
-        val s = lyricsState
-        if (s is LyricsState.Loaded && s.isSynced && waveformDone) {
-            LyricsState.Loaded(LyricsAudioAligner.refine(s.lines, waveform, effectiveDurationMs), true)
-        } else {
-            s
+    val shownLyrics =
+        remember(lyricsState, waveformDone, effectiveDurationMs) {
+            val s = lyricsState
+            if (s is LyricsState.Loaded && s.isSynced && waveformDone) {
+                LyricsState.Loaded(LyricsAudioAligner.refine(s.lines, waveform, effectiveDurationMs), true)
+            } else {
+                s
+            }
         }
-    }
 
-    val artistTap = rememberArtistTap(track?.artist.orEmpty(), track?.album) { name ->
-        track?.let { t -> onGoToArtist(t.copy(artist = name)) }
-    }
+    val artistTap =
+        rememberArtistTap(track?.artist.orEmpty(), track?.album) { name ->
+            track?.let { t -> onGoToArtist(t.copy(artist = name)) }
+        }
     val goToArtist: () -> Unit = artistTap.onClick
 
     val gutter = adaptiveGutter(AdaptiveLayout.PlayerMaxWidth)
@@ -450,7 +455,17 @@ fun PlayerScreen(
 
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 FocusLive(!lyricsPanelOpen) {
-                    PlayerTopBar(leave, onMore = { showMore = true }, modifier = Modifier.fillMaxWidth().padding(start = 24.dp + edge, end = 24.dp + edge, top = 14.dp))
+                    PlayerTopBar(
+                        leave,
+                        onMore = { showMore = true },
+                        modifier =
+                            Modifier.fillMaxWidth().padding(
+                                start = 24.dp + edge,
+                                end =
+                                    24.dp + edge,
+                                top = 14.dp,
+                            ),
+                    )
 
                     if (wide) {
                         Row(Modifier.weight(1f).fillMaxWidth()) {
@@ -499,8 +514,12 @@ fun PlayerScreen(
 
             AnimatedVisibility(
                 visible = lyricsPanelOpen && track != null,
-                enter = slideInVertically(tween(GamutMotion.PLAYER_IN_MS, easing = GamutMotion.EmphasizedDecelerate)) { it } + fadeIn(tween(200)),
-                exit = slideOutVertically(tween(GamutMotion.PLAYER_OUT_MS, easing = GamutMotion.EmphasizedAccelerate)) { it } + fadeOut(tween(200)),
+                enter =
+                    slideInVertically(tween(GamutMotion.PLAYER_IN_MS, easing = GamutMotion.EmphasizedDecelerate)) { it } +
+                        fadeIn(tween(200)),
+                exit =
+                    slideOutVertically(tween(GamutMotion.PLAYER_OUT_MS, easing = GamutMotion.EmphasizedAccelerate)) { it } +
+                        fadeOut(tween(200)),
             ) {
                 FullLyricsPanel(
                     title = track?.title.orEmpty(),
@@ -573,10 +592,11 @@ fun PlayerScreen(
     if (showAddToPlaylist) {
         AddToPlaylistSheet(
             playlists = playlists,
-            alreadyIn = run {
-                val delta = track?.isrc?.let { playlistChanges[it] }.orEmpty()
-                playlistIdsWithTrack.filter { delta[it] != false }.toSet() + delta.filterValues { it }.keys
-            },
+            alreadyIn =
+                run {
+                    val delta = track?.isrc?.let { playlistChanges[it] }.orEmpty()
+                    playlistIdsWithTrack.filter { delta[it] != false }.toSet() + delta.filterValues { it }.keys
+                },
             onPick = { picked ->
                 track?.let {
                     onAddToPlaylist(it, picked.id)
@@ -619,7 +639,11 @@ fun PlayerScreen(
 }
 
 @Composable
-private fun PlayerTopBar(onBack: () -> Unit, onMore: () -> Unit, modifier: Modifier = Modifier) {
+private fun PlayerTopBar(
+    onBack: () -> Unit,
+    onMore: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         DepthIcon(PhosphorIcons.Bold.CaretDown, "Collapse", Modifier.tapTarget(onClick = onBack).padding(8.dp))
         Spacer(Modifier.weight(1f))
@@ -690,8 +714,24 @@ private fun ControlsGrid(
                     size = iconSize,
                 )
             }
-            GridCell { DepthIcon(PhosphorIcons.Regular.Queue, "Queue", Modifier.bounceTap(onClick = onQueue).padding(8.dp), tint = idle, size = iconSize) }
-            GridCell { DepthIcon(PhosphorIcons.Regular.ListPlus, "Add to playlist", Modifier.bounceTap(onClick = onAddToPlaylist).padding(8.dp), tint = idle, size = iconSize) }
+            GridCell {
+                DepthIcon(
+                    PhosphorIcons.Regular.Queue,
+                    "Queue",
+                    Modifier.bounceTap(onClick = onQueue).padding(8.dp),
+                    tint = idle,
+                    size = iconSize,
+                )
+            }
+            GridCell {
+                DepthIcon(
+                    PhosphorIcons.Regular.ListPlus,
+                    "Add to playlist",
+                    Modifier.bounceTap(onClick = onAddToPlaylist).padding(8.dp),
+                    tint = idle,
+                    size = iconSize,
+                )
+            }
             GridCell {
                 DepthIcon(
                     if (repeatMode == PlaybackRepeatMode.ONE) PhosphorIcons.Regular.RepeatOnce else PhosphorIcons.Regular.Repeat,
@@ -709,7 +749,15 @@ private fun ControlsGrid(
         Spacer(Modifier.height(6.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             GridCell {}
-            GridCell { DepthIcon(PhosphorIcons.Regular.ShareNetwork, "Share", Modifier.bounceTap(onClick = onShare).padding(8.dp), tint = idle, size = iconSize) }
+            GridCell {
+                DepthIcon(
+                    PhosphorIcons.Regular.ShareNetwork,
+                    "Share",
+                    Modifier.bounceTap(onClick = onShare).padding(8.dp),
+                    tint = idle,
+                    size = iconSize,
+                )
+            }
             GridCell {
                 DepthIcon(
                     PhosphorIcons.Regular.Sparkle,
@@ -819,20 +867,23 @@ internal class PlayerClock {
 private val BackgroundBlur = 24.dp
 
 @Composable
-internal fun PlayerBackdrop(artUrl: String, animateChanges: Boolean = true) {
+internal fun PlayerBackdrop(
+    artUrl: String,
+    animateChanges: Boolean = true,
+) {
     Box(Modifier.fillMaxSize().acrylicSource()) {
         Box(Modifier.fillMaxSize().clipToBounds()) {
             AsyncImage(
                 model = rememberFadeRequest(artUrl, durationMs = if (animateChanges) 600 else 0),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        scaleX = 1.3f
-                        scaleY = 1.3f
-                    }
-                    .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(BackgroundBlur) else Modifier),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = 1.3f
+                            scaleY = 1.3f
+                        }.then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(BackgroundBlur) else Modifier),
             )
         }
         Box(
@@ -859,12 +910,18 @@ internal fun PlayerBackdrop(artUrl: String, animateChanges: Boolean = true) {
 }
 
 @Composable
-private fun rememberFadeRequest(url: String?, durationMs: Int = 600): ImageRequest {
+private fun rememberFadeRequest(
+    url: String?,
+    durationMs: Int = 600,
+): ImageRequest {
     val context = LocalContext.current
     val firstUrl = remember { url }
     return remember(url, durationMs == 0) {
-        ImageRequest.Builder(context).data(url)
+        ImageRequest
+            .Builder(context)
+            .data(url)
             .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
-            .crossfade(if (url == firstUrl || durationMs == 0) 0 else durationMs).build()
+            .crossfade(if (url == firstUrl || durationMs == 0) 0 else durationMs)
+            .build()
     }
 }

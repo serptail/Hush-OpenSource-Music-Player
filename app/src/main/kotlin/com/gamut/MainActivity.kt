@@ -138,7 +138,6 @@ import com.gamut.feature.resolver.ResolveTrackSourceUseCase
 import com.gamut.feature.resolver.TrackDownloadManager
 import com.gamut.feature.search.AlbumScreen
 import com.gamut.feature.search.AlbumViewModel
-import com.gamut.feature.search.ArtistScreen as DiscoverArtistScreen
 import com.gamut.feature.search.ArtistViewModel
 import com.gamut.feature.search.DiscoverItem
 import com.gamut.feature.search.DiscoverRepository
@@ -168,13 +167,14 @@ import com.gamut.settings.SupportViewModel
 import com.gamut.settings.TelemetryCollector
 import com.gamut.settings.supportNudgeCorona
 import dagger.hilt.android.AndroidEntryPoint
-import java.io.File
-import javax.inject.Inject
-import kotlin.math.abs
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
+import java.io.File
+import javax.inject.Inject
+import kotlin.math.abs
+import com.gamut.feature.search.ArtistScreen as DiscoverArtistScreen
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
@@ -195,15 +195,18 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var telemetry: TelemetryCollector
 
     @Inject lateinit var discoverRepository: DiscoverRepository
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         telemetry.install()
-        com.gamut.feature.playerui.components.WaveformSource.init(applicationContext)
+        com.gamut.feature.playerui.components.WaveformSource
+            .init(applicationContext)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = android.graphics.Color.TRANSPARENT
-        val systemDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val systemDark =
+            (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                android.content.res.Configuration.UI_MODE_NIGHT_YES
         val startPalette = appearanceStore.settings.value.neutralPalette(systemDark)
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = startPalette.isLight
         window.setBackgroundDrawable(ColorDrawable(startPalette.base.toArgb()))
@@ -220,7 +223,17 @@ class MainActivity : FragmentActivity() {
             CompositionLocalProvider(LocalAppearance provides appearance) {
                 com.gamut.update.UpdateGate {
                     com.gamut.onboarding.OnboardingGate {
-                        GamutApp(player, resolveTrackSource, audioSources, newPipe, downloadIndex, downloadManager, appearance, telemetry, discoverRepository)
+                        GamutApp(
+                            player,
+                            resolveTrackSource,
+                            audioSources,
+                            newPipe,
+                            downloadIndex,
+                            downloadManager,
+                            appearance,
+                            telemetry,
+                            discoverRepository,
+                        )
                     }
                 }
             }
@@ -229,7 +242,17 @@ class MainActivity : FragmentActivity() {
 }
 
 @Composable
-private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSourceUseCase, audioSources: AudioSourceRepository, newPipe: NewPipeYoutubeSource, downloadIndex: DownloadIndex, downloadManager: TrackDownloadManager, appearance: AppearanceSettings, telemetry: TelemetryCollector, discoverRepository: DiscoverRepository) {
+private fun GamutApp(
+    player: MusicPlayer,
+    resolveTrackSource: ResolveTrackSourceUseCase,
+    audioSources: AudioSourceRepository,
+    newPipe: NewPipeYoutubeSource,
+    downloadIndex: DownloadIndex,
+    downloadManager: TrackDownloadManager,
+    appearance: AppearanceSettings,
+    telemetry: TelemetryCollector,
+    discoverRepository: DiscoverRepository,
+) {
     val nav = rememberNavController()
     val notifier = rememberNotifier()
     val supportVm = hiltViewModel<SupportViewModel>()
@@ -276,19 +299,26 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
             player.warmUp()
         }
     }
-    val currentRoute = nav.currentBackStackEntryAsState().value?.destination?.route
+    val currentRoute =
+        nav
+            .currentBackStackEntryAsState()
+            .value
+            ?.destination
+            ?.route
     val homeShowing = currentRoute == null || currentRoute == "home"
     val focusManager = LocalFocusManager.current
     LaunchedEffect(homeShowing) { if (!homeShowing) focusManager.clearFocus(force = true) }
-    val photoResolver = remember(discoverRepository) {
-        val resolve: suspend (String, String?) -> String? = { name, album -> discoverRepository.artistPhotoFor(name, album.orEmpty()) }
-        resolve
-    }
-    val homeAlpha = animateFloatAsState(
-        targetValue = if (homeShowing) 1f else 0f,
-        animationSpec = tween(GamutMotion.NAV_MS, easing = GamutMotion.Standard),
-        label = "home-alpha",
-    )
+    val photoResolver =
+        remember(discoverRepository) {
+            val resolve: suspend (String, String?) -> String? = { name, album -> discoverRepository.artistPhotoFor(name, album.orEmpty()) }
+            resolve
+        }
+    val homeAlpha =
+        animateFloatAsState(
+            targetValue = if (homeShowing) 1f else 0f,
+            animationSpec = tween(GamutMotion.NAV_MS, easing = GamutMotion.Standard),
+            label = "home-alpha",
+        )
     val scope = rememberCoroutineScope()
     var selectedTrack by remember { mutableStateOf<Track?>(null) }
     val layerPos = remember { Animatable(0f) }
@@ -416,7 +446,9 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
     var resolvingIsrc by remember { mutableStateOf<String?>(null) }
     var resolveJob by remember { mutableStateOf<Job?>(null) }
     val playback by player.playbackState.collectAsState()
-    val loadedTrack by remember { derivedStateOf { (playback as? PlaybackState.Playing)?.track ?: (playback as? PlaybackState.Paused)?.track } }
+    val loadedTrack by remember {
+        derivedStateOf { (playback as? PlaybackState.Playing)?.track ?: (playback as? PlaybackState.Paused)?.track }
+    }
     val isPlayingNow by remember { derivedStateOf { playback is PlaybackState.Playing } }
     LaunchedEffect(loadedTrack?.isrc) { loadedTrack?.let { selectedTrack = it } }
 
@@ -435,7 +467,8 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
     }
     val localAvailabilityVm = hiltViewModel<LocalAvailabilityViewModel>()
     LaunchedEffect(appLibraryVm, localAvailabilityVm) {
-        kotlinx.coroutines.flow.combine(appLibraryVm.favorites, localAvailabilityVm.existing) { favs, existing -> favs to existing }
+        kotlinx.coroutines.flow
+            .combine(appLibraryVm.favorites, localAvailabilityVm.existing) { favs, existing -> favs to existing }
             .collect { (favs, existing) ->
                 if (existing == null) return@collect
                 val kept = favs.withoutMissingLocal(existing)
@@ -471,12 +504,14 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
         shazamVm.start()
         try {
             ShazamListenService.start(context)
-        } catch (e: Exception) { }
+        } catch (e: Exception) {
+        }
     }
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> startShazam() }
     val beginAfterMic = {
-        val needsNotif = android.os.Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        val needsNotif =
+            android.os.Build.VERSION.SDK_INT >= 33 &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         if (needsNotif && !askedNotifications) {
             askedNotifications = true
             notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -484,9 +519,10 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
             startShazam()
         }
     }
-    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) beginAfterMic() else shazamVm.permissionDenied()
-    }
+    val micPermission =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) beginAfterMic() else shazamVm.permissionDenied()
+        }
     val onShazam = {
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         if (granted) beginAfterMic() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
@@ -534,17 +570,38 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                             visible = backgroundVisible,
                             modifier = Modifier.fillMaxSize().graphicsLayer { alpha = bgAlpha }.acrylicSource(zIndex = -1f),
                         )
-                        val removeFromPlaylist = remember(appLibraryVm) {
-                            { t: Track, id: String ->
-                                id.toLongOrNull()?.let { appLibraryVm.removeTrack(it, t) }
-                                Unit
+                        val removeFromPlaylist =
+                            remember(appLibraryVm) {
+                                { t: Track, id: String ->
+                                    id.toLongOrNull()?.let { appLibraryVm.removeTrack(it, t) }
+                                    Unit
+                                }
                             }
-                        }
-                        CompositionLocalProvider(LocalCoverPalette provides palette, LocalSupportNudge provides supportNudge, LocalNotifier provides notifier, LocalArtistPhotoResolver provides photoResolver, LocalPlaylistRemove provides removeFromPlaylist) {
+                        CompositionLocalProvider(
+                            LocalCoverPalette provides palette,
+                            LocalSupportNudge provides supportNudge,
+                            LocalNotifier provides notifier,
+                            LocalArtistPhotoResolver provides photoResolver,
+                            LocalPlaylistRemove provides removeFromPlaylist,
+                        ) {
                             val openArtist: (String) -> Unit = { artist -> nav.navigate("artist-name/${Uri.encode(artist)}") }
                             val openConnect = { showConnect = true }
-                            val nowPlaying: @Composable () -> Unit = { NowPlayingStrip(player, docked = false, onOpen = openPlayer, onDevicesClick = openConnect) }
-                            val nowPlayingDocked: @Composable () -> Unit = { NowPlayingStrip(player, docked = true, onOpen = openPlayer, onDevicesClick = openConnect) }
+                            val nowPlaying: @Composable () -> Unit = {
+                                NowPlayingStrip(
+                                    player,
+                                    docked = false,
+                                    onOpen = openPlayer,
+                                    onDevicesClick = openConnect,
+                                )
+                            }
+                            val nowPlayingDocked: @Composable () -> Unit = {
+                                NowPlayingStrip(
+                                    player,
+                                    docked = true,
+                                    onOpen = openPlayer,
+                                    onDevicesClick = openConnect,
+                                )
+                            }
                             val playTrackWithQueue: (Track, List<Track>) -> Unit = tap@{ track, queue ->
                                 if (loadedTrack?.isrc == track.isrc) {
                                     if (!isPlayingNow) player.resume()
@@ -555,56 +612,63 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                 selectedTrack = track
                                 resolvingIsrc = track.isrc
                                 resolveJob?.cancel()
-                                resolveJob = scope.launch {
-                                    val deviceUri = track.localUri()
-                                    if (deviceUri != null) {
-                                        val startIndex = queue.indexOfFirst { it.isrc == track.isrc }
-                                        if (startIndex >= 0) player.setQueue(queue, startIndex)
-                                        com.gamut.feature.playerui.components.WaveformSource.register(track, deviceUri.toString())
-                                        player.play(track, deviceUri.toString())
+                                resolveJob =
+                                    scope.launch {
+                                        val deviceUri = track.localUri()
+                                        if (deviceUri != null) {
+                                            val startIndex = queue.indexOfFirst { it.isrc == track.isrc }
+                                            if (startIndex >= 0) player.setQueue(queue, startIndex)
+                                            com.gamut.feature.playerui.components.WaveformSource
+                                                .register(track, deviceUri.toString())
+                                            player.play(track, deviceUri.toString())
+                                            resolvingIsrc = null
+                                            openPlayer()
+                                            return@launch
+                                        }
+                                        val localAudio =
+                                            kotlinx.coroutines.withContext(
+                                                kotlinx.coroutines.Dispatchers.IO,
+                                            ) { downloadManager.playableUri(track.isrc) }
+                                        if (localAudio != null) {
+                                            val startIndex = queue.indexOfFirst { it.isrc == track.isrc }
+                                            if (startIndex >= 0) player.setQueue(queue, startIndex)
+                                            com.gamut.feature.playerui.components.WaveformSource
+                                                .register(track, localAudio.toString())
+                                            player.play(track, localAudio.toString())
+                                            resolvingIsrc = null
+                                            openPlayer()
+                                            return@launch
+                                        }
+                                        val noticeId = notifier.loading("Loading ${track.title}\u2026")
+                                        resolveTrackSource(track).fold(
+                                            onSuccess = { source ->
+                                                notifier.update(noticeId, "Getting audio\u2026")
+                                                audioSources.audioUrl(source.youtubeVideoId).fold(
+                                                    onSuccess = { audioUrl ->
+                                                        val startIndex = queue.indexOfFirst { it.isrc == track.isrc }
+                                                        if (startIndex >= 0) player.setQueue(queue, startIndex)
+                                                        com.gamut.feature.playerui.components.WaveformSource
+                                                            .register(track, audioUrl)
+                                                        player.play(track, audioUrl)
+                                                        notifier.dismiss(noticeId)
+                                                        openPlayer()
+                                                    },
+                                                    onFailure = { notifier.error("Couldn\u2019t play this song") },
+                                                )
+                                            },
+                                            onFailure = { error ->
+                                                notifier.error(
+                                                    when (error) {
+                                                        is ResolveFailure.Timeout -> "Connection was slow. Try again."
+                                                        is ResolveFailure.NoCandidates -> "No playable source was found."
+                                                        is ResolveFailure.LowScore -> "No reliable match was found."
+                                                        else -> "Couldn\u2019t play this song"
+                                                    },
+                                                )
+                                            },
+                                        )
                                         resolvingIsrc = null
-                                        openPlayer()
-                                        return@launch
                                     }
-                                    val localFile = downloadIndex.pathFor(track.isrc)?.let(::File)?.takeIf { it.exists() }
-                                    if (localFile != null) {
-                                        val startIndex = queue.indexOfFirst { it.isrc == track.isrc }
-                                        if (startIndex >= 0) player.setQueue(queue, startIndex)
-                                        com.gamut.feature.playerui.components.WaveformSource.register(track, localFile.absolutePath)
-                                        player.play(track, Uri.fromFile(localFile).toString())
-                                        resolvingIsrc = null
-                                        openPlayer()
-                                        return@launch
-                                    }
-                                    val noticeId = notifier.loading("Loading ${track.title}\u2026")
-                                    resolveTrackSource(track).fold(
-                                        onSuccess = { source ->
-                                            notifier.update(noticeId, "Getting audio\u2026")
-                                            audioSources.audioUrl(source.youtubeVideoId).fold(
-                                                onSuccess = { audioUrl ->
-                                                    val startIndex = queue.indexOfFirst { it.isrc == track.isrc }
-                                                    if (startIndex >= 0) player.setQueue(queue, startIndex)
-                                                    com.gamut.feature.playerui.components.WaveformSource.register(track, audioUrl)
-                                                    player.play(track, audioUrl)
-                                                    notifier.dismiss(noticeId)
-                                                    openPlayer()
-                                                },
-                                                onFailure = { notifier.error("Couldn\u2019t play this song") },
-                                            )
-                                        },
-                                        onFailure = { error ->
-                                            notifier.error(
-                                                when (error) {
-                                                    is ResolveFailure.Timeout -> "Connection was slow. Try again."
-                                                    is ResolveFailure.NoCandidates -> "No playable source was found."
-                                                    is ResolveFailure.LowScore -> "No reliable match was found."
-                                                    else -> "Couldn\u2019t play this song"
-                                                },
-                                            )
-                                        },
-                                    )
-                                    resolvingIsrc = null
-                                }
                             }
                             Box(Modifier.fillMaxSize().focusLayer(!playerOpen)) {
                                 FocusLive(!playerOpen) {
@@ -655,29 +719,87 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                             onCheckForUpdate = { updateVm.checkNow() },
                                         )
                                     }
-                                    SlideLayer(composed = SettingsPage.Recent in composedPages, selected = layerPage == SettingsPage.Recent, open = layerOpen, position = layerPos, onClose = closeLayer) {
+                                    SlideLayer(
+                                        composed = SettingsPage.Recent in composedPages,
+                                        selected = layerPage == SettingsPage.Recent,
+                                        open = layerOpen,
+                                        position = layerPos,
+                                        onClose = closeLayer,
+                                    ) {
                                         val recent by recentVm.tracks.collectAsState()
-                                        RecentlyPlayedScreen(tracks = recent, onBack = closeLayer, onTrackSelected = playTrackWithQueue, nowPlaying = nowPlayingDocked)
+                                        RecentlyPlayedScreen(
+                                            tracks = recent,
+                                            onBack = closeLayer,
+                                            onTrackSelected = playTrackWithQueue,
+                                            nowPlaying = nowPlayingDocked,
+                                        )
                                     }
-                                    SlideLayer(composed = SettingsPage.Appearance in composedPages, selected = layerPage == SettingsPage.Appearance, open = layerOpen, position = layerPos, onClose = closeLayer) {
+                                    SlideLayer(
+                                        composed = SettingsPage.Appearance in composedPages,
+                                        selected =
+                                            layerPage == SettingsPage.Appearance,
+                                        open = layerOpen,
+                                        position = layerPos,
+                                        onClose = closeLayer,
+                                    ) {
                                         AppearanceScreen(onBack = closeLayer, nowPlaying = nowPlayingDocked)
                                     }
-                                    SlideLayer(composed = SettingsPage.Playback in composedPages, selected = layerPage == SettingsPage.Playback, open = layerOpen, position = layerPos, onClose = closeLayer) {
+                                    SlideLayer(
+                                        composed = SettingsPage.Playback in composedPages,
+                                        selected =
+                                            layerPage == SettingsPage.Playback,
+                                        open = layerOpen,
+                                        position = layerPos,
+                                        onClose = closeLayer,
+                                    ) {
                                         PlaybackSettingsScreen(onBack = closeLayer, nowPlaying = nowPlayingDocked)
                                     }
-                                    SlideLayer(composed = SettingsPage.Storage in composedPages, selected = layerPage == SettingsPage.Storage, open = layerOpen, position = layerPos, onClose = closeLayer) {
+                                    SlideLayer(
+                                        composed = SettingsPage.Storage in composedPages,
+                                        selected =
+                                            layerPage == SettingsPage.Storage,
+                                        open = layerOpen,
+                                        position = layerPos,
+                                        onClose = closeLayer,
+                                    ) {
                                         StorageSettingsScreen(onBack = closeLayer, nowPlaying = nowPlayingDocked)
                                     }
-                                    SlideLayer(composed = SettingsPage.Profile in composedPages, selected = layerPage == SettingsPage.Profile, open = layerOpen, position = layerPos, onClose = closeLayer) {
+                                    SlideLayer(
+                                        composed = SettingsPage.Profile in composedPages,
+                                        selected =
+                                            layerPage == SettingsPage.Profile,
+                                        open = layerOpen,
+                                        position = layerPos,
+                                        onClose = closeLayer,
+                                    ) {
                                         ProfileScreen(onBack = closeLayer, nowPlaying = nowPlayingDocked)
                                     }
-                                    SlideLayer(composed = SettingsPage.Feedback in composedPages, selected = layerPage == SettingsPage.Feedback, open = layerOpen, position = layerPos, onClose = closeLayer) {
+                                    SlideLayer(
+                                        composed = SettingsPage.Feedback in composedPages,
+                                        selected =
+                                            layerPage == SettingsPage.Feedback,
+                                        open = layerOpen,
+                                        position = layerPos,
+                                        onClose = closeLayer,
+                                    ) {
                                         FeedbackScreen(onBack = closeLayer, nowPlaying = nowPlayingDocked)
                                     }
-                                    SlideLayer(composed = SettingsPage.About in composedPages, selected = layerPage == SettingsPage.About, open = layerOpen, position = layerPos, onClose = closeLayer) {
+                                    SlideLayer(
+                                        composed = SettingsPage.About in composedPages,
+                                        selected = layerPage == SettingsPage.About,
+                                        open = layerOpen,
+                                        position = layerPos,
+                                        onClose = closeLayer,
+                                    ) {
                                         AboutScreen(onBack = closeLayer, nowPlaying = nowPlayingDocked)
                                     }
-                                    SlideLayer(composed = createComposed, selected = true, open = createOpen, position = createPos, onClose = closeCreate) {
+                                    SlideLayer(
+                                        composed = createComposed,
+                                        selected = true,
+                                        open = createOpen,
+                                        position = createPos,
+                                        onClose = closeCreate,
+                                    ) {
                                         key(createSession) {
                                             CreatePlaylistScreen(
                                                 viewModel = appLibraryVm,
@@ -742,7 +864,11 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                             val downloadsVm = hiltViewModel<PlaylistDownloadsViewModel>()
                                             val storedPlaylistTracks by playlistVm.tracks.collectAsState()
                                             val existingLocal by localAvailabilityVm.existing.collectAsState()
-                                            val playlistTracks = remember(storedPlaylistTracks, existingLocal) { storedPlaylistTracks.withoutMissingLocal(existingLocal) }
+                                            val playlistTracks =
+                                                remember(
+                                                    storedPlaylistTracks,
+                                                    existingLocal,
+                                                ) { storedPlaylistTracks.withoutMissingLocal(existingLocal) }
                                             val allPlaylists by appLibraryVm.playlists.collectAsState()
                                             val favoriteIsrcs by appLibraryVm.favoriteIsrcs.collectAsState()
                                             val id = entry.arguments?.getString("id").orEmpty()
@@ -853,10 +979,30 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                     favoriteIsrcs = favoriteIsrcs,
                                     onToggleFavorite = { t ->
                                         libraryVm.toggleFavorite(t)
-                                        if (t.isrc in favoriteIsrcs) notifier.info("Removed from Favorites") else notifier.success("Added to Favorites")
+                                        if (t.isrc in
+                                            favoriteIsrcs
+                                        ) {
+                                            notifier.info("Removed from Favorites")
+                                        } else {
+                                            notifier.success("Added to Favorites")
+                                        }
                                     },
-                                    playlists = playlists.map { PlaylistPickerItem(id = it.id.toString(), name = it.name, coverUrl = it.coverUri ?: playlistInfo[it.id]?.coverUrl) },
-                                    playlistIdsWithTrack = loadedTrack?.let { playlistIdsContaining(tracksByPlaylist, it) } ?: emptySet(),
+                                    playlists =
+                                        playlists.map {
+                                            PlaylistPickerItem(
+                                                id = it.id.toString(),
+                                                name = it.name,
+                                                coverUrl =
+                                                    it.coverUri ?: playlistInfo[it.id]?.coverUrl,
+                                            )
+                                        },
+                                    playlistIdsWithTrack =
+                                        loadedTrack?.let {
+                                            playlistIdsContaining(
+                                                tracksByPlaylist,
+                                                it,
+                                            )
+                                        } ?: emptySet(),
                                     onAddToPlaylist = { t, playlistId ->
                                         playlists.firstOrNull { it.id.toString() == playlistId }?.let { libraryVm.addTrack(it.id, t) }
                                     },
@@ -878,9 +1024,18 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                 val libraryPlaylists by appLibraryVm.playlists.collectAsState()
                                 val playlistInfo by appLibraryVm.playlistInfo.collectAsState()
                                 val tracksByPlaylist by appLibraryVm.tracksByPlaylist.collectAsState()
-                                val playlists = remember(libraryPlaylists, playlistInfo, tracksByPlaylist) {
-                                    libraryPlaylists.map { TrackPlaylistOption(id = it.id.toString(), name = it.name, coverUrl = it.coverUri ?: playlistInfo[it.id]?.coverUrl, trackIsrcs = tracksByPlaylist[it.id].orEmpty().mapTo(HashSet()) { t -> t.isrc }) }
-                                }
+                                val playlists =
+                                    remember(libraryPlaylists, playlistInfo, tracksByPlaylist) {
+                                        libraryPlaylists.map {
+                                            TrackPlaylistOption(
+                                                id = it.id.toString(),
+                                                name = it.name,
+                                                coverUrl =
+                                                    it.coverUri ?: playlistInfo[it.id]?.coverUrl,
+                                                trackIsrcs = tracksByPlaylist[it.id].orEmpty().mapTo(HashSet()) { t -> t.isrc },
+                                            )
+                                        }
+                                    }
                                 CoverTheme(palette) {
                                     ShazamSheet(
                                         state = shazamState,
@@ -891,7 +1046,10 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                         onRetry = onShazam,
                                         onOpenSettings = {
                                             context.startActivity(
-                                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
+                                                Intent(
+                                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                                    Uri.fromParts("package", context.packageName, null),
+                                                ),
                                             )
                                         },
                                         onPlay = { track ->
@@ -908,8 +1066,9 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
                                     )
                                 }
                             }
-                            val supportSafe = !showLoading && coldStartQuiet && !isPlayingNow && !playerOpen && !createOpen &&
-                                shazamState is ShazamState.Idle && !showConnect
+                            val supportSafe =
+                                !showLoading && coldStartQuiet && !isPlayingNow && !playerOpen && !createOpen &&
+                                    shazamState is ShazamState.Idle && !showConnect
                             CoverTheme(palette) { SupportSheetHost(vm = supportVm, safeMoment = supportSafe) }
                             CoverTheme(if (playerOpen || createOpen) neutralPalette else palette) { NoticeHost() }
                             if (showConnect) {
@@ -923,8 +1082,9 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
             }
             AnimatedVisibility(
                 showLoading,
-                exit = fadeOut(tween(450, easing = GamutMotion.Standard)) +
-                    scaleOut(tween(450, easing = GamutMotion.Standard), targetScale = 1.05f),
+                exit =
+                    fadeOut(tween(450, easing = GamutMotion.Standard)) +
+                        scaleOut(tween(450, easing = GamutMotion.Standard), targetScale = 1.05f),
             ) {
                 GamutLoadingScreen(dataReady = dataReady, onFinished = { showLoading = false })
             }
@@ -933,7 +1093,12 @@ private fun GamutApp(player: MusicPlayer, resolveTrackSource: ResolveTrackSource
 }
 
 @Composable
-private fun NowPlayingStrip(player: MusicPlayer, docked: Boolean, onOpen: () -> Unit, onDevicesClick: () -> Unit) {
+private fun NowPlayingStrip(
+    player: MusicPlayer,
+    docked: Boolean,
+    onOpen: () -> Unit,
+    onDevicesClick: () -> Unit,
+) {
     val outputs = rememberOutputDevices()
     val state by player.playbackState.collectAsState()
     val trackState by remember { derivedStateOf { (state as? PlaybackState.Playing)?.track ?: (state as? PlaybackState.Paused)?.track } }
@@ -947,7 +1112,25 @@ private fun NowPlayingStrip(player: MusicPlayer, docked: Boolean, onOpen: () -> 
     if (track != null && track != last) last = track
     val shown = track ?: last
     val progress by animateFloatAsState(
-        targetValue = if (shown == null) 0f else (position.toFloat() / (if (streamDuration > 0L) streamDuration else shown.durationMs).coerceAtLeast(1L)).coerceIn(0f, 1f),
+        targetValue =
+            if (shown ==
+                null
+            ) {
+                0f
+            } else {
+                (
+                    position.toFloat() /
+                        (
+                            if (streamDuration >
+                                0L
+                            ) {
+                                streamDuration
+                            } else {
+                                shown.durationMs
+                            }
+                        ).coerceAtLeast(1L)
+                ).coerceIn(0f, 1f)
+            },
         animationSpec = tween(500, easing = LinearEasing),
         label = "strip-progress",
     )
@@ -976,9 +1159,20 @@ private fun NowPlayingStrip(player: MusicPlayer, docked: Boolean, onOpen: () -> 
         }
     }
 }
-private fun artFor(url: String?, size: Int) = if (url != null && (url.startsWith("file:") || url.startsWith("content:"))) url else squareArtUrl(url, size)
 
-private fun albumRoute(item: DiscoverItem) = "album/${Uri.encode(item.id)}?title=${Uri.encode(item.title)}&subtitle=${Uri.encode(item.subtitle)}&art=${Uri.encode(item.imageUrl)}"
+private fun artFor(
+    url: String?,
+    size: Int,
+) = if (url != null &&
+    (url.startsWith("file:") || url.startsWith("content:"))
+) {
+    url
+} else {
+    squareArtUrl(url, size)
+}
+
+private fun albumRoute(item: DiscoverItem) =
+    "album/${Uri.encode(item.id)}?title=${Uri.encode(item.title)}&subtitle=${Uri.encode(item.subtitle)}&art=${Uri.encode(item.imageUrl)}"
 
 private const val TAB_SWITCH_MS = GamutMotion.TAB_MS
 private const val TAB_FLING_VELOCITY = 700f
@@ -1021,9 +1215,13 @@ private fun HomeTabs(
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val followVm = hiltViewModel<com.gamut.core.sync.FollowViewModel>()
     val followedEntities by followVm.artists.collectAsState()
-    val followedArtists = remember(followedEntities) {
-        followedEntities.orEmpty().map { com.gamut.feature.library.LibraryArtist(it.artistKey, it.name, it.imageUrl) }
-    }
+    val followedArtists =
+        remember(followedEntities) {
+            followedEntities.orEmpty().map {
+                com.gamut.feature.library
+                    .LibraryArtist(it.artistKey, it.name, it.imageUrl)
+            }
+        }
     val accountVm = hiltViewModel<AccountViewModel>()
     val supportVm = hiltViewModel<SupportViewModel>()
     val profileName by accountVm.displayName.collectAsState()
@@ -1033,9 +1231,18 @@ private fun HomeTabs(
     val libraryPlaylists by libraryVm.playlists.collectAsState()
     val playlistInfo by libraryVm.playlistInfo.collectAsState()
     val tracksByPlaylist by libraryVm.tracksByPlaylist.collectAsState()
-    val playlistOptions = remember(libraryPlaylists, playlistInfo, tracksByPlaylist) {
-        libraryPlaylists.map { TrackPlaylistOption(id = it.id.toString(), name = it.name, coverUrl = it.coverUri ?: playlistInfo[it.id]?.coverUrl, trackIsrcs = tracksByPlaylist[it.id].orEmpty().mapTo(HashSet()) { t -> t.isrc }) }
-    }
+    val playlistOptions =
+        remember(libraryPlaylists, playlistInfo, tracksByPlaylist) {
+            libraryPlaylists.map {
+                TrackPlaylistOption(
+                    id = it.id.toString(),
+                    name = it.name,
+                    coverUrl =
+                        it.coverUri ?: playlistInfo[it.id]?.coverUrl,
+                    trackIsrcs = tracksByPlaylist[it.id].orEmpty().mapTo(HashSet()) { t -> t.isrc },
+                )
+            }
+        }
     var focusSearchTick by remember { mutableIntStateOf(0) }
     val position = remember { Animatable(tab.toFloat()) }
     val scope = rememberCoroutineScope()
@@ -1068,8 +1275,7 @@ private fun HomeTabs(
                 val shown = homeAlpha.value
                 translationX = -(1f - shown) * size.width
                 if (shown <= 0f) alpha = 0f
-            }
-            .then(if (active) Modifier else Modifier.consumeTouches().clearAndSetSemantics {})
+            }.then(if (active) Modifier else Modifier.consumeTouches().clearAndSetSemantics {})
             .focusLayer(active),
     ) {
         FocusLive(active) {
@@ -1080,9 +1286,10 @@ private fun HomeTabs(
                     .draggable(
                         orientation = Orientation.Horizontal,
                         enabled = active,
-                        state = rememberDraggableState { dx ->
-                            scope.launch { position.snapTo((position.value - dx / widthPx).coerceIn(0f, 1f)) }
-                        },
+                        state =
+                            rememberDraggableState { dx ->
+                                scope.launch { position.snapTo((position.value - dx / widthPx).coerceIn(0f, 1f)) }
+                            },
                         onDragStarted = { position.stop() },
                         onDragStopped = { velocity ->
                             goTo(
@@ -1145,13 +1352,39 @@ private fun HomeTabs(
             if (showBar && barComposed) {
                 CoverTheme(palette) {
                     GamutBottomBar(
-                        items = listOf(
-                            BottomBarItem("Discover", PhosphorIcons.Bold.MagnifyingGlass, selected = shownTab == 0, onClick = if (shownTab == 0) null else ({ goTo(0) })),
-                            BottomBarItem("Library", PhosphorIcons.Bold.BookmarkSimple, selected = shownTab == 1, onClick = if (shownTab == 1) null else ({ goTo(1) })),
-                        ),
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .onSizeChanged { barHeight = with(density) { it.height.toDp() } },
+                        items =
+                            listOf(
+                                BottomBarItem(
+                                    "Discover",
+                                    PhosphorIcons.Bold.MagnifyingGlass,
+                                    selected = shownTab == 0,
+                                    onClick =
+                                        if (shownTab ==
+                                            0
+                                        ) {
+                                            null
+                                        } else {
+                                            ({ goTo(0) })
+                                        },
+                                ),
+                                BottomBarItem(
+                                    "Library",
+                                    PhosphorIcons.Bold.BookmarkSimple,
+                                    selected = shownTab == 1,
+                                    onClick =
+                                        if (shownTab ==
+                                            1
+                                        ) {
+                                            null
+                                        } else {
+                                            ({ goTo(1) })
+                                        },
+                                ),
+                            ),
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .onSizeChanged { barHeight = with(density) { it.height.toDp() } },
                         nowPlaying = nowPlaying,
                     )
                 }
@@ -1176,8 +1409,7 @@ private fun SettingsLayer(
             .graphicsLayer {
                 translationX = (x.value - subPagePos.value) * size.width
                 if (x.value >= 1f) alpha = 0f
-            }
-            .then(if (active) Modifier else Modifier.clearAndSetSemantics {})
+            }.then(if (active) Modifier else Modifier.clearAndSetSemantics {})
             .focusLayer(active && !childOpen),
     ) { FocusLive(active && !childOpen) { CompositionLocalProvider(LocalPageActive provides active) { content() } } }
 }
@@ -1205,15 +1437,15 @@ private fun SlideLayer(
                 val rel = if (selected) 1f - position.value else 1f
                 translationX = rel * size.width
                 if (rel >= 1f) alpha = 0f
-            }
-            .then(if (live) Modifier else Modifier.clearAndSetSemantics {})
+            }.then(if (live) Modifier else Modifier.clearAndSetSemantics {})
             .focusLayer(live)
             .draggable(
                 orientation = Orientation.Horizontal,
                 enabled = live,
-                state = rememberDraggableState { dx ->
-                    scope.launch { position.snapTo((position.value - dx / widthPx).coerceIn(0f, 1f)) }
-                },
+                state =
+                    rememberDraggableState { dx ->
+                        scope.launch { position.snapTo((position.value - dx / widthPx).coerceIn(0f, 1f)) }
+                    },
                 onDragStarted = { position.stop() },
                 onDragStopped = { velocity ->
                     val close = velocity > TAB_FLING_VELOCITY || (velocity > -TAB_FLING_VELOCITY && position.value < 0.5f)
@@ -1240,8 +1472,7 @@ private fun PlayerLayer(
                 val rel = 1f - position.value
                 translationY = rel * size.height
                 if (rel >= 1f) alpha = 0f
-            }
-            .focusLayer(open)
+            }.focusLayer(open)
             .then(
                 if (open) {
                     Modifier.pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
@@ -1253,7 +1484,12 @@ private fun PlayerLayer(
 }
 
 @Composable
-private fun TabLayer(page: Int, position: () -> Float, active: Boolean, content: @Composable () -> Unit) {
+private fun TabLayer(
+    page: Int,
+    position: () -> Float,
+    active: Boolean,
+    content: @Composable () -> Unit,
+) {
     Box(
         Modifier
             .fillMaxSize()
@@ -1261,17 +1497,17 @@ private fun TabLayer(page: Int, position: () -> Float, active: Boolean, content:
                 val rel = page - position()
                 translationX = rel * size.width
                 if (abs(rel) >= 1f) alpha = 0f
-            }
-            .then(if (active) Modifier else Modifier.clearAndSetSemantics {})
+            }.then(if (active) Modifier else Modifier.clearAndSetSemantics {})
             .focusLayer(active),
     ) { FocusLive(active) { content() } }
 }
 
-private fun Modifier.consumeTouches(): Modifier = pointerInput(Unit) {
-    awaitPointerEventScope {
-        while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+private fun Modifier.consumeTouches(): Modifier =
+    pointerInput(Unit) {
+        awaitPointerEventScope {
+            while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+        }
     }
-}
 
 @Composable
 private fun ArtistRoute(
@@ -1288,9 +1524,18 @@ private fun ArtistRoute(
     val libraryPlaylists by libraryVm.playlists.collectAsState()
     val playlistInfo by libraryVm.playlistInfo.collectAsState()
     val tracksByPlaylist by libraryVm.tracksByPlaylist.collectAsState()
-    val playlistOptions = remember(libraryPlaylists, playlistInfo, tracksByPlaylist) {
-        libraryPlaylists.map { TrackPlaylistOption(id = it.id.toString(), name = it.name, coverUrl = it.coverUri ?: playlistInfo[it.id]?.coverUrl, trackIsrcs = tracksByPlaylist[it.id].orEmpty().mapTo(HashSet()) { t -> t.isrc }) }
-    }
+    val playlistOptions =
+        remember(libraryPlaylists, playlistInfo, tracksByPlaylist) {
+            libraryPlaylists.map {
+                TrackPlaylistOption(
+                    id = it.id.toString(),
+                    name = it.name,
+                    coverUrl =
+                        it.coverUri ?: playlistInfo[it.id]?.coverUrl,
+                    trackIsrcs = tracksByPlaylist[it.id].orEmpty().mapTo(HashSet()) { t -> t.isrc },
+                )
+            }
+        }
     val followVm = hiltViewModel<com.gamut.core.sync.FollowViewModel>()
     val followedKeys by followVm.followedKeys.collectAsState()
     DiscoverArtistScreen(
@@ -1327,9 +1572,18 @@ private fun AlbumRoute(
     val libraryPlaylists by libraryVm.playlists.collectAsState()
     val playlistInfo by libraryVm.playlistInfo.collectAsState()
     val tracksByPlaylist by libraryVm.tracksByPlaylist.collectAsState()
-    val playlistOptions = remember(libraryPlaylists, playlistInfo, tracksByPlaylist) {
-        libraryPlaylists.map { TrackPlaylistOption(id = it.id.toString(), name = it.name, coverUrl = it.coverUri ?: playlistInfo[it.id]?.coverUrl, trackIsrcs = tracksByPlaylist[it.id].orEmpty().mapTo(HashSet()) { t -> t.isrc }) }
-    }
+    val playlistOptions =
+        remember(libraryPlaylists, playlistInfo, tracksByPlaylist) {
+            libraryPlaylists.map {
+                TrackPlaylistOption(
+                    id = it.id.toString(),
+                    name = it.name,
+                    coverUrl =
+                        it.coverUri ?: playlistInfo[it.id]?.coverUrl,
+                    trackIsrcs = tracksByPlaylist[it.id].orEmpty().mapTo(HashSet()) { t -> t.isrc },
+                )
+            }
+        }
     AlbumScreen(
         viewModel = viewModel,
         onBack = onBack,

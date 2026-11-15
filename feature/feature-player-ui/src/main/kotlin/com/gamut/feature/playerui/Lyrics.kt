@@ -1,5 +1,6 @@
 package com.gamut.feature.playerui
 
+import android.content.Context
 import android.util.Log
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Spring
@@ -66,6 +67,11 @@ import com.gamut.feature.playerui.components.PlayerSpinner
 import com.gamut.feature.playerui.components.fadeOutBetween
 import com.gamut.feature.playerui.components.fadingEdges
 import com.gamut.feature.playerui.components.tapTarget
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -75,23 +81,27 @@ import java.util.Collections
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
 
 sealed interface LyricsState {
     @Immutable
     object Loading : LyricsState
 
     @Immutable
-    data class Loaded(val lines: List<LyricsLine>, val isSynced: Boolean = true) : LyricsState
+    data class Loaded(
+        val lines: List<LyricsLine>,
+        val isSynced: Boolean = true,
+        val raw: String? = null,
+    ) : LyricsState
 
     @Immutable
-    data class NotAvailable(val reason: String) : LyricsState
+    data class NotAvailable(
+        val reason: String,
+    ) : LyricsState
 
     @Immutable
-    data class Error(val message: String) : LyricsState
+    data class Error(
+        val message: String,
+    ) : LyricsState
 }
 
 @Immutable
@@ -109,7 +119,11 @@ data class LyricsLine(
     val words: List<LyricsWord> = emptyList(),
 )
 
-private class FetchedLyrics(val lines: List<LyricsLine>, val isSynced: Boolean)
+private class FetchedLyrics(
+    val lines: List<LyricsLine>,
+    val isSynced: Boolean,
+    val raw: String? = null,
+)
 
 object LyricsRepository {
     private const val BASE_URL = "https://lrclib.net/api"
@@ -123,18 +137,21 @@ object LyricsRepository {
     private val wordStampRegex = Regex("""<(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?>""")
     private val whitespaceRegex = Regex("\\s+")
 
-    private val bracketNoise = Regex(
-        """\s*[(\[][^)\]]*\b(feat\.?|ft\.?|featuring|with|official|video|audio|lyrics?|visuali[sz]er|remaster(?:ed)?|live|explicit)\b[^)\]]*[)\]]""",
-        RegexOption.IGNORE_CASE,
-    )
-    private val dashNoise = Regex("""\s+-\s+(?:\d{4}\s+)?(?:remaster(?:ed)?|live|single version|radio edit)\b.*$""", RegexOption.IGNORE_CASE)
+    private val bracketNoise =
+        Regex(
+            """\s*[(\[][^)\]]*\b(feat\.?|ft\.?|featuring|with|official|video|audio|lyrics?|visuali[sz]er|remaster(?:ed)?|live|explicit)\b[^)\]]*[)\]]""",
+            RegexOption.IGNORE_CASE,
+        )
+    private val dashNoise =
+        Regex("""\s+-\s+(?:\d{4}\s+)?(?:remaster(?:ed)?|live|single version|radio edit)\b.*$""", RegexOption.IGNORE_CASE)
     private val featuringNoise = Regex("""\s+(?:feat\.?|ft\.?|featuring)\s+.*$""", RegexOption.IGNORE_CASE)
 
-    private val cache = Collections.synchronizedMap(
-        object : LinkedHashMap<String, LyricsState.Loaded>(32, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, LyricsState.Loaded>?) = size > 40
-        },
-    )
+    private val cache =
+        Collections.synchronizedMap(
+            object : LinkedHashMap<String, LyricsState.Loaded>(32, 0.75f, true) {
+                override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, LyricsState.Loaded>?) = size > 40
+            },
+        )
 
     private fun cacheKey(track: Track) = track.isrc.orEmpty().ifBlank { "${track.title}|${track.artist}" }
 
@@ -142,18 +159,30 @@ object LyricsRepository {
 
     fun cached(track: Track): LyricsState.Loaded? = cache[cacheKey(track)]
 
-    suspend fun fetchLyrics(track: Track, durationMs: Long = track.durationMs): LyricsState {
+    suspend fun fetchLyrics(
+        track: Track,
+        durationMs: Long = track.durationMs,
+    ): LyricsState {
         val key = cacheKey(track)
         val seconds = (durationMs / 1000).toInt()
         cache[key]?.let { hit -> if (hit.isSynced || cachedSeconds[key] == seconds) return hit }
+        val stored = withContext(Dispatchers.IO) { readStored(track) }
+        if (stored != null && stored.isSynced) {
+            cache[key] = stored
+            cachedSeconds[key] = seconds
+            return stored
+        }
         return try {
             val found = withContext(Dispatchers.IO) { lookup(track, durationMs) }
             if (found == null || found.lines.isEmpty()) {
                 Log.i(TAG, "\"${track.title}\": nothing found (looked up with ${seconds}s)")
-                LyricsState.NotAvailable("No lyrics found for this track")
+                stored ?: LyricsState.NotAvailable("No lyrics found for this track")
             } else {
-                Log.i(TAG, "\"${track.title}\": ${if (found.isSynced) "synced" else "PLAIN (not synced)"}, ${found.lines.size} lines (looked up with ${seconds}s)")
-                LyricsState.Loaded(found.lines, found.isSynced).also {
+                Log.i(
+                    TAG,
+                    "\"${track.title}\": ${if (found.isSynced) "synced" else "PLAIN (not synced)"}, ${found.lines.size} lines (looked up with ${seconds}s)",
+                )
+                LyricsState.Loaded(found.lines, found.isSynced, found.raw).also {
                     cache[key] = it
                     cachedSeconds[key] = seconds
                 }
@@ -161,18 +190,83 @@ object LyricsRepository {
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
-            LyricsState.Error("Couldn't reach the lyrics service")
+            stored ?: LyricsState.Error("Couldn't reach the lyrics service")
         } catch (e: Exception) {
-            LyricsState.Error(e.message ?: "Failed to fetch lyrics")
+            stored ?: LyricsState.Error(e.message ?: "Failed to fetch lyrics")
         }
     }
 
+    private var storeDir: File? = null
+
+    fun init(context: Context) {
+        storeDir = File(context.applicationContext.filesDir, "lyrics").also { it.mkdirs() }
+    }
+
+    private fun storeName(key: String) = key.replace(Regex("[^A-Za-z0-9._-]"), "_").take(120)
+
+    private fun readStored(track: Track): LyricsState.Loaded? {
+        val dir = storeDir ?: return null
+        val name = storeName(cacheKey(track))
+        return try {
+            val timed = File(dir, "$name.lrc")
+            if (timed.isFile) {
+                val text = timed.readText()
+                val lines = parseLrc(text)
+                if (lines.isNotEmpty()) return LyricsState.Loaded(lines, isSynced = true, raw = text)
+            }
+            val plain = File(dir, "$name.txt")
+            if (plain.isFile) {
+                val text = plain.readText()
+                val lines = parsePlainLyrics(text)
+                if (lines.isNotEmpty()) return LyricsState.Loaded(lines, isSynced = false, raw = text)
+            }
+            null
+        } catch (_: IOException) {
+            null
+        }
+    }
+
+    private fun store(
+        track: Track,
+        loaded: LyricsState.Loaded,
+    ) {
+        val dir = storeDir ?: return
+        val raw = loaded.raw ?: return
+        val name = storeName(cacheKey(track))
+        try {
+            File(dir, "$name.lrc").delete()
+            File(dir, "$name.txt").delete()
+            File(dir, name + if (loaded.isSynced) ".lrc" else ".txt").writeText(raw)
+        } catch (_: IOException) {
+        }
+    }
+
+    suspend fun lyricsForDownload(track: Track): String? {
+        val loaded = fetchLyrics(track) as? LyricsState.Loaded ?: return null
+        withContext(Dispatchers.IO) { store(track, loaded) }
+        return loaded.raw
+    }
+
+    fun forget(isrc: String) {
+        val dir = storeDir ?: return
+        val name = storeName(isrc)
+        File(dir, "$name.lrc").delete()
+        File(dir, "$name.txt").delete()
+        cache.remove(isrc)
+    }
+
     private val artistSplit = Regex("""\s*(?:,|;|/|&|\band\b|\bx\b|\bwith\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*""", RegexOption.IGNORE_CASE)
+
     private fun primaryArtist(artist: String) = artist.split(artistSplit).firstOrNull { it.isNotBlank() }?.trim() ?: artist
 
     private fun norm(s: String) = s.lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
 
-    private fun looksLike(o: JSONObject, title: String, artist: String, seconds: Double): Boolean {
+    private fun looksLike(
+        o: JSONObject,
+        title: String,
+        artist: String,
+        seconds: Double,
+    ): Boolean {
         val t = norm(o.optString("trackName", o.optString("name", "")))
         val a = norm(o.optString("artistName", ""))
         val wantT = norm(title)
@@ -183,14 +277,27 @@ object LyricsRepository {
         return titleOk && (artistOk || durationOk)
     }
 
-    private fun lookup(track: Track, durationMs: Long): FetchedLyrics? {
+    private fun lookup(
+        track: Track,
+        durationMs: Long,
+    ): FetchedLyrics? {
         val title = cleanTitle(track.title)
-        val coreTitle = title.substringBefore(" (").substringBefore(" - ").trim().ifBlank { title }
-        val artist = track.artist.replace(featuringNoise, "").trim().ifBlank { track.artist }
+        val coreTitle =
+            title
+                .substringBefore(" (")
+                .substringBefore(" - ")
+                .trim()
+                .ifBlank { title }
+        val artist =
+            track.artist
+                .replace(featuringNoise, "")
+                .trim()
+                .ifBlank { track.artist }
         val lead = primaryArtist(track.artist)
         val seconds = durationMs / 1000.0
         var failed = false
         var offline = false
+
         fun get(url: String): String? {
             if (offline) return null
             return try {
@@ -206,6 +313,7 @@ object LyricsRepository {
         }
 
         var plainFallback: FetchedLyrics? = null
+
         fun synced(found: FetchedLyrics?): FetchedLyrics? {
             if (found == null) return null
             if (found.isSynced) return found
@@ -220,15 +328,19 @@ object LyricsRepository {
             }
         }
 
-        data class Q(val query: String, val strict: Boolean)
-        val queries = listOf(
-            Q("track_name=${enc(title)}&artist_name=${enc(artist)}", false),
-            Q("track_name=${enc(title)}&artist_name=${enc(lead)}", false),
-            Q("track_name=${enc(coreTitle)}&artist_name=${enc(lead)}", false),
-            Q("q=${enc("$title $artist")}", true),
-            Q("q=${enc("$coreTitle $lead")}", true),
-            Q("q=${enc(coreTitle)}", true),
-        ).distinctBy { it.query }
+        data class Q(
+            val query: String,
+            val strict: Boolean,
+        )
+        val queries =
+            listOf(
+                Q("track_name=${enc(title)}&artist_name=${enc(artist)}", false),
+                Q("track_name=${enc(title)}&artist_name=${enc(lead)}", false),
+                Q("track_name=${enc(coreTitle)}&artist_name=${enc(lead)}", false),
+                Q("q=${enc("$title $artist")}", true),
+                Q("q=${enc("$coreTitle $lead")}", true),
+                Q("q=${enc(coreTitle)}", true),
+            ).distinctBy { it.query }
         for ((query, strict) in queries) {
             val body = get("$BASE_URL/search?$query") ?: continue
             val results = runCatching { JSONArray(body) }.getOrNull() ?: continue
@@ -241,8 +353,18 @@ object LyricsRepository {
         return null
     }
 
-    private fun pickBest(items: List<JSONObject>, seconds: Double): FetchedLyrics? {
-        fun diff(o: JSONObject) = if (seconds > 0 && o.has("duration") && !o.isNull("duration")) abs(o.optDouble("duration") - seconds) else 0.0
+    private fun pickBest(
+        items: List<JSONObject>,
+        seconds: Double,
+    ): FetchedLyrics? {
+        fun diff(o: JSONObject) =
+            if (seconds > 0 && o.has("duration") &&
+                !o.isNull("duration")
+            ) {
+                abs(o.optDouble("duration") - seconds)
+            } else {
+                0.0
+            }
         val synced = items.filter { hasText(it, "syncedLyrics") }.minByOrNull(::diff)
         if (synced != null && diff(synced) <= MAX_DURATION_DIFF_S) return toLyrics(synced)
         if (synced != null) Log.i(TAG, "synced version exists but its length is ${"%.1f".format(diff(synced))}s off the audio: not used")
@@ -251,19 +373,28 @@ object LyricsRepository {
         return synced?.let { toLyrics(it) }
     }
 
-    private fun hasText(o: JSONObject, key: String) = o.optString(key, "").let { it.isNotBlank() && it != "null" }
+    private fun hasText(
+        o: JSONObject,
+        key: String,
+    ) = o.optString(key, "").let { it.isNotBlank() && it != "null" }
 
-    private fun toLyrics(o: JSONObject, preferPlain: Boolean = false): FetchedLyrics? {
+    private fun toLyrics(
+        o: JSONObject,
+        preferPlain: Boolean = false,
+    ): FetchedLyrics? {
         val synced = o.optString("syncedLyrics", "").takeIf { it.isNotBlank() && it != "null" }
         val plain = o.optString("plainLyrics", "").takeIf { it.isNotBlank() && it != "null" }
         if (synced != null && !preferPlain) {
             val lines = parseLrc(synced)
-            if (lines.isNotEmpty()) return FetchedLyrics(lines, isSynced = true)
+            if (lines.isNotEmpty()) return FetchedLyrics(lines, isSynced = true, raw = synced)
         }
-        return plain?.let { FetchedLyrics(parsePlainLyrics(it), isSynced = false) }
+        return plain?.let { FetchedLyrics(parsePlainLyrics(it), isSynced = false, raw = it) }
     }
 
-    private fun cleanTitle(title: String) = title.replace('\u2019', '\'').replace(bracketNoise, "").replace(dashNoise, "").trim().ifBlank { title }
+    private fun cleanTitle(title: String) =
+        title.replace('\u2019', '\'').replace(bracketNoise, "").replace(dashNoise, "").trim().ifBlank {
+            title
+        }
 
     private fun enc(v: String) = URLEncoder.encode(v, "UTF-8")
 
@@ -299,7 +430,11 @@ object LyricsRepository {
         }
     }
 
-    private fun toMs(min: String, sec: String, frac: String): Long {
+    private fun toMs(
+        min: String,
+        sec: String,
+        frac: String,
+    ): Long {
         val fracMs = frac.padEnd(3, '0').take(3).toLong()
         return (min.toLong() * 60 + sec.toLong()) * 1000 + fracMs
     }
@@ -324,18 +459,26 @@ object LyricsRepository {
         }
     }
 
-    private fun lineEnd(start: Long, text: String, nextStart: Long?): Long {
+    private fun lineEnd(
+        start: Long,
+        text: String,
+        nextStart: Long?,
+    ): Long {
         val estimate = 400L + text.length * 85L
         val gap = nextStart?.let { it - start }
-        val duration = when {
-            gap == null -> estimate
-            gap <= estimate * 3 / 2 -> gap
-            else -> estimate
-        }
+        val duration =
+            when {
+                gap == null -> estimate
+                gap <= estimate * 3 / 2 -> gap
+                else -> estimate
+            }
         return start + duration.coerceAtLeast(300L)
     }
 
-    private fun parseEnhancedWords(body: String, lineEnd: Long): List<LyricsWord>? {
+    private fun parseEnhancedWords(
+        body: String,
+        lineEnd: Long,
+    ): List<LyricsWord>? {
         val stamps = wordStampRegex.findAll(body).toList()
         if (stamps.isEmpty()) return null
         val words = mutableListOf<LyricsWord>()
@@ -352,13 +495,19 @@ object LyricsRepository {
                     }
                 }
 
-                else -> words.add(LyricsWord(start, end.coerceAtLeast(start + 1), segment.trimStart()))
+                else -> {
+                    words.add(LyricsWord(start, end.coerceAtLeast(start + 1), segment.trimStart()))
+                }
             }
         }
         return words.ifEmpty { null }
     }
 
-    private fun estimateWords(text: String, start: Long, end: Long): List<LyricsWord> {
+    private fun estimateWords(
+        text: String,
+        start: Long,
+        end: Long,
+    ): List<LyricsWord> {
         val parts = text.split(whitespaceRegex).filter { it.isNotEmpty() }
         if (parts.isEmpty()) return emptyList()
         val weights = parts.map { maxOf(it.length, 2) }
@@ -373,9 +522,11 @@ object LyricsRepository {
         }
     }
 
-    private fun parsePlainLyrics(plainText: String): List<LyricsLine> = plainText.lines()
-        .filter { it.isNotBlank() }
-        .map { LyricsLine(timestampMs = 0L, text = it.trim()) }
+    private fun parsePlainLyrics(plainText: String): List<LyricsLine> =
+        plainText
+            .lines()
+            .filter { it.isNotBlank() }
+            .map { LyricsLine(timestampMs = 0L, text = it.trim()) }
 }
 
 private val LyricsTitleHeight = 36.dp
@@ -437,8 +588,7 @@ fun LyricsSection(
                         ambientColor = Color.Black.copy(alpha = 0.35f),
                         spotColor = Color.Black.copy(alpha = 0.45f),
                         clip = false,
-                    )
-                    .tapTarget { if (!expanded) onToggle() },
+                    ).tapTarget { if (!expanded) onToggle() },
                 shape = LyricsCardShape,
                 material = AcrylicMaterials.UltraThin,
             ) {
@@ -448,8 +598,10 @@ fun LyricsSection(
                     } else {
                         Box(Modifier.fillMaxSize()) {
                             when (lyricsState) {
-                                is LyricsState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    PlayerSpinner(Modifier.size(26.dp), Color.White.copy(alpha = 0.75f))
+                                is LyricsState.Loading -> {
+                                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        PlayerSpinner(Modifier.size(26.dp), Color.White.copy(alpha = 0.75f))
+                                    }
                                 }
 
                                 is LyricsState.Loaded -> {
@@ -466,9 +618,13 @@ fun LyricsSection(
                                     }
                                 }
 
-                                is LyricsState.NotAvailable -> LyricsEmptyState("${lyricsState.reason}\nTap to retry", onRetry)
+                                is LyricsState.NotAvailable -> {
+                                    LyricsEmptyState("${lyricsState.reason}\nTap to retry", onRetry)
+                                }
 
-                                is LyricsState.Error -> LyricsEmptyState("${lyricsState.message}\nRetrying\u2026 tap to retry now", onRetry)
+                                is LyricsState.Error -> {
+                                    LyricsEmptyState("${lyricsState.message}\nRetrying\u2026 tap to retry now", onRetry)
+                                }
                             }
                         }
                     }
@@ -482,21 +638,24 @@ fun LyricsSection(
 private fun LyricsPreview(lyricsState: LyricsState) {
     val font = rememberLyricsFont()
     when (lyricsState) {
-        is LyricsState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            PlayerSpinner(Modifier.size(22.dp), Color.White.copy(alpha = 0.75f))
+        is LyricsState.Loading -> {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                PlayerSpinner(Modifier.size(22.dp), Color.White.copy(alpha = 0.75f))
+            }
         }
 
         is LyricsState.Loaded -> {
             if (lyricsState.lines.isEmpty()) {
                 LyricsPreviewMessage("No timed lyrics available")
             } else {
-                val style = TextStyle(
-                    fontFamily = font,
-                    fontWeight = FontWeight.Normal,
-                    fontSize = 20.sp,
-                    lineHeight = 28.sp,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                )
+                val style =
+                    TextStyle(
+                        fontFamily = font,
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 20.sp,
+                        lineHeight = 28.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
                 val density = LocalDensity.current
                 var firstLinePx by remember { mutableIntStateOf(0) }
                 var secondLinePx by remember { mutableIntStateOf(0) }
@@ -525,9 +684,10 @@ private fun LyricsPreview(lyricsState: LyricsState) {
                                 style = style,
                                 maxLines = 2,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .onSizeChanged { if (i == 0) firstLinePx = it.height else secondLinePx = it.height },
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .onSizeChanged { if (i == 0) firstLinePx = it.height else secondLinePx = it.height },
                             )
                         }
                     }
@@ -535,9 +695,13 @@ private fun LyricsPreview(lyricsState: LyricsState) {
             }
         }
 
-        is LyricsState.NotAvailable -> LyricsPreviewMessage(lyricsState.reason)
+        is LyricsState.NotAvailable -> {
+            LyricsPreviewMessage(lyricsState.reason)
+        }
 
-        is LyricsState.Error -> LyricsPreviewMessage("Error: ${lyricsState.message}")
+        is LyricsState.Error -> {
+            LyricsPreviewMessage("Error: ${lyricsState.message}")
+        }
     }
 }
 
@@ -554,7 +718,10 @@ private fun LyricsPreviewMessage(message: String) {
 }
 
 @Composable
-internal fun LyricsEmptyState(message: String, onClick: (() -> Unit)? = null) {
+internal fun LyricsEmptyState(
+    message: String,
+    onClick: (() -> Unit)? = null,
+) {
     Box(
         Modifier.fillMaxSize().let { if (onClick != null) it.tapTarget(onClick) else it },
         contentAlignment = Alignment.Center,
@@ -620,12 +787,13 @@ internal fun LyricsList(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize().fadingEdges(),
-        contentPadding = PaddingValues(
-            start = 22.dp,
-            end = 22.dp,
-            top = if (isSynced) viewport * 0.28f else 8.dp,
-            bottom = if (isSynced) viewport * 0.60f else 16.dp,
-        ),
+        contentPadding =
+            PaddingValues(
+                start = 22.dp,
+                end = 22.dp,
+                top = if (isSynced) viewport * 0.28f else 8.dp,
+                bottom = if (isSynced) viewport * 0.60f else 16.dp,
+            ),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         itemsIndexed(lines) { index, line ->
@@ -652,13 +820,14 @@ private fun LyricLine(
     accent: Color,
     font: FontFamily,
 ) {
-    val style = TextStyle(
-        fontFamily = font,
-        fontWeight = FontWeight.Normal,
-        fontSize = 22.sp,
-        lineHeight = 30.sp,
-        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-    )
+    val style =
+        TextStyle(
+            fontFamily = font,
+            fontWeight = FontWeight.Normal,
+            fontSize = 22.sp,
+            lineHeight = 30.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
 
     if (!isSynced || line.words.isEmpty()) {
         Text(
@@ -671,11 +840,12 @@ private fun LyricLine(
     }
 
     val lineAlpha by animateFloatAsState(
-        targetValue = when {
-            isActive -> 1f
-            isPast -> 0.4f
-            else -> 0.6f
-        },
+        targetValue =
+            when {
+                isActive -> 1f
+                isPast -> 0.4f
+                else -> 0.6f
+            },
         animationSpec = tween(300),
         label = "lyric-line-alpha",
     )
@@ -688,30 +858,36 @@ private fun LyricLine(
     val step by remember(isActive, readPosition) {
         derivedStateOf { if (isActive) readPosition() / HighlightStepMs else 0L }
     }
-    val now = when {
-        isActive -> step * HighlightStepMs
-        isPast -> Long.MAX_VALUE / 2
-        else -> -1_000_000L
-    }
-    val text = buildAnnotatedString {
-        line.words.forEach { word ->
-            val span = (word.endMs - word.startMs).coerceAtLeast(1L)
-            val p = ((now - word.startMs).toFloat() / span).coerceIn(0f, 1f)
-            withStyle(SpanStyle(color = lerp(unsung, accent, p))) { append(word.text) }
+    val now =
+        when {
+            isActive -> step * HighlightStepMs
+            isPast -> Long.MAX_VALUE / 2
+            else -> -1_000_000L
         }
-    }
+    val text =
+        buildAnnotatedString {
+            line.words.forEach { word ->
+                val span = (word.endMs - word.startMs).coerceAtLeast(1L)
+                val p = ((now - word.startMs).toFloat() / span).coerceIn(0f, 1f)
+                withStyle(SpanStyle(color = lerp(unsung, accent, p))) { append(word.text) }
+            }
+        }
     Text(
         text = text,
         style = style,
-        modifier = Modifier.fillMaxWidth().graphicsLayer {
-            alpha = lineAlpha
-            scaleX = lineScale
-            scaleY = lineScale
-        },
+        modifier =
+            Modifier.fillMaxWidth().graphicsLayer {
+                alpha = lineAlpha
+                scaleX = lineScale
+                scaleY = lineScale
+            },
     )
 }
 
-internal fun activeLineIndex(lines: List<LyricsLine>, positionMs: Long): Int {
+internal fun activeLineIndex(
+    lines: List<LyricsLine>,
+    positionMs: Long,
+): Int {
     var lo = 0
     var hi = lines.lastIndex
     var answer = -1

@@ -114,17 +114,19 @@ fun CreatePlaylistScreen(
     }
     var coverUri by rememberSaveable { mutableStateOf<String?>(null) }
     val pickCover = rememberCoverPicker { coverUri = it }
-    val tags: SnapshotStateList<String> = rememberSaveable(
-        saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() }),
-    ) { mutableStateListOf() }
+    val tags: SnapshotStateList<String> =
+        rememberSaveable(
+            saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() }),
+        ) { mutableStateListOf() }
     var addPicked by rememberSaveable { mutableStateOf(false) }
     var copyLiked by rememberSaveable { mutableStateOf(false) }
 
-    val chosen: List<Track> = remember(addPicked, copyLiked, selectedTrack, favorites) {
-        val base = if (copyLiked) favorites else emptyList()
-        val picked = selectedTrack.takeIf { addPicked }
-        (if (picked != null) base.filter { it.isrc != picked.isrc } + picked else base).distinctBy { it.isrc }
-    }
+    val chosen: List<Track> =
+        remember(addPicked, copyLiked, selectedTrack, favorites) {
+            val base = if (copyLiked) favorites else emptyList()
+            val picked = selectedTrack.takeIf { addPicked }
+            (if (picked != null) base.filter { it.isrc != picked.isrc } + picked else base).distinctBy { it.isrc }
+        }
     val canCreate = name.text.isNotBlank()
     val create = {
         val finalName = name.text.trim()
@@ -227,19 +229,28 @@ fun CreatePlaylistScreen(
                         Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Column(Modifier.widthIn(max = 560.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) { leftContent() }
+                        Column(
+                            Modifier.widthIn(max = 560.dp).fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) { leftContent() }
                     }
                     Column(
                         Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Spacer(Modifier.height(20.dp))
-                        Column(Modifier.widthIn(max = 560.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) { rightContent() }
+                        Column(
+                            Modifier.widthIn(max = 560.dp).fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) { rightContent() }
                     }
                 }
             } else {
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-                    Column(Modifier.widthIn(max = 560.dp).fillMaxWidth().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        Modifier.widthIn(max = 560.dp).fillMaxWidth().verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
                         leftContent()
                         rightContent()
                     }
@@ -270,12 +281,20 @@ fun CreatePlaylistScreen(
 }
 
 @Composable
-private fun CoverPreview(url: String?, onPick: () -> Unit, onClear: () -> Unit) {
+private fun CoverPreview(
+    url: String?,
+    onPick: () -> Unit,
+    onClear: () -> Unit,
+) {
     Box(Modifier.size(168.dp)) {
         Crossfade(targetState = url, animationSpec = tween(220), label = "playlist-preview") { u ->
             if (u.isNullOrBlank()) {
                 Box(
-                    Modifier.fillMaxSize().pressScale(onClick = onPick).clip(PreviewShape).background(ink(0.07f)),
+                    Modifier
+                        .fillMaxSize()
+                        .pressScale(onClick = onPick)
+                        .clip(PreviewShape)
+                        .background(ink(0.07f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(PhosphorIcons.Bold.Plus, "Add cover", tint = ink(0.6f), modifier = Modifier.size(44.dp))
@@ -286,8 +305,13 @@ private fun CoverPreview(url: String?, onPick: () -> Unit, onClear: () -> Unit) 
                     Modifier
                         .fillMaxSize()
                         .pressScale(onClick = onPick)
-                        .shadow(22.dp, PreviewShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.35f), spotColor = Color.Black.copy(alpha = 0.35f))
-                        .clip(PreviewShape),
+                        .shadow(
+                            22.dp,
+                            PreviewShape,
+                            clip = false,
+                            ambientColor = Color.Black.copy(alpha = 0.35f),
+                            spotColor = Color.Black.copy(alpha = 0.35f),
+                        ).clip(PreviewShape),
                 )
             }
         }
@@ -308,7 +332,11 @@ private fun CoverPreview(url: String?, onPick: () -> Unit, onClear: () -> Unit) 
 }
 
 @Composable
-private fun NameField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit, onDone: () -> Unit) {
+private fun NameField(
+    value: TextFieldValue,
+    onChange: (TextFieldValue) -> Unit,
+    onDone: () -> Unit,
+) {
     var focused by remember { mutableStateOf(false) }
     val style = MaterialTheme.typography.headlineLarge
     val remote = LocalInputModeManager.current.inputMode == InputMode.Keyboard
@@ -337,14 +365,15 @@ private fun NameField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit,
             cursorBrush = SolidColor(ink()),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { onDone() }),
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusProperties { canFocus = (!remote || editing) && live }
-                .focusRequester(fieldFocus)
-                .onFocusChanged {
-                    focused = it.isFocused
-                    if (!it.isFocused) editing = false
-                },
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .focusProperties { canFocus = (!remote || editing) && live }
+                    .focusRequester(fieldFocus)
+                    .onFocusChanged {
+                        focused = it.isFocused
+                        if (!it.isFocused) editing = false
+                    },
             decorationBox = { inner ->
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     if (value.text.isEmpty()) {
@@ -362,7 +391,13 @@ private fun NameField(value: TextFieldValue, onChange: (TextFieldValue) -> Unit,
 }
 
 @Composable
-private fun OptionRow(icon: ImageVector, title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun OptionRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -375,8 +410,7 @@ private fun OptionRow(icon: ImageVector, title: String, subtitle: String, checke
                 indication = null,
                 role = Role.Switch,
                 onValueChange = onChange,
-            )
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            ).padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, null, tint = ink(0.8f), modifier = Modifier.size(22.dp))
@@ -395,7 +429,13 @@ private fun FlatSwitch(checked: Boolean) {
     val base = LocalCoverPalette.current.base
     val thumb by animateColorAsState(if (checked) base else ink(0.8f), tween(160), label = "switch-thumb")
     Box(Modifier.size(width = 46.dp, height = 28.dp).background(track, PillShape)) {
-        Box(Modifier.align(Alignment.CenterStart).offset(x = thumbX).size(24.dp).background(thumb, CircleShape))
+        Box(
+            Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = thumbX)
+                .size(24.dp)
+                .background(thumb, CircleShape),
+        )
     }
 }
 

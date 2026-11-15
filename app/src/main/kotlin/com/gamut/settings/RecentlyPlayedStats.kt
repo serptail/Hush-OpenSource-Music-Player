@@ -57,8 +57,6 @@ import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.text.NumberFormat
-import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -67,23 +65,31 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
+import java.text.NumberFormat
+import javax.inject.Inject
 
 @HiltViewModel
-class StatsViewModel @Inject constructor(private val store: PlayStatsStore) : ViewModel() {
-    private val period = MutableStateFlow(StatsPeriod.ALL)
-    val selected: StateFlow<StatsPeriod> = period.asStateFlow()
+class StatsViewModel
+    @Inject
+    constructor(
+        private val store: PlayStatsStore,
+    ) : ViewModel() {
+        private val period = MutableStateFlow(StatsPeriod.ALL)
+        val selected: StateFlow<StatsPeriod> = period.asStateFlow()
 
-    val summary: StateFlow<StatsSummary> = combine(store.snapshot, period) { data, p ->
-        summarize(data, p, System.currentTimeMillis())
-    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StatsSummary())
+        val summary: StateFlow<StatsSummary> =
+            combine(store.snapshot, period) { data, p ->
+                summarize(data, p, System.currentTimeMillis())
+            }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StatsSummary())
 
-    fun record(track: Track) = store.record(track)
+        fun record(track: Track) = store.record(track)
 
-    fun select(p: StatsPeriod) {
-        period.value = p
+        fun select(p: StatsPeriod) {
+            period.value = p
+        }
+
+        fun reset() = store.clear()
     }
-    fun reset() = store.clear()
-}
 
 private const val COLLAPSED_SONGS = 5
 private const val COLLAPSED_ARTISTS = 4
@@ -126,7 +132,11 @@ internal fun StatsTab(vm: StatsViewModel) {
 
             if (summary.topSongs.isNotEmpty()) {
                 item(key = "songs-title", contentType = "heading") { SectionTitle("Top songs") }
-                val maxSong = summary.topSongs.first().plays.coerceAtLeast(1)
+                val maxSong =
+                    summary.topSongs
+                        .first()
+                        .plays
+                        .coerceAtLeast(1)
                 val songs = if (showAllSongs) summary.topSongs else summary.topSongs.take(COLLAPSED_SONGS)
                 itemsIndexed(
                     songs,
@@ -153,9 +163,11 @@ internal fun StatsTab(vm: StatsViewModel) {
                             if (showAllSongs) "Show less" else "Show more",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(top = 4.dp)
-                                .pressScale(onClick = { showAllSongs = !showAllSongs }, scaleDown = 0.96f)
-                                .padding(vertical = 8.dp),
+                            modifier =
+                                Modifier
+                                    .padding(top = 4.dp)
+                                    .pressScale(onClick = { showAllSongs = !showAllSongs }, scaleDown = 0.96f)
+                                    .padding(vertical = 8.dp),
                         )
                     }
                 }
@@ -166,9 +178,11 @@ internal fun StatsTab(vm: StatsViewModel) {
                     "Reset statistics",
                     style = MaterialTheme.typography.bodyMedium,
                     color = ink(0.4f),
-                    modifier = Modifier.padding(top = 28.dp)
-                        .pressScale(onClick = { confirmReset = true }, scaleDown = 0.96f)
-                        .padding(vertical = 8.dp),
+                    modifier =
+                        Modifier
+                            .padding(top = 28.dp)
+                            .pressScale(onClick = { confirmReset = true }, scaleDown = 0.96f)
+                            .padding(vertical = 8.dp),
                 )
             }
         }
@@ -193,7 +207,11 @@ internal fun StatsTab(vm: StatsViewModel) {
 }
 
 @Composable
-private fun PeriodSwitch(selected: StatsPeriod, onSelect: (StatsPeriod) -> Unit, modifier: Modifier = Modifier) {
+private fun PeriodSwitch(
+    selected: StatsPeriod,
+    onSelect: (StatsPeriod) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val accent = MaterialTheme.colorScheme.primary
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
         StatsPeriod.values().forEach { p ->
@@ -205,7 +223,14 @@ private fun PeriodSwitch(selected: StatsPeriod, onSelect: (StatsPeriod) -> Unit,
                 horizontalAlignment = Alignment.Start,
             ) {
                 Text(p.label, style = MaterialTheme.typography.titleMedium, color = color, maxLines = 1)
-                Box(Modifier.padding(top = 6.dp).width(22.dp).height(2.dp).clip(CircleShape).background(line))
+                Box(
+                    Modifier
+                        .padding(top = 6.dp)
+                        .width(22.dp)
+                        .height(2.dp)
+                        .clip(CircleShape)
+                        .background(line),
+                )
             }
         }
     }
@@ -214,8 +239,12 @@ private fun PeriodSwitch(selected: StatsPeriod, onSelect: (StatsPeriod) -> Unit,
 @Composable
 private fun SummaryStrip(summary: StatsSummary) {
     Row(
-        Modifier.fillMaxWidth().padding(top = 18.dp)
-            .clip(RoundedCornerShape(18.dp)).background(ink(0.05f)).padding(vertical = 18.dp),
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 18.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(ink(0.05f))
+            .padding(vertical = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Figure(summary.totalPlays, if (summary.totalPlays == 1) "Play" else "Plays", Modifier.weight(1f))
@@ -227,7 +256,11 @@ private fun SummaryStrip(summary: StatsSummary) {
 }
 
 @Composable
-private fun Figure(value: Int, label: String, modifier: Modifier = Modifier) {
+private fun Figure(
+    value: Int,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
     var target by remember { mutableStateOf(0) }
     LaunchedEffect(value) { target = value }
     val shown by animateIntAsState(target, tween(700, easing = FastOutSlowInEasing), label = "stats-figure")
@@ -273,7 +306,13 @@ private fun RankRow(
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (subtitle != null) {
-                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink(0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             ShareBar(fraction, Modifier.padding(top = 7.dp))
         }
@@ -288,25 +327,38 @@ private fun RankRow(
 }
 
 @Composable
-private fun ShareBar(fraction: Float, modifier: Modifier = Modifier) {
+private fun ShareBar(
+    fraction: Float,
+    modifier: Modifier = Modifier,
+) {
     val accent = MaterialTheme.colorScheme.primary
     val progress = remember { Animatable(0f) }
     val target = fraction.coerceIn(0.03f, 1f)
     LaunchedEffect(target) { progress.animateTo(target, tween(650, easing = FastOutSlowInEasing)) }
-    Box(modifier.fillMaxWidth().height(3.dp).clip(CircleShape).background(ink(0.08f))) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(3.dp)
+            .clip(CircleShape)
+            .background(ink(0.08f)),
+    ) {
         Box(
-            Modifier.fillMaxSize()
+            Modifier
+                .fillMaxSize()
                 .graphicsLayer {
                     scaleX = progress.value
                     transformOrigin = TransformOrigin(0f, 0.5f)
-                }
-                .background(accent.copy(alpha = 0.8f), CircleShape),
+                }.background(accent.copy(alpha = 0.8f), CircleShape),
         )
     }
 }
 
 @Composable
-private fun ArtistGrid(artists: List<RankedArtist>, expanded: Boolean, onToggle: () -> Unit) {
+private fun ArtistGrid(
+    artists: List<RankedArtist>,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
     val hasMore = artists.size > COLLAPSED_ARTISTS
     val shown = if (expanded || !hasMore) artists else artists.take(COLLAPSED_ARTISTS)
     Column(Modifier.fillMaxWidth().animateContentSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -325,7 +377,11 @@ private fun ArtistGrid(artists: List<RankedArtist>, expanded: Boolean, onToggle:
 }
 
 @Composable
-private fun MoreToggle(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun MoreToggle(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Text(
         label,
         style = MaterialTheme.typography.titleMedium,
@@ -335,7 +391,10 @@ private fun MoreToggle(label: String, onClick: () -> Unit, modifier: Modifier = 
 }
 
 @Composable
-private fun ArtistPairRow(pair: List<RankedArtist>, modifier: Modifier = Modifier) {
+private fun ArtistPairRow(
+    pair: List<RankedArtist>,
+    modifier: Modifier = Modifier,
+) {
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         pair.forEach { ArtistCell(it, Modifier.weight(1f)) }
         if (pair.size < 2) Spacer(Modifier.weight(1f))
@@ -343,7 +402,10 @@ private fun ArtistPairRow(pair: List<RankedArtist>, modifier: Modifier = Modifie
 }
 
 @Composable
-private fun ArtistCell(artist: RankedArtist, modifier: Modifier = Modifier) {
+private fun ArtistCell(
+    artist: RankedArtist,
+    modifier: Modifier = Modifier,
+) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         ArtistCircle(artist, 52.dp)
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
@@ -358,25 +420,32 @@ private fun ArtistCell(artist: RankedArtist, modifier: Modifier = Modifier) {
     }
 }
 
-private fun Modifier.fadeOutBottom(): Modifier = this
-    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-    .drawWithContent {
-        drawContent()
-        drawRect(
-            Brush.verticalGradient(colorStops = arrayOf(0f to Color.Black, 1f to Color.Transparent)),
-            blendMode = BlendMode.DstIn,
-        )
-    }
+private fun Modifier.fadeOutBottom(): Modifier =
+    this
+        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+        .drawWithContent {
+            drawContent()
+            drawRect(
+                Brush.verticalGradient(colorStops = arrayOf(0f to Color.Black, 1f to Color.Transparent)),
+                blendMode = BlendMode.DstIn,
+            )
+        }
 
 @Composable
-private fun ArtistCircle(artist: RankedArtist, size: Dp) {
+private fun ArtistCircle(
+    artist: RankedArtist,
+    size: Dp,
+) {
     val photo = rememberArtistPhoto(artist.name, artist.album)
     Box(Modifier.size(size).clip(CircleShape).background(ink(0.1f)), contentAlignment = Alignment.Center) {
         if (photo != null) {
             ArtImage(url = photo, modifier = Modifier.fillMaxSize())
         } else {
             Text(
-                artist.name.trim().take(1).uppercase(),
+                artist.name
+                    .trim()
+                    .take(1)
+                    .uppercase(),
                 style = MaterialTheme.typography.titleLarge,
                 color = ink(0.55f),
             )
@@ -385,7 +454,10 @@ private fun ArtistCircle(artist: RankedArtist, size: Dp) {
 }
 
 @Composable
-private fun rememberArtistPhoto(name: String, album: String?): String? {
+private fun rememberArtistPhoto(
+    name: String,
+    album: String?,
+): String? {
     val resolver = LocalArtistPhotoResolver.current
     var url by remember(name) { mutableStateOf<String?>(null) }
     LaunchedEffect(name, album, resolver) {
@@ -394,4 +466,8 @@ private fun rememberArtistPhoto(name: String, album: String?): String? {
     return url
 }
 
-private fun leadArtist(name: String): String? = name.split(" & ", " feat. ", " ft. ", " x ").first().trim().takeIf { it.isNotEmpty() && !it.equals(name.trim(), ignoreCase = true) }
+private fun leadArtist(name: String): String? =
+    name.split(" & ", " feat. ", " ft. ", " x ").first().trim().takeIf {
+        it.isNotEmpty() &&
+            !it.equals(name.trim(), ignoreCase = true)
+    }

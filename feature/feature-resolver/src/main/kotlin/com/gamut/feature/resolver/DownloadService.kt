@@ -32,7 +32,11 @@ class DownloadService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    override fun onStartCommand(
+        intent: Intent?,
+        flags: Int,
+        startId: Int,
+    ): Int {
         val manager = EntryPointAccessors.fromApplication(applicationContext, Access::class.java).downloads()
         val notifications = getSystemService(NotificationManager::class.java)
         notifications.createNotificationChannel(NotificationChannel(CHANNEL, "Downloads", NotificationManager.IMPORTANCE_LOW))
@@ -43,16 +47,17 @@ class DownloadService : Service() {
             startForeground(ID, first)
         }
         if (watcher == null) {
-            watcher = scope.launch {
-                manager.batch.collect { batch ->
-                    if (batch.total == 0) {
-                        stopForeground(STOP_FOREGROUND_REMOVE)
-                        stopSelf()
-                    } else {
-                        notifications.notify(ID, notification(batch))
+            watcher =
+                scope.launch {
+                    manager.batch.collect { batch ->
+                        if (batch.total == 0) {
+                            stopForeground(STOP_FOREGROUND_REMOVE)
+                            stopSelf()
+                        } else {
+                            notifications.notify(ID, notification(batch))
+                        }
                     }
                 }
-            }
         }
         return START_NOT_STICKY
     }
@@ -63,15 +68,18 @@ class DownloadService : Service() {
     }
 
     private fun notification(batch: DownloadBatch): Notification {
-        val open = packageManager.getLaunchIntentForPackage(packageName)?.let {
-            PendingIntent.getActivity(this, 0, it, PendingIntent.FLAG_IMMUTABLE)
-        }
-        val text = when {
-            batch.total > 0 && batch.waitingForWifi -> "Waiting for Wi\u2011Fi \u00b7 ${batch.total - batch.done} left"
-            batch.total > 0 -> "${minOf(batch.done + 1, batch.total)} of ${batch.total}" + (batch.current?.let { " \u00b7 $it" } ?: "")
-            else -> "Starting\u2026"
-        }
-        return Notification.Builder(this, CHANNEL)
+        val open =
+            packageManager.getLaunchIntentForPackage(packageName)?.let {
+                PendingIntent.getActivity(this, 0, it, PendingIntent.FLAG_IMMUTABLE)
+            }
+        val text =
+            when {
+                batch.total > 0 && batch.waitingForWifi -> "Waiting for Wi\u2011Fi \u00b7 ${batch.total - batch.done} left"
+                batch.total > 0 -> "${minOf(batch.done + 1, batch.total)} of ${batch.total}" + (batch.current?.let { " \u00b7 $it" } ?: "")
+                else -> "Starting\u2026"
+            }
+        return Notification
+            .Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("Downloading songs")
             .setContentText(text)

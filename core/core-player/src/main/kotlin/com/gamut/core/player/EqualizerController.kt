@@ -1,7 +1,6 @@
 package com.gamut.core.player
 
 import android.content.Context
-import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -9,8 +8,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
-class EqualizerController private constructor(context: Context) {
+class EqualizerController private constructor(
+    context: Context,
+) {
     data class State(
         val available: Boolean = false,
         val enabled: Boolean = false,
@@ -40,7 +42,10 @@ class EqualizerController private constructor(context: Context) {
 
     fun setEnabled(on: Boolean) = sound.setEqEnabled(on)
 
-    fun setBandLevel(index: Int, levelMb: Int) = sound.setBandGain(index, levelMb / 100f)
+    fun setBandLevel(
+        index: Int,
+        levelMb: Int,
+    ) = sound.setBandGain(index, levelMb / 100f)
 
     fun applyPreset(name: String) = sound.applyPreset(name)
 
@@ -53,19 +58,20 @@ class EqualizerController private constructor(context: Context) {
 
     fun release() = Unit
 
-    private fun SoundSettings.State.toLegacy() = State(
-        available = true,
-        enabled = eqEnabled,
-        preset = preset,
-        bandFrequenciesHz = bands.map { it.freqHz.roundToInt() },
-        bandLevelsMb = bands.map { (it.gainDb * 100f).roundToInt() },
-        minLevelMb = (-SoundSettings.MAX_GAIN_DB * 100f).roundToInt(),
-        maxLevelMb = (SoundSettings.MAX_GAIN_DB * 100f).roundToInt(),
-        bassBoostSupported = false,
-        bassBoost = 0,
-        virtualizerSupported = true,
-        virtualizer = ((widthPercent - 100).coerceAtLeast(0) * 10).coerceAtMost(1000),
-    )
+    private fun SoundSettings.State.toLegacy() =
+        State(
+            available = true,
+            enabled = eqEnabled,
+            preset = preset,
+            bandFrequenciesHz = bands.map { it.freqHz.roundToInt() },
+            bandLevelsMb = bands.map { (it.gainDb * 100f).roundToInt() },
+            minLevelMb = (-SoundSettings.MAX_GAIN_DB * 100f).roundToInt(),
+            maxLevelMb = (SoundSettings.MAX_GAIN_DB * 100f).roundToInt(),
+            bassBoostSupported = false,
+            bassBoost = 0,
+            virtualizerSupported = true,
+            virtualizer = ((widthPercent - 100).coerceAtLeast(0) * 10).coerceAtMost(1000),
+        )
 
     companion object {
         const val FLAT = SoundSettings.FLAT
@@ -75,8 +81,9 @@ class EqualizerController private constructor(context: Context) {
 
         @Volatile private var instance: EqualizerController? = null
 
-        fun get(context: Context): EqualizerController = instance ?: synchronized(this) {
-            instance ?: EqualizerController(context.applicationContext).also { instance = it }
-        }
+        fun get(context: Context): EqualizerController =
+            instance ?: synchronized(this) {
+                instance ?: EqualizerController(context.applicationContext).also { instance = it }
+            }
     }
 }

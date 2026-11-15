@@ -117,7 +117,14 @@ internal fun LazyListScope.discoverFeaturedItems(
         }
     }
 
-    feedSectionItems(state.feed.filter { it.slot == FeedSlot.TOP }, onTrackClick, onMoreClick, nowPlayingIsrc, onArtistItemClick, onAlbumClick)
+    feedSectionItems(
+        state.feed.filter { it.slot == FeedSlot.TOP },
+        onTrackClick,
+        onMoreClick,
+        nowPlayingIsrc,
+        onArtistItemClick,
+        onAlbumClick,
+    )
 
     if (state.artists.isNotEmpty()) {
         item(key = "artists-title") { DiscoverSectionTitle("Artists to know") }
@@ -143,7 +150,16 @@ internal fun LazyListScope.discoverFeaturedItems(
         }
     }
 
-    feedSectionItems(state.feed.filter { it.slot == FeedSlot.MIDDLE }, onTrackClick, onMoreClick, nowPlayingIsrc, onArtistItemClick, onAlbumClick)
+    feedSectionItems(
+        state.feed.filter {
+            it.slot == FeedSlot.MIDDLE
+        },
+        onTrackClick,
+        onMoreClick,
+        nowPlayingIsrc,
+        onArtistItemClick,
+        onAlbumClick,
+    )
 }
 
 internal fun LazyListScope.discoverFeedItems(
@@ -242,12 +258,25 @@ internal fun LazyListScope.discoverItems(
     onLoadMore: () -> Unit = {},
 ) {
     discoverFeaturedItems(state, onTrackClick, nowPlayingIsrc, onArtistClick, onAlbumClick, onRetry, onMoreClick, onArtistItemClick)
-    discoverChartItems(state, selectedTab, onSelectTab, onTrackClick, onMoreClick, nowPlayingIsrc, onAlbumClick, chartExpanded, onToggleChartExpanded)
+    discoverChartItems(
+        state,
+        selectedTab,
+        onSelectTab,
+        onTrackClick,
+        onMoreClick,
+        nowPlayingIsrc,
+        onAlbumClick,
+        chartExpanded,
+        onToggleChartExpanded,
+    )
     discoverFeedItems(state, onTrackClick, onMoreClick, nowPlayingIsrc, onArtistItemClick, onAlbumClick, onLoadMore)
 }
 
 @Composable
-private fun DiscoverSectionTitle(text: String, subtitle: String? = null) {
+private fun DiscoverSectionTitle(
+    text: String,
+    subtitle: String? = null,
+) {
     Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 28.dp, bottom = 12.dp)) {
         Text(
             text,
@@ -257,7 +286,13 @@ private fun DiscoverSectionTitle(text: String, subtitle: String? = null) {
             overflow = TextOverflow.Ellipsis,
         )
         if (subtitle != null) {
-            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextTertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -276,8 +311,13 @@ private fun HeroCard(
         modifier
             .fillMaxWidth()
             .aspectRatio(aspect)
-            .shadow(18.dp, CardShapeLarge, clip = false, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.35f))
-            .pressScale(onClick = onClick, scaleDown = 0.98f)
+            .shadow(
+                18.dp,
+                CardShapeLarge,
+                clip = false,
+                ambientColor = Color.Black.copy(alpha = 0.25f),
+                spotColor = Color.Black.copy(alpha = 0.35f),
+            ).pressScale(onClick = onClick, scaleDown = 0.98f)
             .clip(CardShapeLarge),
     ) {
         ArtImage(
@@ -327,17 +367,26 @@ private fun HeroCard(
 }
 
 @Composable
-private fun ArtistBubble(item: DiscoverItem, onClick: () -> Unit) {
+private fun ArtistBubble(
+    item: DiscoverItem,
+    onClick: () -> Unit,
+) {
     Column(
         Modifier.width(88.dp).pressScale(onClick = onClick, scaleDown = 0.94f),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         ArtImage(
             url = item.imageUrl,
-            modifier = Modifier
-                .size(88.dp)
-                .shadow(8.dp, CircleShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.22f), spotColor = Color.Black.copy(alpha = 0.3f))
-                .clip(CircleShape),
+            modifier =
+                Modifier
+                    .size(88.dp)
+                    .shadow(
+                        8.dp,
+                        CircleShape,
+                        clip = false,
+                        ambientColor = Color.Black.copy(alpha = 0.22f),
+                        spotColor = Color.Black.copy(alpha = 0.3f),
+                    ).clip(CircleShape),
             contentDescription = item.title,
             fallback = { ArtworkFallbackIcon() },
         )
@@ -354,14 +403,24 @@ private fun ArtistBubble(item: DiscoverItem, onClick: () -> Unit) {
 }
 
 @Composable
-private fun AlbumCard(item: DiscoverItem, isPlaying: Boolean = false, onClick: () -> Unit) {
+private fun AlbumCard(
+    item: DiscoverItem,
+    isPlaying: Boolean = false,
+    onClick: () -> Unit,
+) {
     Column(Modifier.width(148.dp).pressScale(onClick = onClick, scaleDown = 0.95f)) {
         ArtImage(
             url = remember(item.imageUrl) { squareArtUrl(item.imageUrl, 400) },
-            modifier = Modifier
-                .size(148.dp)
-                .shadow(10.dp, RoundedCornerShape(14.dp), clip = false, ambientColor = Color.Black.copy(alpha = 0.22f), spotColor = Color.Black.copy(alpha = 0.3f))
-                .clip(RoundedCornerShape(14.dp)),
+            modifier =
+                Modifier
+                    .size(148.dp)
+                    .shadow(
+                        10.dp,
+                        RoundedCornerShape(14.dp),
+                        clip = false,
+                        ambientColor = Color.Black.copy(alpha = 0.22f),
+                        spotColor = Color.Black.copy(alpha = 0.3f),
+                    ).clip(RoundedCornerShape(14.dp)),
             contentDescription = item.title,
             fallback = { ArtworkFallbackIcon() },
         )
@@ -387,7 +446,13 @@ private fun AlbumCard(item: DiscoverItem, isPlaying: Boolean = false, onClick: (
 }
 
 @Composable
-private fun ChartRow(rank: Int?, item: DiscoverItem, isPlaying: Boolean, onClick: () -> Unit, onMore: (() -> Unit)?) {
+private fun ChartRow(
+    rank: Int?,
+    item: DiscoverItem,
+    isPlaying: Boolean,
+    onClick: () -> Unit,
+    onMore: (() -> Unit)?,
+) {
     val accent = MaterialTheme.colorScheme.primary
     InteractiveSurface(
         shape = RowShape,
@@ -403,7 +468,17 @@ private fun ChartRow(rank: Int?, item: DiscoverItem, isPlaying: Boolean, onClick
                 } else {
                     Text(
                         rank.toString(),
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = if (rank <= 3) FontWeight.SemiBold else FontWeight.Normal),
+                        style =
+                            MaterialTheme.typography.titleMedium.copy(
+                                fontWeight =
+                                    if (rank <=
+                                        3
+                                    ) {
+                                        FontWeight.SemiBold
+                                    } else {
+                                        FontWeight.Normal
+                                    },
+                            ),
                         color = if (rank <= 3) TextPrimary else TextTertiary,
                     )
                 }
@@ -412,10 +487,16 @@ private fun ChartRow(rank: Int?, item: DiscoverItem, isPlaying: Boolean, onClick
         }
         ArtImage(
             url = remember(item.imageUrl) { squareArtUrl(item.imageUrl, 256) },
-            modifier = Modifier
-                .size(52.dp)
-                .shadow(6.dp, ThumbShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.20f), spotColor = Color.Black.copy(alpha = 0.30f))
-                .clip(ThumbShape),
+            modifier =
+                Modifier
+                    .size(52.dp)
+                    .shadow(
+                        6.dp,
+                        ThumbShape,
+                        clip = false,
+                        ambientColor = Color.Black.copy(alpha = 0.20f),
+                        spotColor = Color.Black.copy(alpha = 0.30f),
+                    ).clip(ThumbShape),
             fallback = { ArtworkFallbackIcon() },
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
@@ -446,7 +527,11 @@ private fun ChartRow(rank: Int?, item: DiscoverItem, isPlaying: Boolean, onClick
 }
 
 @Composable
-private fun TrendMark(trend: Trend?, delta: Int, accent: Color) {
+private fun TrendMark(
+    trend: Trend?,
+    delta: Int,
+    accent: Color,
+) {
     val small = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
     when (trend) {
         null -> Unit
@@ -490,39 +575,55 @@ private fun LazyListScope.feedSectionItems(
         item(key = "feed-${section.id}-title") { DiscoverSectionTitle(section.title, section.subtitle) }
         item(key = "feed-${section.id}-body") {
             when (section.kind) {
-                FeedKind.QUICK_PICKS -> QuickPicksGrid(section.items, playing, play)
-
-                FeedKind.TRACK_RAILS -> TrackRails(section.items, playing, play, onMoreClick)
-
-                FeedKind.TRACK_CAROUSEL -> LazyRow(
-                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    items(section.items, key = { it.id }) { song -> AlbumCard(song, isPlaying = playing(song)) { play(song) } }
+                FeedKind.QUICK_PICKS -> {
+                    QuickPicksGrid(section.items, playing, play)
                 }
 
-                FeedKind.ALBUM_CAROUSEL -> LazyRow(
-                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    items(section.items, key = { it.id }) { album -> AlbumCard(album) { onAlbumClick(album) } }
+                FeedKind.TRACK_RAILS -> {
+                    TrackRails(section.items, playing, play, onMoreClick)
                 }
 
-                FeedKind.ARTIST_CAROUSEL -> LazyRow(
-                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(18.dp),
-                ) {
-                    items(section.items, key = { it.id }) { artist -> ArtistBubble(artist) { onArtistItemClick(artist) } }
+                FeedKind.TRACK_CAROUSEL -> {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        items(section.items, key = { it.id }) { song -> AlbumCard(song, isPlaying = playing(song)) { play(song) } }
+                    }
                 }
 
-                FeedKind.SPOTLIGHT -> Unit
+                FeedKind.ALBUM_CAROUSEL -> {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        items(section.items, key = { it.id }) { album -> AlbumCard(album) { onAlbumClick(album) } }
+                    }
+                }
+
+                FeedKind.ARTIST_CAROUSEL -> {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(18.dp),
+                    ) {
+                        items(section.items, key = { it.id }) { artist -> ArtistBubble(artist) { onArtistItemClick(artist) } }
+                    }
+                }
+
+                FeedKind.SPOTLIGHT -> {
+                    Unit
+                }
             }
         }
     }
 }
 
 @Composable
-private fun QuickPicksGrid(items: List<DiscoverItem>, isPlaying: (DiscoverItem) -> Boolean, onPlay: (DiscoverItem) -> Unit) {
+private fun QuickPicksGrid(
+    items: List<DiscoverItem>,
+    isPlaying: (DiscoverItem) -> Boolean,
+    onPlay: (DiscoverItem) -> Unit,
+) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items.chunked(2).forEach { pair ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -536,7 +637,12 @@ private fun QuickPicksGrid(items: List<DiscoverItem>, isPlaying: (DiscoverItem) 
 }
 
 @Composable
-private fun QuickPickTile(item: DiscoverItem, isPlaying: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun QuickPickTile(
+    item: DiscoverItem,
+    isPlaying: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val accent = MaterialTheme.colorScheme.primary
     Row(
         modifier
@@ -591,26 +697,37 @@ private fun TrackRails(
 }
 
 @Composable
-private fun FeedFooter(count: Int, exhausted: Boolean, failed: Boolean, onLoadMore: () -> Unit) {
+private fun FeedFooter(
+    count: Int,
+    exhausted: Boolean,
+    failed: Boolean,
+    onLoadMore: () -> Unit,
+) {
     LaunchedEffect(count, exhausted, failed) { if (!exhausted && !failed) onLoadMore() }
     Box(Modifier.fillMaxWidth().padding(top = 28.dp, bottom = 12.dp).height(56.dp), contentAlignment = Alignment.Center) {
         when {
-            failed -> Text(
-                "Couldn\u2019t load more. Tap to retry",
-                style = MaterialTheme.typography.labelLarge,
-                color = TextSecondary,
-                modifier = Modifier.pressScale(onClick = onLoadMore, scaleDown = 0.92f).padding(horizontal = 16.dp, vertical = 8.dp),
-            )
+            failed -> {
+                Text(
+                    "Couldn\u2019t load more. Tap to retry",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = TextSecondary,
+                    modifier = Modifier.pressScale(onClick = onLoadMore, scaleDown = 0.92f).padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
 
-            exhausted -> Text(
-                "You\u2019re all caught up \u00B7 pull down for a fresh mix",
-                style = MaterialTheme.typography.labelMedium,
-                color = TextTertiary,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 24.dp),
-            )
+            exhausted -> {
+                Text(
+                    "You\u2019re all caught up \u00B7 pull down for a fresh mix",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextTertiary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                )
+            }
 
-            else -> CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
+            else -> {
+                CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
+            }
         }
     }
 }

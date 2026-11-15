@@ -54,12 +54,15 @@ import com.adamglin.phosphoricons.Regular
 import com.adamglin.phosphoricons.regular.SpeakerHigh
 import com.adamglin.phosphoricons.regular.SpeakerLow
 import com.adamglin.phosphoricons.regular.SpeakerX
+import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlinx.coroutines.delay
 
 @Stable
-internal class VolumeHud(private val audio: AudioManager, private val haptic: HapticFeedback) {
+internal class VolumeHud(
+    private val audio: AudioManager,
+    private val haptic: HapticFeedback,
+) {
     private val maxSteps = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
     private var lastStep = -1
 
@@ -110,48 +113,52 @@ private val CoverSwipeInset = 28.dp
 internal fun Modifier.swipeVolumeGesture(
     hud: VolumeHud,
     fullRange: Dp = 240.dp,
-): Modifier = pointerInput(hud) {
-    val rangePx = fullRange.toPx()
-    val insetPx = CoverSwipeInset.toPx()
-    awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-        val zone = hud.anchor.deflate(insetPx)
-        if (zone.width <= 0f || zone.height <= 0f || !zone.contains(down.position)) return@awaitEachGesture
+): Modifier =
+    pointerInput(hud) {
+        val rangePx = fullRange.toPx()
+        val insetPx = CoverSwipeInset.toPx()
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val zone = hud.anchor.deflate(insetPx)
+            if (zone.width <= 0f || zone.height <= 0f || !zone.contains(down.position)) return@awaitEachGesture
 
-        val slop = viewConfiguration.touchSlop
-        var claimed = false
-        var startX = down.position.x
-        var startFraction = 0f
-        while (true) {
-            val event = awaitPointerEvent(PointerEventPass.Initial)
-            val c = event.changes.firstOrNull { it.id == down.id } ?: break
-            if (c.changedToUp() || !c.pressed) break
-            if (!claimed) {
-                if (c.isConsumed || event.changes.size > 1) break
-                val dx = c.position.x - down.position.x
-                val dy = c.position.y - down.position.y
-                if (abs(dx) > slop) {
-                    if (abs(dx) > abs(dy) * 1.5f) {
-                        claimed = true
-                        hud.begin()
-                        startFraction = hud.fractionNow()
-                        startX = c.position.x
-                        c.consume()
-                    } else {
-                        break
+            val slop = viewConfiguration.touchSlop
+            var claimed = false
+            var startX = down.position.x
+            var startFraction = 0f
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val c = event.changes.firstOrNull { it.id == down.id } ?: break
+                if (c.changedToUp() || !c.pressed) break
+                if (!claimed) {
+                    if (c.isConsumed || event.changes.size > 1) break
+                    val dx = c.position.x - down.position.x
+                    val dy = c.position.y - down.position.y
+                    if (abs(dx) > slop) {
+                        if (abs(dx) > abs(dy) * 1.5f) {
+                            claimed = true
+                            hud.begin()
+                            startFraction = hud.fractionNow()
+                            startX = c.position.x
+                            c.consume()
+                        } else {
+                            break
+                        }
                     }
+                } else {
+                    c.consume()
+                    hud.set(startFraction + (c.position.x - startX) / rangePx)
                 }
-            } else {
-                c.consume()
-                hud.set(startFraction + (c.position.x - startX) / rangePx)
             }
+            if (claimed) hud.end()
         }
-        if (claimed) hud.end()
     }
-}
 
 @Composable
-internal fun VolumeHudOverlay(hud: VolumeHud, modifier: Modifier = Modifier) {
+internal fun VolumeHudOverlay(
+    hud: VolumeHud,
+    modifier: Modifier = Modifier,
+) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(hud.holding) {
         if (hud.holding) {
@@ -187,13 +194,17 @@ private val PillHeight = 34.dp
 private val PillLift = 9.dp
 
 @Composable
-private fun VolumePill(fraction: Float, modifier: Modifier = Modifier) {
+private fun VolumePill(
+    fraction: Float,
+    modifier: Modifier = Modifier,
+) {
     val f by animateFloatAsState(fraction.coerceIn(0f, 1f), tween(60), label = "volume-fill")
-    val icon = when {
-        f <= 0f -> PhosphorIcons.Regular.SpeakerX
-        f < 0.5f -> PhosphorIcons.Regular.SpeakerLow
-        else -> PhosphorIcons.Regular.SpeakerHigh
-    }
+    val icon =
+        when {
+            f <= 0f -> PhosphorIcons.Regular.SpeakerX
+            f < 0.5f -> PhosphorIcons.Regular.SpeakerLow
+            else -> PhosphorIcons.Regular.SpeakerHigh
+        }
     val shape = RoundedCornerShape(PillHeight / 2)
     val iconTint = if (f > 0.15f) Color.Black.copy(alpha = 0.8f) else Color.White
     val numberTint = if (f > 0.88f) Color.Black.copy(alpha = 0.8f) else Color.White

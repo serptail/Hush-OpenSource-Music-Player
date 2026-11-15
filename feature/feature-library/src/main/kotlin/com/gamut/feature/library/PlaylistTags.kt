@@ -40,8 +40,13 @@ internal const val MAX_TAG_LENGTH = 20
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun TagsEditor(tags: List<String>, onChange: (List<String>) -> Unit, modifier: Modifier = Modifier) {
+internal fun TagsEditor(
+    tags: List<String>,
+    onChange: (List<String>) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var draft by remember { mutableStateOf("") }
+
     fun add(raw: String) {
         val tag = raw.trim().take(MAX_TAG_LENGTH)
         if (tag.isNotEmpty() && tags.size < MAX_TAGS && tags.none { it.equals(tag, ignoreCase = true) }) onChange(tags + tag)
@@ -58,10 +63,11 @@ internal fun TagsEditor(tags: List<String>, onChange: (List<String>) -> Unit, mo
                     textStyle = MaterialTheme.typography.labelLarge.copy(color = ink()),
                     cursorBrush = SolidColor(ink()),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = {
-                        add(draft)
-                        draft = ""
-                    }),
+                    keyboardActions =
+                        KeyboardActions(onDone = {
+                            add(draft)
+                            draft = ""
+                        }),
                     decorationBox = { inner ->
                         Row(
                             Modifier.background(ink(0.04f), TagShape).padding(horizontal = 16.dp, vertical = 9.dp),
@@ -84,7 +90,11 @@ internal fun TagsEditor(tags: List<String>, onChange: (List<String>) -> Unit, mo
 }
 
 @Composable
-internal fun TagChip(label: String, removable: Boolean, onClick: () -> Unit) {
+internal fun TagChip(
+    label: String,
+    removable: Boolean,
+    onClick: () -> Unit,
+) {
     Row(
         Modifier
             .pressScale(onClick = onClick)
@@ -93,13 +103,23 @@ internal fun TagChip(label: String, removable: Boolean, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, style = MaterialTheme.typography.labelLarge, color = ink())
-        if (removable) Icon(PhosphorIcons.Bold.X, "Remove tag $label", tint = ink(0.7f), modifier = Modifier.padding(start = 6.dp).size(14.dp))
+        if (removable) {
+            Icon(
+                PhosphorIcons.Bold.X,
+                "Remove tag $label",
+                tint = ink(0.7f),
+                modifier = Modifier.padding(start = 6.dp).size(14.dp),
+            )
+        }
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun TagsRow(tags: List<String>, modifier: Modifier = Modifier) {
+internal fun TagsRow(
+    tags: List<String>,
+    modifier: Modifier = Modifier,
+) {
     FlowRow(
         modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),

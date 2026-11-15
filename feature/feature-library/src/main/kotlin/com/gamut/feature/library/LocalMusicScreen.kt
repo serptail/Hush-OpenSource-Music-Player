@@ -122,7 +122,6 @@ import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNavSettled
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.NowPlayingBars
-import com.gamut.core.designsystem.R as DesignR
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.isWideLayout
@@ -130,6 +129,7 @@ import com.gamut.core.designsystem.pressScale
 import com.gamut.core.model.Track
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.gamut.core.designsystem.R as DesignR
 
 @Composable
 internal fun deviceBrush(): Brush {
@@ -146,13 +146,28 @@ internal fun DeviceTile(
     raised: Boolean = false,
 ) {
     val base = if (size != null) modifier.size(size) else modifier
-    val surface = when {
-        raised -> base.softCover(shape).background(flatCoverFill())
-        background -> base.clip(shape).background(ink(0.10f))
-        else -> base.clip(shape)
-    }
+    val surface =
+        when {
+            raised -> base.softCover(shape).background(flatCoverFill())
+            background -> base.clip(shape).background(ink(0.10f))
+            else -> base.clip(shape)
+        }
     Box(surface, contentAlignment = Alignment.Center) {
-        Icon(PhosphorIcons.Fill.DeviceMobileCamera, null, tint = ink(0.9f), modifier = Modifier.size(if (size != null) size * 0.48f else 34.dp))
+        Icon(
+            PhosphorIcons.Fill.DeviceMobileCamera,
+            null,
+            tint = ink(0.9f),
+            modifier =
+                Modifier.size(
+                    if (size !=
+                        null
+                    ) {
+                        size * 0.48f
+                    } else {
+                        34.dp
+                    },
+                ),
+        )
     }
 }
 
@@ -164,12 +179,20 @@ internal fun BoxScopeDeviceBadge(modifier: Modifier = Modifier) {
 @Composable
 internal fun OnDeviceMark(modifier: Modifier = Modifier) {
     Box(modifier.size(40.dp), contentAlignment = Alignment.Center) {
-        Icon(PhosphorIcons.Bold.DeviceMobileCamera, "Stored on this device", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+        Icon(
+            PhosphorIcons.Bold.DeviceMobileCamera,
+            "Stored on this device",
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 
 @Composable
-internal fun DeviceTag(modifier: Modifier = Modifier, size: Dp = 20.dp) {
+internal fun DeviceTag(
+    modifier: Modifier = Modifier,
+    size: Dp = 20.dp,
+) {
     Box(
         modifier
             .size(size)
@@ -183,7 +206,11 @@ internal fun DeviceTag(modifier: Modifier = Modifier, size: Dp = 20.dp) {
 }
 
 @Composable
-internal fun BadgedCover(local: Boolean, tagSize: Dp = 20.dp, cover: @Composable () -> Unit) {
+internal fun BadgedCover(
+    local: Boolean,
+    tagSize: Dp = 20.dp,
+    cover: @Composable () -> Unit,
+) {
     Box {
         cover()
         if (local) DeviceTag(Modifier.align(Alignment.TopEnd).offset(x = tagSize / 2, y = -tagSize / 2), tagSize)
@@ -195,7 +222,10 @@ private fun formatDuration(ms: Long): String {
     return "%d:%02d".format(s / 60, s % 60)
 }
 
-private fun plural(n: Int, word: String) = if (n == 1) "1 $word" else "$n ${word}s"
+private fun plural(
+    n: Int,
+    word: String,
+) = if (n == 1) "1 $word" else "$n ${word}s"
 
 private enum class SongSheetMode { Actions, Playlists, EditChoice, NotFound }
 
@@ -240,32 +270,39 @@ fun LocalMusicScreen(
     var editMode by remember { mutableStateOf(EditMode.Manual) }
     val autoUi by viewModel.auto.collectAsStateWithLifecycle()
 
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        viewModel.refreshPermission(granted)
-    }
-    val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            scope.launch {
-                when (val r = viewModel.importPicked(uri)) {
-                    is ImportResult.Added -> notifier.success("Added \u201C${r.title}\u201D to this device")
-                    is ImportResult.Failed -> notifier.info(r.reason)
+    val permissionLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            viewModel.refreshPermission(granted)
+        }
+    val importPicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) {
+                scope.launch {
+                    when (val r = viewModel.importPicked(uri)) {
+                        is ImportResult.Added -> notifier.success("Added \u201C${r.title}\u201D to this device")
+                        is ImportResult.Failed -> notifier.info(r.reason)
+                    }
                 }
             }
         }
-    }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshPermission() }
 
-    val visible = remember(songs, query) {
-        val q = query.trim().lowercase()
-        if (q.isEmpty()) {
-            songs
-        } else {
-            songs.filter {
-                val t = it.track
-                t.title.lowercase().contains(q) || t.artist.lowercase().contains(q) || t.album.orEmpty().lowercase().contains(q)
+    val visible =
+        remember(songs, query) {
+            val q = query.trim().lowercase()
+            if (q.isEmpty()) {
+                songs
+            } else {
+                songs.filter {
+                    val t = it.track
+                    t.title.lowercase().contains(q) || t.artist.lowercase().contains(q) ||
+                        t.album
+                            .orEmpty()
+                            .lowercase()
+                            .contains(q)
+                }
             }
         }
-    }
     val visibleTracks = remember(visible) { visible.map { it.track } }
     val searching = query.isNotBlank()
 
@@ -275,7 +312,11 @@ fun LocalMusicScreen(
         pendingSave = null
     }
 
-    fun addToPlaylist(song: LocalSong, id: Long, name: String) {
+    fun addToPlaylist(
+        song: LocalSong,
+        id: Long,
+        name: String,
+    ) {
         if (busy) return
         busy = true
         scope.launch {
@@ -295,7 +336,10 @@ fun LocalMusicScreen(
         }
     }
 
-    fun toggleFavorite(song: LocalSong, isFavorite: Boolean) {
+    fun toggleFavorite(
+        song: LocalSong,
+        isFavorite: Boolean,
+    ) {
         if (busy) return
         if (isFavorite) {
             libraryVm.toggleFavorite(song.track)
@@ -358,7 +402,13 @@ fun LocalMusicScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         DeviceTile(88.dp, RoundedCornerShape(22.dp), background = false)
                         Column(Modifier.weight(1f).padding(start = 18.dp)) {
-                            Text("On this device", style = MaterialTheme.typography.headlineMedium, color = ink(), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                "On this device",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = ink(),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                             Text(
                                 when {
                                     !hasPermission -> "Allow access to see your music"
@@ -395,7 +445,19 @@ fun LocalMusicScreen(
                             modifier = Modifier.padding(bottom = 8.dp),
                         ) {
                             item { FormatChip("All", selected = format == null) { viewModel.setFormat(null) } }
-                            items(formats, key = { it }) { f -> FormatChip(f, selected = format == f) { viewModel.setFormat(if (format == f) null else f) } }
+                            items(formats, key = { it }) { f ->
+                                FormatChip(f, selected = format == f) {
+                                    viewModel.setFormat(
+                                        if (format ==
+                                            f
+                                        ) {
+                                            null
+                                        } else {
+                                            f
+                                        },
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -404,17 +466,21 @@ fun LocalMusicScreen(
                     item(key = "permission") {
                         EmptyStateCard(
                             title = if (denied) "Music access is off" else "Play any music on your device",
-                            subtitle = if (denied) {
-                                "Turn on “Music and audio” for this app in system settings."
-                            } else {
-                                "Allow access to your audio files. They stay on your device and are never uploaded."
-                            },
+                            subtitle =
+                                if (denied) {
+                                    "Turn on “Music and audio” for this app in system settings."
+                                } else {
+                                    "Allow access to your audio files. They stay on your device and are never uploaded."
+                                },
                             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
                             buttonLabel = if (denied) "Open settings" else "Allow access",
                             onButton = {
                                 if (denied) {
                                     context.startActivity(
-                                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
+                                        Intent(
+                                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                            Uri.fromParts("package", context.packageName, null),
+                                        ),
                                     )
                                 } else {
                                     permissionLauncher.launch(LOCAL_AUDIO_PERMISSION)
@@ -493,20 +559,49 @@ fun LocalMusicScreen(
                 dragHandle = { BottomSheetDefaults.DragHandle(color = ink(0.3f)) },
             ) {
                 Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp)) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         BadgedCover(local = true) {
                             CoverImage(song.track.albumArtUrl.orEmpty(), Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)))
                         }
                         Column(Modifier.weight(1f).padding(start = 16.dp)) {
-                            Text(song.track.title, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(song.track.artist, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                song.track.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = ink(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                song.track.artist,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ink(0.6f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
-                    Box(Modifier.fillMaxWidth().padding(vertical = 6.dp).height(1.dp).background(ink(0.10f)))
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp)
+                            .height(1.dp)
+                            .background(ink(0.10f)),
+                    )
                     if (busy) {
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             CircularProgressIndicator(color = accent, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                            Text("Getting song info…", style = MaterialTheme.typography.titleMedium, color = ink(), modifier = Modifier.padding(start = 16.dp))
+                            Text(
+                                "Getting song info…",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = ink(),
+                                modifier = Modifier.padding(start = 16.dp),
+                            )
                         }
                     } else if (sheetMode == SongSheetMode.Actions) {
                         SongAction(PhosphorIcons.Fill.Play, "Play now") {
@@ -529,18 +624,32 @@ fun LocalMusicScreen(
                         }
                     } else if (sheetMode == SongSheetMode.EditChoice) {
                         Row(
-                            Modifier.fillMaxWidth().pressScale(onClick = { sheetMode = SongSheetMode.Actions }, scaleDown = 0.98f).padding(horizontal = 24.dp, vertical = 10.dp),
+                            Modifier
+                                .fillMaxWidth()
+                                .pressScale(onClick = {
+                                    sheetMode = SongSheetMode.Actions
+                                }, scaleDown = 0.98f)
+                                .padding(horizontal = 24.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(PhosphorIcons.Bold.ArrowLeft, "Back", tint = ink(0.7f), modifier = Modifier.size(18.dp))
-                            Text("Edit metadata", style = MaterialTheme.typography.labelLarge, color = ink(0.6f), modifier = Modifier.padding(start = 12.dp))
+                            Text(
+                                "Edit metadata",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = ink(0.6f),
+                                modifier = Modifier.padding(start = 12.dp),
+                            )
                         }
                         SongAction(PhosphorIcons.Bold.Globe, "Auto fetch", subtitle = "Find the cover, name and artist online") {
                             editMode = EditMode.Auto
                             editSong = song
                             closeSheet()
                         }
-                        SongAction(PhosphorIcons.Bold.PencilSimple, "Manual edit", subtitle = "Change the cover, name and artist yourself") {
+                        SongAction(
+                            PhosphorIcons.Bold.PencilSimple,
+                            "Manual edit",
+                            subtitle = "Change the cover, name and artist yourself",
+                        ) {
                             editMode = EditMode.Manual
                             editSong = song
                             closeSheet()
@@ -569,9 +678,19 @@ fun LocalMusicScreen(
                             scope.launch { pendingSave?.invoke() }
                         }
                     } else {
-                        Text("Choose a playlist", style = MaterialTheme.typography.labelLarge, color = ink(0.6f), modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp))
+                        Text(
+                            "Choose a playlist",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = ink(0.6f),
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp),
+                        )
                         if (playlists.isEmpty()) {
-                            Text("You have no playlists yet. Create one from the Library tab.", style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp))
+                            Text(
+                                "You have no playlists yet. Create one from the Library tab.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ink(0.6f),
+                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                            )
                         }
                         playlists.forEach { p -> SongAction(PhosphorIcons.Bold.PlusCircle, p.name) { addToPlaylist(song, p.id, p.name) } }
                     }
@@ -581,29 +700,33 @@ fun LocalMusicScreen(
 
         editSong?.let { song ->
             when (editMode) {
-                EditMode.Manual -> ManualEditSheet(
-                    song = song,
-                    onDismiss = { editSong = null },
-                    onSave = { title, artist, cover ->
-                        viewModel.saveEdit(song.track, title, artist, cover)
-                        notifier.success("Song info updated")
-                        editSong = null
-                    },
-                )
+                EditMode.Manual -> {
+                    ManualEditSheet(
+                        song = song,
+                        onDismiss = { editSong = null },
+                        onSave = { title, artist, cover ->
+                            viewModel.saveEdit(song.track, title, artist, cover)
+                            notifier.success("Song info updated")
+                            editSong = null
+                        },
+                    )
+                }
 
-                EditMode.Auto -> AutoFetchSheet(
-                    song = song,
-                    ui = autoUi,
-                    onStart = { viewModel.startAutoFetch(song.track) },
-                    onStop = { viewModel.stopAutoFetch() },
-                    onDismiss = { editSong = null },
-                    onApply = { c ->
-                        viewModel.applyCandidate(song.track, c)
-                        notifier.success("Song info updated")
-                        editSong = null
-                    },
-                    onManual = { editMode = EditMode.Manual },
-                )
+                EditMode.Auto -> {
+                    AutoFetchSheet(
+                        song = song,
+                        ui = autoUi,
+                        onStart = { viewModel.startAutoFetch(song.track) },
+                        onStop = { viewModel.stopAutoFetch() },
+                        onDismiss = { editSong = null },
+                        onApply = { c ->
+                            viewModel.applyCandidate(song.track, c)
+                            notifier.success("Song info updated")
+                            editSong = null
+                        },
+                        onManual = { editMode = EditMode.Manual },
+                    )
+                }
             }
         }
     }
@@ -614,7 +737,13 @@ private val CodeNextFont = FontFamily(Font(DesignR.font.codenext_extrabold, Font
 private val ScanPlaces = listOf("Music", "Downloads", "Documents", "WhatsApp Audio", "Recordings", "Other folders")
 
 @Composable
-private fun ScanCard(scan: ScanUi, deepScanned: Boolean, onScan: () -> Unit, onBrowse: () -> Unit, modifier: Modifier = Modifier) {
+private fun ScanCard(
+    scan: ScanUi,
+    deepScanned: Boolean,
+    onScan: () -> Unit,
+    onBrowse: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val running = scan.running
     val onFill = if (LocalCoverPalette.current.isLight) Color.White else Color.Black
     val shape = RoundedCornerShape(16.dp)
@@ -669,8 +798,7 @@ private fun ScanCard(scan: ScanUi, deepScanned: Boolean, onScan: () -> Unit, onB
                                 size = Size((x + w).coerceAtMost(size.width) - x.coerceAtLeast(0f), h),
                             )
                         }
-                    }
-                    .padding(horizontal = 14.dp, vertical = 15.dp),
+                    }.padding(horizontal = 14.dp, vertical = 15.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
@@ -678,9 +806,10 @@ private fun ScanCard(scan: ScanUi, deepScanned: Boolean, onScan: () -> Unit, onB
                     PhosphorIcons.Bold.Scan,
                     null,
                     tint = onFill,
-                    modifier = Modifier
-                        .size(22.dp)
-                        .graphicsLayer { alpha = 1f - (1f - breathe) * motion },
+                    modifier =
+                        Modifier
+                            .size(22.dp)
+                            .graphicsLayer { alpha = 1f - (1f - breathe) * motion },
                 )
                 Crossfade(if (running) "Scanning…" else "Scan", animationSpec = tween(300), label = "title") {
                     Text(
@@ -735,30 +864,56 @@ private fun ScanCard(scan: ScanUi, deepScanned: Boolean, onScan: () -> Unit, onB
 }
 
 @Composable
-private fun FormatChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun FormatChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
     val light = LocalCoverPalette.current.isLight
     Text(
         label,
         style = MaterialTheme.typography.labelLarge,
         color = if (selected) (if (light) Color.White else Color.Black) else ink(),
-        modifier = Modifier
-            .pressScale(onClick = onClick)
-            .background(if (selected) ink(0.95f) else ink(0.12f), CircleShape)
-            .padding(horizontal = 16.dp, vertical = 7.dp),
+        modifier =
+            Modifier
+                .pressScale(onClick = onClick)
+                .background(if (selected) ink(0.95f) else ink(0.12f), CircleShape)
+                .padding(horizontal = 16.dp, vertical = 7.dp),
     )
 }
 
 @Composable
-private fun SongAction(icon: ImageVector, label: String, subtitle: String? = null, onClick: () -> Unit) {
+private fun SongAction(
+    icon: ImageVector,
+    label: String,
+    subtitle: String? = null,
+    onClick: () -> Unit,
+) {
     Row(
-        Modifier.fillMaxWidth().pressScale(onClick = onClick, scaleDown = 0.98f).padding(horizontal = 24.dp, vertical = if (subtitle != null) 12.dp else 15.dp),
+        Modifier.fillMaxWidth().pressScale(onClick = onClick, scaleDown = 0.98f).padding(
+            horizontal = 24.dp,
+            vertical =
+                if (subtitle !=
+                    null
+                ) {
+                    12.dp
+                } else {
+                    15.dp
+                },
+        ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, null, tint = ink(0.85f), modifier = Modifier.size(22.dp))
         Column(Modifier.weight(1f).padding(start = 18.dp)) {
             Text(label, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (subtitle != null) {
-                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink(0.55f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
@@ -775,23 +930,32 @@ private fun ManualEditSheet(
     val focus = LocalFocusManager.current
     val scope = rememberCoroutineScope()
     var title by remember { mutableStateOf(song.track.title) }
-    var artist by remember { mutableStateOf(song.track.artist.takeIf { it != UNKNOWN_ARTIST }.orEmpty()) }
+    var artist by remember {
+        mutableStateOf(
+            song.track.artist
+                .takeIf { it != UNKNOWN_ARTIST }
+                .orEmpty(),
+        )
+    }
     var cover by remember { mutableStateOf<CoverEdit>(CoverEdit.Keep) }
     var linkOpen by remember { mutableStateOf(false) }
     var link by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) {
-            cover = CoverEdit.Photo(uri)
-            linkOpen = false
+    val picker =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri != null) {
+                cover = CoverEdit.Photo(uri)
+                linkOpen = false
+            }
         }
-    }
-    val preview = when (val c = cover) {
-        CoverEdit.Keep -> song.track.albumArtUrl.orEmpty()
-        is CoverEdit.Url -> c.url
-        is CoverEdit.Photo -> c.uri.toString()
-    }
+    val preview =
+        when (val c = cover) {
+            CoverEdit.Keep -> song.track.albumArtUrl.orEmpty()
+            is CoverEdit.Url -> c.url
+            is CoverEdit.Photo -> c.uri.toString()
+        }
+
     fun applyLink() {
         val u = link.trim()
         if (u.startsWith("http://", true) || u.startsWith("https://", true)) {
@@ -810,11 +974,21 @@ private fun ManualEditSheet(
         dragHandle = { BottomSheetDefaults.DragHandle(color = ink(0.3f)) },
     ) {
         Column(
-            Modifier.fillMaxWidth().imePadding().navigationBarsPadding()
-                .verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 16.dp),
+            Modifier
+                .fillMaxWidth()
+                .imePadding()
+                .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("Edit metadata", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(top = 4.dp, bottom = 18.dp))
+            Text(
+                "Edit metadata",
+                style = MaterialTheme.typography.titleLarge,
+                color = ink(),
+                modifier = Modifier.padding(top = 4.dp, bottom = 18.dp),
+            )
 
             Box(Modifier.size(132.dp)) {
                 Crossfade(preview, animationSpec = tween(300), label = "cover") { url ->
@@ -838,17 +1012,33 @@ private fun ManualEditSheet(
                         onDone = { applyLink() },
                     )
                     Box(
-                        Modifier.padding(start = 10.dp).size(50.dp).pressScale(onClick = { applyLink() }).background(ink(0.95f), CircleShape),
+                        Modifier
+                            .padding(
+                                start = 10.dp,
+                            ).size(50.dp)
+                            .pressScale(onClick = { applyLink() })
+                            .background(ink(0.95f), CircleShape),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(PhosphorIcons.Bold.Check, "Use this link", tint = if (light) Color.White else Color.Black, modifier = Modifier.size(22.dp)) }
+                    ) {
+                        Icon(
+                            PhosphorIcons.Bold.Check,
+                            "Use this link",
+                            tint = if (light) Color.White else Color.Black,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
                 }
             }
 
             EditField("Name", title, { title = it }, "Song name", Modifier.padding(top = 22.dp))
-            EditField("Artist", artist, { artist = it }, "Artist", Modifier.padding(top = 14.dp), imeAction = ImeAction.Done, onDone = { focus.clearFocus() })
+            EditField("Artist", artist, {
+                artist = it
+            }, "Artist", Modifier.padding(top = 14.dp), imeAction = ImeAction.Done, onDone = { focus.clearFocus() })
 
             Box(
-                Modifier.fillMaxWidth().padding(top = 24.dp)
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 24.dp)
                     .pressScale(onClick = {
                         if (canSave) {
                             saving = true
@@ -860,9 +1050,17 @@ private fun ManualEditSheet(
                 contentAlignment = Alignment.Center,
             ) {
                 if (saving) {
-                    CircularProgressIndicator(color = if (light) Color.White else Color.Black, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                    CircularProgressIndicator(
+                        color = if (light) Color.White else Color.Black,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(20.dp),
+                    )
                 } else {
-                    Text("Save", style = MaterialTheme.typography.titleMedium, color = if (canSave) (if (light) Color.White else Color.Black) else ink(0.4f))
+                    Text(
+                        "Save",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (canSave) (if (light) Color.White else Color.Black) else ink(0.4f),
+                    )
                 }
             }
         }
@@ -881,8 +1079,19 @@ private fun EditField(
 ) {
     val textStyle = MaterialTheme.typography.bodyLarge
     Column(modifier.fillMaxWidth()) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = ink(0.6f), modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
-        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(ink(0.08f)).padding(horizontal = 16.dp, vertical = 14.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = ink(0.6f),
+            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+        )
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(ink(0.08f))
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+        ) {
             if (value.isEmpty()) Text(placeholder, style = textStyle, color = ink(0.4f), maxLines = 1)
             BasicTextField(
                 value = value,
@@ -951,7 +1160,12 @@ private fun AutoFetchSheet(
                     Row(Modifier.padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(color = accent, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
                         Crossfade(AutoSteps[step], animationSpec = tween(350), label = "step") {
-                            Text(it, style = MaterialTheme.typography.bodyMedium, color = ink(0.7f), modifier = Modifier.padding(start = 12.dp))
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ink(0.7f),
+                                modifier = Modifier.padding(start = 12.dp),
+                            )
                         }
                     }
                     if (ui.results.isEmpty()) repeat(3) { SkeletonRow() }
@@ -972,7 +1186,10 @@ private fun AutoFetchSheet(
             val empty = !ui.loading && ui.results.isEmpty()
             val enabled = selected != null && !applying
             Box(
-                Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 14.dp)
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(top = 14.dp)
                     .pressScale(onClick = {
                         if (empty) {
                             onManual()
@@ -990,7 +1207,11 @@ private fun AutoFetchSheet(
                 contentAlignment = Alignment.Center,
             ) {
                 if (applying) {
-                    CircularProgressIndicator(color = if (light) Color.White else Color.Black, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                    CircularProgressIndicator(
+                        color = if (light) Color.White else Color.Black,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(20.dp),
+                    )
                 } else {
                     Text(
                         when {
@@ -1008,12 +1229,18 @@ private fun AutoFetchSheet(
 }
 
 @Composable
-private fun FoundRow(c: MetaCandidate, selected: Boolean, onClick: () -> Unit) {
+private fun FoundRow(
+    c: MetaCandidate,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
     var shown by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { shown = true }
     AnimatedVisibility(shown, enter = fadeIn(tween(400)) + expandVertically(tween(400))) {
         Row(
-            Modifier.fillMaxWidth().pressScale(onClick = onClick, scaleDown = 0.98f)
+            Modifier
+                .fillMaxWidth()
+                .pressScale(onClick = onClick, scaleDown = 0.98f)
                 .padding(horizontal = 12.dp, vertical = 2.dp)
                 .clip(RoundedCornerShape(14.dp))
                 .background(if (selected) ink(0.12f) else Color.Transparent)
@@ -1045,7 +1272,12 @@ private fun FoundRow(c: MetaCandidate, selected: Boolean, onClick: () -> Unit) {
             }
             Crossfade(selected, animationSpec = tween(200), label = "pick") { on ->
                 if (on) {
-                    Icon(PhosphorIcons.Fill.CheckCircle, "Selected", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                    Icon(
+                        PhosphorIcons.Fill.CheckCircle,
+                        "Selected",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp),
+                    )
                 } else {
                     Icon(PhosphorIcons.Bold.Circle, null, tint = ink(0.35f), modifier = Modifier.size(24.dp))
                 }
@@ -1061,8 +1293,21 @@ private fun SkeletonRow() {
     Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)).background(ink(a)))
         Column(Modifier.padding(start = 14.dp)) {
-            Box(Modifier.width(150.dp).height(13.dp).clip(CircleShape).background(ink(a)))
-            Box(Modifier.padding(top = 8.dp).width(100.dp).height(11.dp).clip(CircleShape).background(ink(a)))
+            Box(
+                Modifier
+                    .width(150.dp)
+                    .height(13.dp)
+                    .clip(CircleShape)
+                    .background(ink(a)),
+            )
+            Box(
+                Modifier
+                    .padding(top = 8.dp)
+                    .width(100.dp)
+                    .height(11.dp)
+                    .clip(CircleShape)
+                    .background(ink(a)),
+            )
         }
     }
 }
@@ -1078,7 +1323,12 @@ private fun LocalSongRow(
 ) {
     val track = song.track
     Row(
-        Modifier.fillMaxWidth().pressScale(onClick = onClick, scaleDown = 0.98f).padding(start = 24.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+        Modifier
+            .fillMaxWidth()
+            .pressScale(
+                onClick = onClick,
+                scaleDown = 0.98f,
+            ).padding(start = 24.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BadgedCover(local = true) {
@@ -1089,7 +1339,10 @@ private fun LocalSongRow(
                 if (isPlaying) NowPlayingBars(color = accent, modifier = Modifier.padding(end = 8.dp))
                 Text(
                     track.title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium),
+                    style =
+                        MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium,
+                        ),
                     color = if (isPlaying) accent else ink(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1113,11 +1366,21 @@ private fun LocalSongRow(
                     style = MaterialTheme.typography.labelSmall,
                     color = ink(0.7f),
                     maxLines = 1,
-                    modifier = Modifier.padding(start = 8.dp).background(ink(0.10f), CircleShape).padding(horizontal = 7.dp, vertical = 1.dp),
+                    modifier =
+                        Modifier
+                            .padding(
+                                start = 8.dp,
+                            ).background(ink(0.10f), CircleShape)
+                            .padding(horizontal = 7.dp, vertical = 1.dp),
                 )
             }
         }
-        Text(formatDuration(track.durationMs), style = MaterialTheme.typography.labelMedium, color = ink(0.45f), modifier = Modifier.padding(end = 2.dp))
+        Text(
+            formatDuration(track.durationMs),
+            style = MaterialTheme.typography.labelMedium,
+            color = ink(0.45f),
+            modifier = Modifier.padding(end = 2.dp),
+        )
         Box(Modifier.size(40.dp).pressScale(onClick = onMore), contentAlignment = Alignment.Center) {
             Icon(PhosphorIcons.Bold.DotsThreeVertical, "More options", tint = ink(0.7f), modifier = Modifier.size(20.dp))
         }
@@ -1125,7 +1388,12 @@ private fun LocalSongRow(
 }
 
 @Composable
-private fun LocalPill(label: String, icon: ImageVector, filled: Boolean, onClick: () -> Unit) {
+private fun LocalPill(
+    label: String,
+    icon: ImageVector,
+    filled: Boolean,
+    onClick: () -> Unit,
+) {
     val isLight = LocalCoverPalette.current.isLight
     val content = if (filled) (if (isLight) Color.White else Color.Black) else ink()
     Row(
@@ -1141,10 +1409,21 @@ private fun LocalPill(label: String, icon: ImageVector, filled: Boolean, onClick
 }
 
 @Composable
-private fun LocalSearchField(query: String, onChange: (String) -> Unit, onFocus: (Boolean) -> Unit, onDone: () -> Unit, modifier: Modifier = Modifier) {
+private fun LocalSearchField(
+    query: String,
+    onChange: (String) -> Unit,
+    onFocus: (Boolean) -> Unit,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val textStyle = MaterialTheme.typography.bodyLarge
     Row(
-        modifier.fillMaxWidth().height(42.dp).clip(RoundedCornerShape(50)).background(ink(0.08f)).padding(start = 14.dp, end = 6.dp),
+        modifier
+            .fillMaxWidth()
+            .height(42.dp)
+            .clip(RoundedCornerShape(50))
+            .background(ink(0.08f))
+            .padding(start = 14.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(PhosphorIcons.Bold.MagnifyingGlass, null, tint = ink(0.6f), modifier = Modifier.size(18.dp))

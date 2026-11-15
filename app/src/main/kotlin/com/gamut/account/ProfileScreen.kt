@@ -96,11 +96,15 @@ import com.gamut.settings.GamutPage
 import com.gamut.settings.PillSwitch
 import com.gamut.settings.SoftCard
 import com.gamut.settings.SoftHeader
-import kotlin.math.ceil
 import kotlinx.coroutines.delay
+import kotlin.math.ceil
 
 @Composable
-fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: AccountViewModel = hiltViewModel()) {
+fun ProfileScreen(
+    onBack: () -> Unit,
+    nowPlaying: @Composable () -> Unit,
+    vm: AccountViewModel = hiltViewModel(),
+) {
     val context = LocalContext.current
     val notifier = LocalNotifier.current
     val userId by vm.userId.collectAsState()
@@ -142,21 +146,24 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
         }
     }
 
-    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        uri?.let { vm.export(context.contentResolver, it, exportPassword) }
-        exportPassword = ""
-        exportConfirm = ""
-    }
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            importPassword = ""
-            importReplace = false
-            pendingImport = uri
+    val exportLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            uri?.let { vm.export(context.contentResolver, it, exportPassword) }
+            exportPassword = ""
+            exportConfirm = ""
         }
-    }
-    val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let { vm.setAvatar(context.contentResolver, it) }
-    }
+    val importLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) {
+                importPassword = ""
+                importReplace = false
+                pendingImport = uri
+            }
+        }
+    val photoLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            uri?.let { vm.setAvatar(context.contentResolver, it) }
+        }
     val pickPhoto = { photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
     val openEditName = {
         draft = customName
@@ -166,7 +173,14 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
     GamutPage(title = "", onBack = onBack, nowPlaying = nowPlaying) {
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.pressScale(onClick = pickPhoto)) {
-                ProfileAvatar(name = name, seed = userId, size = 92.dp, guestIcon = PhosphorIcons.Bold.User, image = avatar, shape = CircleShape)
+                ProfileAvatar(
+                    name = name,
+                    seed = userId,
+                    size = 92.dp,
+                    guestIcon = PhosphorIcons.Bold.User,
+                    image = avatar,
+                    shape = CircleShape,
+                )
             }
             Column(Modifier.weight(1f).padding(start = 18.dp)) {
                 Text(
@@ -186,7 +200,12 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
                     modifier = Modifier.padding(top = 2.dp),
                 )
                 Row(
-                    Modifier.padding(top = 10.dp).clip(RoundedCornerShape(50)).background(ink(0.08f)).padding(horizontal = 10.dp, vertical = 5.dp),
+                    Modifier
+                        .padding(
+                            top = 10.dp,
+                        ).clip(RoundedCornerShape(50))
+                        .background(ink(0.08f))
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
@@ -205,12 +224,20 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth().padding(top = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             IconPill(PhosphorIcons.Bold.PencilSimple, "Edit name", openEditName, Modifier.weight(1f))
             IconPill(PhosphorIcons.Bold.Camera, if (avatar != null) "Change photo" else "Add photo", pickPhoto, Modifier.weight(1f))
             if (avatar != null) {
                 Box(
-                    Modifier.size(44.dp).pressScale(onClick = { vm.removeAvatar() }).clip(CircleShape).background(ink(0.1f)),
+                    Modifier
+                        .size(44.dp)
+                        .pressScale(onClick = { vm.removeAvatar() })
+                        .clip(CircleShape)
+                        .background(ink(0.1f)),
                     contentAlignment = Alignment.Center,
                 ) { Icon(PhosphorIcons.Bold.Trash, "Remove photo", tint = ink(0.85f), modifier = Modifier.size(20.dp)) }
             }
@@ -272,7 +299,11 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
                     if (i > 0) IconDivider()
                     IconRow(
                         PhosphorIcons.Bold.ClockClockwise,
-                        DateUtils.formatDateTime(context, b.modifiedMs, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_ABBREV_MONTH),
+                        DateUtils.formatDateTime(
+                            context,
+                            b.modifiedMs,
+                            DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_ABBREV_MONTH,
+                        ),
                         subtitle = "Tap to restore",
                         onClick = { vm.requestRestore(b) },
                     )
@@ -365,7 +396,13 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
             GamutField(value = importPassword, onChange = { importPassword = it }, placeholder = "Password (if encrypted)", password = true)
             Column(Modifier.padding(top = 10.dp)) {
                 ChoiceRow(!importReplace, "Merge", "Add to what you have. Nothing is deleted.", { importReplace = false })
-                ChoiceRow(importReplace, "Replace", "Delete your current favorites and playlists first.", { importReplace = true }, warn = true)
+                ChoiceRow(
+                    importReplace,
+                    "Replace",
+                    "Delete your current favorites and playlists first.",
+                    { importReplace = true },
+                    warn = true,
+                )
             }
         }
     }
@@ -373,11 +410,13 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
     restorePrompt?.let { p ->
         GamutDialog(
             title = "Restore this backup?",
-            body = "Backup from " + DateUtils.formatDateTime(
-                context,
-                p.file.modifiedMs,
-                DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_ABBREV_MONTH,
-            ) + ". It only adds what is missing; nothing you have now is removed.",
+            body =
+                "Backup from " +
+                    DateUtils.formatDateTime(
+                        context,
+                        p.file.modifiedMs,
+                        DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_ABBREV_MONTH,
+                    ) + ". It only adds what is missing; nothing you have now is removed.",
             confirmLabel = "Restore",
             onDismiss = vm::cancelRestore,
             onConfirm = vm::confirmRestore,
@@ -389,11 +428,12 @@ fun ProfileScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: Ac
     importSummary?.let { s ->
         GamutDialog(
             title = if (s.report.totalAdded == 0) "Nothing new to add" else "Import complete",
-            body = when {
-                s.report.totalAdded == 0 -> "Everything in the backup was already in your library."
-                s.replaced -> "Your previous library was replaced."
-                else -> "The backup was merged into your library."
-            },
+            body =
+                when {
+                    s.report.totalAdded == 0 -> "Everything in the backup was already in your library."
+                    s.replaced -> "Your previous library was replaced."
+                    else -> "The backup was merged into your library."
+                },
             confirmLabel = "Done",
             dismissLabel = null,
             onDismiss = vm::dismissImportSummary,
@@ -508,24 +548,51 @@ private fun IconRow(
 
 @Composable
 private fun IconDivider() {
-    Box(Modifier.padding(start = 76.dp).fillMaxWidth().height(1.dp).background(ink(0.06f)))
+    Box(
+        Modifier
+            .padding(start = 76.dp)
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(ink(0.06f)),
+    )
 }
 
 @Composable
-private fun IconPill(icon: ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun IconPill(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Row(
-        modifier.pressScale(onClick = onClick).clip(RoundedCornerShape(50)).background(ink(0.1f))
+        modifier
+            .pressScale(onClick = onClick)
+            .clip(RoundedCornerShape(50))
+            .background(ink(0.1f))
             .padding(horizontal = 14.dp, vertical = 11.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, null, tint = ink(0.85f), modifier = Modifier.size(18.dp))
-        Text(label, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.titleMedium,
+            color = ink(),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 8.dp),
+        )
     }
 }
 
 @Composable
-private fun ChoiceRow(selected: Boolean, title: String, subtitle: String, onClick: () -> Unit, warn: Boolean = false) {
+private fun ChoiceRow(
+    selected: Boolean,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    warn: Boolean = false,
+) {
     val dot = if (warn) GamutDestructive else ink(0.95f)
     Row(Modifier.fillMaxWidth().pressScale(onClick = onClick, scaleDown = 0.98f).padding(vertical = 8.dp)) {
         Box(
@@ -540,7 +607,10 @@ private fun ChoiceRow(selected: Boolean, title: String, subtitle: String, onClic
 }
 
 @Composable
-private fun SummaryRow(label: String, value: String) {
+private fun SummaryRow(
+    label: String,
+    value: String,
+) {
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = ink(0.7f))
         Text(value, style = MaterialTheme.typography.titleMedium, color = ink())
@@ -548,7 +618,10 @@ private fun SummaryRow(label: String, value: String) {
 }
 
 @Composable
-private fun ReportRows(r: ImportReport, done: Boolean) {
+private fun ReportRows(
+    r: ImportReport,
+    done: Boolean,
+) {
     val added = if (done) "added" else "to add"
     if (r.replaced) {
         if (r.removedFavorites > 0) SummaryRow("Favorites removed first", "${r.removedFavorites}")
@@ -575,14 +648,23 @@ private fun ReportRows(r: ImportReport, done: Boolean) {
             )
         }
     }
-    if (done && r.playlists.size > 6) Text("and ${r.playlists.size - 6} more playlists", style = MaterialTheme.typography.bodyMedium, color = ink(0.55f))
+    if (done &&
+        r.playlists.size > 6
+    ) {
+        Text("and ${r.playlists.size - 6} more playlists", style = MaterialTheme.typography.bodyMedium, color = ink(0.55f))
+    }
     r.warnings.take(3).forEach {
         Text(it, style = MaterialTheme.typography.bodyMedium, color = GamutDestructive, modifier = Modifier.padding(top = 4.dp))
     }
 }
 
 @Composable
-private fun SyncRow(status: SyncStatus, lastSynced: Long?, pending: Int, onClick: () -> Unit) {
+private fun SyncRow(
+    status: SyncStatus,
+    lastSynced: Long?,
+    pending: Int,
+    onClick: () -> Unit,
+) {
     val syncing = status is SyncStatus.Syncing
     val failed = status is SyncStatus.Error
     val offline = status is SyncStatus.Offline
@@ -629,28 +711,44 @@ private fun SyncRow(status: SyncStatus, lastSynced: Long?, pending: Int, onClick
 
     val accent = if (failed) GamutDestructive else ink(0.9f)
 
-    val title = when {
-        failed -> "Sync failed \u00B7 tap to retry"
-        offline -> "Waiting for connection"
-        syncing -> "Syncing\u2026"
-        justSynced -> "All synced"
-        else -> "Sync now"
-    }
-    val subtitle = when (status) {
-        is SyncStatus.Error -> status.message
+    val title =
+        when {
+            failed -> "Sync failed \u00B7 tap to retry"
+            offline -> "Waiting for connection"
+            syncing -> "Syncing\u2026"
+            justSynced -> "All synced"
+            else -> "Sync now"
+        }
+    val subtitle =
+        when (status) {
+            is SyncStatus.Error -> {
+                status.message
+            }
 
-        SyncStatus.Offline ->
-            if (pending > 0) "Offline \u00B7 $pending waiting, will sync when you\u2019re back" else "Offline \u00B7 will sync when you\u2019re back"
+            SyncStatus.Offline -> {
+                if (pending >
+                    0
+                ) {
+                    "Offline \u00B7 $pending waiting, will sync when you\u2019re back"
+                } else {
+                    "Offline \u00B7 will sync when you\u2019re back"
+                }
+            }
 
-        SyncStatus.Syncing -> if (pending > 0) "$pending waiting" else "Keeping your library up to date"
+            SyncStatus.Syncing -> {
+                if (pending > 0) "$pending waiting" else "Keeping your library up to date"
+            }
 
-        SyncStatus.Idle -> (lastSynced?.let { "Last synced ${DateUtils.getRelativeTimeSpanString(it)}" } ?: "Not synced yet") +
-            if (pending > 0) " \u00B7 $pending waiting" else ""
-    }
+            SyncStatus.Idle -> {
+                (lastSynced?.let { "Last synced ${DateUtils.getRelativeTimeSpanString(it)}" } ?: "Not synced yet") +
+                    if (pending > 0) " \u00B7 $pending waiting" else ""
+            }
+        }
 
     val haptic = LocalHapticFeedback.current
     Box(
-        Modifier.fillMaxWidth()
+        Modifier
+            .fillMaxWidth()
             .pressScale(onClick = {
                 if (!syncing) {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -690,15 +788,22 @@ private fun SyncRow(status: SyncStatus, lastSynced: Long?, pending: Int, onClick
                         },
                         null,
                         tint = if (failed) GamutDestructive else ink(if (offline) 0.5f else 0.85f),
-                        modifier = Modifier.size(24.dp).graphicsLayer {
-                            rotationZ = if (checked) 0f else spin.value
-                            scaleX = if (checked) pop else 1f
-                            scaleY = if (checked) pop else 1f
-                        },
+                        modifier =
+                            Modifier.size(24.dp).graphicsLayer {
+                                rotationZ = if (checked) 0f else spin.value
+                                scaleX = if (checked) pop else 1f
+                                scaleY = if (checked) pop else 1f
+                            },
                     )
                 }
                 if (pending > 0 && !syncing && !failed && !justSynced) {
-                    Box(Modifier.align(Alignment.TopEnd).padding(3.dp).size(9.dp).background(ink(0.9f), CircleShape))
+                    Box(
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(3.dp)
+                            .size(9.dp)
+                            .background(ink(0.9f), CircleShape),
+                    )
                 }
             }
             Spacer(Modifier.width(16.dp))

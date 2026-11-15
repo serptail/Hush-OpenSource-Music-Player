@@ -45,21 +45,24 @@ import kotlin.math.ln
 import kotlin.math.roundToInt
 
 @HiltViewModel
-class PlaybackSettingsViewModel @Inject constructor(
-    val settings: PlaybackSettings,
-    @ApplicationContext context: Context,
-) : ViewModel() {
-    val sound: SoundSettings = SoundSettings.get(context)
-}
+class PlaybackSettingsViewModel
+    @Inject
+    constructor(
+        val settings: PlaybackSettings,
+        @ApplicationContext context: Context,
+    ) : ViewModel() {
+        val sound: SoundSettings = SoundSettings.get(context)
+    }
 
 private enum class PlaybackDialog { QUALITY, PRESET, BANDS, RESET }
 
-private val FadeChoices = listOf(
-    Choice(0, "Off"),
-    Choice(300, "Short", "0.3 seconds"),
-    Choice(600, "Medium", "0.6 seconds"),
-    Choice(1_000, "Long", "1 second"),
-)
+private val FadeChoices =
+    listOf(
+        Choice(0, "Off"),
+        Choice(300, "Short", "0.3 seconds"),
+        Choice(600, "Medium", "0.6 seconds"),
+        Choice(1_000, "Long", "1 second"),
+    )
 
 private fun hzLabel(hz: Int) = if (hz >= 1_000) String.format(Locale.US, "%.1f kHz", hz / 1_000f).replace(".0 ", " ") else "$hz Hz"
 
@@ -71,7 +74,11 @@ private val LnMinHz = ln(20f)
 private val LnMaxHz = ln(20_000f)
 
 @Composable
-private fun BandEditorDialog(bands: List<EqBand>, sound: SoundSettings, onDismiss: () -> Unit) {
+private fun BandEditorDialog(
+    bands: List<EqBand>,
+    sound: SoundSettings,
+    onDismiss: () -> Unit,
+) {
     GamutDialog(
         title = "Frequency and Q",
         body = "Move each band along the spectrum and set how wide it is. A lower Q is wider.",
@@ -173,7 +180,12 @@ fun PlaybackSettingsScreen(
                     onSelect = { ms -> settings.update { it.copy(fadeMs = ms) } },
                 )
                 FadeChoices.firstOrNull { it.value == s.fadeMs }?.hint?.let {
-                    Text(it, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 8.dp, start = 4.dp))
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ink(0.55f),
+                        modifier = Modifier.padding(top = 8.dp, start = 4.dp),
+                    )
                 }
             }
             SoftDivider()
@@ -202,7 +214,13 @@ fun PlaybackSettingsScreen(
             Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp)) {
                 val band = activeBand?.let { snd.bands.getOrNull(it) }
                 Text(
-                    if (band != null) "${hzLabel(band.freqHz.roundToInt())}  ·  ${dbLabel((band.gainDb * 100).roundToInt())}" else snd.preset,
+                    if (band !=
+                        null
+                    ) {
+                        "${hzLabel(band.freqHz.roundToInt())}  ·  ${dbLabel((band.gainDb * 100).roundToInt())}"
+                    } else {
+                        snd.preset
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = ink(0.6f),
                     modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
@@ -258,7 +276,12 @@ fun PlaybackSettingsScreen(
                 Spacer(Modifier.height(12.dp))
                 SegmentedControl(Crossfeed.entries.map { Choice(it, it.label, it.hint) }, snd.crossfeed, sound::setCrossfeed)
                 if (snd.crossfeed != Crossfeed.OFF) {
-                    Text(snd.crossfeed.hint, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 8.dp, start = 4.dp))
+                    Text(
+                        snd.crossfeed.hint,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ink(0.55f),
+                        modifier = Modifier.padding(top = 8.dp, start = 4.dp),
+                    )
                 }
             }
             SoftDivider()
@@ -294,8 +317,12 @@ fun PlaybackSettingsScreen(
 
         Spacer(Modifier.height(24.dp))
         Box(
-            Modifier.fillMaxWidth().pressScale(onClick = { dialog = PlaybackDialog.RESET })
-                .clip(RoundedCornerShape(20.dp)).background(GamutDestructive.copy(alpha = 0.12f)).padding(vertical = 16.dp),
+            Modifier
+                .fillMaxWidth()
+                .pressScale(onClick = { dialog = PlaybackDialog.RESET })
+                .clip(RoundedCornerShape(20.dp))
+                .background(GamutDestructive.copy(alpha = 0.12f))
+                .padding(vertical = 16.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text("Reset audio settings", style = MaterialTheme.typography.titleMedium, color = GamutDestructive)
@@ -303,41 +330,52 @@ fun PlaybackSettingsScreen(
     }
 
     when (dialog) {
-        PlaybackDialog.QUALITY -> GamutChoiceDialog(
-            title = "Streaming quality",
-            choices = StreamQuality.entries.map { Choice(it, it.label, it.hint) },
-            selected = s.streamQuality,
-            onSelect = { q -> settings.update { it.copy(streamQuality = q) } },
-            onDismiss = { dialog = null },
-            note = "Applies from the next track you play. Downloads have their own quality setting in Storage & Downloads.",
-        )
+        PlaybackDialog.QUALITY -> {
+            GamutChoiceDialog(
+                title = "Streaming quality",
+                choices = StreamQuality.entries.map { Choice(it, it.label, it.hint) },
+                selected = s.streamQuality,
+                onSelect = { q -> settings.update { it.copy(streamQuality = q) } },
+                onDismiss = { dialog = null },
+                note = "Applies from the next track you play. Downloads have their own quality setting in Storage & Downloads.",
+            )
+        }
 
-        PlaybackDialog.PRESET -> GamutChoiceDialog(
-            title = "Equalizer preset",
-            choices = buildList {
-                addAll(SoundSettings.presetNames.map { Choice(it, it) })
-                if (snd.preset == SoundSettings.CUSTOM) add(Choice(SoundSettings.CUSTOM, "Custom"))
-            },
-            selected = snd.preset,
-            onSelect = sound::applyPreset,
-            onDismiss = { dialog = null },
-        )
+        PlaybackDialog.PRESET -> {
+            GamutChoiceDialog(
+                title = "Equalizer preset",
+                choices =
+                    buildList {
+                        addAll(SoundSettings.presetNames.map { Choice(it, it) })
+                        if (snd.preset == SoundSettings.CUSTOM) add(Choice(SoundSettings.CUSTOM, "Custom"))
+                    },
+                selected = snd.preset,
+                onSelect = sound::applyPreset,
+                onDismiss = { dialog = null },
+            )
+        }
 
-        PlaybackDialog.BANDS -> BandEditorDialog(snd.bands, sound) { dialog = null }
+        PlaybackDialog.BANDS -> {
+            BandEditorDialog(snd.bands, sound) { dialog = null }
+        }
 
-        PlaybackDialog.RESET -> GamutDialog(
-            title = "Reset audio settings?",
-            body = "Streaming, playback, output and sound-quality options go back to their defaults, and the equalizer returns to Flat.",
-            confirmLabel = "Reset",
-            destructive = true,
-            onDismiss = { dialog = null },
-            onConfirm = {
-                settings.reset()
-                sound.reset()
-                dialog = null
-            },
-        )
+        PlaybackDialog.RESET -> {
+            GamutDialog(
+                title = "Reset audio settings?",
+                body = "Streaming, playback, output and sound-quality options go back to their defaults, and the equalizer returns to Flat.",
+                confirmLabel = "Reset",
+                destructive = true,
+                onDismiss = { dialog = null },
+                onConfirm = {
+                    settings.reset()
+                    sound.reset()
+                    dialog = null
+                },
+            )
+        }
 
-        null -> Unit
+        null -> {
+            Unit
+        }
     }
 }

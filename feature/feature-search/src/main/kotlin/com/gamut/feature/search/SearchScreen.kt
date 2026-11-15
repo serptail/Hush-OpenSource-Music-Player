@@ -142,10 +142,10 @@ import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
 import com.gamut.core.model.TrackSource
 import dev.chrisbanes.haze.HazeState
-import java.util.Locale
-import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.Locale
+import kotlin.math.roundToInt
 
 internal val TextPrimary: Color
     @Composable @ReadOnlyComposable
@@ -248,13 +248,14 @@ fun SearchScreen(
 
         val hasYoutube = state.tracks.any { it.source == TrackSource.YOUTUBE }
         val activeFilter = if (hasYoutube) filter else FILTER_ALL
-        val visibleTracks = remember(state.tracks, activeFilter) {
-            when (activeFilter) {
-                FILTER_CATALOG -> state.tracks.filter { it.source != TrackSource.YOUTUBE }
-                FILTER_YOUTUBE -> state.tracks.filter { it.source == TrackSource.YOUTUBE }
-                else -> state.tracks
+        val visibleTracks =
+            remember(state.tracks, activeFilter) {
+                when (activeFilter) {
+                    FILTER_CATALOG -> state.tracks.filter { it.source != TrackSource.YOUTUBE }
+                    FILTER_YOUTUBE -> state.tracks.filter { it.source == TrackSource.YOUTUBE }
+                    else -> state.tracks
+                }
             }
-        }
 
         val wide = isWideLayout()
         val gutter = if (wide) 16.dp else adaptiveGutter()
@@ -273,7 +274,10 @@ fun SearchScreen(
                     )
                     if (showingDiscover && LocalInputModeManager.current.inputMode == InputMode.Keyboard) {
                         Box(
-                            Modifier.size(44.dp).pressScale(onClick = { viewModel.refreshDiscover() }).semantics { contentDescription = "Refresh Discover" },
+                            Modifier.size(44.dp).pressScale(onClick = { viewModel.refreshDiscover() }).semantics {
+                                contentDescription =
+                                    "Refresh Discover"
+                            },
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(PhosphorIcons.Bold.ArrowClockwise, null, tint = ink(0.9f), modifier = Modifier.size(26.dp))
@@ -290,7 +294,13 @@ fun SearchScreen(
                         )
                     }
                     Spacer(Modifier.width(8.dp))
-                    Box(Modifier.size(44.dp).then(profileModifier).pressScale(onClick = onProfile).semantics { contentDescription = "Profile" }, contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier.size(44.dp).then(profileModifier).pressScale(onClick = onProfile).semantics {
+                            contentDescription =
+                                "Profile"
+                        },
+                        contentAlignment = Alignment.Center,
+                    ) {
                         ProfileAvatar(
                             name = profileName,
                             seed = profileSeed,
@@ -329,7 +339,13 @@ fun SearchScreen(
         val refresh = rememberSlingshotRefresh(enabled = showingDiscover && !showingRecents, onRefresh = { viewModel.refreshDiscover() })
 
         AcrylicHost(Modifier.fillMaxSize(), state = LocalAcrylicState.current ?: remember { HazeState() }) {
-            Box(Modifier.fillMaxSize().padding(bottom = tabsHeight).acrylicSource().nestedScroll(refresh.connection)) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .padding(bottom = tabsHeight)
+                    .acrylicSource()
+                    .nestedScroll(refresh.connection),
+            ) {
                 val resultsAlpha by animateFloatAsState(if (state.isLoading) 0.55f else 1f, tween(150), label = "results-alpha")
                 val resultCell: @Composable (Track) -> Unit = { track ->
                     Box(Modifier.padding(horizontal = 16.dp).graphicsLayer { alpha = resultsAlpha }) {
@@ -363,11 +379,22 @@ fun SearchScreen(
 
                     if (wide && showingDiscover && !showingRecents) {
                         Row(
-                            Modifier.weight(1f).fillMaxWidth().padding(horizontal = gutter)
+                            Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(horizontal = gutter)
                                 .offset { IntOffset(0, refresh.pull.coerceAtLeast(0f).roundToInt()) },
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            LazyColumn(Modifier.weight(1.1f).fillMaxHeight(), state = listState, contentPadding = PaddingValues(bottom = stripHeight + 32.dp)) {
+                            LazyColumn(
+                                Modifier.weight(1.1f).fillMaxHeight(),
+                                state = listState,
+                                contentPadding =
+                                    PaddingValues(
+                                        bottom =
+                                            stripHeight + 32.dp,
+                                    ),
+                            ) {
                                 discoverFeaturedItems(
                                     state = discover,
                                     onTrackClick = onTrackSelected,
@@ -388,7 +415,15 @@ fun SearchScreen(
                                     onLoadMore = { viewModel.loadMoreFeed() },
                                 )
                             }
-                            LazyColumn(Modifier.weight(1f).fillMaxHeight(), state = chartsListState, contentPadding = PaddingValues(bottom = stripHeight + 32.dp)) {
+                            LazyColumn(
+                                Modifier.weight(1f).fillMaxHeight(),
+                                state = chartsListState,
+                                contentPadding =
+                                    PaddingValues(
+                                        bottom =
+                                            stripHeight + 32.dp,
+                                    ),
+                            ) {
                                 discoverChartItems(
                                     state = discover,
                                     selectedTab = discoverTab,
@@ -408,7 +443,12 @@ fun SearchScreen(
                     } else {
                         LazyColumn(
                             state = listState,
-                            modifier = Modifier.weight(1f).fillMaxWidth().offset { IntOffset(0, refresh.pull.coerceAtLeast(0f).roundToInt()) },
+                            modifier =
+                                Modifier
+                                    .weight(
+                                        1f,
+                                    ).fillMaxWidth()
+                                    .offset { IntOffset(0, refresh.pull.coerceAtLeast(0f).roundToInt()) },
                             contentPadding = PaddingValues(start = gutter, end = gutter, bottom = stripHeight + 32.dp),
                         ) {
                             if (showingRecents) {
@@ -427,10 +467,13 @@ fun SearchScreen(
                                             "Clear",
                                             style = MaterialTheme.typography.labelLarge,
                                             color = TextSecondary,
-                                            modifier = Modifier.pressScale(onClick = {
-                                                recents.clear()
-                                                recentList = emptyList()
-                                            }, scaleDown = 0.92f).padding(4.dp),
+                                            modifier =
+                                                Modifier
+                                                    .pressScale(onClick = {
+                                                        recents.clear()
+                                                        recentList = emptyList()
+                                                    }, scaleDown = 0.92f)
+                                                    .padding(4.dp),
                                         )
                                     }
                                 }
@@ -519,21 +562,32 @@ fun SearchScreen(
                                 }
 
                                 when {
-                                    loadingEmpty -> items(8, key = { "skeleton-$it" }) {
-                                        TrackRowSkeleton(Modifier.padding(horizontal = 24.dp))
+                                    loadingEmpty -> {
+                                        items(8, key = { "skeleton-$it" }) {
+                                            TrackRowSkeleton(Modifier.padding(horizontal = 24.dp))
+                                        }
                                     }
 
-                                    noResults -> item(key = "empty") { NoResults(state.query) }
+                                    noResults -> {
+                                        item(key = "empty") { NoResults(state.query) }
+                                    }
 
-                                    else -> if (wide) {
-                                        itemsIndexed(visibleTracks.chunked(2), key = { i, pair -> "${pair.first().isrc}#$i" }) { _, pair ->
-                                            Row(Modifier.fillMaxWidth()) {
-                                                pair.forEach { track -> Box(Modifier.weight(1f)) { resultCell(track) } }
-                                                if (pair.size == 1) Spacer(Modifier.weight(1f))
+                                    else -> {
+                                        if (wide) {
+                                            itemsIndexed(visibleTracks.chunked(2), key = {
+                                                i,
+                                                pair,
+                                                ->
+                                                "${pair.first().isrc}#$i"
+                                            }) { _, pair ->
+                                                Row(Modifier.fillMaxWidth()) {
+                                                    pair.forEach { track -> Box(Modifier.weight(1f)) { resultCell(track) } }
+                                                    if (pair.size == 1) Spacer(Modifier.weight(1f))
+                                                }
                                             }
+                                        } else {
+                                            itemsIndexed(visibleTracks, key = { i, t -> "${t.isrc}#$i" }) { _, track -> resultCell(track) }
                                         }
-                                    } else {
-                                        itemsIndexed(visibleTracks, key = { i, t -> "${t.isrc}#$i" }) { _, track -> resultCell(track) }
                                     }
                                 }
                             }
@@ -625,8 +679,15 @@ private fun SearchField(
             Modifier
                 .weight(1f)
                 .height(52.dp)
-                .then(if (remote && !editing && !focused) Modifier.pressScale(onClick = { editing = true }, scaleDown = 0.99f) else Modifier)
-                .glass(PanelShape, fill = 0.07f + 0.03f * focus, borderColor = accent.copy(alpha = 0.55f * focus))
+                .then(
+                    if (remote && !editing &&
+                        !focused
+                    ) {
+                        Modifier.pressScale(onClick = { editing = true }, scaleDown = 0.99f)
+                    } else {
+                        Modifier
+                    },
+                ).glass(PanelShape, fill = 0.07f + 0.03f * focus, borderColor = accent.copy(alpha = 0.55f * focus))
                 .padding(start = 16.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -640,23 +701,25 @@ private fun SearchField(
             BasicTextField(
                 value = query,
                 onValueChange = onQueryChange,
-                modifier = Modifier
-                    .weight(1f)
-                    .focusProperties { canFocus = (!remote || editing) && live }
-                    .focusRequester(focusRequester)
-                    .onFocusChanged {
-                        focused = it.isFocused
-                        if (!it.isFocused) editing = false
-                        onFocusChange(it.isFocused)
-                    },
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .focusProperties { canFocus = (!remote || editing) && live }
+                        .focusRequester(focusRequester)
+                        .onFocusChanged {
+                            focused = it.isFocused
+                            if (!it.isFocused) editing = false
+                            onFocusChange(it.isFocused)
+                        },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = TextPrimary),
                 cursorBrush = SolidColor(accent),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = {
-                    keyboard?.hide()
-                    onSubmit()
-                }),
+                keyboardActions =
+                    KeyboardActions(onSearch = {
+                        keyboard?.hide()
+                        onSubmit()
+                    }),
                 decorationBox = { inner ->
                     Box(contentAlignment = Alignment.CenterStart) {
                         if (query.isEmpty()) {
@@ -688,19 +751,23 @@ private fun SearchField(
                 color = ink(0.85f),
                 maxLines = 1,
                 softWrap = false,
-                modifier = Modifier
-                    .padding(start = 16.dp)
-                    .pressScale(onClick = {
-                        onQueryChange("")
-                        focusManager.clearFocus()
-                    }, scaleDown = 0.94f),
+                modifier =
+                    Modifier
+                        .padding(start = 16.dp)
+                        .pressScale(onClick = {
+                            onQueryChange("")
+                            focusManager.clearFocus()
+                        }, scaleDown = 0.94f),
             )
         }
     }
 }
 
 @Composable
-internal fun SectionLabel(text: String, modifier: Modifier = Modifier) {
+internal fun SectionLabel(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
     Text(
         text,
         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
@@ -710,7 +777,11 @@ internal fun SectionLabel(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-internal fun Pill(label: String, selected: Boolean, onClick: () -> Unit) {
+internal fun Pill(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
     val fill by animateColorAsState(ink(if (selected) 0.16f else 0.06f), tween(200), label = "pill-fill")
     val text by animateColorAsState(ink(if (selected) 1f else 0.6f), tween(200), label = "pill-text")
     Box(
@@ -732,7 +803,11 @@ internal fun Pill(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun RecentRow(query: String, onClick: () -> Unit, onRemove: () -> Unit) {
+private fun RecentRow(
+    query: String,
+    onClick: () -> Unit,
+    onRemove: () -> Unit,
+) {
     InteractiveSurface(
         shape = RowShape,
         pressedScale = 0.98f,
@@ -785,13 +860,18 @@ internal fun formatDuration(ms: Long): String {
     return "${total / 60}:${(total % 60).toString().padStart(2, '0')}"
 }
 
-internal fun formatCount(n: Long): String = when {
-    n >= 1_000_000 -> String.format(Locale.ROOT, "%.1fM", n / 1_000_000.0).replace(".0M", "M")
-    n >= 1_000 -> "${n / 1_000}K"
-    else -> n.toString()
-}
+internal fun formatCount(n: Long): String =
+    when {
+        n >= 1_000_000 -> String.format(Locale.ROOT, "%.1fM", n / 1_000_000.0).replace(".0M", "M")
+        n >= 1_000 -> "${n / 1_000}K"
+        else -> n.toString()
+    }
 
-private fun highlight(text: String, query: String, match: Color): AnnotatedString {
+private fun highlight(
+    text: String,
+    query: String,
+    match: Color,
+): AnnotatedString {
     val tokens = query.lowercase().split(' ').filter { it.isNotBlank() }
     val lower = text.lowercase()
     if (tokens.isEmpty() || lower.length != text.length) return AnnotatedString(text)
@@ -819,20 +899,23 @@ private fun highlight(text: String, query: String, match: Color): AnnotatedStrin
 }
 
 private val YouTubeGlyph: ImageVector by lazy {
-    ImageVector.Builder(
-        name = "YouTube",
-        defaultWidth = 32.dp,
-        defaultHeight = 32.dp,
-        viewportWidth = 32f,
-        viewportHeight = 32f,
-    ).addPath(
-        pathData = PathParser().parsePathString(
-            "M24.325 8.309s-2.655-.334-8.357-.334c-5.517 0-8.294.334-8.294.334A2.675 2.675 0 0 0 5 10.984v10.034" +
-                "a2.675 2.675 0 0 0 2.674 2.676s2.582.332 8.294.332c5.709 0 8.357-.332 8.357-.332A2.673 2.673 0 0 0 27 21.018" +
-                "V10.982a2.673 2.673 0 0 0-2.675-2.673zM13.061 19.975V12.03L20.195 16l-7.134 3.975z",
-        ).toNodes(),
-        fill = SolidColor(Color.Black),
-    ).build()
+    ImageVector
+        .Builder(
+            name = "YouTube",
+            defaultWidth = 32.dp,
+            defaultHeight = 32.dp,
+            viewportWidth = 32f,
+            viewportHeight = 32f,
+        ).addPath(
+            pathData =
+                PathParser()
+                    .parsePathString(
+                        "M24.325 8.309s-2.655-.334-8.357-.334c-5.517 0-8.294.334-8.294.334A2.675 2.675 0 0 0 5 10.984v10.034" +
+                            "a2.675 2.675 0 0 0 2.674 2.676s2.582.332 8.294.332c5.709 0 8.357-.332 8.357-.332A2.673 2.673 0 0 0 27 21.018" +
+                            "V10.982a2.673 2.673 0 0 0-2.675-2.673zM13.061 19.975V12.03L20.195 16l-7.134 3.975z",
+                    ).toNodes(),
+            fill = SolidColor(Color.Black),
+        ).build()
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -855,15 +938,16 @@ internal fun InteractiveSurface(
         label = "surface-scale",
     )
     val tint by animateColorAsState(
-        targetValue = ink(
-            if (pressed) {
-                0.10f
-            } else if (hovered) {
-                0.06f
-            } else {
-                0f
-            },
-        ),
+        targetValue =
+            ink(
+                if (pressed) {
+                    0.10f
+                } else if (hovered) {
+                    0.06f
+                } else {
+                    0f
+                },
+            ),
         animationSpec = tween(140),
         label = "surface-tint",
     )
@@ -872,8 +956,7 @@ internal fun InteractiveSurface(
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-            }
-            .then(modifier)
+            }.then(modifier)
             .clip(shape)
             .background(tint)
             .hoverable(interaction)
@@ -883,14 +966,16 @@ internal fun InteractiveSurface(
                 indication = null,
                 onClick = onClick,
                 onLongClick = onLongClick,
-            )
-            .padding(contentPadding),
+            ).padding(contentPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) { content(this, hovered || pressed) }
 }
 
 @Composable
-private fun ArtistHit(item: DiscoverItem, onClick: (Long) -> Unit) {
+private fun ArtistHit(
+    item: DiscoverItem,
+    onClick: (Long) -> Unit,
+) {
     InteractiveSurface(
         shape = CardShapeLarge,
         pressedScale = 0.97f,
@@ -900,10 +985,16 @@ private fun ArtistHit(item: DiscoverItem, onClick: (Long) -> Unit) {
     ) { active ->
         ArtImage(
             url = item.imageUrl,
-            modifier = Modifier
-                .size(76.dp)
-                .shadow(10.dp, CircleShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.35f))
-                .clip(CircleShape),
+            modifier =
+                Modifier
+                    .size(76.dp)
+                    .shadow(
+                        10.dp,
+                        CircleShape,
+                        clip = false,
+                        ambientColor = Color.Black.copy(alpha = 0.25f),
+                        spotColor = Color.Black.copy(alpha = 0.35f),
+                    ).clip(CircleShape),
             contentDescription = item.title,
             fallback = { ArtworkFallbackIcon() },
         )
@@ -959,10 +1050,16 @@ private fun TrackResultRow(
         val isYoutubeThumb = track.albumArtUrl?.let { "ytimg.com" in it || "img.youtube.com" in it } == true
         ArtImage(
             url = remember(track.albumArtUrl) { squareArtUrl(track.albumArtUrl, 256) },
-            modifier = Modifier
-                .size(width = if (isYoutubeThumb) 100.dp else 56.dp, height = 56.dp)
-                .shadow(6.dp, ThumbShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.20f), spotColor = Color.Black.copy(alpha = 0.30f))
-                .clip(ThumbShape),
+            modifier =
+                Modifier
+                    .size(width = if (isYoutubeThumb) 100.dp else 56.dp, height = 56.dp)
+                    .shadow(
+                        6.dp,
+                        ThumbShape,
+                        clip = false,
+                        ambientColor = Color.Black.copy(alpha = 0.20f),
+                        spotColor = Color.Black.copy(alpha = 0.30f),
+                    ).clip(ThumbShape),
             fallback = { ArtworkFallbackIcon() },
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
@@ -971,7 +1068,10 @@ private fun TrackResultRow(
                 val titleColor = if (isPlaying) accent else ink(0.85f)
                 Text(
                     text = highlight(track.title, query, if (isPlaying) accent else TextPrimary),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Normal),
+                    style =
+                        MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Normal,
+                        ),
                     color = titleColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -982,11 +1082,12 @@ private fun TrackResultRow(
                 if (track.source == TrackSource.YOUTUBE) {
                     Icon(YouTubeGlyph, "From YouTube", tint = ink(0.6f), modifier = Modifier.padding(end = 4.dp).size(18.dp))
                 }
-                val subtitle = if (isResolving) {
-                    "Checking a verified source\u2026"
-                } else {
-                    listOfNotNull(track.artist, track.album?.takeIf { it.isNotBlank() }).joinToString(" \u00B7 ")
-                }
+                val subtitle =
+                    if (isResolving) {
+                        "Checking a verified source\u2026"
+                    } else {
+                        listOfNotNull(track.artist, track.album?.takeIf { it.isNotBlank() }).joinToString(" \u00B7 ")
+                    }
                 Text(
                     subtitle,
                     style = MaterialTheme.typography.bodyMedium,
@@ -1031,7 +1132,12 @@ private fun TrackResultRow(
 }
 
 @Composable
-internal fun RowIconButton(icon: ImageVector, description: String, tint: Color, onClick: () -> Unit) {
+internal fun RowIconButton(
+    icon: ImageVector,
+    description: String,
+    tint: Color,
+    onClick: () -> Unit,
+) {
     Box(
         Modifier
             .size(40.dp)

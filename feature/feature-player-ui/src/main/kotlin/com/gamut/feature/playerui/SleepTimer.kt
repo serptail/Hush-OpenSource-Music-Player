@@ -35,15 +35,19 @@ object SleepTimer {
     private val _endsAt = MutableStateFlow<Long?>(null)
     val endsAt: StateFlow<Long?> = _endsAt.asStateFlow()
 
-    fun start(minutes: Int, onFire: () -> Unit) {
+    fun start(
+        minutes: Int,
+        onFire: () -> Unit,
+    ) {
         cancel()
         val end = SystemClock.elapsedRealtime() + minutes * 60_000L
         _endsAt.value = end
-        job = scope.launch {
-            delay((end - SystemClock.elapsedRealtime()).coerceAtLeast(0L))
-            onFire()
-            _endsAt.value = null
-        }
+        job =
+            scope.launch {
+                delay((end - SystemClock.elapsedRealtime()).coerceAtLeast(0L))
+                onFire()
+                _endsAt.value = null
+            }
     }
 
     fun cancel() {
@@ -55,13 +59,23 @@ object SleepTimer {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun SleepTimerSheet(onPick: (minutes: Int) -> Unit, onTurnOff: () -> Unit, onDismiss: () -> Unit) {
+internal fun SleepTimerSheet(
+    onPick: (minutes: Int) -> Unit,
+    onTurnOff: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val endsAt by SleepTimer.endsAt.collectAsState()
     GamutSheet(
         onDismiss = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp).padding(bottom = 16.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 16.dp),
+        ) {
             Text("Sleep timer", style = MaterialTheme.typography.titleLarge, color = ink())
             endsAt?.let { end ->
                 val left = ((end - SystemClock.elapsedRealtime()) / 60_000L + 1).coerceAtLeast(1)

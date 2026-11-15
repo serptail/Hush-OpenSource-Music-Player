@@ -27,12 +27,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
 
-val GoogleBorderColors = listOf(
-    Color(0xFF4285F4),
-    Color(0xFFEA4335),
-    Color(0xFFFBBC05),
-    Color(0xFF34A853),
-)
+val GoogleBorderColors =
+    listOf(
+        Color(0xFF4285F4),
+        Color(0xFFEA4335),
+        Color(0xFFFBBC05),
+        Color(0xFF34A853),
+    )
 
 private const val PulseLoopMs = 12_000
 
@@ -110,12 +111,13 @@ private fun ShaderBorderFrame(
     val shader = remember { RuntimeShader(PulsingBorderAgsl) }
     val brush = remember(shader) { ShaderBrush(shader) }
 
-    val clock = rememberInfiniteTransition(label = "pulsing-border").animateFloat(
-        initialValue = 0f,
-        targetValue = (2 * PI).toFloat(),
-        animationSpec = infiniteRepeatable(tween(PulseLoopMs, easing = LinearEasing), RepeatMode.Restart),
-        label = "pulsing-border-clock",
-    )
+    val clock =
+        rememberInfiniteTransition(label = "pulsing-border").animateFloat(
+            initialValue = 0f,
+            targetValue = (2 * PI).toFloat(),
+            animationSpec = infiniteRepeatable(tween(PulseLoopMs, easing = LinearEasing), RepeatMode.Restart),
+            label = "pulsing-border-clock",
+        )
     val level by animateFloatAsState(if (active) 1f else 0.25f, tween(300), label = "pulsing-border-level")
 
     Box(

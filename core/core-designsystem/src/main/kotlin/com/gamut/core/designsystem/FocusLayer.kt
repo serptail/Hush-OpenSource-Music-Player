@@ -26,6 +26,9 @@ fun Modifier.focusLayer(live: Boolean): Modifier {
 val LocalFocusLive = compositionLocalOf { true }
 
 @Composable
-fun FocusLive(live: Boolean, content: @Composable () -> Unit) {
+fun FocusLive(
+    live: Boolean,
+    content: @Composable () -> Unit,
+) {
     CompositionLocalProvider(LocalFocusLive provides (LocalFocusLive.current && live), content = content)
 }

@@ -98,7 +98,11 @@ fun SliderCell(
     }
 }
 
-data class Choice<T>(val value: T, val label: String, val hint: String? = null)
+data class Choice<T>(
+    val value: T,
+    val label: String,
+    val hint: String? = null,
+)
 
 @Composable
 fun <T> GamutChoiceDialog(
@@ -121,7 +125,8 @@ fun <T> GamutChoiceDialog(
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
             choices.forEach { choice ->
                 Row(
-                    Modifier.fillMaxWidth()
+                    Modifier
+                        .fillMaxWidth()
                         .pressScale(onClick = {
                             onSelect(choice.value)
                             close()

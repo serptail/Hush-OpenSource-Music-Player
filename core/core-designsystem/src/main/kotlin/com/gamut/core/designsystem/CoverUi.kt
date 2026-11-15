@@ -32,28 +32,32 @@ fun Modifier.glass(
     shape: Shape,
     fill: Float = 0.07f,
     borderColor: Color = ink(0.07f),
-): Modifier = this
-    .clip(shape)
-    .background(ink(fill), shape)
-    .border(1.dp, borderColor, shape)
+): Modifier =
+    this
+        .clip(shape)
+        .background(ink(fill), shape)
+        .border(1.dp, borderColor, shape)
 
-fun Modifier.fadeEdges(fade: Dp = 18.dp): Modifier = this
-    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-    .drawWithCache {
-        val f = (fade.toPx() / size.height).coerceIn(0f, 0.5f)
-        val brush = Brush.verticalGradient(
-            colorStops = arrayOf(
-                0f to Color.Transparent,
-                f to Color.Black,
-                1f - f to Color.Black,
-                1f to Color.Transparent,
-            ),
-        )
-        onDrawWithContent {
-            drawContent()
-            drawRect(brush = brush, blendMode = BlendMode.DstIn)
+fun Modifier.fadeEdges(fade: Dp = 18.dp): Modifier =
+    this
+        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+        .drawWithCache {
+            val f = (fade.toPx() / size.height).coerceIn(0f, 0.5f)
+            val brush =
+                Brush.verticalGradient(
+                    colorStops =
+                        arrayOf(
+                            0f to Color.Transparent,
+                            f to Color.Black,
+                            1f - f to Color.Black,
+                            1f to Color.Transparent,
+                        ),
+                )
+            onDrawWithContent {
+                drawContent()
+                drawRect(brush = brush, blendMode = BlendMode.DstIn)
+            }
         }
-    }
 
 @Suppress("DEPRECATION")
 @Composable
@@ -71,8 +75,9 @@ fun TransparentStatusBar(darkIcons: Boolean) {
     }
 }
 
-private tailrec fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> null
-}
+private tailrec fun Context.findActivity(): Activity? =
+    when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }

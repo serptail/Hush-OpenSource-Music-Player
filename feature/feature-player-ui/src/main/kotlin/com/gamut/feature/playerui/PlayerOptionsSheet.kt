@@ -50,7 +50,11 @@ internal fun PlayerOptionsSheet(
 ) {
     GamutSheet(onDismiss = onDismiss) {
         Column(
-            Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(bottom = 16.dp),
+            Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 16.dp),
         ) {
             Text(
                 "Options",
@@ -75,7 +79,12 @@ internal fun PlayerOptionsSheet(
 }
 
 @Composable
-private fun OptionRow(icon: ImageVector, label: String, status: String?, onClick: () -> Unit) {
+private fun OptionRow(
+    icon: ImageVector,
+    label: String,
+    status: String?,
+    onClick: () -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,

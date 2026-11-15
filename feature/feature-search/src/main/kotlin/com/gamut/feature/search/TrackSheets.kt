@@ -58,7 +58,6 @@ import com.adamglin.phosphoricons.bold.PlusCircle
 import com.adamglin.phosphoricons.bold.ShareNetwork
 import com.adamglin.phosphoricons.bold.UserCircle
 import com.adamglin.phosphoricons.fill.CheckCircle
-import com.adamglin.phosphoricons.fill.Heart as HeartFill
 import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.designsystem.GamutSheet
@@ -66,6 +65,7 @@ import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
+import com.adamglin.phosphoricons.fill.Heart as HeartFill
 
 internal val SheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
 
@@ -80,38 +80,40 @@ data class TrackPlaylistOption(
 
 val LocalPlaylistRemove = staticCompositionLocalOf<(Track, String) -> Unit> { { _, _ -> } }
 
-internal fun Modifier.bounceClick(onClick: () -> Unit): Modifier = composed {
-    val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    val hovered by source.collectIsHoveredAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-        label = "bounce",
-    )
-    val tint by animateColorAsState(
-        targetValue = ink().copy(
-            alpha = if (pressed) {
-                0.10f
-            } else if (hovered) {
-                0.06f
-            } else {
-                0f
-            },
-        ),
-        animationSpec = tween(140),
-        label = "tint",
-    )
-    this
-        .graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-        }
-        .clip(RoundedCornerShape(16.dp))
-        .background(tint)
-        .hoverable(source)
-        .clickable(interactionSource = source, indication = null, onClick = onClick)
-}
+internal fun Modifier.bounceClick(onClick: () -> Unit): Modifier =
+    composed {
+        val source = remember { MutableInteractionSource() }
+        val pressed by source.collectIsPressedAsState()
+        val hovered by source.collectIsHoveredAsState()
+        val scale by animateFloatAsState(
+            targetValue = if (pressed) 0.97f else 1f,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+            label = "bounce",
+        )
+        val tint by animateColorAsState(
+            targetValue =
+                ink().copy(
+                    alpha =
+                        if (pressed) {
+                            0.10f
+                        } else if (hovered) {
+                            0.06f
+                        } else {
+                            0f
+                        },
+                ),
+            animationSpec = tween(140),
+            label = "tint",
+        )
+        this
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }.clip(RoundedCornerShape(16.dp))
+            .background(tint)
+            .hoverable(source)
+            .clickable(interactionSource = source, indication = null, onClick = onClick)
+    }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -150,13 +152,24 @@ private fun TrackHeader(track: Track) {
         )
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
             Text(track.title, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                track.artist,
+                style = MaterialTheme.typography.bodyMedium,
+                color = ink(0.6f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
 
 @Composable
-private fun ActionRow(icon: ImageVector, label: String, tint: Color = ink(), onClick: () -> Unit) {
+private fun ActionRow(
+    icon: ImageVector,
+    label: String,
+    tint: Color = ink(),
+    onClick: () -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth().bounceClick(onClick).padding(horizontal = 24.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -178,9 +191,10 @@ internal fun SavedInSheet(
     onDismiss: () -> Unit,
 ) {
     val removeFromPlaylist = LocalPlaylistRemove.current
-    val ticked = remember {
-        mutableStateListOf<String>().apply { addAll(playlists.filter { it.contains || track.isrc in it.trackIsrcs }.map { it.id }) }
-    }
+    val ticked =
+        remember {
+            mutableStateListOf<String>().apply { addAll(playlists.filter { it.contains || track.isrc in it.trackIsrcs }.map { it.id }) }
+        }
     GamutSheet(onDismiss = onDismiss, shape = SheetShape) {
         Row(Modifier.padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (showFavorites) {
@@ -192,7 +206,8 @@ internal fun SavedInSheet(
         LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
             if (showFavorites) {
                 item {
-                    PlaylistRow("Favorites", "Liked songs", null, checked = true, accent = accent, icon = PhosphorIcons.Fill.HeartFill, iconTint = accent, onClick = {})
+                    PlaylistRow("Favorites", "Liked songs", null, checked = true, accent = accent, icon = PhosphorIcons.Fill.HeartFill, iconTint = accent, onClick = {
+                    })
                 }
             }
             if (playlists.isEmpty()) {

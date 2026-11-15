@@ -63,13 +63,25 @@ interface PlaylistDao {
     suspend fun delete(id: Long)
 
     @Query("UPDATE playlists SET name = :name, tags = :tags, coverUri = :coverUri WHERE id = :id")
-    suspend fun update(id: Long, name: String, tags: String, coverUri: String?)
+    suspend fun update(
+        id: Long,
+        name: String,
+        tags: String,
+        coverUri: String?,
+    )
 
     @Query("UPDATE playlists SET name = :name, tags = :tags WHERE id = :id")
-    suspend fun updateMeta(id: Long, name: String, tags: String)
+    suspend fun updateMeta(
+        id: Long,
+        name: String,
+        tags: String,
+    )
 
     @Query("UPDATE playlists SET remoteId = :remoteId WHERE id = :id")
-    suspend fun setRemoteId(id: Long, remoteId: String)
+    suspend fun setRemoteId(
+        id: Long,
+        remoteId: String,
+    )
 
     @Query("UPDATE playlists SET remoteId = NULL")
     suspend fun clearRemoteIds()
@@ -81,9 +93,14 @@ abstract class PlaylistTrackDao {
     abstract suspend fun upsert(ref: PlaylistTrackCrossRef)
 
     @Query("DELETE FROM playlisttrackcrossref WHERE playlistId = :playlistId AND isrc = :isrc")
-    abstract suspend fun remove(playlistId: Long, isrc: String)
+    abstract suspend fun remove(
+        playlistId: Long,
+        isrc: String,
+    )
 
-    @Query("SELECT t.* FROM tracks t INNER JOIN playlisttrackcrossref r ON t.isrc = r.isrc WHERE r.playlistId = :playlistId ORDER BY r.position")
+    @Query(
+        "SELECT t.* FROM tracks t INNER JOIN playlisttrackcrossref r ON t.isrc = r.isrc WHERE r.playlistId = :playlistId ORDER BY r.position",
+    )
     abstract fun observeTracks(playlistId: Long): Flow<List<TrackEntity>>
 
     @Query("SELECT isrc FROM playlisttrackcrossref WHERE playlistId = :playlistId ORDER BY position")
@@ -93,13 +110,19 @@ abstract class PlaylistTrackDao {
     abstract suspend fun nextPosition(playlistId: Long): Int
 
     @Query("SELECT EXISTS(SELECT 1 FROM playlisttrackcrossref WHERE playlistId = :playlistId AND isrc = :isrc)")
-    abstract suspend fun contains(playlistId: Long, isrc: String): Boolean
+    abstract suspend fun contains(
+        playlistId: Long,
+        isrc: String,
+    ): Boolean
 
     @Query("DELETE FROM playlisttrackcrossref WHERE playlistId = :playlistId")
     abstract suspend fun clear(playlistId: Long)
 
     @Transaction
-    open suspend fun replaceAll(playlistId: Long, isrcs: List<String>) {
+    open suspend fun replaceAll(
+        playlistId: Long,
+        isrcs: List<String>,
+    ) {
         clear(playlistId)
         isrcs.distinct().forEachIndexed { index, isrc -> upsert(PlaylistTrackCrossRef(playlistId, isrc, index)) }
     }
@@ -192,13 +215,22 @@ interface PendingSyncDao {
     fun observeCount(): Flow<Int>
 
     @Query("SELECT EXISTS(SELECT 1 FROM pending_sync WHERE type = :type AND itemKey = :key)")
-    suspend fun has(type: String, key: String): Boolean
+    suspend fun has(
+        type: String,
+        key: String,
+    ): Boolean
 
     @Query("DELETE FROM pending_sync WHERE type = :type AND itemKey = :key")
-    suspend fun delete(type: String, key: String)
+    suspend fun delete(
+        type: String,
+        key: String,
+    )
 
     @Query("DELETE FROM pending_sync WHERE type = :type AND itemKey LIKE :prefix")
-    suspend fun deleteByPrefix(type: String, prefix: String)
+    suspend fun deleteByPrefix(
+        type: String,
+        prefix: String,
+    )
 }
 
 @Dao

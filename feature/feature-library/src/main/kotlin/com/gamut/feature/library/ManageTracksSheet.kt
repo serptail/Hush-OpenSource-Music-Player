@@ -162,11 +162,12 @@ internal fun ManageTracksSheet(
                 val gapTop = top - info.viewportStartOffset
                 val gapBottom = info.viewportEndOffset - (top + current.size)
                 val zone = current.size * 0.75f
-                val speed = when {
-                    dragDirection < 0 && gapTop < zone -> -MAX_AUTOSCROLL_PX * ((zone - gapTop) / zone).coerceIn(0f, 1f)
-                    dragDirection > 0 && gapBottom < zone -> MAX_AUTOSCROLL_PX * ((zone - gapBottom) / zone).coerceIn(0f, 1f)
-                    else -> 0f
-                }
+                val speed =
+                    when {
+                        dragDirection < 0 && gapTop < zone -> -MAX_AUTOSCROLL_PX * ((zone - gapTop) / zone).coerceIn(0f, 1f)
+                        dragDirection > 0 && gapBottom < zone -> MAX_AUTOSCROLL_PX * ((zone - gapBottom) / zone).coerceIn(0f, 1f)
+                        else -> 0f
+                    }
                 if (speed != 0f) {
                     dragOffset += listState.scrollBy(speed)
                 }
@@ -218,7 +219,12 @@ internal fun ManageTracksSheet(
                         Text(
                             when (downloadUi.status) {
                                 PlaylistDownloadStatus.Idle -> "Download all"
-                                PlaylistDownloadStatus.Active -> "Downloading ${minOf(downloadUi.done + 1, downloadUi.total)} of ${downloadUi.total}"
+
+                                PlaylistDownloadStatus.Active -> "Downloading ${minOf(
+                                    downloadUi.done + 1,
+                                    downloadUi.total,
+                                )} of ${downloadUi.total}"
+
                                 PlaylistDownloadStatus.Done -> "Available offline"
                             },
                             style = MaterialTheme.typography.titleMedium,
@@ -226,12 +232,23 @@ internal fun ManageTracksSheet(
                         )
                         Text(
                             when (downloadUi.status) {
-                                PlaylistDownloadStatus.Idle ->
-                                    if (downloadedCount > 0) "$downloadedCount of ${isrcs.size} available offline" else "${songsLabel(isrcs.size)} for offline listening"
+                                PlaylistDownloadStatus.Idle -> {
+                                    if (downloadedCount >
+                                        0
+                                    ) {
+                                        "$downloadedCount of ${isrcs.size} available offline"
+                                    } else {
+                                        "${songsLabel(isrcs.size)} for offline listening"
+                                    }
+                                }
 
-                                PlaylistDownloadStatus.Active -> "Tap to stop"
+                                PlaylistDownloadStatus.Active -> {
+                                    "Tap to stop"
+                                }
 
-                                PlaylistDownloadStatus.Done -> "All ${songsLabel(isrcs.size)} are downloaded"
+                                PlaylistDownloadStatus.Done -> {
+                                    "All ${songsLabel(isrcs.size)} are downloaded"
+                                }
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             color = ManageTextSecondary,
@@ -258,11 +275,22 @@ internal fun ManageTracksSheet(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(PhosphorIcons.Bold.Trash, null, tint = ManageDestructive, modifier = Modifier.size(18.dp))
-                    Text("Remove downloads", style = MaterialTheme.typography.titleMedium, color = ManageDestructive, modifier = Modifier.padding(start = 18.dp))
+                    Text(
+                        "Remove downloads",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = ManageDestructive,
+                        modifier = Modifier.padding(start = 18.dp),
+                    )
                 }
             }
 
-            Box(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp).height(1.dp).background(ink(0.10f)))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp, bottom = 4.dp)
+                    .height(1.dp)
+                    .background(ink(0.10f)),
+            )
 
             LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(vertical = 4.dp)) {
                 items(draft, key = { it.isrc }) { track ->
@@ -272,11 +300,12 @@ internal fun ManageTracksSheet(
                         removeDescription = removeDescription,
                         offline = track.isLocal || downloadStates[track.isrc] == DownloadState.Done,
                         dragging = dragging,
-                        modifier = if (dragging) {
-                            Modifier.zIndex(1f).graphicsLayer { translationY = dragOffset }
-                        } else {
-                            Modifier.animateItem()
-                        },
+                        modifier =
+                            if (dragging) {
+                                Modifier.zIndex(1f).graphicsLayer { translationY = dragOffset }
+                            } else {
+                                Modifier.animateItem()
+                            },
                         onRemove = {
                             val at = draft.indexOfFirst { it.isrc == track.isrc }
                             if (at >= 0) {
@@ -343,13 +372,14 @@ internal fun ManageTracksSheet(
                         "Undo",
                         style = MaterialTheme.typography.titleMedium,
                         color = ink(),
-                        modifier = Modifier
-                            .pressScale(onClick = {
-                                draft.add(at.coerceIn(0, draft.size), removed)
-                                undo = null
-                                onReorder(draft.toList())
-                            })
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        modifier =
+                            Modifier
+                                .pressScale(onClick = {
+                                    draft.add(at.coerceIn(0, draft.size), removed)
+                                    undo = null
+                                    onReorder(draft.toList())
+                                })
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
                     )
                 }
             }
@@ -396,17 +426,24 @@ private fun ManageRow(
                 val s = if (dragging) 1.03f else 1f
                 scaleX = s
                 scaleY = s
-            }
-            .shadow(if (dragging) 10.dp else 0.dp, shape)
-            .background(if (dragging || grabbed) androidx.compose.ui.graphics.lerp(LocalCoverPalette.current.base, ink(), 0.12f) else Color.Transparent, shape)
-            .focusRing(shape)
+            }.shadow(if (dragging) 10.dp else 0.dp, shape)
+            .background(
+                if (dragging ||
+                    grabbed
+                ) {
+                    androidx.compose.ui.graphics
+                        .lerp(LocalCoverPalette.current.base, ink(), 0.12f)
+                } else {
+                    Color.Transparent
+                },
+                shape,
+            ).focusRing(shape)
             .onFocusChanged {
                 if (!it.isFocused && grabbed) {
                     grabbed = false
                     doneNow()
                 }
-            }
-            .onKeyEvent { e ->
+            }.onKeyEvent { e ->
                 when (e.key) {
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
                         if (e.type == KeyEventType.KeyUp) {
@@ -429,21 +466,23 @@ private fun ManageRow(
                         }
                     }
 
-                    else -> false
+                    else -> {
+                        false
+                    }
                 }
-            }
-            .focusable()
+            }.focusable()
             .pointerInput(track.isrc) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val gripStart = size.width - 56.dp.toPx()
                     val trashStart = gripStart - 44.dp.toPx()
                     if (down.position.x in trashStart..gripStart) return@awaitEachGesture
-                    val grabbed = if (down.position.x >= gripStart) {
-                        awaitVerticalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
-                    } else {
-                        awaitLongPressOrCancellation(down.id)
-                    }
+                    val grabbed =
+                        if (down.position.x >= gripStart) {
+                            awaitVerticalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
+                        } else {
+                            awaitLongPressOrCancellation(down.id)
+                        }
                     if (grabbed != null) {
                         start()
                         try {
@@ -457,8 +496,7 @@ private fun ManageRow(
                         }
                     }
                 }
-            }
-            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+            }.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BadgedCover(local = track.isLocal) {
@@ -466,10 +504,21 @@ private fun ManageRow(
         }
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
             Text(track.title, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = ManageTextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                track.artist,
+                style = MaterialTheme.typography.bodyMedium,
+                color = ManageTextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         if (offline) {
-            Icon(PhosphorIcons.Fill.CheckCircle, "Available offline", tint = ManageTextSecondary, modifier = Modifier.padding(end = 6.dp).size(15.dp))
+            Icon(
+                PhosphorIcons.Fill.CheckCircle,
+                "Available offline",
+                tint = ManageTextSecondary,
+                modifier = Modifier.padding(end = 6.dp).size(15.dp),
+            )
         }
         Box(Modifier.size(44.dp).pressScale(onClick = onRemove), contentAlignment = Alignment.Center) {
             Icon(PhosphorIcons.Bold.TrashSimple, removeDescription, tint = ManageDestructive, modifier = Modifier.size(18.dp))
@@ -481,9 +530,18 @@ private fun ManageRow(
 }
 
 @Composable
-private fun ConfirmRemoveDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+private fun ConfirmRemoveDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     Dialog(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(LibrarySheetBackground).padding(24.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(LibrarySheetBackground)
+                .padding(24.dp),
+        ) {
             Text("Remove downloads?", style = MaterialTheme.typography.titleLarge, color = ink())
             Text(
                 "Your favorites stay, but won't play offline until you download them again.",

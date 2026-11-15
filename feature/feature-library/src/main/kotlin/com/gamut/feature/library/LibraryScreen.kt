@@ -91,9 +91,19 @@ private val TextSecondary: Color
 private val PanelShape = RoundedCornerShape(12.dp)
 private val ButtonShape = RoundedCornerShape(8.dp)
 
-data class LibraryArtist(val id: String, val name: String, val imageUrl: String? = null)
+data class LibraryArtist(
+    val id: String,
+    val name: String,
+    val imageUrl: String? = null,
+)
 
-private enum class LibraryFilter(val label: String) { Playlists("Playlists"), Artists("Artists"), Offline("Offline") }
+private enum class LibraryFilter(
+    val label: String,
+) {
+    Playlists("Playlists"),
+    Artists("Artists"),
+    Offline("Offline"),
+}
 
 @Composable
 fun LibraryScreen(
@@ -133,7 +143,10 @@ fun LibraryScreen(
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = barHeight)) {
                 Column(Modifier.weight(1f).fillMaxWidth()) {
-                    Row(Modifier.fillMaxWidth().padding(start = 24.dp + gutter, end = 24.dp + gutter, top = 22.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 24.dp + gutter, end = 24.dp + gutter, top = 22.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
                             "Library",
                             style = MaterialTheme.typography.displayLarge,
@@ -164,13 +177,18 @@ fun LibraryScreen(
                         }
                     }
 
-                    if (selectedTrack != null) ReadyToAddCard(selectedTrack, Modifier.padding(horizontal = 24.dp + gutter).padding(top = 12.dp))
+                    if (selectedTrack !=
+                        null
+                    ) {
+                        ReadyToAddCard(selectedTrack, Modifier.padding(horizontal = 24.dp + gutter).padding(top = 12.dp))
+                    }
 
                     LazyVerticalGrid(
-                        columns = when {
-                            wide -> GridCells.Adaptive(if (isGrid) 170.dp else 380.dp)
-                            else -> GridCells.Fixed(if (isGrid) 3 else 1)
-                        },
+                        columns =
+                            when {
+                                wide -> GridCells.Adaptive(if (isGrid) 170.dp else 380.dp)
+                                else -> GridCells.Fixed(if (isGrid) 3 else 1)
+                            },
                         modifier = Modifier.weight(1f).fadeEdges(),
                         contentPadding = PaddingValues(start = 24.dp + gutter, end = 24.dp + gutter, top = 6.dp, bottom = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(if (isGrid) 18.dp else 2.dp),
@@ -197,7 +215,13 @@ fun LibraryScreen(
                                     LibraryRow(
                                         title = song.title,
                                         meta = {
-                                            Text(song.artist, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(
+                                                song.artist,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = TextSecondary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
                                         },
                                         onClick = { onPlayTrack(song, downloaded) },
                                         cover = { RowCover(song.albumArtUrl, PhosphorIcons.Bold.MusicNoteSimple) },
@@ -211,7 +235,11 @@ fun LibraryScreen(
                         if (showPlaylists) {
                             item(key = "liked") {
                                 if (isGrid) {
-                                    GridCell("Liked songs", { onOpenPlaylist("liked") }, offline = likedOffline) { TileCover(null, PhosphorIcons.Fill.Heart) }
+                                    GridCell(
+                                        "Liked songs",
+                                        { onOpenPlaylist("liked") },
+                                        offline = likedOffline,
+                                    ) { TileCover(null, PhosphorIcons.Fill.Heart) }
                                 } else {
                                     LibraryRow(
                                         title = "Liked songs",
@@ -228,7 +256,15 @@ fun LibraryScreen(
                                 } else {
                                     LibraryRow(
                                         title = "On this device",
-                                        meta = { Text("Music stored on your phone", style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                        meta = {
+                                            Text(
+                                                "Music stored on your phone",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = TextSecondary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        },
                                         onClick = onOpenLocal,
                                         cover = { RowCover(null, PhosphorIcons.Fill.DeviceMobileCamera) },
                                     )
@@ -264,7 +300,11 @@ fun LibraryScreen(
                                     }
                                 }
                                 if (isGrid) {
-                                    GridCell(playlist.name, addOrOpen, offline = offline) { TileCover(cover, PhosphorIcons.Bold.MusicNoteSimple) }
+                                    GridCell(
+                                        playlist.name,
+                                        addOrOpen,
+                                        offline = offline,
+                                    ) { TileCover(cover, PhosphorIcons.Bold.MusicNoteSimple) }
                                 } else {
                                     LibraryRow(
                                         title = playlist.name,
@@ -275,7 +315,10 @@ fun LibraryScreen(
                                         trailing = {
                                             if (selectedTrack != null) {
                                                 Box(
-                                                    Modifier.size(44.dp).then(if (added) Modifier else Modifier.pressScale(onClick = { addOrOpen() })),
+                                                    Modifier
+                                                        .size(
+                                                            44.dp,
+                                                        ).then(if (added) Modifier else Modifier.pressScale(onClick = { addOrOpen() })),
                                                     contentAlignment = Alignment.Center,
                                                 ) {
                                                     Icon(
@@ -304,7 +347,14 @@ fun LibraryScreen(
                                         modifier = Modifier.padding(top = 8.dp),
                                         buttonLabel = "Find artists",
                                         onButton = onOpenSearch,
-                                        covers = suggestedArtists.mapNotNull { it.imageUrl?.takeIf { u -> u.isNotBlank() } }.take(5).ifEmpty { EmptyStateArtistCovers.urls },
+                                        covers =
+                                            suggestedArtists
+                                                .mapNotNull {
+                                                    it.imageUrl?.takeIf { u ->
+                                                        u.isNotBlank()
+                                                    }
+                                                }.take(5)
+                                                .ifEmpty { EmptyStateArtistCovers.urls },
                                         circleCovers = true,
                                     )
                                 }
@@ -331,21 +381,32 @@ fun LibraryScreen(
 }
 
 @Composable
-private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun FilterPill(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
     val light = LocalCoverPalette.current.isLight
     Text(
         label,
         style = MaterialTheme.typography.labelLarge,
         color = if (selected) (if (light) Color.White else Color.Black) else TextPrimary,
-        modifier = Modifier
-            .pressScale(onClick = onClick)
-            .background(if (selected) ink(0.95f) else ink(0.12f), CircleShape)
-            .padding(horizontal = 18.dp, vertical = 8.dp),
+        modifier =
+            Modifier
+                .pressScale(onClick = onClick)
+                .background(if (selected) ink(0.95f) else ink(0.12f), CircleShape)
+                .padding(horizontal = 18.dp, vertical = 8.dp),
     )
 }
 
 @Composable
-private fun GridCell(title: String, onClick: () -> Unit, circle: Boolean = false, offline: Boolean = false, cover: @Composable () -> Unit) {
+private fun GridCell(
+    title: String,
+    onClick: () -> Unit,
+    circle: Boolean = false,
+    offline: Boolean = false,
+    cover: @Composable () -> Unit,
+) {
     Column(
         Modifier.fillMaxWidth().pressScale(onClick = onClick, scaleDown = 0.97f),
         horizontalAlignment = if (circle) Alignment.CenterHorizontally else Alignment.Start,
@@ -365,7 +426,11 @@ private fun GridCell(title: String, onClick: () -> Unit, circle: Boolean = false
 }
 
 @Composable
-private fun TileCover(coverUrl: String?, icon: ImageVector, circle: Boolean = false) {
+private fun TileCover(
+    coverUrl: String?,
+    icon: ImageVector,
+    circle: Boolean = false,
+) {
     val shape = if (circle) CircleShape else RoundedCornerShape(10.dp)
     Box(Modifier.fillMaxWidth()) {
         if (!coverUrl.isNullOrBlank()) {
@@ -375,7 +440,12 @@ private fun TileCover(coverUrl: String?, icon: ImageVector, circle: Boolean = fa
             )
         } else {
             Box(
-                Modifier.fillMaxWidth().aspectRatio(1f).then(if (circle) Modifier.clip(shape) else Modifier.softCover()).background(flatCoverFill()),
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(
+                        1f,
+                    ).then(if (circle) Modifier.clip(shape) else Modifier.softCover())
+                    .background(flatCoverFill()),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(icon, null, tint = ink(), modifier = Modifier.size(32.dp))
@@ -385,7 +455,10 @@ private fun TileCover(coverUrl: String?, icon: ImageVector, circle: Boolean = fa
 }
 
 @Composable
-private fun ReadyToAddCard(track: Track, modifier: Modifier = Modifier) {
+private fun ReadyToAddCard(
+    track: Track,
+    modifier: Modifier = Modifier,
+) {
     val shape = RoundedCornerShape(16.dp)
     val tone = if (LocalCoverPalette.current.isLight) AcrylicTone.Light else AcrylicTone.Dark
     Row(
@@ -401,9 +474,28 @@ private fun ReadyToAddCard(track: Track, modifier: Modifier = Modifier) {
             Modifier.size(48.dp).softCover(RoundedCornerShape(10.dp)),
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-            Text("Ready to add \u00B7 pick a playlist", style = MaterialTheme.typography.labelMedium, color = ink(0.65f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(track.title, style = MaterialTheme.typography.titleMedium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
-            Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                "Ready to add \u00B7 pick a playlist",
+                style = MaterialTheme.typography.labelMedium,
+                color = ink(0.65f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                track.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+            Text(
+                track.artist,
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -424,7 +516,11 @@ private fun ChevronIcon() {
 }
 
 @Composable
-private fun RowCover(coverUrl: String?, icon: ImageVector, circle: Boolean = false) {
+private fun RowCover(
+    coverUrl: String?,
+    icon: ImageVector,
+    circle: Boolean = false,
+) {
     if (!coverUrl.isNullOrBlank()) {
         CoverImage(
             remember(coverUrl) { resolveCoverUrl(coverUrl, 200) },
@@ -457,7 +553,10 @@ private fun TagRow(tags: List<String>) {
 }
 
 @Composable
-private fun TagPill(text: String, modifier: Modifier = Modifier) {
+private fun TagPill(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
     Text(
         text,
         style = MaterialTheme.typography.labelSmall,
@@ -465,9 +564,10 @@ private fun TagPill(text: String, modifier: Modifier = Modifier) {
         maxLines = 1,
         softWrap = false,
         overflow = TextOverflow.Ellipsis,
-        modifier = modifier
-            .background(ink(0.10f), CircleShape)
-            .padding(horizontal = 8.dp, vertical = 2.dp),
+        modifier =
+            modifier
+                .background(ink(0.10f), CircleShape)
+                .padding(horizontal = 8.dp, vertical = 2.dp),
     )
 }
 

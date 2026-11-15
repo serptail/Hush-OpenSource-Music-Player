@@ -194,14 +194,19 @@ fun ConnectSheet(
 @Composable
 fun rememberBluetoothEnabled(): Boolean {
     val context = LocalContext.current
+
     fun read(): Boolean = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter?.isEnabled == true
     var enabled by remember { mutableStateOf(read()) }
     DisposableEffect(context) {
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(c: Context?, i: Intent?) {
-                enabled = i?.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1) == BluetoothAdapter.STATE_ON
+        val receiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(
+                    c: Context?,
+                    i: Intent?,
+                ) {
+                    enabled = i?.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1) == BluetoothAdapter.STATE_ON
+                }
             }
-        }
         context.registerReceiver(receiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
         enabled = read()
         onDispose { context.unregisterReceiver(receiver) }
@@ -213,6 +218,7 @@ fun rememberBluetoothEnabled(): Boolean {
 fun rememberOutputDevices(): List<OutputDevice> {
     val context = LocalContext.current
     val am = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+
     fun read(): List<OutputDevice> {
         val raw = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).filter { it.type in SHOWN_TYPES }
         val active = raw.minByOrNull { priority(it.type) }?.id
@@ -227,14 +233,16 @@ fun rememberOutputDevices(): List<OutputDevice> {
     }
     var devices by remember { mutableStateOf(read()) }
     DisposableEffect(am) {
-        val cb = object : AudioDeviceCallback() {
-            override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>?) {
-                devices = read()
+        val cb =
+            object : AudioDeviceCallback() {
+                override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>?) {
+                    devices = read()
+                }
+
+                override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>?) {
+                    devices = read()
+                }
             }
-            override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>?) {
-                devices = read()
-            }
-        }
         am.registerAudioDeviceCallback(cb, null)
         onDispose { am.unregisterAudioDeviceCallback(cb) }
     }
@@ -242,22 +250,26 @@ fun rememberOutputDevices(): List<OutputDevice> {
 }
 
 private val BT_TYPES = setOf(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_BLE_SPEAKER)
-private val SHOWN_TYPES = BT_TYPES + setOf(
-    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
-    AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
-    AudioDeviceInfo.TYPE_WIRED_HEADSET,
-    AudioDeviceInfo.TYPE_USB_DEVICE,
-    AudioDeviceInfo.TYPE_USB_HEADSET,
-    AudioDeviceInfo.TYPE_HDMI,
-)
+private val SHOWN_TYPES =
+    BT_TYPES +
+        setOf(
+            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+            AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            AudioDeviceInfo.TYPE_USB_DEVICE,
+            AudioDeviceInfo.TYPE_USB_HEADSET,
+            AudioDeviceInfo.TYPE_HDMI,
+        )
 
-private fun priority(type: Int) = when (type) {
-    in BT_TYPES -> 0
-    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> 2
-    else -> 1
-}
+private fun priority(type: Int) =
+    when (type) {
+        in BT_TYPES -> 0
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> 2
+        else -> 1
+    }
 
-private fun AudioDeviceInfo.label(): String = when (type) {
-    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "This phone"
-    else -> productName?.toString()?.takeIf { it.isNotBlank() } ?: "Audio device"
-}
+private fun AudioDeviceInfo.label(): String =
+    when (type) {
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "This phone"
+        else -> productName?.toString()?.takeIf { it.isNotBlank() } ?: "Audio device"
+    }

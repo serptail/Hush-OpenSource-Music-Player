@@ -34,18 +34,21 @@ import com.adamglin.phosphoricons.bold.MusicNote
 import com.gamut.core.model.Track
 import com.gamut.feature.playerui.components.PlayerSpinner
 import com.gamut.feature.playerui.components.tapTarget
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.util.Collections
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
 
 @Immutable
-data class ArtistCredit(val name: String, val roles: String)
+data class ArtistCredit(
+    val name: String,
+    val roles: String,
+)
 
 @Immutable
 data class ArtistInfo(
@@ -61,11 +64,12 @@ object ArtistInfoRepository {
     private const val TAG = "ArtistInfo"
     private const val USER_AGENT = "Gamut/1.0 ( contact@your-domain.example )"
 
-    private val cache = Collections.synchronizedMap(
-        object : LinkedHashMap<String, ArtistInfo>(32, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ArtistInfo>?) = size > 40
-        },
-    )
+    private val cache =
+        Collections.synchronizedMap(
+            object : LinkedHashMap<String, ArtistInfo>(32, 0.75f, true) {
+                override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ArtistInfo>?) = size > 40
+            },
+        )
 
     private fun key(track: Track) = track.isrc.orEmpty().ifBlank { "${track.title}|${track.artist}" }
 
@@ -79,25 +83,42 @@ object ArtistInfoRepository {
     }
 
     private val artistSplit = Regex("""\s*(?:,|;|/|&|\band\b|\bx\b|\bwith\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*""", RegexOption.IGNORE_CASE)
+
     private fun lead(artist: String) = artist.split(artistSplit).firstOrNull { it.isNotBlank() }?.trim() ?: artist
+
     private fun norm(s: String) = s.lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
+
     private fun enc(v: String) = URLEncoder.encode(v, "UTF-8")
 
     private val isrcShape = Regex("^[A-Z]{2}[A-Z0-9]{3}[0-9]{7}$")
 
     private suspend fun load(track: Track): ArtistInfo {
         val leadName = lead(track.artist)
-        val isrc = track.isrc.orEmpty().uppercase().takeIf { isrcShape.matches(it) }
-        val coreTitle = track.title.replace(Regex("""\s*[(\[].*?[)\]]"""), "").substringBefore(" - ").trim().ifBlank { track.title }
+        val isrc =
+            track.isrc
+                .orEmpty()
+                .uppercase()
+                .takeIf { isrcShape.matches(it) }
+        val coreTitle =
+            track.title
+                .replace(Regex("""\s*[(\[].*?[)\]]"""), "")
+                .substringBefore(" - ")
+                .trim()
+                .ifBlank { track.title }
         var image: String? = null
         var fans: Long? = null
         var album: String? = null
         var year: String? = null
         val roles = LinkedHashMap<String, LinkedHashSet<String>>()
-        fun add(name: String?, role: String) {
+
+        fun add(
+            name: String?,
+            role: String,
+        ) {
             val n = name?.trim().orEmpty()
             if (n.isNotEmpty()) roles.getOrPut(n) { LinkedHashSet() }.add(role)
         }
+
         fun realPicture(url: String?) = url?.takeIf { it.isNotBlank() && !it.contains("/artist//") }
 
         var deezer: JSONObject? = null
@@ -112,7 +133,9 @@ object ArtistInfoRepository {
                     val h = hits.optJSONObject(i) ?: continue
                     val t = norm(h.optString("title_short").ifBlank { h.optString("title") })
                     val a = norm(h.optJSONObject("artist")?.optString("name").orEmpty())
-                    if ((t == wantTitle || t.startsWith(wantTitle)) && a.isNotEmpty() && (a.contains(wantArtist) || wantArtist.contains(a))) {
+                    if ((t == wantTitle || t.startsWith(wantTitle)) && a.isNotEmpty() &&
+                        (a.contains(wantArtist) || wantArtist.contains(a))
+                    ) {
                         id = h.optLong("id")
                         break
                     }
@@ -126,7 +149,11 @@ object ArtistInfoRepository {
             image = realPicture(o.optJSONObject("artist")?.optString("picture_xl"))
             album = o.optJSONObject("album")?.optString("title")?.takeIf { it.isNotBlank() }
             year = o.optString("release_date").take(4).takeIf { it.length == 4 }
-            o.optString("isrc").uppercase().takeIf { isrcShape.matches(it) }?.let { realIsrc = it }
+            o
+                .optString("isrc")
+                .uppercase()
+                .takeIf { isrcShape.matches(it) }
+                ?.let { realIsrc = it }
             o.optJSONArray("contributors")?.let { arr ->
                 for (i in 0 until arr.length()) {
                     val c = arr.optJSONObject(i) ?: continue
@@ -135,7 +162,9 @@ object ArtistInfoRepository {
             }
         }
         json("https://api.deezer.com/search/artist?q=${enc(leadName)}&limit=1")
-            ?.optJSONArray("data")?.optJSONObject(0)?.let { a ->
+            ?.optJSONArray("data")
+            ?.optJSONObject(0)
+            ?.let { a ->
                 val n = norm(a.optString("name"))
                 if (n == norm(leadName) || n.contains(norm(leadName))) {
                     if (image == null) image = realPicture(a.optString("picture_xl"))
@@ -148,14 +177,21 @@ object ArtistInfoRepository {
         runCatching {
             var rec: String? = null
             if (realIsrc != null) {
-                rec = json("https://musicbrainz.org/ws/2/recording?query=isrc:$realIsrc&fmt=json&limit=1")
-                    ?.optJSONArray("recordings")?.optJSONObject(0)?.optString("id")
+                rec =
+                    json("https://musicbrainz.org/ws/2/recording?query=isrc:$realIsrc&fmt=json&limit=1")
+                        ?.optJSONArray("recordings")
+                        ?.optJSONObject(0)
+                        ?.optString("id")
             }
             if (rec.isNullOrBlank()) {
                 if (realIsrc != null) delay(1_100)
                 val query = enc("recording:\"${coreTitle.replace("\"", "")}\" AND artist:\"${leadName.replace("\"", "")}\"")
-                rec = json("https://musicbrainz.org/ws/2/recording?query=$query&fmt=json&limit=1")
-                    ?.optJSONArray("recordings")?.optJSONObject(0)?.takeIf { it.optInt("score") >= 90 }?.optString("id")
+                rec =
+                    json("https://musicbrainz.org/ws/2/recording?query=$query&fmt=json&limit=1")
+                        ?.optJSONArray("recordings")
+                        ?.optJSONObject(0)
+                        ?.takeIf { it.optInt("score") >= 90 }
+                        ?.optString("id")
             }
             if (!rec.isNullOrBlank()) {
                 musicBrainz = "recording found"
@@ -167,18 +203,21 @@ object ArtistInfoRepository {
                         val r = rels.optJSONObject(i) ?: continue
                         when (r.optString("target-type")) {
                             "artist" -> {
-                                val role = when (r.optString("type")) {
-                                    "producer" -> "Producer"
-                                    "mix" -> "Mixer"
-                                    "engineer" -> "Engineer"
-                                    "recording" -> "Recording engineer"
-                                    "mastering" -> "Mastering engineer"
-                                    else -> null
-                                }
+                                val role =
+                                    when (r.optString("type")) {
+                                        "producer" -> "Producer"
+                                        "mix" -> "Mixer"
+                                        "engineer" -> "Engineer"
+                                        "recording" -> "Recording engineer"
+                                        "mastering" -> "Mastering engineer"
+                                        else -> null
+                                    }
                                 if (role != null) add(r.optJSONObject("artist")?.optString("name"), role)
                             }
 
-                            "work" -> if (workId == null) workId = r.optJSONObject("work")?.optString("id")
+                            "work" -> {
+                                if (workId == null) workId = r.optJSONObject("work")?.optString("id")
+                            }
                         }
                     }
                 }
@@ -187,12 +226,13 @@ object ArtistInfoRepository {
                     json("https://musicbrainz.org/ws/2/work/$workId?inc=artist-rels&fmt=json")?.optJSONArray("relations")?.let { wr ->
                         for (i in 0 until wr.length()) {
                             val r = wr.optJSONObject(i) ?: continue
-                            val role = when (r.optString("type")) {
-                                "composer" -> "Composer"
-                                "lyricist" -> "Lyricist"
-                                "writer" -> "Writer"
-                                else -> null
-                            }
+                            val role =
+                                when (r.optString("type")) {
+                                    "composer" -> "Composer"
+                                    "lyricist" -> "Lyricist"
+                                    "writer" -> "Writer"
+                                    else -> null
+                                }
                             if (role != null) add(r.optJSONObject("artist")?.optString("name"), role)
                         }
                     }
@@ -201,37 +241,43 @@ object ArtistInfoRepository {
                 musicBrainz = "no recording"
             }
         }
-        Log.i(TAG, "\"${track.title}\": deezerTrack=${deezer != null} realIsrc=$realIsrc musicBrainz=$musicBrainz credits=${roles.size} photo=${image != null}")
+        Log.i(
+            TAG,
+            "\"${track.title}\": deezerTrack=${deezer != null} realIsrc=$realIsrc musicBrainz=$musicBrainz credits=${roles.size} photo=${image != null}",
+        )
 
-        fun rank(set: Set<String>) = when {
-            set.any { it == "Composer" || it == "Lyricist" || it == "Writer" } -> 0
-            set.any { it.contains("Producer") || it.contains("Mixer") || it.contains("ngineer") } -> 1
-            else -> 2
-        }
-        val credits = roles.entries
-            .sortedBy { rank(it.value) }
-            .take(10)
-            .map { ArtistCredit(it.key, it.value.joinToString(", ")) }
+        fun rank(set: Set<String>) =
+            when {
+                set.any { it == "Composer" || it == "Lyricist" || it == "Writer" } -> 0
+                set.any { it.contains("Producer") || it.contains("Mixer") || it.contains("ngineer") } -> 1
+                else -> 2
+            }
+        val credits =
+            roles.entries
+                .sortedBy { rank(it.value) }
+                .take(10)
+                .map { ArtistCredit(it.key, it.value.joinToString(", ")) }
         return ArtistInfo(leadName, image, fans, album, year, credits)
     }
 
-    private fun json(url: String): JSONObject? = try {
-        val c = URL(url).openConnection() as HttpURLConnection
+    private fun json(url: String): JSONObject? =
         try {
-            c.requestMethod = "GET"
-            c.setRequestProperty("User-Agent", USER_AGENT)
-            c.setRequestProperty("Accept", "application/json")
-            c.connectTimeout = 6_000
-            c.readTimeout = 8_000
-            if (c.responseCode == 200) JSONObject(c.inputStream.bufferedReader().use { it.readText() }) else null
-        } finally {
-            c.disconnect()
+            val c = URL(url).openConnection() as HttpURLConnection
+            try {
+                c.requestMethod = "GET"
+                c.setRequestProperty("User-Agent", USER_AGENT)
+                c.setRequestProperty("Accept", "application/json")
+                c.connectTimeout = 6_000
+                c.readTimeout = 8_000
+                if (c.responseCode == 200) JSONObject(c.inputStream.bufferedReader().use { it.readText() }) else null
+            } finally {
+                c.disconnect()
+            }
+        } catch (e: IOException) {
+            null
+        } catch (e: org.json.JSONException) {
+            null
         }
-    } catch (e: IOException) {
-        null
-    } catch (e: org.json.JSONException) {
-        null
-    }
 }
 
 @Composable
@@ -256,11 +302,20 @@ internal fun ArtistAboutSection(
         ) {
             val photo = info?.imageUrl ?: fallbackArtUrl
             Box(
-                Modifier.size(140.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.1f)).tapTarget(onArtistClick),
+                Modifier
+                    .size(140.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.1f))
+                    .tapTarget(onArtistClick),
                 contentAlignment = Alignment.Center,
             ) {
                 if (photo != null) {
-                    AsyncImage(model = photo, contentDescription = artistName, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    AsyncImage(
+                        model = photo,
+                        contentDescription = artistName,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 } else {
                     Icon(PhosphorIcons.Bold.MusicNote, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(44.dp))
                 }
@@ -287,13 +342,34 @@ internal fun ArtistAboutSection(
                     Text("Credits", color = Color.White, style = MaterialTheme.typography.titleSmall)
                     info?.let { i ->
                         val meta = listOfNotNull(i.album, i.year).joinToString(" \u00B7 ")
-                        if (meta.isNotEmpty()) Text(meta, color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+                        if (meta.isNotEmpty()) {
+                            Text(
+                                meta,
+                                color = Color.White.copy(alpha = 0.5f),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     }
                     Spacer(Modifier.height(10.dp))
                     credits.forEach { c ->
-                        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text(c.name, color = Color.White.copy(alpha = 0.92f), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                            Text(c.roles, color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text(
+                                c.name,
+                                color = Color.White.copy(alpha = 0.92f),
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                c.roles,
+                                color = Color.White.copy(alpha = 0.55f),
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.End,
+                                modifier = Modifier.weight(1f),
+                            )
                         }
                     }
                 }

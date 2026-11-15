@@ -18,15 +18,16 @@ private const val BlobFocalDistance = 0.97f
 
 private const val BlobFalloff = 0.55f
 
-private val BlobColors = listOf(
-    Color(0xFFEE22FF),
-    Color(0xFFA02CFF),
-    Color(0xFF3340FF),
-    Color(0xFF0A4CF0),
-    Color(0xFF00A8FF),
-    Color(0xFF00DCE8),
-    Color(0xFF1CF2C0),
-)
+private val BlobColors =
+    listOf(
+        Color(0xFFEE22FF),
+        Color(0xFFA02CFF),
+        Color(0xFF3340FF),
+        Color(0xFF0A4CF0),
+        Color(0xFF00A8FF),
+        Color(0xFF00DCE8),
+        Color(0xFF1CF2C0),
+    )
 private val BlobOffsets = floatArrayOf(0f, 0.2f, 0.4f, 0.55f, 0.72f, 0.86f, 1f)
 
 private const val BlobAgsl = """
@@ -74,7 +75,10 @@ half4 main(float2 fc) {
 """
 
 @Composable
-fun GradientBlob(modifier: Modifier = Modifier, intensity: Float = 1f) {
+fun GradientBlob(
+    modifier: Modifier = Modifier,
+    intensity: Float = 1f,
+) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         ShaderBlob(modifier, intensity)
     } else {
@@ -84,7 +88,10 @@ fun GradientBlob(modifier: Modifier = Modifier, intensity: Float = 1f) {
 
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
-private fun ShaderBlob(modifier: Modifier, intensity: Float) {
+private fun ShaderBlob(
+    modifier: Modifier,
+    intensity: Float,
+) {
     val shader = remember { RuntimeShader(BlobAgsl) }
     val brush = remember(shader) { ShaderBrush(shader) }
     Canvas(modifier) {
@@ -99,18 +106,23 @@ private fun ShaderBlob(modifier: Modifier, intensity: Float) {
 }
 
 @Composable
-private fun GradientBlobFallback(modifier: Modifier, intensity: Float) {
+private fun GradientBlobFallback(
+    modifier: Modifier,
+    intensity: Float,
+) {
     Canvas(modifier) {
-        val stops = BlobColors.indices
-            .map { i -> (if (MagentaAtBottom) BlobOffsets[i] else 1f - BlobOffsets[i]) to BlobColors[i] }
-            .sortedBy { it.first }
-            .let { it.dropLast(1) + (it.last().first to it.last().second.copy(alpha = 0f)) }
+        val stops =
+            BlobColors.indices
+                .map { i -> (if (MagentaAtBottom) BlobOffsets[i] else 1f - BlobOffsets[i]) to BlobColors[i] }
+                .sortedBy { it.first }
+                .let { it.dropLast(1) + (it.last().first to it.last().second.copy(alpha = 0f)) }
         drawRect(
-            brush = Brush.radialGradient(
-                colorStops = stops.toTypedArray(),
-                center = Offset(size.width / 2f, 0f),
-                radius = size.height * 0.98f,
-            ),
+            brush =
+                Brush.radialGradient(
+                    colorStops = stops.toTypedArray(),
+                    center = Offset(size.width / 2f, 0f),
+                    radius = size.height * 0.98f,
+                ),
             alpha = intensity,
         )
     }

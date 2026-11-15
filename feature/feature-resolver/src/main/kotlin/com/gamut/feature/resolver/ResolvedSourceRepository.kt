@@ -13,30 +13,52 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import javax.inject.Inject
-import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import javax.inject.Inject
+import javax.inject.Singleton
 
 interface ResolvedSourceRepository {
     suspend fun getLocal(isrc: String): ResolvedSource?
+
     suspend fun getRemote(isrc: String): ResolvedSource?
+
     suspend fun saveLocal(source: ResolvedSource)
+
     suspend fun submitRemote(source: ResolvedSource)
 }
 
-class ResolvedSourceRepositoryImpl @Inject constructor(private val dao: ResolvedSourceDao, private val api: ResolverSyncApi) : ResolvedSourceRepository {
-    private val remoteEnabled = false
-    override suspend fun getLocal(isrc: String) = dao.get(isrc)?.toDomain()
-    override suspend fun getRemote(isrc: String) = if (remoteEnabled) runCatching { api.get(isrc).body()?.toDomain() }.getOrNull() else null
-    override suspend fun saveLocal(source: ResolvedSource) = dao.upsert(source.toEntity())
-    override suspend fun submitRemote(source: ResolvedSource) {
-        if (remoteEnabled) runCatching { api.save(source.toDto()) }
-    }
-}
+class ResolvedSourceRepositoryImpl
+    @Inject
+    constructor(
+        private val dao: ResolvedSourceDao,
+        private val api: ResolverSyncApi,
+    ) : ResolvedSourceRepository {
+        private val remoteEnabled = false
 
-private fun ResolvedSourceDto.toDomain() = ResolvedSource(isrc, youtubeVideoId, com.gamut.core.model.ResolutionMethod.valueOf(resolutionMethod), confidenceScore, verifiedCount)
+        override suspend fun getLocal(isrc: String) = dao.get(isrc)?.toDomain()
+
+        override suspend fun getRemote(isrc: String) =
+            if (remoteEnabled) runCatching { api.get(isrc).body()?.toDomain() }.getOrNull() else null
+
+        override suspend fun saveLocal(source: ResolvedSource) = dao.upsert(source.toEntity())
+
+        override suspend fun submitRemote(source: ResolvedSource) {
+            if (remoteEnabled) runCatching { api.save(source.toDto()) }
+        }
+    }
+
+private fun ResolvedSourceDto.toDomain() =
+    ResolvedSource(
+        isrc,
+        youtubeVideoId,
+        com.gamut.core.model.ResolutionMethod
+            .valueOf(resolutionMethod),
+        confidenceScore,
+        verifiedCount,
+    )
+
 private fun ResolvedSource.toDto() = ResolvedSourceDto(isrc, youtubeVideoId, resolutionMethod.name, confidenceScore, verifiedCount)
 
 @Module

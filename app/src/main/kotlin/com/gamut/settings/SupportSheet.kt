@@ -72,13 +72,16 @@ import com.adamglin.phosphoricons.bold.Heart
 import com.gamut.core.designsystem.AdaptiveLayout
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
-import kotlin.math.PI
-import kotlin.math.sin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.PI
+import kotlin.math.sin
 
 @Composable
-fun SupportSheetHost(vm: SupportViewModel, safeMoment: Boolean) {
+fun SupportSheetHost(
+    vm: SupportViewModel,
+    safeMoment: Boolean,
+) {
     val store = vm.store
     val pending by store.pending.collectAsState()
     var shown by remember { mutableStateOf<SupportTrigger?>(null) }
@@ -138,12 +141,14 @@ private fun SupportSheet(
     LaunchedEffect(Unit) { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
 
     var handled by remember { mutableStateOf(false) }
+
     fun resolve(action: () -> Unit) {
         if (!handled) {
             handled = true
             action()
         }
     }
+
     fun leave(action: () -> Unit) {
         resolve(action)
         scope.launch { sheetState.hide() }.invokeOnCompletion { onGone() }
@@ -180,7 +185,8 @@ private fun SupportSheet(
                 Spacer(Modifier.height(24.dp))
                 Row(
                     Modifier
-                        .fillMaxWidth().height(56.dp)
+                        .fillMaxWidth()
+                        .height(56.dp)
                         .pressScale(onClick = { leave(onBuy) }, scaleDown = 0.97f)
                         .clip(CircleShape)
                         .background(Brush.horizontalGradient(listOf(KoFiPink, KoFiCoral)))
@@ -201,7 +207,12 @@ private fun SupportSheet(
                         "I already did / don\u2019t ask again",
                         style = MaterialTheme.typography.bodySmall,
                         color = ink(0.45f),
-                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { leave(onNever) }.padding(horizontal = 12.dp, vertical = 10.dp),
+                        modifier =
+                            Modifier
+                                .clip(
+                                    RoundedCornerShape(8.dp),
+                                ).clickable { leave(onNever) }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
                     )
                 }
             }
@@ -209,19 +220,28 @@ private fun SupportSheet(
     }
 }
 
-private fun body(trigger: SupportTrigger): String = when (trigger) {
-    SupportTrigger.Donate ->
-        "Gamut is free, open source and ad-free. Support keeps development going."
-    else -> "Gamut will always be free and open source. Every bit of support helps us keep improving it."
-}
+private fun body(trigger: SupportTrigger): String =
+    when (trigger) {
+        SupportTrigger.Donate -> {
+            "Gamut is free, open source and ad-free. Support keeps development going."
+        }
 
-private fun headline(trigger: SupportTrigger, plays: Int): String = when {
-    trigger == SupportTrigger.Donate -> "Support Gamut"
-    plays >= 20 -> "You\u2019ve played ${"%,d".format(plays)} songs on Gamut."
-    trigger == SupportTrigger.FirstDownload -> "Your first song is saved for offline."
-    trigger == SupportTrigger.PlaylistMilestone -> "That playlist is really coming together."
-    else -> "Enjoying Gamut?"
-}
+        else -> {
+            "Gamut will always be free and open source. Every bit of support helps us keep improving it."
+        }
+    }
+
+private fun headline(
+    trigger: SupportTrigger,
+    plays: Int,
+): String =
+    when {
+        trigger == SupportTrigger.Donate -> "Support Gamut"
+        plays >= 20 -> "You\u2019ve played ${"%,d".format(plays)} songs on Gamut."
+        trigger == SupportTrigger.FirstDownload -> "Your first song is saved for offline."
+        trigger == SupportTrigger.PlaylistMilestone -> "That playlist is really coming together."
+        else -> "Enjoying Gamut?"
+    }
 
 @Composable
 internal fun CoffeeCup(modifier: Modifier = Modifier) {
@@ -233,16 +253,17 @@ internal fun CoffeeCup(modifier: Modifier = Modifier) {
     val steam = ink(0.55f)
     val saucer = cup.copy(alpha = 0.35f)
 
-    val phaseState: State<Float> = if (animate) {
-        rememberInfiniteTransition(label = "cup").animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(3200, easing = LinearEasing)),
-            label = "steam",
-        )
-    } else {
-        remember { mutableStateOf(0.3f) }
-    }
+    val phaseState: State<Float> =
+        if (animate) {
+            rememberInfiniteTransition(label = "cup").animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(tween(3200, easing = LinearEasing)),
+                label = "steam",
+            )
+        } else {
+            remember { mutableStateOf(0.3f) }
+        }
 
     val pop = remember { Animatable(if (animate) 0.6f else 1f) }
     LaunchedEffect(Unit) { if (animate) pop.animateTo(1f, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow)) }
@@ -285,22 +306,40 @@ internal fun CoffeeCup(modifier: Modifier = Modifier) {
 
         val hr = bh * 0.30f
         val hc = Offset(bodyR - line * 0.3f, bodyT + bh * 0.42f)
-        drawArc(cup, startAngle = -90f, sweepAngle = 180f, useCenter = false, topLeft = Offset(hc.x - hr, hc.y - hr), size = Size(hr * 2, hr * 2), style = Stroke(line * 1.8f, cap = StrokeCap.Round))
+        drawArc(
+            cup,
+            startAngle = -90f,
+            sweepAngle = 180f,
+            useCenter = false,
+            topLeft = Offset(hc.x - hr, hc.y - hr),
+            size =
+                Size(
+                    hr * 2,
+                    hr * 2,
+                ),
+            style = Stroke(line * 1.8f, cap = StrokeCap.Round),
+        )
 
-        val body = Path().apply {
-            moveTo(bodyL, bodyT)
-            lineTo(bodyR, bodyT)
-            cubicTo(bodyR, bodyT + bh * 0.9f, bodyR - bw * 0.12f, bodyB, bodyR - bw * 0.28f, bodyB)
-            lineTo(bodyL + bw * 0.28f, bodyB)
-            cubicTo(bodyL + bw * 0.12f, bodyB, bodyL, bodyT + bh * 0.9f, bodyL, bodyT)
-            close()
-        }
+        val body =
+            Path().apply {
+                moveTo(bodyL, bodyT)
+                lineTo(bodyR, bodyT)
+                cubicTo(bodyR, bodyT + bh * 0.9f, bodyR - bw * 0.12f, bodyB, bodyR - bw * 0.28f, bodyB)
+                lineTo(bodyL + bw * 0.28f, bodyB)
+                cubicTo(bodyL + bw * 0.12f, bodyB, bodyL, bodyT + bh * 0.9f, bodyL, bodyT)
+                close()
+            }
         drawPath(body, cup)
 
         val beat = if (phase < 0.18f) sin(PI * phase / 0.18f).toFloat() else 0f
         val s = bw * 0.11f * (1f + 0.22f * beat)
         drawPath(Path().apply { addHeart(bodyL + bw / 2f, bodyT + bh * 0.46f, s) }, heart)
 
-        drawRoundRect(saucer, topLeft = Offset(bodyL - bw * 0.14f, bodyB + 1.5.dp.toPx()), size = Size(bw * 1.28f, 4.dp.toPx()), cornerRadius = CornerRadius(2.dp.toPx()))
+        drawRoundRect(
+            saucer,
+            topLeft = Offset(bodyL - bw * 0.14f, bodyB + 1.5.dp.toPx()),
+            size = Size(bw * 1.28f, 4.dp.toPx()),
+            cornerRadius = CornerRadius(2.dp.toPx()),
+        )
     }
 }

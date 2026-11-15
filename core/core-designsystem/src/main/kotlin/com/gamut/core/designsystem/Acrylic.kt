@@ -54,7 +54,17 @@ fun AcrylicHost(
 }
 
 @Composable
-fun Modifier.acrylicSource(state: HazeState? = LocalAcrylicState.current, zIndex: Float = 0f): Modifier = if (state == null) this else hazeSource(state, zIndex = zIndex)
+fun Modifier.acrylicSource(
+    state: HazeState? = LocalAcrylicState.current,
+    zIndex: Float = 0f,
+): Modifier =
+    if (state ==
+        null
+    ) {
+        this
+    } else {
+        hazeSource(state, zIndex = zIndex)
+    }
 
 enum class AcrylicTone { Dark, Light }
 
@@ -82,11 +92,12 @@ object AcrylicMaterials {
     val Ultra = AcrylicMaterial(56.dp, 0.55f, 0.04f, 0.16f, 0.60f, 0.92f)
 }
 
-private fun AcrylicMaterial.adapted(s: AppearanceSettings): AcrylicMaterial = copy(
-    blurRadius = blurRadius * s.glassDensity.blurScale,
-    tintAlpha = (tintAlpha * s.glassDensity.tintScale).coerceAtMost(0.95f),
-    fallbackAlpha = if (s.glass) (fallbackAlpha * s.glassDensity.tintScale).coerceAtMost(0.97f) else maxOf(fallbackAlpha, 0.88f),
-)
+private fun AcrylicMaterial.adapted(s: AppearanceSettings): AcrylicMaterial =
+    copy(
+        blurRadius = blurRadius * s.glassDensity.blurScale,
+        tintAlpha = (tintAlpha * s.glassDensity.tintScale).coerceAtMost(0.95f),
+        fallbackAlpha = if (s.glass) (fallbackAlpha * s.glassDensity.tintScale).coerceAtMost(0.97f) else maxOf(fallbackAlpha, 0.88f),
+    )
 
 private val DarkBase = Color(0xFF0B0D12)
 private val LightBase = Color(0xFFF4F6FA)
@@ -116,42 +127,47 @@ fun AcrylicSurface(
         SideEffect {
             if (!noHazeWarned) {
                 noHazeWarned = true
-                Log.w("Acrylic", "No HazeState found. Wrap the screen in AcrylicHost and put Modifier.acrylicSource() on the layer behind the glass.")
+                Log.w(
+                    "Acrylic",
+                    "No HazeState found. Wrap the screen in AcrylicHost and put Modifier.acrylicSource() on the layer behind the glass.",
+                )
             }
         }
     }
     val base = rememberGlassBase()
     val style = remember(material, base) { material.hazeStyle(base) }
     val highlight = Color.White
-    val sheen = remember(material, tone) {
-        Brush.linearGradient(
-            0.00f to highlight.copy(alpha = material.sheenAlpha),
-            0.45f to highlight.copy(alpha = material.sheenAlpha * 0.15f),
-            1.00f to Color.Transparent,
-        )
-    }
-    val rim = remember(material, tone) {
-        val a = material.rimAlpha
-        val rimColor = Color.White
-        Brush.linearGradient(
-            0.0f to rimColor.copy(alpha = a),
-            0.5f to rimColor.copy(alpha = a * 0.10f),
-            1.0f to rimColor.copy(alpha = a * 0.40f),
-        )
-    }
+    val sheen =
+        remember(material, tone) {
+            Brush.linearGradient(
+                0.00f to highlight.copy(alpha = material.sheenAlpha),
+                0.45f to highlight.copy(alpha = material.sheenAlpha * 0.15f),
+                1.00f to Color.Transparent,
+            )
+        }
+    val rim =
+        remember(material, tone) {
+            val a = material.rimAlpha
+            val rimColor = Color.White
+            Brush.linearGradient(
+                0.0f to rimColor.copy(alpha = a),
+                0.5f to rimColor.copy(alpha = a * 0.10f),
+                1.0f to rimColor.copy(alpha = a * 0.40f),
+            )
+        }
 
     Box(
-        modifier = modifier
-            .clip(shape)
-            .then(
-                if (hazeState != null) {
-                    Modifier.hazeEffect(state = hazeState, style = style)
-                } else {
-                    Modifier.background(base.copy(alpha = material.fallbackAlpha))
-                },
-            )
-            .then(if (material.sheenAlpha > 0f) Modifier.background(sheen) else Modifier)
-            .then(if (material.rimAlpha > 0f) Modifier.border(0.75.dp, rim, shape) else Modifier),
+        modifier =
+            modifier
+                .clip(shape)
+                .then(
+                    if (hazeState != null) {
+                        Modifier.hazeEffect(state = hazeState, style = style)
+                    } else {
+                        Modifier.background(base.copy(alpha = material.fallbackAlpha))
+                    },
+                ).then(if (material.sheenAlpha > 0f) Modifier.background(sheen) else Modifier)
+                .then(if (material.rimAlpha > 0f) Modifier.border(0.75.dp, rim, shape) else Modifier),
         contentAlignment = Alignment.Center,
         content = content,
     )
@@ -167,9 +183,10 @@ fun AcrylicCircleButton(
     content: @Composable BoxScope.() -> Unit,
 ) {
     AcrylicSurface(
-        modifier = modifier
-            .pressScale(onClick = onClick)
-            .size(size),
+        modifier =
+            modifier
+                .pressScale(onClick = onClick)
+                .size(size),
         shape = CircleShape,
         material = material,
         tone = tone,
@@ -193,10 +210,11 @@ fun AcrylicPill(
         tone = tone,
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(height)
-                .padding(contentPadding),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(height)
+                    .padding(contentPadding),
             verticalAlignment = Alignment.CenterVertically,
             content = content,
         )
@@ -220,13 +238,14 @@ fun AcrylicCard(
     )
 }
 
-private fun AcrylicMaterial.hazeStyle(base: Color) = HazeStyle(
-    backgroundColor = base,
-    tints = listOf(HazeTint(base.copy(alpha = tintAlpha))),
-    blurRadius = blurRadius,
-    noiseFactor = noise,
-    fallbackTint = HazeTint(base.copy(alpha = fallbackAlpha)),
-)
+private fun AcrylicMaterial.hazeStyle(base: Color) =
+    HazeStyle(
+        backgroundColor = base,
+        tints = listOf(HazeTint(base.copy(alpha = tintAlpha))),
+        blurRadius = blurRadius,
+        noiseFactor = noise,
+        fallbackTint = HazeTint(base.copy(alpha = fallbackAlpha)),
+    )
 
 @Composable
 fun Modifier.acrylicFill(
@@ -262,16 +281,18 @@ fun AcrylicScrim(
     val base = rememberGlassBase()
     val style = remember(material, base) { material.hazeStyle(base) }
     val top = edge == AcrylicEdge.Top
-    val fade = remember(edge) {
-        Brush.verticalGradient(if (top) listOf(Color.Black, Color.Transparent) else listOf(Color.Transparent, Color.Black))
-    }
+    val fade =
+        remember(edge) {
+            Brush.verticalGradient(if (top) listOf(Color.Black, Color.Transparent) else listOf(Color.Transparent, Color.Black))
+        }
     Box(
         if (state != null) {
             modifier.hazeEffect(state = state, style = style) {
-                progressive = HazeProgressive.verticalGradient(
-                    startIntensity = if (top) 1f else 0f,
-                    endIntensity = if (top) 0f else 1f,
-                )
+                progressive =
+                    HazeProgressive.verticalGradient(
+                        startIntensity = if (top) 1f else 0f,
+                        endIntensity = if (top) 0f else 1f,
+                    )
                 mask = fade
             }
         } else {

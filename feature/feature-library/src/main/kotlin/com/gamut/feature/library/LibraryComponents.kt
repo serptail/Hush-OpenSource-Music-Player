@@ -31,14 +31,19 @@ import com.gamut.core.designsystem.ink
 internal val RowArtShape = RoundedCornerShape(14.dp)
 
 @Composable
-internal fun CoverImage(url: String, modifier: Modifier = Modifier) {
+internal fun CoverImage(
+    url: String,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
-    val request = remember(url) {
-        ImageRequest.Builder(context)
-            .data(url.ifBlank { null })
-            .crossfade(false)
-            .build()
-    }
+    val request =
+        remember(url) {
+            ImageRequest
+                .Builder(context)
+                .data(url.ifBlank { null })
+                .crossfade(false)
+                .build()
+        }
     var failed by remember(url) { mutableStateOf(false) }
     val noArt = url.isBlank()
     val flat = flatCoverFill()
@@ -61,6 +66,7 @@ internal fun CoverImage(url: String, modifier: Modifier = Modifier) {
 @Composable
 internal fun flatCoverFill(): Color = ink(0.08f).compositeOver(LocalCoverPalette.current.base)
 
-internal fun Modifier.softCover(shape: androidx.compose.ui.graphics.Shape = RowArtShape): Modifier = this
-    .shadow(4.dp, shape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
-    .clip(shape)
+internal fun Modifier.softCover(shape: androidx.compose.ui.graphics.Shape = RowArtShape): Modifier =
+    this
+        .shadow(4.dp, shape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
+        .clip(shape)

@@ -179,20 +179,26 @@ fun PlaylistScreen(
 
     val streamed = remember(songs) { songs.filter { !it.isLocal } }
     val streamedIsrcs = remember(streamed) { streamed.map { it.isrc }.distinct() }
-    val states = remember(downloadStates, songs) {
-        downloadStates + songs.filter { it.isLocal }.associate { it.isrc to DownloadState.Done }
-    }
+    val states =
+        remember(downloadStates, songs) {
+            downloadStates + songs.filter { it.isLocal }.associate { it.isrc to DownloadState.Done }
+        }
     val isrcs = remember(songs) { songs.map { it.isrc }.distinct() }
     val downloadUi = remember(isrcs, states) { playlistDownloadUi(isrcs, states) }
     val downloadedCount = remember(isrcs, states) { isrcs.count { states[it] == DownloadState.Done } }
     val streamedDownloaded = remember(streamedIsrcs, downloadStates) { streamedIsrcs.count { downloadStates[it] == DownloadState.Done } }
 
-    val visible: List<Listed> = remember(songs, query) {
-        val q = query.trim().lowercase()
-        songs.withIndex().filter { (_, t) ->
-            q.isEmpty() || t.title.lowercase().contains(q) || t.artist.lowercase().contains(q) || t.album.orEmpty().lowercase().contains(q)
+    val visible: List<Listed> =
+        remember(songs, query) {
+            val q = query.trim().lowercase()
+            songs.withIndex().filter { (_, t) ->
+                q.isEmpty() || t.title.lowercase().contains(q) || t.artist.lowercase().contains(q) ||
+                    t.album
+                        .orEmpty()
+                        .lowercase()
+                        .contains(q)
+            }
         }
-    }
 
     val customCover = playlist?.coverUri
     val coverUrl = customCover ?: songs.lastOrNull()?.albumArtUrl
@@ -214,7 +220,10 @@ fun PlaylistScreen(
         sheet = PlaylistSheet.None
     }
 
-    fun closeSheet(state: SheetState, then: () -> Unit = {}) {
+    fun closeSheet(
+        state: SheetState,
+        then: () -> Unit = {},
+    ) {
         scope.launch { state.hide() }.invokeOnCompletion {
             sheet = PlaylistSheet.None
             then()
@@ -257,11 +266,17 @@ fun PlaylistScreen(
                     tags = playlist?.tags.orEmpty(),
                     songCount = songs.size,
                     artistCount = songs.flatMap { splitArtists(it.artist) }.distinctBy { it.lowercase() }.size,
-                    statusLine = when (downloadUi.status) {
-                        PlaylistDownloadStatus.Active -> "Downloading ${minOf(downloadUi.done + 1, downloadUi.total)} of ${downloadUi.total}"
-                        PlaylistDownloadStatus.Done -> null
-                        PlaylistDownloadStatus.Idle -> if (downloadedCount > 0) "$downloadedCount of ${isrcs.size} downloaded" else null
-                    },
+                    statusLine =
+                        when (downloadUi.status) {
+                            PlaylistDownloadStatus.Active -> "Downloading ${minOf(
+                                downloadUi.done + 1,
+                                downloadUi.total,
+                            )} of ${downloadUi.total}"
+
+                            PlaylistDownloadStatus.Done -> null
+
+                            PlaylistDownloadStatus.Idle -> if (downloadedCount > 0) "$downloadedCount of ${isrcs.size} downloaded" else null
+                        },
                     downloadUi = downloadUi,
                     offline = downloadUi.status == PlaylistDownloadStatus.Done,
                     onDownload = onDownloadClick,
@@ -382,27 +397,59 @@ fun PlaylistScreen(
                 dragHandle = { BottomSheetDefaults.DragHandle(color = ink(0.3f)) },
             ) {
                 Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp)) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         if (coverUrl.isNullOrBlank()) {
-                            Box(Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)).background(sheetInk(0.08f)), contentAlignment = Alignment.Center) {
+                            Box(
+                                Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)).background(sheetInk(0.08f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
                                 Icon(PhosphorIcons.Bold.VinylRecord, null, tint = sheetInk(0.6f), modifier = Modifier.size(24.dp))
                             }
                         } else {
-                            CoverImage(remember(coverUrl) { resolveCoverUrl(coverUrl, 160) }, Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)))
+                            CoverImage(
+                                remember(coverUrl) { resolveCoverUrl(coverUrl, 160) },
+                                Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)),
+                            )
                         }
                         Column(Modifier.weight(1f).padding(start = 16.dp)) {
-                            Text(name, style = MaterialTheme.typography.titleMedium, color = sheetInk(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                name,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = sheetInk(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                             Text(plural(songs.size, "song"), style = MaterialTheme.typography.bodyMedium, color = sheetInk(0.6f))
                         }
                     }
-                    Box(Modifier.fillMaxWidth().padding(vertical = 6.dp).height(1.dp).background(sheetInk(0.10f)))
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp)
+                            .height(1.dp)
+                            .background(sheetInk(0.10f)),
+                    )
                     SheetAction(PhosphorIcons.Bold.PencilSimple, "Edit playlist") { closeSheet(state) { startEdit() } }
-                    if (songs.isNotEmpty()) SheetAction(PhosphorIcons.Bold.RowsPlusTop, "Manage playlist") { closeSheet(state) { showManage = true } }
+                    if (songs.isNotEmpty()) {
+                        SheetAction(PhosphorIcons.Bold.RowsPlusTop, "Manage playlist") {
+                            closeSheet(state) {
+                                showManage =
+                                    true
+                            }
+                        }
+                    }
                     SheetAction(PhosphorIcons.Bold.ImageSquare, "Change cover art") {
                         pickQuickCover()
                         closeSheet(state)
                     }
-                    if (streamedDownloaded > 0) SheetAction(PhosphorIcons.Bold.X, "Remove downloads") { closeSheet(state) { confirmRemoveDownloads = true } }
+                    if (streamedDownloaded >
+                        0
+                    ) {
+                        SheetAction(PhosphorIcons.Bold.X, "Remove downloads") { closeSheet(state) { confirmRemoveDownloads = true } }
+                    }
                     SheetAction(PhosphorIcons.Bold.Trash, "Delete playlist", danger = true) { closeSheet(state) { confirmDelete = true } }
                 }
             }
@@ -424,18 +471,34 @@ fun PlaylistScreen(
                         .padding(bottom = 20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text("Edit playlist", style = MaterialTheme.typography.titleLarge, color = sheetInk(), modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
+                    Text(
+                        "Edit playlist",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = sheetInk(),
+                        modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
+                    )
                     val shownCover = draftCover ?: songs.lastOrNull()?.albumArtUrl
                     Box(Modifier.size(150.dp).pressScale(onClick = pickDraftCover)) {
                         if (shownCover.isNullOrBlank()) {
-                            Box(Modifier.fillMaxSize().clip(HeaderCoverShape).background(sheetInk(0.07f)), contentAlignment = Alignment.Center) {
+                            Box(
+                                Modifier.fillMaxSize().clip(HeaderCoverShape).background(sheetInk(0.07f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
                                 Icon(PhosphorIcons.Bold.Plus, "Add cover", tint = sheetInk(0.6f), modifier = Modifier.size(44.dp))
                             }
                         } else {
-                            CoverImage(remember(shownCover) { resolveCoverUrl(shownCover, 400) }, Modifier.fillMaxSize().clip(HeaderCoverShape))
+                            CoverImage(
+                                remember(shownCover) { resolveCoverUrl(shownCover, 400) },
+                                Modifier.fillMaxSize().clip(HeaderCoverShape),
+                            )
                         }
                         Box(
-                            Modifier.align(Alignment.BottomEnd).padding(8.dp).size(34.dp).background(Color.Black.copy(alpha = 0.55f), CircleShape),
+                            Modifier
+                                .align(
+                                    Alignment.BottomEnd,
+                                ).padding(8.dp)
+                                .size(34.dp)
+                                .background(Color.Black.copy(alpha = 0.55f), CircleShape),
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(PhosphorIcons.Bold.PencilSimple, "Change cover", tint = Color.White, modifier = Modifier.size(18.dp))
@@ -446,7 +509,12 @@ fun PlaylistScreen(
                             "Use the last song's art instead",
                             style = MaterialTheme.typography.labelLarge,
                             color = sheetInk(0.7f),
-                            modifier = Modifier.padding(top = 10.dp).pressScale(onClick = { draftCover = null }).padding(horizontal = 12.dp, vertical = 6.dp),
+                            modifier =
+                                Modifier
+                                    .padding(
+                                        top = 10.dp,
+                                    ).pressScale(onClick = { draftCover = null })
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
                         )
                     }
                     val style = MaterialTheme.typography.headlineMedium
@@ -461,7 +529,14 @@ fun PlaylistScreen(
                             modifier = Modifier.fillMaxWidth(),
                             decorationBox = { inner ->
                                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                    if (draftName.isEmpty()) Text("Playlist name", style = style, color = sheetInk(0.35f), textAlign = TextAlign.Center)
+                                    if (draftName.isEmpty()) {
+                                        Text(
+                                            "Playlist name",
+                                            style = style,
+                                            color = sheetInk(0.35f),
+                                            textAlign = TextAlign.Center,
+                                        )
+                                    }
                                     inner()
                                 }
                             },
@@ -505,7 +580,9 @@ fun PlaylistScreen(
         if (confirmDelete) {
             ConfirmDialog(
                 title = "Delete playlist?",
-                message = "\u201C$name\u201D will be deleted." + if (streamedDownloaded > 0) " Its downloaded songs will be removed from this device too." else "",
+                message =
+                    "\u201C$name\u201D will be deleted." +
+                        if (streamedDownloaded > 0) " Its downloaded songs will be removed from this device too." else "",
                 confirmLabel = "Delete",
                 danger = true,
                 onConfirm = {
@@ -534,7 +611,12 @@ fun PlaylistScreen(
 }
 
 @Composable
-private fun TopIcon(icon: ImageVector, description: String, enabled: Boolean = true, onClick: () -> Unit) {
+private fun TopIcon(
+    icon: ImageVector,
+    description: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
     Box(
         Modifier.size(44.dp).then(if (enabled) Modifier.pressScale(onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center,
@@ -544,10 +626,21 @@ private fun TopIcon(icon: ImageVector, description: String, enabled: Boolean = t
 }
 
 @Composable
-private fun SearchField(query: String, onChange: (String) -> Unit, onFocus: (Boolean) -> Unit, onDone: () -> Unit, modifier: Modifier = Modifier) {
+private fun SearchField(
+    query: String,
+    onChange: (String) -> Unit,
+    onFocus: (Boolean) -> Unit,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val textStyle = MaterialTheme.typography.bodyLarge
     Row(
-        modifier.fillMaxWidth().height(42.dp).clip(PillShape).background(ink(0.08f)).padding(start = 14.dp, end = 6.dp),
+        modifier
+            .fillMaxWidth()
+            .height(42.dp)
+            .clip(PillShape)
+            .background(ink(0.08f))
+            .padding(start = 14.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(PhosphorIcons.Bold.MagnifyingGlass, null, tint = ink(0.6f), modifier = Modifier.size(18.dp))
@@ -598,8 +691,13 @@ private fun PlaylistHeader(
                     remember(coverUrl) { resolveCoverUrl(coverUrl, 600) },
                     Modifier
                         .fillMaxSize()
-                        .shadow(22.dp, HeaderCoverShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.35f), spotColor = Color.Black.copy(alpha = 0.35f))
-                        .clip(HeaderCoverShape),
+                        .shadow(
+                            22.dp,
+                            HeaderCoverShape,
+                            clip = false,
+                            ambientColor = Color.Black.copy(alpha = 0.35f),
+                            spotColor = Color.Black.copy(alpha = 0.35f),
+                        ).clip(HeaderCoverShape),
                 )
             }
         }
@@ -652,7 +750,12 @@ private fun PlaylistHeader(
 }
 
 @Composable
-private fun ActionPill(label: String, icon: ImageVector, filled: Boolean, onClick: () -> Unit) {
+private fun ActionPill(
+    label: String,
+    icon: ImageVector,
+    filled: Boolean,
+    onClick: () -> Unit,
+) {
     val isLight = LocalCoverPalette.current.isLight
     val content = if (filled) (if (isLight) Color.White else Color.Black) else ink()
     Row(
@@ -668,17 +771,20 @@ private fun ActionPill(label: String, icon: ImageVector, filled: Boolean, onClic
 }
 
 @OptIn(ExperimentalFoundationApi::class)
-private fun Modifier.rowPress(onClick: () -> Unit, onLongClick: () -> Unit): Modifier = composed {
-    val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.98f else 1f, tween(90), label = "row-press")
-    graphicsLayer {
-        scaleX = scale
-        scaleY = scale
+private fun Modifier.rowPress(
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+): Modifier =
+    composed {
+        val source = remember { MutableInteractionSource() }
+        val pressed by source.collectIsPressedAsState()
+        val scale by animateFloatAsState(if (pressed) 0.98f else 1f, tween(90), label = "row-press")
+        graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }.focusRing(RoundedCornerShape(12.dp))
+            .combinedClickable(interactionSource = source, indication = null, onClick = onClick, onLongClick = onLongClick)
     }
-        .focusRing(RoundedCornerShape(12.dp))
-        .combinedClickable(interactionSource = source, indication = null, onClick = onClick, onLongClick = onLongClick)
-}
 
 @Composable
 private fun PlaylistTrackRow(
@@ -708,7 +814,10 @@ private fun PlaylistTrackRow(
                 if (isPlaying) NowPlayingBars(color = accent, modifier = Modifier.padding(end = 8.dp))
                 Text(
                     track.title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium),
+                    style =
+                        MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium,
+                        ),
                     color = if (isPlaying) accent else ink(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -716,7 +825,14 @@ private fun PlaylistTrackRow(
                 )
             }
             ArtistLine(track.artist, track.album, onArtist, stackSize = 18.dp, modifier = Modifier.padding(vertical = 1.dp)) { m ->
-                Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = m)
+                Text(
+                    track.artist,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink(0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = m,
+                )
             }
             Box(Modifier.padding(top = 5.dp).height(2.dp)) { DownloadProgressLine(downloadState) }
         }
@@ -759,8 +875,20 @@ private fun TrackOptionsPanel(
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 CoverImage(resolveCoverUrl(track.albumArtUrl, 160), Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)))
                 Column(Modifier.weight(1f).padding(start = 14.dp)) {
-                    Text(track.title, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        track.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = ink(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        track.artist,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ink(0.6f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(ink(0.10f)))
@@ -770,17 +898,23 @@ private fun TrackOptionsPanel(
             }
             if (!local) {
                 when (downloadState) {
-                    DownloadState.Done -> PanelAction(PhosphorIcons.Fill.CheckCircle, "Remove download", true) {
-                        onRemoveDownload()
-                        onDismiss()
+                    DownloadState.Done -> {
+                        PanelAction(PhosphorIcons.Fill.CheckCircle, "Remove download", true) {
+                            onRemoveDownload()
+                            onDismiss()
+                        }
                     }
 
-                    null, is DownloadState.Failed -> PanelAction(PhosphorIcons.Bold.ArrowCircleDown, "Download", true) {
-                        onDownload()
-                        onDismiss()
+                    null, is DownloadState.Failed -> {
+                        PanelAction(PhosphorIcons.Bold.ArrowCircleDown, "Download", true) {
+                            onDownload()
+                            onDismiss()
+                        }
                     }
 
-                    else -> Unit
+                    else -> {
+                        Unit
+                    }
                 }
             }
             PanelAction(
@@ -816,7 +950,12 @@ private fun TrackOptionsPanel(
 }
 
 @Composable
-private fun PanelAction(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
+private fun PanelAction(
+    icon: ImageVector,
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
     val alpha = if (enabled) 1f else 0.3f
     Row(
         Modifier
@@ -831,7 +970,12 @@ private fun PanelAction(icon: ImageVector, label: String, enabled: Boolean, onCl
 }
 
 @Composable
-private fun SheetAction(icon: ImageVector, label: String, danger: Boolean = false, onClick: () -> Unit) {
+private fun SheetAction(
+    icon: ImageVector,
+    label: String,
+    danger: Boolean = false,
+    onClick: () -> Unit,
+) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -840,12 +984,22 @@ private fun SheetAction(icon: ImageVector, label: String, danger: Boolean = fals
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, null, tint = if (danger) DangerColor else sheetInk(0.85f), modifier = Modifier.size(20.dp))
-        Text(label, style = MaterialTheme.typography.titleMedium, color = if (danger) DangerColor else sheetInk(), modifier = Modifier.padding(start = 18.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.titleMedium,
+            color = if (danger) DangerColor else sheetInk(),
+            modifier = Modifier.padding(start = 18.dp),
+        )
     }
 }
 
 @Composable
-private fun SheetButton(label: String, filled: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun SheetButton(
+    label: String,
+    filled: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
     val content = if (filled) LocalCoverPalette.current.base else ink()
     Box(
         Modifier
@@ -880,7 +1034,11 @@ private fun ConfirmDialog(
         ) {
             Text(title, style = MaterialTheme.typography.titleLarge, color = ink())
             Text(message, style = MaterialTheme.typography.bodyMedium, color = ink(0.7f), modifier = Modifier.padding(top = 10.dp))
-            Row(Modifier.fillMaxWidth().padding(top = 22.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 22.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
                     "Cancel",
                     style = MaterialTheme.typography.titleMedium,
@@ -898,4 +1056,7 @@ private fun ConfirmDialog(
     }
 }
 
-private fun plural(n: Int, word: String) = if (n == 1) "1 $word" else "$n ${word}s"
+private fun plural(
+    n: Int,
+    word: String,
+) = if (n == 1) "1 $word" else "$n ${word}s"

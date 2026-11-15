@@ -4,7 +4,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class MusicBrainzSearchResponse(val recordings: List<MusicBrainzRecordingDto> = emptyList())
+data class MusicBrainzSearchResponse(
+    val recordings: List<MusicBrainzRecordingDto> = emptyList(),
+)
 
 @Serializable
 data class MusicBrainzRecordingDto(
@@ -24,7 +26,9 @@ data class MusicBrainzArtistCreditDto(
 )
 
 @Serializable
-data class MusicBrainzArtistDto(val name: String)
+data class MusicBrainzArtistDto(
+    val name: String,
+)
 
 @Serializable
 data class MusicBrainzReleaseDto(
@@ -33,7 +37,9 @@ data class MusicBrainzReleaseDto(
 )
 
 @Serializable
-data class CoverArtResponse(val images: List<CoverArtImageDto> = emptyList())
+data class CoverArtResponse(
+    val images: List<CoverArtImageDto> = emptyList(),
+)
 
 @Serializable
 data class CoverArtImageDto(
@@ -67,10 +73,14 @@ data class ItunesTrackDto(
 )
 
 @Serializable
-data class YoutubeSearchRequest(val query: String)
+data class YoutubeSearchRequest(
+    val query: String,
+)
 
 @Serializable
-data class YoutubeSearchResponse(val candidates: List<YoutubeCandidateDto>)
+data class YoutubeSearchResponse(
+    val candidates: List<YoutubeCandidateDto>,
+)
 
 @Serializable
 data class YoutubeCandidateDto(
@@ -94,21 +104,27 @@ data class ResolvedSourceDto(
 )
 
 @Serializable
-data class AudioStreamDto(val url: String, val expiresAtEpochSeconds: Long? = null)
-
-fun YoutubeCandidateDto.toDomain() = YoutubeCandidate(
-    videoId,
-    title,
-    channelName,
-    channelIsTopicChannel,
-    durationMs,
-    viewCount,
-    category,
-    isMusicCatalog,
+data class AudioStreamDto(
+    val url: String,
+    val expiresAtEpochSeconds: Long? = null,
 )
 
+fun YoutubeCandidateDto.toDomain() =
+    YoutubeCandidate(
+        videoId,
+        title,
+        channelName,
+        channelIsTopicChannel,
+        durationMs,
+        viewCount,
+        category,
+        isMusicCatalog,
+    )
+
 @Serializable
-data class DeezerArtistSearchResponse(val data: List<DeezerArtistDto> = emptyList())
+data class DeezerArtistSearchResponse(
+    val data: List<DeezerArtistDto> = emptyList(),
+)
 
 @Serializable
 data class DeezerArtistDto(
@@ -120,10 +136,14 @@ data class DeezerArtistDto(
 )
 
 @Serializable
-data class DeezerTrackResponse(val data: List<DeezerTrackDto> = emptyList())
+data class DeezerTrackResponse(
+    val data: List<DeezerTrackDto> = emptyList(),
+)
 
 @Serializable
-data class DeezerAlbumResponse(val data: List<DeezerAlbumDto> = emptyList())
+data class DeezerAlbumResponse(
+    val data: List<DeezerAlbumDto> = emptyList(),
+)
 
 @Serializable
 data class DeezerTrackDto(
@@ -150,10 +170,14 @@ data class DeezerAlbumDto(
 )
 
 @Serializable
-data class AppleChartResponse(val feed: AppleChartFeed)
+data class AppleChartResponse(
+    val feed: AppleChartFeed,
+)
 
 @Serializable
-data class AppleChartFeed(val results: List<AppleChartItem> = emptyList())
+data class AppleChartFeed(
+    val results: List<AppleChartItem> = emptyList(),
+)
 
 @Serializable
 data class AppleChartItem(
@@ -183,7 +207,10 @@ data class BillboardEntryDto(
 )
 
 @Serializable
-data class AppleLookupResponse(val resultCount: Int = 0, val results: List<AppleLookupItem> = emptyList())
+data class AppleLookupResponse(
+    val resultCount: Int = 0,
+    val results: List<AppleLookupItem> = emptyList(),
+)
 
 @Serializable
 data class AppleLookupItem(
@@ -201,7 +228,10 @@ data class AppleLookupItem(
 )
 
 @Serializable
-data class BillboardHot100Dto(val date: String = "", val data: List<BillboardSongDto> = emptyList())
+data class BillboardHot100Dto(
+    val date: String = "",
+    val data: List<BillboardSongDto> = emptyList(),
+)
 
 @Serializable
 data class BillboardSongDto(

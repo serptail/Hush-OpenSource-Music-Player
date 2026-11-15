@@ -89,70 +89,85 @@ import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.bold.DotsThree
 import com.adamglin.phosphoricons.bold.DownloadSimple
-import com.adamglin.phosphoricons.bold.Image as ImageIcon
 import com.adamglin.phosphoricons.bold.Link
 import com.adamglin.phosphoricons.bold.LinkSimpleHorizontal
 import com.adamglin.phosphoricons.bold.MusicNote
-import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import com.adamglin.phosphoricons.bold.Image as ImageIcon
 
 private val CardW = 280.dp
 private val CardH = 370.dp
 
-private val PriorityPackages = listOf(
-    "com.whatsapp",
-    "org.telegram.messenger",
-    "com.instagram.android",
-    "com.facebook.orca",
-    "com.snapchat.android",
-    "com.google.android.apps.messaging",
-    "com.twitter.android",
-    "com.discord",
-    "com.google.android.gm",
-)
+private val PriorityPackages =
+    listOf(
+        "com.whatsapp",
+        "org.telegram.messenger",
+        "com.instagram.android",
+        "com.facebook.orca",
+        "com.snapchat.android",
+        "com.google.android.apps.messaging",
+        "com.twitter.android",
+        "com.discord",
+        "com.google.android.gm",
+    )
 
-private class ShareItem(val title: String, val artist: String, val artUrl: String?)
+private class ShareItem(
+    val title: String,
+    val artist: String,
+    val artUrl: String?,
+)
 
 private val SheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
 
-private fun Modifier.bounceClick(onClick: () -> Unit): Modifier = composed {
-    val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    val hovered by source.collectIsHoveredAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-        label = "bounce",
-    )
-    val tint by animateColorAsState(
-        targetValue = ink().copy(
-            alpha = if (pressed) {
-                0.10f
-            } else if (hovered) {
-                0.06f
-            } else {
-                0f
-            },
-        ),
-        animationSpec = tween(140),
-        label = "tint",
-    )
-    this
-        .graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-        }
-        .clip(RoundedCornerShape(16.dp))
-        .background(tint)
-        .hoverable(source)
-        .clickable(interactionSource = source, indication = null, onClick = onClick)
-}
+private fun Modifier.bounceClick(onClick: () -> Unit): Modifier =
+    composed {
+        val source = remember { MutableInteractionSource() }
+        val pressed by source.collectIsPressedAsState()
+        val hovered by source.collectIsHoveredAsState()
+        val scale by animateFloatAsState(
+            targetValue = if (pressed) 0.97f else 1f,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+            label = "bounce",
+        )
+        val tint by animateColorAsState(
+            targetValue =
+                ink().copy(
+                    alpha =
+                        if (pressed) {
+                            0.10f
+                        } else if (hovered) {
+                            0.06f
+                        } else {
+                            0f
+                        },
+                ),
+            animationSpec = tween(140),
+            label = "tint",
+        )
+        this
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }.clip(RoundedCornerShape(16.dp))
+            .background(tint)
+            .hoverable(source)
+            .clickable(interactionSource = source, indication = null, onClick = onClick)
+    }
 
-private class ShareApp(val label: String, val component: ComponentName, val icon: ImageBitmap)
+private class ShareApp(
+    val label: String,
+    val component: ComponentName,
+    val icon: ImageBitmap,
+)
 
-private class ShareCardStyle(val top: Color, val bottom: Color, val text: Color)
+private class ShareCardStyle(
+    val top: Color,
+    val bottom: Color,
+    val text: Color,
+)
 
 @Composable
 private fun rememberShareStyles(): List<ShareCardStyle> {
@@ -171,7 +186,10 @@ private fun rememberShareStyles(): List<ShareCardStyle> {
     }
 }
 
-fun defaultShareUrl(title: String, artist: String): String = "https://music.youtube.com/search?q=" + Uri.encode("$title $artist")
+fun defaultShareUrl(
+    title: String,
+    artist: String,
+): String = "https://music.youtube.com/search?q=" + Uri.encode("$title $artist")
 
 @Composable
 fun ShareSheet(
@@ -228,25 +246,27 @@ private fun ShareSheetContent(
         onDismiss()
     }
 
-    fun shareIntent(uri: Uri?): Intent = Intent(Intent.ACTION_SEND).apply {
-        putExtra(Intent.EXTRA_TEXT, text)
-        putExtra(Intent.EXTRA_SUBJECT, track.title)
-        putExtra(Intent.EXTRA_TITLE, track.title)
-        if (uri != null) {
-            type = "image/png"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            clipData = ClipData.newRawUri(null, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        } else {
-            type = "text/plain"
+    fun shareIntent(uri: Uri?): Intent =
+        Intent(Intent.ACTION_SEND).apply {
+            putExtra(Intent.EXTRA_TEXT, text)
+            putExtra(Intent.EXTRA_SUBJECT, track.title)
+            putExtra(Intent.EXTRA_TITLE, track.title)
+            if (uri != null) {
+                type = "image/png"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                clipData = ClipData.newRawUri(null, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } else {
+                type = "text/plain"
+            }
         }
-    }
 
-    fun sendTo(app: ShareApp?) = withCard { bmp ->
-        val uri = bmp?.let { writeToCache(context, it, track) }
-        val intent = shareIntent(uri)
-        open(if (app == null) Intent.createChooser(intent, null) else intent.setComponent(app.component))
-    }
+    fun sendTo(app: ShareApp?) =
+        withCard { bmp ->
+            val uri = bmp?.let { writeToCache(context, it, track) }
+            val intent = shareIntent(uri)
+            open(if (app == null) Intent.createChooser(intent, null) else intent.setComponent(app.component))
+        }
 
     GamutSheet(onDismiss = onDismiss, shape = SheetShape) {
         Column(
@@ -284,7 +304,10 @@ private fun ShareSheetContent(
                         styles.forEachIndexed { i, st ->
                             val selected = pager.currentPage == i
                             Box(
-                                Modifier.padding(horizontal = 4.dp).size(30.dp).clip(CircleShape)
+                                Modifier
+                                    .padding(horizontal = 4.dp)
+                                    .size(30.dp)
+                                    .clip(CircleShape)
                                     .background(Brush.verticalGradient(listOf(st.top, st.bottom)))
                                     .border(if (selected) 2.dp else 1.dp, if (selected) ink() else ink(0.25f), CircleShape)
                                     .clickable { scope.launch { pager.animateScrollToPage(i) } },
@@ -357,14 +380,19 @@ private fun ShareSheetContent(
 }
 
 @Composable
-private fun ModeChip(selected: Boolean, onClick: () -> Unit, content: @Composable RowScope.() -> Unit) {
+private fun ModeChip(
+    selected: Boolean,
+    onClick: () -> Unit,
+    content: @Composable RowScope.() -> Unit,
+) {
     Row(
-        modifier = Modifier
-            .clip(CircleShape)
-            .background(ink(if (selected) 0.14f else 0.05f))
-            .border(BorderStroke(1.dp, ink(if (selected) 0.35f else 0.12f)), CircleShape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+        modifier =
+            Modifier
+                .clip(CircleShape)
+                .background(ink(if (selected) 0.14f else 0.05f))
+                .border(BorderStroke(1.dp, ink(if (selected) 0.35f else 0.12f)), CircleShape)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         content = content,
@@ -382,7 +410,10 @@ private fun ChipLabel(text: String) {
 }
 
 @Composable
-private fun LinkPreview(track: ShareItem, url: String) {
+private fun LinkPreview(
+    track: ShareItem,
+    url: String,
+) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -394,14 +425,24 @@ private fun LinkPreview(track: ShareItem, url: String) {
         )
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
             Text(track.title, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                track.artist,
+                style = MaterialTheme.typography.bodyMedium,
+                color = ink(0.6f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             Text(url, style = MaterialTheme.typography.labelSmall, color = ink(0.45f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
 
 @Composable
-private fun ShareCard(track: ShareItem, style: ShareCardStyle, layer: GraphicsLayer) {
+private fun ShareCard(
+    track: ShareItem,
+    style: ShareCardStyle,
+    layer: GraphicsLayer,
+) {
     Column(
         Modifier
             .size(CardW, CardH)
@@ -409,8 +450,7 @@ private fun ShareCard(track: ShareItem, style: ShareCardStyle, layer: GraphicsLa
             .drawWithContent {
                 layer.record { this@drawWithContent.drawContent() }
                 drawLayer(layer)
-            }
-            .background(Brush.verticalGradient(listOf(style.top, style.bottom)))
+            }.background(Brush.verticalGradient(listOf(style.top, style.bottom)))
             .padding(22.dp),
     ) {
         ArtImage(
@@ -444,14 +484,25 @@ private fun ShareCard(track: ShareItem, style: ShareCardStyle, layer: GraphicsLa
 }
 
 @Composable
-private fun ShareTarget(label: String, onClick: () -> Unit, icon: @Composable () -> Unit) {
+private fun ShareTarget(
+    label: String,
+    onClick: () -> Unit,
+    icon: @Composable () -> Unit,
+) {
     Column(
         Modifier.width(76.dp).bounceClick(onClick).padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(Modifier.size(56.dp).clip(CircleShape).background(ink(0.1f)), contentAlignment = Alignment.Center) { icon() }
         Spacer(Modifier.height(8.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = ink(),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -464,58 +515,74 @@ private fun AppIcon(icon: ImageBitmap?) {
     }
 }
 
-private suspend fun captureCard(layer: GraphicsLayer): Bitmap? = try {
-    if (layer.size.width == 0 || layer.size.height == 0) {
+private suspend fun captureCard(layer: GraphicsLayer): Bitmap? =
+    try {
+        if (layer.size.width == 0 || layer.size.height == 0) {
+            null
+        } else {
+            val bmp = layer.toImageBitmap().asAndroidBitmap()
+            if (bmp.config == Bitmap.Config.HARDWARE) bmp.copy(Bitmap.Config.ARGB_8888, false) else bmp
+        }
+    } catch (_: Exception) {
         null
-    } else {
-        val bmp = layer.toImageBitmap().asAndroidBitmap()
-        if (bmp.config == Bitmap.Config.HARDWARE) bmp.copy(Bitmap.Config.ARGB_8888, false) else bmp
     }
-} catch (_: Exception) {
-    null
-}
 
 private fun fileName(track: ShareItem): String {
     val slug = "${track.artist}-${track.title}".lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').take(40)
     return "gamut-$slug"
 }
 
-private suspend fun writeToCache(context: Context, bmp: Bitmap, track: ShareItem): Uri? = withContext(Dispatchers.IO) {
-    try {
-        val dir = File(context.cacheDir, "share").apply { mkdirs() }
-        dir.listFiles()?.forEach { it.delete() }
-        val file = File(dir, "${fileName(track)}-${System.currentTimeMillis()}.png")
-        file.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        FileProvider.getUriForFile(context, "${context.packageName}.share", file)
-    } catch (_: Exception) {
-        null
-    }
-}
-
-private suspend fun saveToGallery(context: Context, bmp: Bitmap, track: ShareItem): Boolean = withContext(Dispatchers.IO) {
-    try {
-        val values = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, "${fileName(track)}.png")
-            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-            put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Gamut")
+private suspend fun writeToCache(
+    context: Context,
+    bmp: Bitmap,
+    track: ShareItem,
+): Uri? =
+    withContext(Dispatchers.IO) {
+        try {
+            val dir = File(context.cacheDir, "share").apply { mkdirs() }
+            dir.listFiles()?.forEach { it.delete() }
+            val file = File(dir, "${fileName(track)}-${System.currentTimeMillis()}.png")
+            file.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            FileProvider.getUriForFile(context, "${context.packageName}.share", file)
+        } catch (_: Exception) {
+            null
         }
-        val resolver = context.contentResolver
-        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return@withContext false
-        resolver.openOutputStream(uri)?.use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) } != null
-    } catch (_: Exception) {
-        false
     }
-}
 
-private fun resolveShareApps(context: Context, withImage: Boolean): List<ShareApp> {
+private suspend fun saveToGallery(
+    context: Context,
+    bmp: Bitmap,
+    track: ShareItem,
+): Boolean =
+    withContext(Dispatchers.IO) {
+        try {
+            val values =
+                ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, "${fileName(track)}.png")
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Gamut")
+                }
+            val resolver = context.contentResolver
+            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return@withContext false
+            resolver.openOutputStream(uri)?.use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) } != null
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+private fun resolveShareApps(
+    context: Context,
+    withImage: Boolean,
+): List<ShareApp> {
     val pm = context.packageManager
     val probe = Intent(Intent.ACTION_SEND).setType(if (withImage) "image/png" else "text/plain")
-    val infos = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        pm.queryIntentActivities(probe, PackageManager.ResolveInfoFlags.of(0))
-    } else {
-        @Suppress("DEPRECATION")
-        pm.queryIntentActivities(probe, 0)
-    }
+    val infos =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pm.queryIntentActivities(probe, PackageManager.ResolveInfoFlags.of(0))
+        } else {
+            @Suppress("DEPRECATION")
+            pm.queryIntentActivities(probe, 0)
+        }
     return infos
         .filter { it.activityInfo.exported && it.activityInfo.packageName != context.packageName }
         .distinctBy { it.activityInfo.packageName }
@@ -527,7 +594,11 @@ private fun resolveShareApps(context: Context, withImage: Boolean): List<ShareAp
                 ShareApp(
                     label = pm.getApplicationLabel(ai.applicationInfo).toString(),
                     component = ComponentName(ai.packageName, ai.name),
-                    icon = ai.applicationInfo.loadIcon(pm).toBitmap(112, 112).asImageBitmap(),
+                    icon =
+                        ai.applicationInfo
+                            .loadIcon(pm)
+                            .toBitmap(112, 112)
+                            .asImageBitmap(),
                 )
             } catch (_: Exception) {
                 null
@@ -535,22 +606,27 @@ private fun resolveShareApps(context: Context, withImage: Boolean): List<ShareAp
         }
 }
 
-private fun Context.isInstalled(pkg: String): Boolean = try {
-    packageManager.getApplicationInfo(pkg, 0)
-    true
-} catch (_: Exception) {
-    false
-}
+private fun Context.isInstalled(pkg: String): Boolean =
+    try {
+        packageManager.getApplicationInfo(pkg, 0)
+        true
+    } catch (_: Exception) {
+        false
+    }
 
-private fun Context.appIcon(pkg: String): ImageBitmap? = try {
-    packageManager.getApplicationIcon(pkg).toBitmap(112, 112).asImageBitmap()
-} catch (_: Exception) {
-    null
-}
+private fun Context.appIcon(pkg: String): ImageBitmap? =
+    try {
+        packageManager.getApplicationIcon(pkg).toBitmap(112, 112).asImageBitmap()
+    } catch (_: Exception) {
+        null
+    }
 
 private fun Context.toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 
-private fun Context.copyText(label: String, text: String) {
+private fun Context.copyText(
+    label: String,
+    text: String,
+) {
     getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText(label, text))
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) toast("Link copied")
 }

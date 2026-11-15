@@ -8,9 +8,15 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-val props = Properties().apply {
-    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
-}
+val props =
+    Properties().apply {
+        rootProject
+            .file("local.properties")
+            .takeIf { it.exists() }
+            ?.inputStream()
+            ?.use { load(it) }
+    }
+
 fun cfg(key: String): String = props.getProperty(key) ?: System.getenv(key) ?: ""
 
 android {

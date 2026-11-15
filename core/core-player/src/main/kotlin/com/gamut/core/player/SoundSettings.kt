@@ -7,9 +7,18 @@ import kotlinx.coroutines.flow.asStateFlow
 
 enum class BandType { LOW_SHELF, PEAK, HIGH_SHELF }
 
-data class EqBand(val type: BandType, val freqHz: Float, val gainDb: Float, val q: Float)
+data class EqBand(
+    val type: BandType,
+    val freqHz: Float,
+    val gainDb: Float,
+    val q: Float,
+)
 
-enum class Crossfeed(val label: String, val hint: String, val amount: Float) {
+enum class Crossfeed(
+    val label: String,
+    val hint: String,
+    val amount: Float,
+) {
     OFF("Off", "The recording as it is", 0f),
     LIGHT("Light", "A gentle touch, keeps a wide stage", 0.12f),
     MEDIUM("Medium", "Closest to listening on speakers", 0.22f),
@@ -18,21 +27,25 @@ enum class Crossfeed(val label: String, val hint: String, val amount: Float) {
 
 internal val DefaultBandFreqs = floatArrayOf(60f, 130f, 250f, 500f, 1_000f, 2_000f, 3_500f, 6_000f, 10_000f, 14_000f)
 
-internal fun defaultBands(gains: FloatArray? = null): List<EqBand> = List(DefaultBandFreqs.size) { i ->
-    val edge = i == 0 || i == DefaultBandFreqs.lastIndex
-    EqBand(
-        type = when (i) {
-            0 -> BandType.LOW_SHELF
-            DefaultBandFreqs.lastIndex -> BandType.HIGH_SHELF
-            else -> BandType.PEAK
-        },
-        freqHz = DefaultBandFreqs[i],
-        gainDb = gains?.getOrNull(i) ?: 0f,
-        q = if (edge) 0.71f else 1.2f,
-    )
-}
+internal fun defaultBands(gains: FloatArray? = null): List<EqBand> =
+    List(DefaultBandFreqs.size) { i ->
+        val edge = i == 0 || i == DefaultBandFreqs.lastIndex
+        EqBand(
+            type =
+                when (i) {
+                    0 -> BandType.LOW_SHELF
+                    DefaultBandFreqs.lastIndex -> BandType.HIGH_SHELF
+                    else -> BandType.PEAK
+                },
+            freqHz = DefaultBandFreqs[i],
+            gainDb = gains?.getOrNull(i) ?: 0f,
+            q = if (edge) 0.71f else 1.2f,
+        )
+    }
 
-class SoundSettings private constructor(context: Context) {
+class SoundSettings private constructor(
+    context: Context,
+) {
     data class State(
         val eqEnabled: Boolean = false,
         val preset: String = FLAT,
@@ -58,11 +71,24 @@ class SoundSettings private constructor(context: Context) {
 
     fun setEqEnabled(on: Boolean) = edit { it.copy(eqEnabled = on) }
 
-    fun setBandGain(index: Int, gainDb: Float) = edit { s -> s.withBand(index) { it.copy(gainDb = gainDb.coerceIn(-MAX_GAIN_DB, MAX_GAIN_DB)) } }
+    fun setBandGain(
+        index: Int,
+        gainDb: Float,
+    ) = edit { s ->
+        s.withBand(index) {
+            it.copy(gainDb = gainDb.coerceIn(-MAX_GAIN_DB, MAX_GAIN_DB))
+        }
+    }
 
-    fun setBandFreq(index: Int, hz: Float) = edit { s -> s.withBand(index) { it.copy(freqHz = hz.coerceIn(20f, 20_000f)) } }
+    fun setBandFreq(
+        index: Int,
+        hz: Float,
+    ) = edit { s -> s.withBand(index) { it.copy(freqHz = hz.coerceIn(20f, 20_000f)) } }
 
-    fun setBandQ(index: Int, q: Float) = edit { s -> s.withBand(index) { it.copy(q = q.coerceIn(0.2f, 10f)) } }
+    fun setBandQ(
+        index: Int,
+        q: Float,
+    ) = edit { s -> s.withBand(index) { it.copy(q = q.coerceIn(0.2f, 10f)) } }
 
     fun applyPreset(name: String) {
         val gains = PRESETS[name] ?: return
@@ -70,22 +96,30 @@ class SoundSettings private constructor(context: Context) {
     }
 
     fun setAutoHeadroom(on: Boolean) = edit { it.copy(autoHeadroom = on) }
+
     fun setLimiter(on: Boolean) = edit { it.copy(limiter = on) }
+
     fun setDither(on: Boolean) = edit { it.copy(dither = on) }
+
     fun setCrossfeed(level: Crossfeed) = edit { it.copy(crossfeed = level) }
+
     fun setWidth(percent: Int) = edit { it.copy(widthPercent = percent.coerceIn(0, 200)) }
 
     fun resetEqualizer() = edit { it.copy(preset = FLAT, bands = defaultBands(), widthPercent = 100) }
 
     fun reset() = edit { State() }
 
-    private fun State.withBand(index: Int, change: (EqBand) -> EqBand): State {
+    private fun State.withBand(
+        index: Int,
+        change: (EqBand) -> EqBand,
+    ): State {
         if (index !in bands.indices) return this
         return copy(bands = bands.toMutableList().also { it[index] = change(it[index]) }, preset = CUSTOM)
     }
 
     private fun save(s: State) {
-        prefs.edit()
+        prefs
+            .edit()
             .putBoolean(K_EQ, s.eqEnabled)
             .putString(K_PRESET, s.preset)
             .putString(K_BANDS, s.bands.joinToString(";") { "${it.type.name},${it.freqHz},${it.gainDb},${it.q}" })
@@ -98,8 +132,12 @@ class SoundSettings private constructor(context: Context) {
     }
 
     private fun load(): State {
-        val bands = prefs.getString(K_BANDS, null)?.split(';')?.mapNotNull(::parseBand)
-            ?.takeIf { it.size == DefaultBandFreqs.size } ?: defaultBands()
+        val bands =
+            prefs
+                .getString(K_BANDS, null)
+                ?.split(';')
+                ?.mapNotNull(::parseBand)
+                ?.takeIf { it.size == DefaultBandFreqs.size } ?: defaultBands()
         return State(
             eqEnabled = prefs.getBoolean(K_EQ, false),
             preset = prefs.getString(K_PRESET, FLAT) ?: FLAT,
@@ -133,36 +171,39 @@ class SoundSettings private constructor(context: Context) {
         private const val K_XFEED = "crossfeed"
         private const val K_WIDTH = "width"
 
-        private val PRESETS: Map<String, FloatArray> = linkedMapOf(
-            FLAT to floatArrayOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f),
-            "Bass Booster" to floatArrayOf(6f, 5f, 3f, 1f, 0f, 0f, 0f, 0f, 0f, 0f),
-            "Bass Reducer" to floatArrayOf(-6f, -5f, -3f, -1f, 0f, 0f, 0f, 0f, 0f, 0f),
-            "Treble Booster" to floatArrayOf(0f, 0f, 0f, 0f, 0f, 1f, 2.5f, 4f, 5f, 5.5f),
-            "Vocal Booster" to floatArrayOf(-3f, -2f, -1f, 0f, 1.5f, 3f, 3.5f, 2f, 0f, -1f),
-            "Rock" to floatArrayOf(5f, 4f, 2.5f, -0.5f, -1.5f, 0.5f, 2.5f, 3.5f, 4.5f, 4.5f),
-            "Pop" to floatArrayOf(-1.5f, -0.5f, 1.5f, 3f, 3.5f, 2.5f, 0.5f, -0.5f, -1f, -1.5f),
-            "Hip-Hop" to floatArrayOf(5.5f, 5f, 3.5f, 1.5f, -0.5f, -0.5f, 1f, 0.5f, 1.5f, 2.5f),
-            "Electronic" to floatArrayOf(5f, 4f, 1.5f, 0f, -1.5f, 1f, 0f, 1.5f, 4f, 4.5f),
-            "Jazz" to floatArrayOf(3f, 2.5f, 1.5f, 2f, -1.5f, -1.5f, 0f, 1.5f, 2.5f, 3.5f),
-            "Classical" to floatArrayOf(4f, 3f, 2f, 1.5f, -0.5f, -0.5f, 0f, 2f, 3f, 4f),
-            "Loudness" to floatArrayOf(6f, 5f, 2.5f, 0f, -1f, -0.5f, 0.5f, 2f, 4.5f, 5f),
-        )
+        private val PRESETS: Map<String, FloatArray> =
+            linkedMapOf(
+                FLAT to floatArrayOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f),
+                "Bass Booster" to floatArrayOf(6f, 5f, 3f, 1f, 0f, 0f, 0f, 0f, 0f, 0f),
+                "Bass Reducer" to floatArrayOf(-6f, -5f, -3f, -1f, 0f, 0f, 0f, 0f, 0f, 0f),
+                "Treble Booster" to floatArrayOf(0f, 0f, 0f, 0f, 0f, 1f, 2.5f, 4f, 5f, 5.5f),
+                "Vocal Booster" to floatArrayOf(-3f, -2f, -1f, 0f, 1.5f, 3f, 3.5f, 2f, 0f, -1f),
+                "Rock" to floatArrayOf(5f, 4f, 2.5f, -0.5f, -1.5f, 0.5f, 2.5f, 3.5f, 4.5f, 4.5f),
+                "Pop" to floatArrayOf(-1.5f, -0.5f, 1.5f, 3f, 3.5f, 2.5f, 0.5f, -0.5f, -1f, -1.5f),
+                "Hip-Hop" to floatArrayOf(5.5f, 5f, 3.5f, 1.5f, -0.5f, -0.5f, 1f, 0.5f, 1.5f, 2.5f),
+                "Electronic" to floatArrayOf(5f, 4f, 1.5f, 0f, -1.5f, 1f, 0f, 1.5f, 4f, 4.5f),
+                "Jazz" to floatArrayOf(3f, 2.5f, 1.5f, 2f, -1.5f, -1.5f, 0f, 1.5f, 2.5f, 3.5f),
+                "Classical" to floatArrayOf(4f, 3f, 2f, 1.5f, -0.5f, -0.5f, 0f, 2f, 3f, 4f),
+                "Loudness" to floatArrayOf(6f, 5f, 2.5f, 0f, -1f, -0.5f, 0.5f, 2f, 4.5f, 5f),
+            )
 
         val presetNames: List<String> = PRESETS.keys.toList()
 
         @Volatile private var instance: SoundSettings? = null
 
-        fun get(context: Context): SoundSettings = instance ?: synchronized(this) {
-            instance ?: SoundSettings(context.applicationContext).also { instance = it }
-        }
+        fun get(context: Context): SoundSettings =
+            instance ?: synchronized(this) {
+                instance ?: SoundSettings(context.applicationContext).also { instance = it }
+            }
     }
 }
 
-fun SoundSettings.State.toParams() = SoundParams(
-    bands = if (eqEnabled) bands else emptyList(),
-    autoHeadroom = autoHeadroom,
-    limiter = limiter,
-    dither = dither,
-    crossfeed = crossfeed.amount,
-    width = widthPercent / 100f,
-)
+fun SoundSettings.State.toParams() =
+    SoundParams(
+        bands = if (eqEnabled) bands else emptyList(),
+        autoHeadroom = autoHeadroom,
+        limiter = limiter,
+        dither = dither,
+        crossfeed = crossfeed.amount,
+        width = widthPercent / 100f,
+    )

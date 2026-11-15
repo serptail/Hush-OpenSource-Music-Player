@@ -63,7 +63,11 @@ fun MiniPlayerStrip(
     val isWide = LocalConfiguration.current.screenWidthDp >= 600
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val bottomInset = if (isWide) navInset.coerceAtMost(16.dp) else navInset
-    val acrylicFillStrip = Modifier.acrylicFill(AcrylicMaterials.Thick, if (LocalCoverPalette.current.isLight) AcrylicTone.Light else AcrylicTone.Dark)
+    val acrylicFillStrip =
+        Modifier.acrylicFill(
+            AcrylicMaterials.Thick,
+            if (LocalCoverPalette.current.isLight) AcrylicTone.Light else AcrylicTone.Dark,
+        )
     Column(
         modifier
             .fillMaxWidth()
@@ -92,7 +96,13 @@ fun MiniPlayerStrip(
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(title, color = ink(if (isLoading) 0.6f else 1f), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    title,
+                    color = ink(if (isLoading) 0.6f else 1f),
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Text(
                     artist,
                     color = ink(0.6f),
@@ -102,7 +112,12 @@ fun MiniPlayerStrip(
                 )
             }
             Box(Modifier.size(40.dp).pressScale(onClick = onDevicesClick, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
-                Icon(PhosphorIcons.Regular.Devices, "Connect to a device", tint = if (devicesActive) accent else ink(0.9f), modifier = Modifier.size(22.dp))
+                Icon(
+                    PhosphorIcons.Regular.Devices,
+                    "Connect to a device",
+                    tint = if (devicesActive) accent else ink(0.9f),
+                    modifier = Modifier.size(22.dp),
+                )
             }
             Box(Modifier.size(40.dp).pressScale(onClick = onPrevious, scaleDown = 0.88f), contentAlignment = Alignment.Center) {
                 Icon(PhosphorIcons.Regular.SkipBack, "Previous", tint = ink(0.9f), modifier = Modifier.size(22.dp))

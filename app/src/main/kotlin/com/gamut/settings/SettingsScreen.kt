@@ -85,11 +85,12 @@ fun SettingsScreen(
         if (!checking) {
             checking = true
             scope.launch {
-                val status = try {
-                    onCheckForUpdate()
-                } finally {
-                    checking = false
-                }
+                val status =
+                    try {
+                        onCheckForUpdate()
+                    } finally {
+                        checking = false
+                    }
                 when (status) {
                     UpdateCheckStatus.UpToDate -> notifier.info("You\u2019re on the latest version")
                     UpdateCheckStatus.Failed -> notifier.info("Couldn\u2019t check for updates. Try again later.")
@@ -114,7 +115,13 @@ fun SettingsScreen(
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Text(name, style = MaterialTheme.typography.titleLarge, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(email ?: "View profile", style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    email ?: "View profile",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink(0.55f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             Icon(PhosphorIcons.Bold.CaretRight, null, tint = ink(0.45f), modifier = Modifier.size(18.dp))
         }
@@ -126,7 +133,12 @@ fun SettingsScreen(
 
         GroupLabel("Preferences")
         Cell("Appearance", icon = PhosphorIcons.Bold.Palette, subtitle = "Theme, colors and glass", onClick = onAppearance)
-        Cell("Playback & Audio", icon = PhosphorIcons.Bold.Headphones, subtitle = "Quality, equalizer, fades and more", onClick = onPlaybackAudio)
+        Cell(
+            "Playback & Audio",
+            icon = PhosphorIcons.Bold.Headphones,
+            subtitle = "Quality, equalizer, fades and more",
+            onClick = onPlaybackAudio,
+        )
         Cell("Storage & Downloads", icon = PhosphorIcons.Bold.HardDrives, subtitle = "Cache and offline songs", onClick = onStorage)
 
         GroupLabel("Support")
@@ -138,16 +150,20 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun UpdateCheckButton(checking: Boolean, onClick: () -> Unit) {
+private fun UpdateCheckButton(
+    checking: Boolean,
+    onClick: () -> Unit,
+) {
     Text(
         if (checking) "Checking\u2026" else "Check for updates",
         style = MaterialTheme.typography.labelLarge,
         color = ink(if (checking) 0.55f else 0.85f),
         maxLines = 1,
-        modifier = Modifier
-            .pressScale(onClick = onClick, scaleDown = 0.95f)
-            .clip(CircleShape)
-            .background(ink(0.07f))
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+        modifier =
+            Modifier
+                .pressScale(onClick = onClick, scaleDown = 0.95f)
+                .clip(CircleShape)
+                .background(ink(0.07f))
+                .padding(horizontal = 14.dp, vertical = 8.dp),
     )
 }

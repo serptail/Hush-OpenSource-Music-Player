@@ -93,57 +93,59 @@ import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
-import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @HiltViewModel
-class ArtistViewModel @Inject constructor(
-    savedStateHandle: SavedStateHandle,
-    private val repository: DiscoverRepository,
-) : ViewModel() {
-    private val artistId = savedStateHandle.get<String>("artistId")?.toLongOrNull()
-    private val _state = MutableStateFlow<ArtistDetails?>(null)
-    val state: StateFlow<ArtistDetails?> = _state.asStateFlow()
-    private val _followKey = MutableStateFlow<String?>(null)
-    val followKey: StateFlow<String?> = _followKey.asStateFlow()
-    private val _failed = MutableStateFlow(false)
-    val failed: StateFlow<Boolean> = _failed.asStateFlow()
+class ArtistViewModel
+    @Inject
+    constructor(
+        savedStateHandle: SavedStateHandle,
+        private val repository: DiscoverRepository,
+    ) : ViewModel() {
+        private val artistId = savedStateHandle.get<String>("artistId")?.toLongOrNull()
+        private val _state = MutableStateFlow<ArtistDetails?>(null)
+        val state: StateFlow<ArtistDetails?> = _state.asStateFlow()
+        private val _followKey = MutableStateFlow<String?>(null)
+        val followKey: StateFlow<String?> = _followKey.asStateFlow()
+        private val _failed = MutableStateFlow(false)
+        val failed: StateFlow<Boolean> = _failed.asStateFlow()
 
-    init {
-        viewModelScope.launch {
-            val id = artistId ?: repository.findArtistId(savedStateHandle.get<String>("artistName").orEmpty())
-            _followKey.value = id?.let { "deezer:$it" }
-            val base = id?.let { repository.artistOverview(it) }
-            _state.value = base
-            _failed.value = base == null
-            if (base == null) return@launch
-            launch {
-                val similar = repository.similarArtists(base)
-                _state.update { it?.copy(similar = similar) }
+        init {
+            viewModelScope.launch {
+                val id = artistId ?: repository.findArtistId(savedStateHandle.get<String>("artistName").orEmpty())
+                _followKey.value = id?.let { "deezer:$it" }
+                val base = id?.let { repository.artistOverview(it) }
+                _state.value = base
+                _failed.value = base == null
+                if (base == null) return@launch
+                launch {
+                    val similar = repository.similarArtists(base)
+                    _state.update { it?.copy(similar = similar) }
+                }
+                launch { loadPortrait(base) }
+                if (base.songsLoaded) return@launch
+                val full = repository.artistSongs(base)
+                _state.update { it?.copy(songs = full.songs, latestSongs = full.latestSongs, songsLoaded = true) }
             }
-            launch { loadPortrait(base) }
-            if (base.songsLoaded) return@launch
-            val full = repository.artistSongs(base)
-            _state.update { it?.copy(songs = full.songs, latestSongs = full.latestSongs, songsLoaded = true) }
+        }
+
+        private suspend fun loadPortrait(base: ArtistDetails) {
+            repeat(4) { attempt ->
+                val photo = repository.artistPhoto(base)
+                if (photo != null) {
+                    _state.update { it?.copy(imageUrl = photo) }
+                    return
+                }
+                if (attempt < 3) delay(1_500L * (attempt + 1))
+            }
         }
     }
-
-    private suspend fun loadPortrait(base: ArtistDetails) {
-        repeat(4) { attempt ->
-            val photo = repository.artistPhoto(base)
-            if (photo != null) {
-                _state.update { it?.copy(imageUrl = photo) }
-                return
-            }
-            if (attempt < 3) delay(1_500L * (attempt + 1))
-        }
-    }
-}
 
 @Composable
 fun ArtistScreen(
@@ -175,20 +177,36 @@ fun ArtistScreen(
                     if (wide) {
                         Row(Modifier.fillMaxSize().padding(top = 78.dp, start = 56.dp, end = 24.dp, bottom = 24.dp)) {
                             Box(Modifier.weight(0.38f).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                                Box(Modifier.widthIn(max = 300.dp).fillMaxWidth(0.92f).aspectRatio(1f).clip(CircleShape).shimmer())
+                                Box(
+                                    Modifier
+                                        .widthIn(max = 300.dp)
+                                        .fillMaxWidth(0.92f)
+                                        .aspectRatio(1f)
+                                        .clip(CircleShape)
+                                        .shimmer(),
+                                )
                             }
                             Column(Modifier.weight(0.62f).padding(start = 12.dp)) { repeat(4) { TrackRowSkeleton() } }
                         }
                     } else {
                         Column(Modifier.fillMaxSize().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Spacer(Modifier.height(78.dp))
-                            Box(Modifier.fillMaxWidth(0.7f).aspectRatio(1f).clip(CircleShape).shimmer())
+                            Box(
+                                Modifier
+                                    .fillMaxWidth(0.7f)
+                                    .aspectRatio(1f)
+                                    .clip(CircleShape)
+                                    .shimmer(),
+                            )
                             Spacer(Modifier.height(28.dp))
                             repeat(4) { TrackRowSkeleton() }
                         }
                     }
                 }
-                Box(Modifier.padding(start = 10.dp, top = 14.dp).size(44.dp).pressScale(onClick = onBack), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier.padding(start = 10.dp, top = 14.dp).size(44.dp).pressScale(onClick = onBack),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Icon(PhosphorIcons.Bold.ArrowLeft, "Back", tint = ink(), modifier = Modifier.size(22.dp))
                 }
                 if (failed) {
@@ -213,7 +231,8 @@ fun ArtistScreen(
         var artistPickTrack by remember { mutableStateOf<Track?>(null) }
         var pickerTrack by remember { mutableStateOf<Track?>(null) }
         val accent = MaterialTheme.colorScheme.primary
-        var selectedTab by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
+        var selectedTab by androidx.compose.runtime.saveable
+            .rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Row(
                 Modifier.fillMaxWidth().padding(start = 10.dp, end = 24.dp, top = 14.dp),
@@ -241,25 +260,39 @@ fun ArtistScreen(
                 )
                 Crossfade(selectedTab, label = "artist-tab", modifier = Modifier.weight(1f)) { tab ->
                     when (tab) {
-                        0 -> ArtistOverview(
-                            artist = value,
-                            wide = wide,
-                            onTrack = { picked -> onTrackSelected(picked, value.popular) },
-                            nowPlayingIsrc = nowPlayingIsrc,
-                            accent = accent,
-                            onMore = { actionsTrack = it },
-                            onAlbum = onAlbumSelected,
-                            onArtist = onSimilarArtist,
-                            onViewAll = { selectedTab = 1 },
-                            following = following,
-                            onFollowClick = onFollowClick,
-                        )
+                        0 -> {
+                            ArtistOverview(
+                                artist = value,
+                                wide = wide,
+                                onTrack = { picked -> onTrackSelected(picked, value.popular) },
+                                nowPlayingIsrc = nowPlayingIsrc,
+                                accent = accent,
+                                onMore = { actionsTrack = it },
+                                onAlbum = onAlbumSelected,
+                                onArtist = onSimilarArtist,
+                                onViewAll = { selectedTab = 1 },
+                                following = following,
+                                onFollowClick = onFollowClick,
+                            )
+                        }
 
-                        1 -> TrackList(value.songs, loading = !value.songsLoaded, wide = wide, nowPlayingIsrc = nowPlayingIsrc, accent = accent, onMore = { actionsTrack = it }) { picked -> onTrackSelected(picked, value.songs) }
+                        1 -> {
+                            TrackList(value.songs, loading = !value.songsLoaded, wide = wide, nowPlayingIsrc = nowPlayingIsrc, accent = accent, onMore = {
+                                actionsTrack =
+                                    it
+                            }) { picked -> onTrackSelected(picked, value.songs) }
+                        }
 
-                        2 -> AlbumGrid(value.albums, onAlbumSelected, wide)
+                        2 -> {
+                            AlbumGrid(value.albums, onAlbumSelected, wide)
+                        }
 
-                        else -> TrackList(value.latestSongs, loading = !value.songsLoaded, wide = wide, nowPlayingIsrc = nowPlayingIsrc, accent = accent, onMore = { actionsTrack = it }) { picked -> onTrackSelected(picked, value.latestSongs) }
+                        else -> {
+                            TrackList(value.latestSongs, loading = !value.songsLoaded, wide = wide, nowPlayingIsrc = nowPlayingIsrc, accent = accent, onMore = {
+                                actionsTrack =
+                                    it
+                            }) { picked -> onTrackSelected(picked, value.latestSongs) }
+                        }
                     }
                 }
             }
@@ -329,7 +362,13 @@ private fun ArtistOverview(
             SubcomposeAsyncImage(
                 model = artist.imageUrl,
                 contentDescription = artist.name,
-                modifier = Modifier.then(if (wide) Modifier.widthIn(max = 300.dp) else Modifier).fillMaxWidth(0.92f).aspectRatio(1f).clip(CircleShape),
+                modifier =
+                    Modifier
+                        .then(
+                            if (wide) Modifier.widthIn(max = 300.dp) else Modifier,
+                        ).fillMaxWidth(0.92f)
+                        .aspectRatio(1f)
+                        .clip(CircleShape),
                 contentScale = ContentScale.Crop,
                 loading = { ArtistPlaceholder() },
                 error = { ArtistPlaceholder() },
@@ -342,7 +381,12 @@ private fun ArtistOverview(
             BoxWithConstraints(Modifier.weight(0.38f).fillMaxHeight()) {
                 val paneHeight = maxHeight
                 Column(
-                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = paneHeight).padding(start = 12.dp, end = 12.dp, bottom = 24.dp),
+                    Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(
+                            rememberScrollState(),
+                        ).heightIn(min = paneHeight)
+                        .padding(start = 12.dp, end = 12.dp, bottom = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) { portrait() }
@@ -376,7 +420,10 @@ private fun LazyListScope.overviewBody(
     endPad: Dp = 0.dp,
 ) {
     item {
-        Row(Modifier.fillMaxWidth().padding(top = if (wide) 12.dp else 24.dp, bottom = 6.dp, end = endPad), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth().padding(top = if (wide) 12.dp else 24.dp, bottom = 6.dp, end = endPad),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text("Popular songs", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.weight(1f))
             Text("View all", color = ink(0.6f), modifier = Modifier.pressScale(onClick = onViewAll).padding(vertical = 6.dp))
         }
@@ -389,7 +436,14 @@ private fun LazyListScope.overviewBody(
                     artist.popular.take(4).chunked(columns).forEach { rowTracks ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                             rowTracks.forEach { t ->
-                                TrackLine(t, isPlaying = t.isrc == nowPlayingIsrc, accent = accent, onClick = onTrack, onMore = onMore, modifier = Modifier.weight(1f))
+                                TrackLine(
+                                    t,
+                                    isPlaying = t.isrc == nowPlayingIsrc,
+                                    accent = accent,
+                                    onClick = onTrack,
+                                    onMore = onMore,
+                                    modifier = Modifier.weight(1f),
+                                )
                             }
                             repeat(columns - rowTracks.size) { Spacer(Modifier.weight(1f)) }
                         }
@@ -398,7 +452,12 @@ private fun LazyListScope.overviewBody(
             }
         }
     } else {
-        itemsIndexed(artist.popular.take(4), key = { i, t -> "${t.isrc}-$i" }) { _, t -> TrackLine(t, isPlaying = t.isrc == nowPlayingIsrc, accent = accent, onClick = onTrack, onMore = onMore) }
+        itemsIndexed(artist.popular.take(4), key = {
+            i,
+            t,
+            ->
+            "${t.isrc}-$i"
+        }) { _, t -> TrackLine(t, isPlaying = t.isrc == nowPlayingIsrc, accent = accent, onClick = onTrack, onMore = onMore) }
     }
     item {
         Text("Albums", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(top = 24.dp, bottom = 12.dp))
@@ -411,7 +470,12 @@ private fun LazyListScope.overviewBody(
     }
     if (artist.similar.isNotEmpty()) {
         item(key = "similar") {
-            Text("Similar artists", style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(top = 24.dp, bottom = 12.dp))
+            Text(
+                "Similar artists",
+                style = MaterialTheme.typography.titleLarge,
+                color = ink(),
+                modifier = Modifier.padding(top = 24.dp, bottom = 12.dp),
+            )
             LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(end = endPad)) {
                 items(artist.similar, key = { it.id }) { SimilarArtistCard(it, onArtist) }
             }
@@ -440,7 +504,12 @@ private fun TrackList(
             contentPadding = PaddingValues(start = 12.dp, end = 24.dp, bottom = 24.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            itemsIndexed(tracks, key = { i, t -> "${t.isrc}-$i" }) { _, t -> TrackLine(t, isPlaying = t.isrc == nowPlayingIsrc, accent = accent, onClick = onTrack, onMore = onMore) }
+            itemsIndexed(tracks, key = {
+                i,
+                t,
+                ->
+                "${t.isrc}-$i"
+            }) { _, t -> TrackLine(t, isPlaying = t.isrc == nowPlayingIsrc, accent = accent, onClick = onTrack, onMore = onMore) }
             if (loading) {
                 item(key = "loading", span = { GridItemSpan(maxLineSpan) }) {
                     Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
@@ -452,7 +521,12 @@ private fun TrackList(
         return
     }
     LazyColumn(Modifier.fillMaxSize().fadeEdges(), contentPadding = PaddingValues(start = 12.dp, end = 24.dp, bottom = 24.dp)) {
-        itemsIndexed(tracks, key = { i, t -> "${t.isrc}-$i" }) { _, t -> TrackLine(t, isPlaying = t.isrc == nowPlayingIsrc, accent = accent, onClick = onTrack, onMore = onMore) }
+        itemsIndexed(tracks, key = {
+            i,
+            t,
+            ->
+            "${t.isrc}-$i"
+        }) { _, t -> TrackLine(t, isPlaying = t.isrc == nowPlayingIsrc, accent = accent, onClick = onTrack, onMore = onMore) }
         if (loading) {
             item(key = "loading") {
                 Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
@@ -464,7 +538,11 @@ private fun TrackList(
 }
 
 @Composable
-private fun AlbumGrid(albums: List<DiscoverItem>, onAlbum: (DiscoverItem) -> Unit, wide: Boolean = false) {
+private fun AlbumGrid(
+    albums: List<DiscoverItem>,
+    onAlbum: (DiscoverItem) -> Unit,
+    wide: Boolean = false,
+) {
     LazyVerticalGrid(
         columns = if (wide) GridCells.Adaptive(170.dp) else GridCells.Fixed(2),
         modifier = Modifier.fillMaxSize().fadeEdges(),
@@ -477,21 +555,44 @@ private fun AlbumGrid(albums: List<DiscoverItem>, onAlbum: (DiscoverItem) -> Uni
 }
 
 @Composable
-private fun AlbumCard(album: DiscoverItem, onClick: (DiscoverItem) -> Unit, modifier: Modifier = Modifier) {
+private fun AlbumCard(
+    album: DiscoverItem,
+    onClick: (DiscoverItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Column(modifier.fillMaxWidth().pressScale(onClick = { onClick(album) }, scaleDown = 0.97f)) {
         AsyncImage(
             model = remember(album.imageUrl) { squareArtUrl(album.imageUrl, 480) },
             contentDescription = album.title,
-            modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(10.dp)).background(ink(0.08f)),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(ink(0.08f)),
             contentScale = ContentScale.Crop,
         )
-        Text(album.title, color = ink(), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
+        Text(
+            album.title,
+            color = ink(),
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 8.dp),
+        )
         Text(album.subtitle, color = ink(0.6f), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
 @Composable
-private fun TrackLine(track: Track, isPlaying: Boolean, accent: Color, onClick: (Track) -> Unit, onMore: (Track) -> Unit, modifier: Modifier = Modifier) {
+private fun TrackLine(
+    track: Track,
+    isPlaying: Boolean,
+    accent: Color,
+    onClick: (Track) -> Unit,
+    onMore: (Track) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Row(
         modifier.fillMaxWidth().pressScale(onClick = { onClick(track) }, scaleDown = 0.98f).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -508,13 +609,22 @@ private fun TrackLine(track: Track, isPlaying: Boolean, accent: Color, onClick: 
                 Text(
                     track.title,
                     color = if (isPlaying) accent else ink(),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium),
+                    style =
+                        MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium,
+                        ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
             }
-            Text(track.album ?: track.artist, color = ink(0.6f), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                track.album ?: track.artist,
+                color = ink(0.6f),
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         TrackMoreButton { onMore(track) }
     }
@@ -533,7 +643,10 @@ private fun TrackMoreButton(onClick: () -> Unit) {
 }
 
 @Composable
-private fun SimilarArtistCard(artist: DiscoverItem, onClick: (String) -> Unit) {
+private fun SimilarArtistCard(
+    artist: DiscoverItem,
+    onClick: (String) -> Unit,
+) {
     Column(
         Modifier.width(96.dp).pressScale(onClick = { onClick(artist.title) }, scaleDown = 0.96f),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -584,7 +697,11 @@ private fun ArtistPlaceholder() {
 }
 
 @Composable
-private fun FollowButton(following: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun FollowButton(
+    following: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val fg = ink()
     val onFg = if (fg.luminance() > 0.5f) Color.Black else Color.White
     val shape = RoundedCornerShape(50)

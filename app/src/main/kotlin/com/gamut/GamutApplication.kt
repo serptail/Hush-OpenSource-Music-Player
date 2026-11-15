@@ -2,26 +2,26 @@ package com.gamut
 
 import android.app.Activity
 import android.app.Application
-import android.net.Uri
 import android.os.Bundle
 import androidx.work.Configuration
 import com.gamut.account.ProfileStore
 import com.gamut.core.database.DownloadIndex
 import com.gamut.core.player.MusicPlayer
 import com.gamut.core.sync.SyncManager
+import com.gamut.feature.playerui.LyricsRepository
 import com.gamut.feature.resolver.AndroidYtDlpEngine
 import com.gamut.feature.resolver.AudioSourceRepository
+import com.gamut.feature.resolver.DownloadStorage
 import com.gamut.feature.resolver.ResolveTrackSourceUseCase
 import com.gamut.feature.resolver.YtDlpUpdateWorker
 import com.gamut.feature.search.ShazamSession
 import com.gamut.onboarding.AutoBackup
 import dagger.hilt.android.HiltAndroidApp
-import java.io.File
-import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @HiltAndroidApp
 class GamutApplication :
@@ -39,6 +39,8 @@ class GamutApplication :
 
     @Inject lateinit var downloadIndex: DownloadIndex
 
+    @Inject lateinit var downloadStorage: DownloadStorage
+
     @Inject lateinit var syncManager: SyncManager
 
     @Inject lateinit var profileStore: ProfileStore
@@ -47,10 +49,11 @@ class GamutApplication :
 
     override fun onCreate() {
         super.onCreate()
+        LyricsRepository.init(this)
         player.setSourceResolver { track, forceRefresh, onProgress ->
             if (!forceRefresh) {
-                downloadIndex.pathFor(track.isrc)?.let(::File)?.takeIf { it.exists() }?.let {
-                    return@setSourceResolver Uri.fromFile(it).toString()
+                downloadStorage.playableUri(downloadIndex.pathFor(track.isrc))?.let {
+                    return@setSourceResolver it.toString()
                 }
             }
             val source = resolveTrackSource(track).getOrNull() ?: return@setSourceResolver null
@@ -62,25 +65,40 @@ class GamutApplication :
             YtDlpUpdateWorker.schedule(applicationContext)
         }
         syncManager.start(CoroutineScope(SupervisorJob() + Dispatchers.Default))
-        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
-            private var started = 0
-            private var lastSyncAt = 0L
-            override fun onActivityStarted(activity: Activity) {
-                if (started++ == 0) shazamSession.appVisible = true
-                if (started == 1 && System.currentTimeMillis() - lastSyncAt > 30_000) {
-                    lastSyncAt = System.currentTimeMillis()
-                    syncManager.syncNow()
+        registerActivityLifecycleCallbacks(
+            object : ActivityLifecycleCallbacks {
+                private var started = 0
+                private var lastSyncAt = 0L
+
+                override fun onActivityStarted(activity: Activity) {
+                    if (started++ == 0) shazamSession.appVisible = true
+                    if (started == 1 && System.currentTimeMillis() - lastSyncAt > 30_000) {
+                        lastSyncAt = System.currentTimeMillis()
+                        syncManager.syncNow()
+                    }
                 }
-            }
-            override fun onActivityStopped(activity: Activity) {
-                if (--started == 0) shazamSession.appVisible = false
-            }
-            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
-            override fun onActivityResumed(activity: Activity) {}
-            override fun onActivityPaused(activity: Activity) {}
-            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
-            override fun onActivityDestroyed(activity: Activity) {}
-        })
+
+                override fun onActivityStopped(activity: Activity) {
+                    if (--started == 0) shazamSession.appVisible = false
+                }
+
+                override fun onActivityCreated(
+                    activity: Activity,
+                    savedInstanceState: Bundle?,
+                ) {}
+
+                override fun onActivityResumed(activity: Activity) {}
+
+                override fun onActivityPaused(activity: Activity) {}
+
+                override fun onActivitySaveInstanceState(
+                    activity: Activity,
+                    outState: Bundle,
+                ) {}
+
+                override fun onActivityDestroyed(activity: Activity) {}
+            },
+        )
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             profileStore.autoBackup.collect { AutoBackup.apply(applicationContext, it) }
         }

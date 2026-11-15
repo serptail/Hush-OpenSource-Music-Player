@@ -19,11 +19,18 @@ object ShazamSignature {
     private const val RING = 256
     private const val DATA_URI_PREFIX = "data:audio/vnd.shazam.sig;base64,"
 
-    class Result(val uri: String, val sampleMs: Int)
+    class Result(
+        val uri: String,
+        val sampleMs: Int,
+    )
 
     fun fromPcm16(pcm: ByteArray): Result {
         val samples = ShortArray(pcm.size / 2)
-        ByteBuffer.wrap(pcm, 0, samples.size * 2).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(samples)
+        ByteBuffer
+            .wrap(pcm, 0, samples.size * 2)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .asShortBuffer()
+            .get(samples)
         return fromSamples(samples)
     }
 
@@ -33,19 +40,25 @@ object ShazamSignature {
         return Result(uri, (samples.size.toFloat() / SAMPLE_RATE_HZ * 1000f).toInt())
     }
 
-    private class Peak(val pass: Int, val magnitude: Int, val bin: Int)
+    private class Peak(
+        val pass: Int,
+        val magnitude: Int,
+        val bin: Int,
+    )
 
-    private fun bandOf(hz: Int): Int = when (hz) {
-        in 250..519 -> 0
-        in 520..1449 -> 1
-        in 1450..3499 -> 2
-        in 3500..5500 -> 3
-        else -> -1
-    }
+    private fun bandOf(hz: Int): Int =
+        when (hz) {
+            in 250..519 -> 0
+            in 520..1449 -> 1
+            in 1450..3499 -> 2
+            in 3500..5500 -> 3
+            else -> -1
+        }
 
-    private val hann = FloatArray(FFT_SIZE) { i ->
-        (0.5 - 0.5 * cos(2.0 * PI * (i + 1) / (FFT_SIZE + 1))).toFloat()
-    }
+    private val hann =
+        FloatArray(FFT_SIZE) { i ->
+            (0.5 - 0.5 * cos(2.0 * PI * (i + 1) / (FFT_SIZE + 1))).toFloat()
+        }
 
     private class Generator {
         private val ringSamples = ShortArray(FFT_SIZE)
@@ -134,7 +147,10 @@ object ShazamSignature {
     private val FREQ_NEIGHBORS = intArrayOf(-10, -7, -4, -3, 1, 2, 5, 8)
     private val TIME_NEIGHBORS = intArrayOf(-53, -45, 165, 172, 179, 186, 193, 200, 214, 221, 228, 235, 242, 249)
 
-    private fun encode(numberSamples: Int, bands: Array<ArrayList<Peak>>): ByteArray {
+    private fun encode(
+        numberSamples: Int,
+        bands: Array<ArrayList<Peak>>,
+    ): ByteArray {
         val body = java.io.ByteArrayOutputStream()
         for (band in 0 until 4) {
             val peaks = bands[band]
@@ -179,17 +195,23 @@ object ShazamSignature {
         return bytes
     }
 
-    private class RealFft(private val n: Int) {
+    private class RealFft(
+        private val n: Int,
+    ) {
         private val cosT = DoubleArray(n / 2) { cos(2.0 * PI * it / n) }
         private val sinT = DoubleArray(n / 2) { -sin(2.0 * PI * it / n) }
-        private val rev = IntArray(n).also { r ->
-            val bits = Integer.numberOfTrailingZeros(n)
-            for (i in 0 until n) r[i] = Integer.reverse(i) ushr (32 - bits)
-        }
+        private val rev =
+            IntArray(n).also { r ->
+                val bits = Integer.numberOfTrailingZeros(n)
+                for (i in 0 until n) r[i] = Integer.reverse(i) ushr (32 - bits)
+            }
         private val re = DoubleArray(n)
         private val im = DoubleArray(n)
 
-        fun powerSpectrum(input: FloatArray, out: FloatArray) {
+        fun powerSpectrum(
+            input: FloatArray,
+            out: FloatArray,
+        ) {
             for (i in 0 until n) {
                 re[rev[i]] = input[i].toDouble()
                 im[rev[i]] = 0.0

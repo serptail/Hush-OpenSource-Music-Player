@@ -11,16 +11,19 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-class EncryptedSessionManager(private val context: Context) : SessionManager {
+class EncryptedSessionManager(
+    private val context: Context,
+) : SessionManager {
     private val json = Json { ignoreUnknownKeys = true }
 
-    private fun open(): SharedPreferences = EncryptedSharedPreferences.create(
-        context,
-        FILE,
-        MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-    )
+    private fun open(): SharedPreferences =
+        EncryptedSharedPreferences.create(
+            context,
+            FILE,
+            MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+        )
 
     private val prefs: SharedPreferences by lazy {
         try {
@@ -31,19 +34,22 @@ class EncryptedSessionManager(private val context: Context) : SessionManager {
         }
     }
 
-    override suspend fun saveSession(session: UserSession) = withContext(Dispatchers.IO) {
-        prefs.edit().putString(KEY, json.encodeToString(session)).commit()
-        Unit
-    }
+    override suspend fun saveSession(session: UserSession) =
+        withContext(Dispatchers.IO) {
+            prefs.edit().putString(KEY, json.encodeToString(session)).commit()
+            Unit
+        }
 
-    override suspend fun loadSession(): UserSession? = withContext(Dispatchers.IO) {
-        runCatching { prefs.getString(KEY, null)?.let { json.decodeFromString<UserSession>(it) } }.getOrNull()
-    }
+    override suspend fun loadSession(): UserSession? =
+        withContext(Dispatchers.IO) {
+            runCatching { prefs.getString(KEY, null)?.let { json.decodeFromString<UserSession>(it) } }.getOrNull()
+        }
 
-    override suspend fun deleteSession() = withContext(Dispatchers.IO) {
-        prefs.edit().remove(KEY).commit()
-        Unit
-    }
+    override suspend fun deleteSession() =
+        withContext(Dispatchers.IO) {
+            prefs.edit().remove(KEY).commit()
+            Unit
+        }
 
     private companion object {
         const val FILE = "gamut_session"

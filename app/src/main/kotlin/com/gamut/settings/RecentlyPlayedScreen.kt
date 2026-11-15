@@ -40,7 +40,12 @@ import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
 
-private enum class RecentTab(val label: String) { RECENT("Recent"), STATS("Statistics") }
+private enum class RecentTab(
+    val label: String,
+) {
+    RECENT("Recent"),
+    STATS("Statistics"),
+}
 
 @Composable
 fun RecentlyPlayedScreen(
@@ -69,15 +74,23 @@ fun RecentlyPlayedScreen(
 }
 
 @Composable
-private fun TabSwitch(selected: RecentTab, onSelect: (RecentTab) -> Unit, modifier: Modifier = Modifier) {
+private fun TabSwitch(
+    selected: RecentTab,
+    onSelect: (RecentTab) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val accent = MaterialTheme.colorScheme.primary
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         RecentTab.values().forEach { t ->
             val on = t == selected
             val bg by animateColorAsState(if (on) accent.copy(alpha = 0.22f) else ink(0.07f), tween(250), label = "recent-tab")
             Box(
-                Modifier.weight(1f).pressScale(onClick = { onSelect(t) }, scaleDown = 0.97f)
-                    .clip(RoundedCornerShape(50)).background(bg).padding(vertical = 11.dp),
+                Modifier
+                    .weight(1f)
+                    .pressScale(onClick = { onSelect(t) }, scaleDown = 0.97f)
+                    .clip(RoundedCornerShape(50))
+                    .background(bg)
+                    .padding(vertical = 11.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(t.label, style = MaterialTheme.typography.titleMedium, color = if (on) ink() else ink(0.6f), maxLines = 1)
@@ -87,7 +100,10 @@ private fun TabSwitch(selected: RecentTab, onSelect: (RecentTab) -> Unit, modifi
 }
 
 @Composable
-private fun RecentList(rows: List<Track>, onPick: (Track, List<Track>) -> Unit) {
+private fun RecentList(
+    rows: List<Track>,
+    onPick: (Track, List<Track>) -> Unit,
+) {
     if (rows.isEmpty()) {
         Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
             Text("Songs you play will show up here.", style = MaterialTheme.typography.bodyLarge, color = ink(0.5f))
@@ -117,7 +133,10 @@ private fun RecentList(rows: List<Track>, onPick: (Track, List<Track>) -> Unit) 
 }
 
 @Composable
-private fun RecentRow(track: Track, onClick: () -> Unit) {
+private fun RecentRow(
+    track: Track,
+    onClick: () -> Unit,
+) {
     Row(Modifier.fillMaxWidth().pressScale(onClick = onClick).padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         ArtImage(
             url = remember(track.albumArtUrl) { squareArtUrl(track.albumArtUrl, 200) },
@@ -125,7 +144,13 @@ private fun RecentRow(track: Track, onClick: () -> Unit) {
         )
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
             Text(track.title, style = MaterialTheme.typography.bodyLarge, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(track.artist, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                track.artist,
+                style = MaterialTheme.typography.bodyMedium,
+                color = ink(0.6f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

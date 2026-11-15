@@ -39,6 +39,7 @@
         </service>
         <meta-data android:name="com.google.android.gms.car.application" android:resource="@xml/automotive_app_desc" />
         <service android:name="com.gamut.feature.resolver.DownloadService" android:foregroundServiceType="dataSync" android:exported="false" />
+        <service android:name="com.gamut.feature.resolver.MigrationService" android:foregroundServiceType="dataSync" android:exported="false" />
         <service android:name=".ShazamListenService" android:foregroundServiceType="microphone" android:exported="false" />
         <receiver android:name="com.gamut.update.UpdateInstallReceiver" android:exported="false" />
         <provider

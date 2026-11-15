@@ -77,17 +77,30 @@ fun SoftHeader(text: String) {
 }
 
 @Composable
-fun SoftCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+fun SoftCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Column(modifier.fillMaxWidth().clip(CardShape).background(ink(0.06f)), content = content)
 }
 
 @Composable
 fun SoftDivider() {
-    Box(Modifier.padding(start = 20.dp).fillMaxWidth().height(1.dp).background(ink(0.06f)))
+    Box(
+        Modifier
+            .padding(start = 20.dp)
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(ink(0.06f)),
+    )
 }
 
 @Composable
-private fun RowText(title: String, subtitle: String?, modifier: Modifier = Modifier) {
+private fun RowText(
+    title: String,
+    subtitle: String?,
+    modifier: Modifier = Modifier,
+) {
     Column(modifier) {
         Text(title, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (subtitle != null) {
@@ -97,7 +110,10 @@ private fun RowText(title: String, subtitle: String?, modifier: Modifier = Modif
 }
 
 @Composable
-fun PillSwitch(checked: Boolean, modifier: Modifier = Modifier) {
+fun PillSwitch(
+    checked: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val onInk = if (LocalCoverPalette.current.isLight) Color.White else Color.Black
     val trackOn = ink(0.95f)
     val trackOff = ink(0.16f)
@@ -109,7 +125,13 @@ fun PillSwitch(checked: Boolean, modifier: Modifier = Modifier) {
         spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow),
         label = "x",
     )
-    Box(modifier.size(width = 52.dp, height = 30.dp).clip(CircleShape).background(track).padding(3.dp)) {
+    Box(
+        modifier
+            .size(width = 52.dp, height = 30.dp)
+            .clip(CircleShape)
+            .background(track)
+            .padding(3.dp),
+    ) {
         Box(Modifier.offset(x = x).size(24.dp).background(thumb, CircleShape))
     }
 }
@@ -123,7 +145,9 @@ fun SoftSwitchRow(
     enabled: Boolean = true,
 ) {
     Row(
-        Modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.4f)
+        Modifier
+            .fillMaxWidth()
+            .alpha(if (enabled) 1f else 0.4f)
             .then(if (enabled) Modifier.pressScale(onClick = { onChange(!checked) }, scaleDown = 0.99f) else Modifier)
             .padding(horizontal = 20.dp, vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -135,7 +159,12 @@ fun SoftSwitchRow(
 }
 
 @Composable
-fun SoftValueRow(title: String, value: String? = null, subtitle: String? = null, onClick: () -> Unit) {
+fun SoftValueRow(
+    title: String,
+    value: String? = null,
+    subtitle: String? = null,
+    onClick: () -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth().pressScale(onClick = onClick, scaleDown = 0.99f).padding(horizontal = 20.dp, vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -183,6 +212,7 @@ fun PillSlider(
             if (!enabled) return@pointerInput
             awaitEachGesture {
                 val pad = 10.dp.toPx()
+
                 fun apply(x: Float) {
                     var p = ((x - pad) / (size.width - 2 * pad)).coerceIn(0f, 1f)
                     if (steps > 0) p = (p * (steps + 1)).roundToInt() / (steps + 1f)
@@ -210,7 +240,15 @@ fun PillSlider(
         val l = min(startX, x)
         val rr = max(startX, x)
         if (rr - l > 0.5f) drawRoundRect(fillC, Offset(l, cy - r), Size(rr - l, th), CornerRadius(r))
-        if (centered) drawLine(tickC, Offset(size.width / 2f, cy - 5.dp.toPx()), Offset(size.width / 2f, cy + 5.dp.toPx()), 1.dp.toPx(), StrokeCap.Round)
+        if (centered) {
+            drawLine(
+                tickC,
+                Offset(size.width / 2f, cy - 5.dp.toPx()),
+                Offset(size.width / 2f, cy + 5.dp.toPx()),
+                1.dp.toPx(),
+                StrokeCap.Round,
+            )
+        }
         drawCircle(fillC, 6.5.dp.toPx() * grow, Offset(x, cy))
     }
 }
@@ -227,24 +265,59 @@ fun SoftSliderRow(
     steps: Int = 0,
     centered: Boolean = false,
 ) {
-    Column(Modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.4f).padding(horizontal = 20.dp).padding(top = 15.dp, bottom = 12.dp)) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .alpha(if (enabled) 1f else 0.4f)
+            .padding(horizontal = 20.dp)
+            .padding(top = 15.dp, bottom = 12.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = ink(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
             Text(valueLabel, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1)
         }
-        if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 2.dp))
+        if (subtitle !=
+            null
+        ) {
+            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 2.dp))
+        }
         Spacer(Modifier.height(8.dp))
         PillSlider(value, onChange, range, enabled = enabled, steps = steps, centered = centered)
     }
 }
 
 @Composable
-fun <T> SegmentedControl(options: List<Choice<T>>, selected: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
+fun <T> SegmentedControl(
+    options: List<Choice<T>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val idx = options.indexOfFirst { it.value == selected }.coerceAtLeast(0)
-    BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ink(0.07f)).padding(4.dp)) {
+    BoxWithConstraints(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(ink(0.07f))
+            .padding(4.dp),
+    ) {
         val segW = maxWidth / options.size
         val x by animateDpAsState(segW * idx, spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMedium), label = "seg")
-        Box(Modifier.offset(x = x).width(segW).height(38.dp).clip(RoundedCornerShape(12.dp)).background(ink(0.16f)))
+        Box(
+            Modifier
+                .offset(x = x)
+                .width(segW)
+                .height(38.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(ink(0.16f)),
+        )
         Row {
             options.forEachIndexed { i, o ->
                 Box(
@@ -265,7 +338,14 @@ fun <T> SegmentedControl(options: List<Choice<T>>, selected: T, onSelect: (T) ->
 }
 
 @Composable
-fun EqCurve(bands: List<EqBand>, maxDb: Float, enabled: Boolean, lnMin: Float, lnMax: Float, modifier: Modifier = Modifier) {
+fun EqCurve(
+    bands: List<EqBand>,
+    maxDb: Float,
+    enabled: Boolean,
+    lnMin: Float,
+    lnMax: Float,
+    modifier: Modifier = Modifier,
+) {
     val line = ink(0.95f)
     val area = ink(0.12f)
     val grid = ink(0.1f)
@@ -276,29 +356,32 @@ fun EqCurve(bands: List<EqBand>, maxDb: Float, enabled: Boolean, lnMin: Float, l
         drawLine(grid, Offset(0f, mid), Offset(w, mid), 1.dp.toPx())
         if (bands.isEmpty()) return@Canvas
         val inset = 10.dp.toPx()
-        val pts = bands.sortedBy { it.freqHz }.map { b ->
-            Offset(
-                ((ln(b.freqHz) - lnMin) / (lnMax - lnMin)).coerceIn(0f, 1f) * w,
-                mid - (b.gainDb / maxDb).coerceIn(-1f, 1f) * (mid - inset),
-            )
-        }
-        val path = Path().apply {
-            moveTo(0f, pts.first().y)
-            lineTo(pts.first().x, pts.first().y)
-            for (i in 0 until pts.size - 1) {
-                val a = pts[i]
-                val b = pts[i + 1]
-                val mx = (a.x + b.x) / 2f
-                cubicTo(mx, a.y, mx, b.y, b.x, b.y)
+        val pts =
+            bands.sortedBy { it.freqHz }.map { b ->
+                Offset(
+                    ((ln(b.freqHz) - lnMin) / (lnMax - lnMin)).coerceIn(0f, 1f) * w,
+                    mid - (b.gainDb / maxDb).coerceIn(-1f, 1f) * (mid - inset),
+                )
             }
-            lineTo(w, pts.last().y)
-        }
-        val fill = Path().apply {
-            addPath(path)
-            lineTo(w, mid)
-            lineTo(0f, mid)
-            close()
-        }
+        val path =
+            Path().apply {
+                moveTo(0f, pts.first().y)
+                lineTo(pts.first().x, pts.first().y)
+                for (i in 0 until pts.size - 1) {
+                    val a = pts[i]
+                    val b = pts[i + 1]
+                    val mx = (a.x + b.x) / 2f
+                    cubicTo(mx, a.y, mx, b.y, b.x, b.y)
+                }
+                lineTo(w, pts.last().y)
+            }
+        val fill =
+            Path().apply {
+                addPath(path)
+                lineTo(w, mid)
+                lineTo(0f, mid)
+                close()
+            }
         drawPath(fill, area)
         drawPath(path, line, style = Stroke(2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
     }
@@ -325,7 +408,13 @@ fun EqBandSliders(
 }
 
 @Composable
-private fun VerticalBand(gain: Float, maxDb: Float, enabled: Boolean, onChange: (Float) -> Unit, onPress: (Boolean) -> Unit) {
+private fun VerticalBand(
+    gain: Float,
+    maxDb: Float,
+    enabled: Boolean,
+    onChange: (Float) -> Unit,
+    onPress: (Boolean) -> Unit,
+) {
     val onChangeNow by rememberUpdatedState(onChange)
     val onPressNow by rememberUpdatedState(onPress)
     var pressed by remember { mutableStateOf(false) }
@@ -339,6 +428,7 @@ private fun VerticalBand(gain: Float, maxDb: Float, enabled: Boolean, onChange: 
             if (!enabled) return@pointerInput
             awaitEachGesture {
                 val pad = 12.dp.toPx()
+
                 fun apply(y: Float) {
                     val p = 1f - ((y - pad) / (size.height - 2 * pad)).coerceIn(0f, 1f)
                     var db = ((-maxDb + 2 * maxDb * p) * 10).roundToInt() / 10f
@@ -362,6 +452,7 @@ private fun VerticalBand(gain: Float, maxDb: Float, enabled: Boolean, onChange: 
         val cx = size.width / 2f
         val top = pad
         val bottom = size.height - pad
+
         fun yFor(db: Float) = bottom - (db + maxDb) / (2 * maxDb) * (bottom - top)
         val tw = 3.dp.toPx()
         val zeroY = yFor(0f)

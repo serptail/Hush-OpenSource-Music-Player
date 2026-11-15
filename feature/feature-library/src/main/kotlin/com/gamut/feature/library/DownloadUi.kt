@@ -66,7 +66,10 @@ data class PlaylistDownloadUi(
     val total: Int = 0,
 )
 
-fun playlistDownloadUi(isrcs: List<String>, states: Map<String, DownloadState>): PlaylistDownloadUi {
+fun playlistDownloadUi(
+    isrcs: List<String>,
+    states: Map<String, DownloadState>,
+): PlaylistDownloadUi {
     if (isrcs.isEmpty()) return PlaylistDownloadUi()
     var done = 0
     var busy = false
@@ -83,16 +86,21 @@ fun playlistDownloadUi(isrcs: List<String>, states: Map<String, DownloadState>):
                 fraction += state.progress
             }
 
-            DownloadState.Queued -> busy = true
+            DownloadState.Queued -> {
+                busy = true
+            }
 
-            else -> Unit
+            else -> {
+                Unit
+            }
         }
     }
-    val status = when {
-        busy -> PlaylistDownloadStatus.Active
-        done == isrcs.size -> PlaylistDownloadStatus.Done
-        else -> PlaylistDownloadStatus.Idle
-    }
+    val status =
+        when {
+            busy -> PlaylistDownloadStatus.Active
+            done == isrcs.size -> PlaylistDownloadStatus.Done
+            else -> PlaylistDownloadStatus.Idle
+        }
     return PlaylistDownloadUi(status, fraction / isrcs.size, done, isrcs.size)
 }
 
@@ -122,31 +130,34 @@ fun DownloadButton(
             .graphicsLayer {
                 scaleX = press
                 scaleY = press
-            }
-            .clip(CircleShape)
+            }.clip(CircleShape)
             .clickable(
                 interactionSource = interaction,
                 indication = null,
                 role = Role.Button,
-                onClickLabel = when (ui.status) {
-                    PlaylistDownloadStatus.Idle -> "Download playlist"
-                    PlaylistDownloadStatus.Active -> "Stop downloading"
-                    PlaylistDownloadStatus.Done -> "Downloaded"
-                },
+                onClickLabel =
+                    when (ui.status) {
+                        PlaylistDownloadStatus.Idle -> "Download playlist"
+                        PlaylistDownloadStatus.Active -> "Stop downloading"
+                        PlaylistDownloadStatus.Done -> "Downloaded"
+                    },
                 onClick = onClick,
             ),
         contentAlignment = Alignment.Center,
     ) {
         Crossfade(ui.status, modifier = Modifier.size(glyphSize), animationSpec = tween(220), label = "downloadStatus") { status ->
             when (status) {
-                PlaylistDownloadStatus.Idle ->
+                PlaylistDownloadStatus.Idle -> {
                     Icon(idleIcon, "Download playlist", tint = tint, modifier = Modifier.size(glyphSize))
+                }
 
-                PlaylistDownloadStatus.Active ->
+                PlaylistDownloadStatus.Active -> {
                     ActiveRing(ui.progress.coerceAtLeast(0.04f), tint.copy(alpha = 0.2f), accent, glyphSize)
+                }
 
-                PlaylistDownloadStatus.Done ->
+                PlaylistDownloadStatus.Done -> {
                     CheckCirclePop(animate = watched, color = accent, size = glyphSize, icon = doneIcon)
+                }
             }
         }
     }
@@ -168,32 +179,58 @@ fun TrackDownloadButton(
 ) {
     var watched by remember { mutableStateOf(false) }
     LaunchedEffect(state is DownloadState.Active) { if (state is DownloadState.Active) watched = true }
-    val kind = when (state) {
-        null -> Kind.Idle
-        DownloadState.Queued -> Kind.Queued
-        is DownloadState.Active -> Kind.Active
-        DownloadState.Done -> Kind.Done
-        is DownloadState.Failed -> Kind.Failed
-    }
+    val kind =
+        when (state) {
+            null -> Kind.Idle
+            DownloadState.Queued -> Kind.Queued
+            is DownloadState.Active -> Kind.Active
+            DownloadState.Done -> Kind.Done
+            is DownloadState.Failed -> Kind.Failed
+        }
     Box(
         modifier
             .size(size)
             .pressScale(
-                onClick = when (kind) {
-                    Kind.Idle, Kind.Failed -> onDownload
-                    Kind.Queued, Kind.Active -> onCancel
-                    Kind.Done -> onDone
-                },
+                onClick =
+                    when (kind) {
+                        Kind.Idle, Kind.Failed -> onDownload
+                        Kind.Queued, Kind.Active -> onCancel
+                        Kind.Done -> onDone
+                    },
             ),
         contentAlignment = Alignment.Center,
     ) {
         Crossfade(kind, modifier = Modifier.size(glyph), animationSpec = tween(180), label = "trackDownload") { shown ->
             when (shown) {
-                Kind.Idle -> Icon(PhosphorIcons.Bold.ArrowCircleDown, "Download", tint = tint, modifier = Modifier.size(glyph))
-                Kind.Failed -> Icon(PhosphorIcons.Bold.ArrowCircleDown, "Download failed, tap to retry", tint = FailureColor, modifier = Modifier.size(glyph))
-                Kind.Queued -> SpinnerArc(tint, Modifier.size(glyph), 2.dp)
-                Kind.Active -> ActiveRing(((state as? DownloadState.Active)?.progress ?: 0f).coerceAtLeast(0.05f), tint.copy(alpha = 0.25f), accent, glyph)
-                Kind.Done -> CheckCirclePop(animate = watched, color = accent, size = glyph)
+                Kind.Idle -> {
+                    Icon(PhosphorIcons.Bold.ArrowCircleDown, "Download", tint = tint, modifier = Modifier.size(glyph))
+                }
+
+                Kind.Failed -> {
+                    Icon(
+                        PhosphorIcons.Bold.ArrowCircleDown,
+                        "Download failed, tap to retry",
+                        tint = FailureColor,
+                        modifier = Modifier.size(glyph),
+                    )
+                }
+
+                Kind.Queued -> {
+                    SpinnerArc(tint, Modifier.size(glyph), 2.dp)
+                }
+
+                Kind.Active -> {
+                    ActiveRing(
+                        ((state as? DownloadState.Active)?.progress ?: 0f).coerceAtLeast(0.05f),
+                        tint.copy(alpha = 0.25f),
+                        accent,
+                        glyph,
+                    )
+                }
+
+                Kind.Done -> {
+                    CheckCirclePop(animate = watched, color = accent, size = glyph)
+                }
             }
         }
     }
@@ -205,11 +242,12 @@ fun DownloadProgressLine(
     modifier: Modifier = Modifier,
     color: Color = ink(),
 ) {
-    val target = when (state) {
-        is DownloadState.Active -> state.progress.coerceIn(0f, 1f)
-        DownloadState.Done -> 1f
-        else -> 0f
-    }
+    val target =
+        when (state) {
+            is DownloadState.Active -> state.progress.coerceIn(0f, 1f)
+            DownloadState.Done -> 1f
+            else -> 0f
+        }
     val progress by animateFloatAsState(target, tween(240, easing = LinearEasing), label = "lineProgress")
     val alpha by animateFloatAsState(
         if (state is DownloadState.Active) 1f else 0f,
@@ -231,7 +269,12 @@ fun DownloadProgressLine(
 }
 
 @Composable
-private fun CheckCirclePop(animate: Boolean, color: Color, size: Dp, icon: ImageVector = PhosphorIcons.Fill.CheckCircle) {
+private fun CheckCirclePop(
+    animate: Boolean,
+    color: Color,
+    size: Dp,
+    icon: ImageVector = PhosphorIcons.Fill.CheckCircle,
+) {
     val scale = remember { Animatable(if (animate) 0.35f else 1f) }
     LaunchedEffect(animate) {
         if (animate) scale.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMedium))
@@ -240,15 +283,21 @@ private fun CheckCirclePop(animate: Boolean, color: Color, size: Dp, icon: Image
         icon,
         "Downloaded",
         tint = color,
-        modifier = Modifier.size(size).graphicsLayer {
-            scaleX = scale.value
-            scaleY = scale.value
-        },
+        modifier =
+            Modifier.size(size).graphicsLayer {
+                scaleX = scale.value
+                scaleY = scale.value
+            },
     )
 }
 
 @Composable
-private fun ActiveRing(progress: Float, track: Color, color: Color, size: Dp) {
+private fun ActiveRing(
+    progress: Float,
+    track: Color,
+    color: Color,
+    size: Dp,
+) {
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         ProgressRing(progress, track, color, Modifier.size(size - 2.dp), 2.5.dp)
         Box(Modifier.size(size * 0.3f).clip(RoundedCornerShape(2.dp)).background(color))
@@ -256,7 +305,13 @@ private fun ActiveRing(progress: Float, track: Color, color: Color, size: Dp) {
 }
 
 @Composable
-private fun ProgressRing(progress: Float, track: Color, color: Color, modifier: Modifier, stroke: Dp) {
+private fun ProgressRing(
+    progress: Float,
+    track: Color,
+    color: Color,
+    modifier: Modifier,
+    stroke: Dp,
+) {
     val shown by animateFloatAsState(progress.coerceIn(0f, 1f), tween(250), label = "ring")
     Canvas(modifier) {
         val w = stroke.toPx()
@@ -268,7 +323,11 @@ private fun ProgressRing(progress: Float, track: Color, color: Color, modifier: 
 }
 
 @Composable
-private fun SpinnerArc(color: Color, modifier: Modifier, stroke: Dp) {
+private fun SpinnerArc(
+    color: Color,
+    modifier: Modifier,
+    stroke: Dp,
+) {
     val transition = rememberInfiniteTransition(label = "queued")
     val angle by transition.animateFloat(0f, 360f, infiniteRepeatable(tween(1100, easing = LinearEasing)), label = "queuedAngle")
     Canvas(modifier) {
@@ -281,7 +340,10 @@ private fun SpinnerArc(color: Color, modifier: Modifier, stroke: Dp) {
 }
 
 @Composable
-fun AvailableOfflineLine(modifier: Modifier = Modifier, color: Color = ink(0.6f)) {
+fun AvailableOfflineLine(
+    modifier: Modifier = Modifier,
+    color: Color = ink(0.6f),
+) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Icon(PhosphorIcons.Fill.CheckCircle, null, tint = color, modifier = Modifier.size(13.dp))
         Text(

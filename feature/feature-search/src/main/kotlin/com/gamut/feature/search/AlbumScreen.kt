@@ -88,39 +88,42 @@ import com.gamut.core.designsystem.rememberArtistTap
 import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
-import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @HiltViewModel
-class AlbumViewModel @Inject constructor(
-    savedStateHandle: SavedStateHandle,
-    private val repository: DiscoverRepository,
-) : ViewModel() {
-    private val _state = MutableStateFlow<AlbumDetails?>(null)
-    val state: StateFlow<AlbumDetails?> = _state.asStateFlow()
-    private val _failed = MutableStateFlow(false)
-    val failed: StateFlow<Boolean> = _failed.asStateFlow()
-    private val _artistImage = MutableStateFlow<String?>(null)
-    val artistImage: StateFlow<String?> = _artistImage.asStateFlow()
+class AlbumViewModel
+    @Inject
+    constructor(
+        savedStateHandle: SavedStateHandle,
+        private val repository: DiscoverRepository,
+    ) : ViewModel() {
+        private val _state = MutableStateFlow<AlbumDetails?>(null)
+        val state: StateFlow<AlbumDetails?> = _state.asStateFlow()
+        private val _failed = MutableStateFlow(false)
+        val failed: StateFlow<Boolean> = _failed.asStateFlow()
+        private val _artistImage = MutableStateFlow<String?>(null)
+        val artistImage: StateFlow<String?> = _artistImage.asStateFlow()
 
-    init {
-        val item = DiscoverItem(
-            id = savedStateHandle.get<String>("id").orEmpty(),
-            title = savedStateHandle.get<String>("title").orEmpty(),
-            subtitle = savedStateHandle.get<String>("subtitle").orEmpty(),
-            imageUrl = savedStateHandle.get<String>("art").orEmpty(),
-        )
-        viewModelScope.launch {
-            val album = repository.album(item)
-            _state.value = album
-            _failed.value = album == null
-            if (album != null) _artistImage.value = repository.artistPhotoFor(album.artist, album.title)
+        init {
+            val item =
+                DiscoverItem(
+                    id = savedStateHandle.get<String>("id").orEmpty(),
+                    title = savedStateHandle.get<String>("title").orEmpty(),
+                    subtitle = savedStateHandle.get<String>("subtitle").orEmpty(),
+                    imageUrl = savedStateHandle.get<String>("art").orEmpty(),
+                )
+            viewModelScope.launch {
+                val album = repository.album(item)
+                _state.value = album
+                _failed.value = album == null
+                if (album != null) _artistImage.value = repository.artistPhotoFor(album.artist, album.title)
+            }
         }
     }
-}
 
 @Composable
 fun AlbumScreen(
@@ -177,7 +180,13 @@ fun AlbumScreen(
                             }
                             if (isWideLayout()) {
                                 Row(Modifier.fillMaxSize()) {
-                                    Column(Modifier.weight(0.4f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+                                    Column(
+                                        Modifier
+                                            .weight(0.4f)
+                                            .fillMaxHeight()
+                                            .verticalScroll(rememberScrollState())
+                                            .padding(bottom = 24.dp),
+                                    ) {
                                         heroContent()
                                     }
                                     LazyColumn(
@@ -257,7 +266,12 @@ fun AlbumScreen(
 }
 
 @Composable
-private fun AlbumHero(album: AlbumDetails, artistImageUrl: String?, onPlay: () -> Unit, onArtist: (String) -> Unit) {
+private fun AlbumHero(
+    album: AlbumDetails,
+    artistImageUrl: String?,
+    onPlay: () -> Unit,
+    onArtist: (String) -> Unit,
+) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -274,8 +288,7 @@ private fun AlbumHero(album: AlbumDetails, artistImageUrl: String?, onPlay: () -
                     shape = RoundedCornerShape(14.dp),
                     ambientColor = Color.Black.copy(alpha = 0.30f),
                     spotColor = Color.Black.copy(alpha = 0.45f),
-                )
-                .clip(RoundedCornerShape(14.dp))
+                ).clip(RoundedCornerShape(14.dp))
                 .background(artTileColor()),
         ) {
             SubcomposeAsyncImage(
@@ -297,10 +310,11 @@ private fun AlbumHero(album: AlbumDetails, artistImageUrl: String?, onPlay: () -
             Column(Modifier.weight(1f).padding(end = 16.dp)) {
                 Text(
                     album.title,
-                    style = MaterialTheme.typography.headlineSmall.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = (-0.3).sp,
-                    ),
+                    style =
+                        MaterialTheme.typography.headlineSmall.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = (-0.3).sp,
+                        ),
                     color = ink(),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -336,7 +350,10 @@ private fun AlbumHero(album: AlbumDetails, artistImageUrl: String?, onPlay: () -
 }
 
 @Composable
-private fun ArtistAvatar(url: String?, artist: String) {
+private fun ArtistAvatar(
+    url: String?,
+    artist: String,
+) {
     val modifier = Modifier.size(24.dp).clip(CircleShape)
     if (url != null) {
         SubcomposeAsyncImage(
@@ -353,7 +370,10 @@ private fun ArtistAvatar(url: String?, artist: String) {
 }
 
 @Composable
-private fun PlayFab(onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun PlayFab(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val isLight = LocalCoverPalette.current.isLight
     Box(
         modifier
@@ -394,15 +414,16 @@ private fun AlbumTrackRow(
         label = "rowScale",
     )
     val tint by animateColorAsState(
-        targetValue = ink(
-            if (pressed) {
-                0.10f
-            } else if (hovered) {
-                0.06f
-            } else {
-                0f
-            },
-        ),
+        targetValue =
+            ink(
+                if (pressed) {
+                    0.10f
+                } else if (hovered) {
+                    0.06f
+                } else {
+                    0f
+                },
+            ),
         animationSpec = tween(140),
         label = "rowTint",
     )
@@ -414,8 +435,7 @@ private fun AlbumTrackRow(
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-            }
-            .clip(RoundedCornerShape(12.dp))
+            }.clip(RoundedCornerShape(12.dp))
             .drawBehind { drawRect(tint) }
             .focusRing(RoundedCornerShape(12.dp))
             .hoverable(interaction)

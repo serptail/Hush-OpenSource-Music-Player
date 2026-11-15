@@ -69,11 +69,11 @@ import com.adamglin.phosphoricons.regular.Play
 import com.gamut.core.designsystem.ArtPlaceholder
 import com.gamut.core.designsystem.LocalFocusLive
 import com.gamut.core.designsystem.focusRing
+import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
-import kotlinx.coroutines.delay
 
 private val CoverShape = RoundedCornerShape(12.dp)
 private val CoverCornerRadius = 12.dp
@@ -158,8 +158,7 @@ internal fun ArtworkWithRing(
                     val h = ((w - clearance) / aspect).roundToInt() + clearance
                     val placeable = measurable.measure(Constraints.fixed(w, h))
                     layout(w, h) { placeable.place(0, 0) }
-                }
-                .graphicsLayer {
+                }.graphicsLayer {
                     scaleX = coverScale
                     scaleY = coverScale
                 },
@@ -182,13 +181,13 @@ internal fun ArtworkWithRing(
                                 model = shownUrl,
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .graphicsLayer {
-                                        scaleX = 1.3f
-                                        scaleY = 1.3f
-                                    }
-                                    .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(28.dp) else Modifier),
+                                modifier =
+                                    Modifier
+                                        .fillMaxSize()
+                                        .graphicsLayer {
+                                            scaleX = 1.3f
+                                            scaleY = 1.3f
+                                        }.then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(28.dp) else Modifier),
                             )
                             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
                         }
@@ -262,10 +261,11 @@ internal fun ArtworkWithRing(
                                 true
                             }
 
-                            else -> false
+                            else -> {
+                                false
+                            }
                         }
-                    }
-                    .focusProperties { if (!live) canFocus = false }
+                    }.focusProperties { if (!live) canFocus = false }
                     .focusable(enabled)
                     .pointerInput(enabled, ringSize) {
                         if (!enabled || ringSize.width == 0) return@pointerInput
@@ -279,10 +279,13 @@ internal fun ArtworkWithRing(
                         val samples = 300
                         val pts = List(samples) { measure.getPosition(total * it / samples) }
 
-                        val coverInner = Rect(marginPx, marginPx, marginPx + coverW, marginPx + coverH)
-                            .deflate(10.dp.toPx())
+                        val coverInner =
+                            Rect(marginPx, marginPx, marginPx + coverW, marginPx + coverH)
+                                .deflate(10.dp.toPx())
                         val hitRadius = 16.dp.toPx()
+
                         fun nearLine(p: Offset) = !coverInner.contains(p) && pts.minOf { hypot(it.x - p.x, it.y - p.y) } < hitRadius
+
                         fun fractionAt(p: Offset): Float {
                             var best = 0
                             var bestD = Float.MAX_VALUE
@@ -305,12 +308,13 @@ internal fun ArtworkWithRing(
                                 var last = fractionAt(down.position)
                                 try {
                                     currentScrub(last)
-                                    val released = drag(down.id) { change ->
-                                        change.consume()
-                                        val f = fractionAt(change.position)
-                                        last = if (abs(f - last) > 0.5f) (if (last > 0.5f) 1f else 0f) else f
-                                        currentScrub(last)
-                                    }
+                                    val released =
+                                        drag(down.id) { change ->
+                                            change.consume()
+                                            val f = fractionAt(change.position)
+                                            last = if (abs(f - last) > 0.5f) (if (last > 0.5f) 1f else 0f) else f
+                                            currentScrub(last)
+                                        }
                                     if (released) currentSeek(last)
                                 } finally {
                                     scrubbing = false
@@ -325,8 +329,7 @@ internal fun ArtworkWithRing(
                                 }
                             }
                         }
-                    }
-                    .drawWithCache {
+                    }.drawWithCache {
                         if (!enabled) return@drawWithCache onDrawBehind {}
                         val marginPx = RingInset.toPx()
                         val coverW = size.width - RingClearance.toPx()
@@ -339,21 +342,23 @@ internal fun ArtworkWithRing(
                         val outlinePx = RingOutlineWidth.toPx()
 
                         val filled = Path()
-                        val outlinePaint = android.graphics.Paint().apply {
-                            isAntiAlias = true
-                            style = android.graphics.Paint.Style.STROKE
-                            strokeWidth = strokePx + outlinePx * 2f
-                            strokeCap = android.graphics.Paint.Cap.ROUND
-                            color = RingOutlineColor.toArgb()
-                            setShadowLayer(3.dp.toPx(), 0f, 1.dp.toPx(), android.graphics.Color.argb(80, 0, 0, 0))
-                        }
-                        val linePaint = android.graphics.Paint().apply {
-                            isAntiAlias = true
-                            style = android.graphics.Paint.Style.STROKE
-                            strokeWidth = strokePx
-                            strokeCap = android.graphics.Paint.Cap.ROUND
-                            color = android.graphics.Color.WHITE
-                        }
+                        val outlinePaint =
+                            android.graphics.Paint().apply {
+                                isAntiAlias = true
+                                style = android.graphics.Paint.Style.STROKE
+                                strokeWidth = strokePx + outlinePx * 2f
+                                strokeCap = android.graphics.Paint.Cap.ROUND
+                                color = RingOutlineColor.toArgb()
+                                setShadowLayer(3.dp.toPx(), 0f, 1.dp.toPx(), android.graphics.Color.argb(80, 0, 0, 0))
+                            }
+                        val linePaint =
+                            android.graphics.Paint().apply {
+                                isAntiAlias = true
+                                style = android.graphics.Paint.Style.STROKE
+                                strokeWidth = strokePx
+                                strokeCap = android.graphics.Paint.Cap.ROUND
+                                color = android.graphics.Color.WHITE
+                            }
 
                         val barW = WaveBarWidth.toPx()
                         val startOff = WaveStartOffset.toPx()
@@ -446,7 +451,13 @@ internal fun ArtworkWithRing(
     }
 }
 
-private fun outerRingPath(coverW: Float, coverH: Float, marginPx: Float, gapPx: Float, coverRadiusPx: Float): Path {
+private fun outerRingPath(
+    coverW: Float,
+    coverH: Float,
+    marginPx: Float,
+    gapPx: Float,
+    coverRadiusPx: Float,
+): Path {
     val left = marginPx - gapPx
     val top = marginPx - gapPx
     val right = marginPx + coverW + gapPx

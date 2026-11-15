@@ -103,6 +103,7 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
         clearState()
         running = false
     }
+
     override fun onReset() {
         clearState()
         running = false
@@ -161,7 +162,11 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
         running = false
     }
 
-    private fun frame(inL: Double, inR: Double, out: ByteBuffer) {
+    private fun frame(
+        inL: Double,
+        inR: Double,
+        out: ByteBuffer,
+    ) {
         val stereo = channels == 2
         var l = inL * pre
         var r = inR * pre
@@ -234,7 +239,10 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
         return if (x < 0.0) -y else y
     }
 
-    private fun quantize(x: Double, dither: Double): Short {
+    private fun quantize(
+        x: Double,
+        dither: Double,
+    ): Short {
         val v = floor(x * 32768.0 + dither + 0.5)
         return (
             if (v > 32767.0) {
@@ -244,7 +252,7 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
             } else {
                 v
             }
-            ).toInt().toShort()
+        ).toInt().toShort()
     }
 
     private fun rand(): Double {
@@ -254,7 +262,10 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
         return (rng ushr 11) * (1.0 / 9007199254740992.0)
     }
 
-    private fun rebuild(p: SoundParams, pitch: Float) {
+    private fun rebuild(
+        p: SoundParams,
+        pitch: Float,
+    ) {
         val scale = 1.0 / pitch.toDouble().coerceIn(0.25, 4.0)
         val nyq = rate / 2.0
 
@@ -300,7 +311,11 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
         appliedPitch = pitch
     }
 
-    private fun design(i: Int, band: EqBand, f0: Double) {
+    private fun design(
+        i: Int,
+        band: EqBand,
+        f0: Double,
+    ) {
         val fs = rate.toDouble()
         val f = f0.coerceIn(10.0, fs * 0.48)
         val q = band.q.toDouble().coerceIn(0.1, 20.0)
@@ -308,40 +323,43 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
         val w0 = 2.0 * PI * f / fs
         val cw = cos(w0)
         val alpha = sin(w0) / (2.0 * q)
-        val c: DoubleArray = when (band.type) {
-            BandType.PEAK -> doubleArrayOf(
-                1.0 + alpha * a,
-                -2.0 * cw,
-                1.0 - alpha * a,
-                1.0 + alpha / a,
-                -2.0 * cw,
-                1.0 - alpha / a,
-            )
+        val c: DoubleArray =
+            when (band.type) {
+                BandType.PEAK -> {
+                    doubleArrayOf(
+                        1.0 + alpha * a,
+                        -2.0 * cw,
+                        1.0 - alpha * a,
+                        1.0 + alpha / a,
+                        -2.0 * cw,
+                        1.0 - alpha / a,
+                    )
+                }
 
-            BandType.LOW_SHELF -> {
-                val s = 2.0 * sqrt(a) * alpha
-                doubleArrayOf(
-                    a * ((a + 1.0) - (a - 1.0) * cw + s),
-                    2.0 * a * ((a - 1.0) - (a + 1.0) * cw),
-                    a * ((a + 1.0) - (a - 1.0) * cw - s),
-                    (a + 1.0) + (a - 1.0) * cw + s,
-                    -2.0 * ((a - 1.0) + (a + 1.0) * cw),
-                    (a + 1.0) + (a - 1.0) * cw - s,
-                )
-            }
+                BandType.LOW_SHELF -> {
+                    val s = 2.0 * sqrt(a) * alpha
+                    doubleArrayOf(
+                        a * ((a + 1.0) - (a - 1.0) * cw + s),
+                        2.0 * a * ((a - 1.0) - (a + 1.0) * cw),
+                        a * ((a + 1.0) - (a - 1.0) * cw - s),
+                        (a + 1.0) + (a - 1.0) * cw + s,
+                        -2.0 * ((a - 1.0) + (a + 1.0) * cw),
+                        (a + 1.0) + (a - 1.0) * cw - s,
+                    )
+                }
 
-            BandType.HIGH_SHELF -> {
-                val s = 2.0 * sqrt(a) * alpha
-                doubleArrayOf(
-                    a * ((a + 1.0) + (a - 1.0) * cw + s),
-                    -2.0 * a * ((a - 1.0) + (a + 1.0) * cw),
-                    a * ((a + 1.0) + (a - 1.0) * cw - s),
-                    (a + 1.0) - (a - 1.0) * cw + s,
-                    2.0 * ((a - 1.0) - (a + 1.0) * cw),
-                    (a + 1.0) - (a - 1.0) * cw - s,
-                )
+                BandType.HIGH_SHELF -> {
+                    val s = 2.0 * sqrt(a) * alpha
+                    doubleArrayOf(
+                        a * ((a + 1.0) + (a - 1.0) * cw + s),
+                        -2.0 * a * ((a - 1.0) + (a + 1.0) * cw),
+                        a * ((a + 1.0) + (a - 1.0) * cw - s),
+                        (a + 1.0) - (a - 1.0) * cw + s,
+                        2.0 * ((a - 1.0) - (a + 1.0) * cw),
+                        (a + 1.0) - (a - 1.0) * cw - s,
+                    )
+                }
             }
-        }
         b0[i] = c[0] / c[3]
         b1[i] = c[1] / c[3]
         b2[i] = c[2] / c[3]
@@ -362,10 +380,12 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
             var db = 0.0
             for (j in 0 until eqBands) {
                 val i = order[j]
-                val num = b0[i] * b0[i] + b1[i] * b1[i] + b2[i] * b2[i] +
-                    2.0 * (b0[i] * b1[i] + b1[i] * b2[i]) * c1 + 2.0 * b0[i] * b2[i] * c2
-                val den = 1.0 + a1[i] * a1[i] + a2[i] * a2[i] +
-                    2.0 * (a1[i] + a1[i] * a2[i]) * c1 + 2.0 * a2[i] * c2
+                val num =
+                    b0[i] * b0[i] + b1[i] * b1[i] + b2[i] * b2[i] +
+                        2.0 * (b0[i] * b1[i] + b1[i] * b2[i]) * c1 + 2.0 * b0[i] * b2[i] * c2
+                val den =
+                    1.0 + a1[i] * a1[i] + a2[i] * a2[i] +
+                        2.0 * (a1[i] + a1[i] * a2[i]) * c1 + 2.0 * a2[i] * c2
                 db += 10.0 * log10(max(num / den, 1e-30))
             }
             if (db > peak) peak = db

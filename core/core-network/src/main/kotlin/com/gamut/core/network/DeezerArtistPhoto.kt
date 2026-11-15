@@ -4,7 +4,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class DeezerPhotoSearchResponse(val data: List<DeezerPhotoArtist> = emptyList())
+data class DeezerPhotoSearchResponse(
+    val data: List<DeezerPhotoArtist> = emptyList(),
+)
 
 @Serializable
 data class DeezerPhotoArtist(
@@ -16,7 +18,11 @@ data class DeezerPhotoArtist(
 )
 
 @Serializable
-data class DeezerTitleResponse(val data: List<DeezerTitle> = emptyList())
+data class DeezerTitleResponse(
+    val data: List<DeezerTitle> = emptyList(),
+)
 
 @Serializable
-data class DeezerTitle(val title: String = "")
+data class DeezerTitle(
+    val title: String = "",
+)

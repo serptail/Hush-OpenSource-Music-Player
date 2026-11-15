@@ -89,9 +89,6 @@ import com.adamglin.phosphoricons.bold.MusicNote
 import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
-import java.nio.ByteOrder
-import kotlin.math.pow
-import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -101,6 +98,9 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.nio.ByteOrder
+import kotlin.math.pow
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 internal fun ArtworkPlaceholder() {
@@ -115,7 +115,10 @@ internal fun ArtworkPlaceholder() {
 internal fun formatTime(milliseconds: Long): String = "%d:%02d".format(milliseconds / 60_000, (milliseconds / 1_000) % 60)
 
 @Composable
-internal fun TimeRow(position: () -> Long, durationMs: Long) {
+internal fun TimeRow(
+    position: () -> Long,
+    durationMs: Long,
+) {
     val elapsedSecond by remember(position) { derivedStateOf { position() / 1_000 } }
     val style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum", letterSpacing = 0.4.sp)
     val color = Color.White.copy(alpha = 0.6f)
@@ -131,25 +134,30 @@ internal fun Modifier.tapTarget(onClick: () -> Unit): Modifier {
     return this.focusRing().clickable(interactionSource = interaction, indication = null, onClick = onClick)
 }
 
-internal fun Modifier.bounceTap(onClick: () -> Unit, scaleDown: Float = 0.88f): Modifier = composed {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val hovered by interaction.collectIsHoveredAsState()
-    val haptic = LocalHapticFeedback.current
-    val scale by animateFloatAsState(
-        targetValue = when {
-            pressed -> scaleDown
-            hovered -> 1.08f
-            else -> 1f
-        },
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-        label = "bounce-tap",
-    )
-    this.scale(scale).hoverable(interaction).focusRing().clickable(interactionSource = interaction, indication = null) {
-        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-        onClick()
+internal fun Modifier.bounceTap(
+    onClick: () -> Unit,
+    scaleDown: Float = 0.88f,
+): Modifier =
+    composed {
+        val interaction = remember { MutableInteractionSource() }
+        val pressed by interaction.collectIsPressedAsState()
+        val hovered by interaction.collectIsHoveredAsState()
+        val haptic = LocalHapticFeedback.current
+        val scale by animateFloatAsState(
+            targetValue =
+                when {
+                    pressed -> scaleDown
+                    hovered -> 1.08f
+                    else -> 1f
+                },
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+            label = "bounce-tap",
+        )
+        this.scale(scale).hoverable(interaction).focusRing().clickable(interactionSource = interaction, indication = null) {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onClick()
+        }
     }
-}
 
 @Composable
 internal fun DepthIcon(
@@ -165,10 +173,11 @@ internal fun DepthIcon(
             imageVector,
             contentDescription = null,
             tint = Color.Black.copy(alpha = if (canBlur) 0.45f else 0.22f),
-            modifier = Modifier
-                .fillMaxSize()
-                .offset(y = 1.5.dp)
-                .then(if (canBlur) Modifier.blur(2.dp, BlurredEdgeTreatment.Unbounded) else Modifier),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .offset(y = 1.5.dp)
+                    .then(if (canBlur) Modifier.blur(2.dp, BlurredEdgeTreatment.Unbounded) else Modifier),
         )
         Icon(imageVector, contentDescription, tint = tint, modifier = Modifier.fillMaxSize())
     }
@@ -178,49 +187,59 @@ internal fun Modifier.fadeOutBetween(
     start: () -> Float,
     end: () -> Float,
     hasSecondLine: () -> Boolean,
-): Modifier = this
-    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-    .drawWithContent {
-        drawContent()
-        if (!hasSecondLine()) return@drawWithContent
-        val s = start()
-        val e = end()
-        if (e <= s) return@drawWithContent
-        drawRect(
-            brush = Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0f to Color.Black,
-                    0.5f to Color.Black.copy(alpha = 0.3f),
-                    1f to Color.Transparent,
-                ),
-                startY = s,
-                endY = e,
-            ),
-            blendMode = BlendMode.DstIn,
-        )
-    }
+): Modifier =
+    this
+        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+        .drawWithContent {
+            drawContent()
+            if (!hasSecondLine()) return@drawWithContent
+            val s = start()
+            val e = end()
+            if (e <= s) return@drawWithContent
+            drawRect(
+                brush =
+                    Brush.verticalGradient(
+                        colorStops =
+                            arrayOf(
+                                0f to Color.Black,
+                                0.5f to Color.Black.copy(alpha = 0.3f),
+                                1f to Color.Transparent,
+                            ),
+                        startY = s,
+                        endY = e,
+                    ),
+                blendMode = BlendMode.DstIn,
+            )
+        }
 
-internal fun Modifier.fadingEdges(fade: Float = 0.12f): Modifier = this
-    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-    .drawWithContent {
-        drawContent()
-        drawRect(
-            brush = Brush.verticalGradient(
-                0f to Color.Transparent,
-                fade to Color.Black,
-                1f - fade to Color.Black,
-                1f to Color.Transparent,
-            ),
-            blendMode = BlendMode.DstIn,
-        )
-    }
+internal fun Modifier.fadingEdges(fade: Float = 0.12f): Modifier =
+    this
+        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+        .drawWithContent {
+            drawContent()
+            drawRect(
+                brush =
+                    Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        fade to Color.Black,
+                        1f - fade to Color.Black,
+                        1f to Color.Transparent,
+                    ),
+                blendMode = BlendMode.DstIn,
+            )
+        }
 
 private const val BounceSpeedDpPerSecond = 26f
 private const val BounceRestStartMs = 2400L
 private const val BounceRestEndMs = 1700L
 
 @Composable
-internal fun BouncingText(text: String, style: TextStyle, color: Color, modifier: Modifier = Modifier) {
+internal fun BouncingText(
+    text: String,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
     val density = LocalDensity.current
     var boxWidth by remember { mutableIntStateOf(0) }
     var textWidth by remember { mutableIntStateOf(0) }
@@ -247,16 +266,20 @@ internal fun BouncingText(text: String, style: TextStyle, color: Color, modifier
             maxLines = 1,
             softWrap = false,
             overflow = androidx.compose.ui.text.style.TextOverflow.Clip,
-            modifier = Modifier
-                .wrapContentWidth(Alignment.Start, unbounded = true)
-                .onSizeChanged { textWidth = it.width }
-                .graphicsLayer { translationX = -offset.value },
+            modifier =
+                Modifier
+                    .wrapContentWidth(Alignment.Start, unbounded = true)
+                    .onSizeChanged { textWidth = it.width }
+                    .graphicsLayer { translationX = -offset.value },
         )
     }
 }
 
 @Composable
-internal fun LoadingVinyl(progress: Float?, modifier: Modifier = Modifier) {
+internal fun LoadingVinyl(
+    progress: Float?,
+    modifier: Modifier = Modifier,
+) {
     Box(modifier.size(104.dp), contentAlignment = Alignment.Center) {
         VinylDisc(Modifier.fillMaxSize())
         if (progress != null) {
@@ -266,7 +289,10 @@ internal fun LoadingVinyl(progress: Float?, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun LoadingBar(progress: Float, modifier: Modifier = Modifier) {
+private fun LoadingBar(
+    progress: Float,
+    modifier: Modifier = Modifier,
+) {
     val shown by animateFloatAsState(
         targetValue = progress.coerceIn(0f, 1f),
         animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
@@ -284,7 +310,11 @@ private fun LoadingBar(progress: Float, modifier: Modifier = Modifier) {
 }
 
 @Composable
-internal fun PlayerSpinner(modifier: Modifier = Modifier, color: Color = Color.White, strokeWidth: Dp = 2.dp) {
+internal fun PlayerSpinner(
+    modifier: Modifier = Modifier,
+    color: Color = Color.White,
+    strokeWidth: Dp = 2.dp,
+) {
     val transition = rememberInfiniteTransition(label = "player-spinner")
     val rotation by transition.animateFloat(
         initialValue = 0f,
@@ -340,16 +370,17 @@ private fun VinylDisc(modifier: Modifier = Modifier) {
             i++
         }
         drawCircle(
-            brush = Brush.sweepGradient(
-                0.00f to Color.Transparent,
-                0.07f to Color.White.copy(alpha = 0.16f),
-                0.15f to Color.Transparent,
-                0.50f to Color.Transparent,
-                0.57f to Color.White.copy(alpha = 0.16f),
-                0.65f to Color.Transparent,
-                1.00f to Color.Transparent,
-                center = c,
-            ),
+            brush =
+                Brush.sweepGradient(
+                    0.00f to Color.Transparent,
+                    0.07f to Color.White.copy(alpha = 0.16f),
+                    0.15f to Color.Transparent,
+                    0.50f to Color.Transparent,
+                    0.57f to Color.White.copy(alpha = 0.16f),
+                    0.65f to Color.Transparent,
+                    1.00f to Color.Transparent,
+                    center = c,
+                ),
             radius = r * 0.97f,
             center = c,
         )
@@ -365,7 +396,11 @@ private fun VinylDisc(modifier: Modifier = Modifier) {
     }
 }
 
-internal fun waveformAt(wave: FloatArray, index: Int, count: Int): Float {
+internal fun waveformAt(
+    wave: FloatArray,
+    index: Int,
+    count: Int,
+): Float {
     if (wave.isEmpty()) return 0f
     val from = (index.toLong() * wave.size / count).toInt().coerceIn(0, wave.lastIndex)
     val to = ((index + 1).toLong() * wave.size / count).toInt().coerceIn(from + 1, wave.size)
@@ -374,7 +409,10 @@ internal fun waveformAt(wave: FloatArray, index: Int, count: Int): Float {
     return m.coerceIn(0f, 1f)
 }
 
-internal fun barHeights(wave: FloatArray, count: Int): FloatArray {
+internal fun barHeights(
+    wave: FloatArray,
+    count: Int,
+): FloatArray {
     if (wave.isEmpty() || count <= 0) return FloatArray(maxOf(count, 0))
     var row = FloatArray(count) { waveformAt(wave, it, count) }
     if (count < 5) return row
@@ -407,14 +445,18 @@ object WaveformSource {
 
     private val recent = java.util.ArrayDeque<String>()
 
-    fun register(track: Track, audioUrl: String) {
+    fun register(
+        track: Track,
+        audioUrl: String,
+    ) {
         val key = keyOf(track)
         urls[key] = audioUrl
-        val stale = synchronized(recent) {
-            recent.remove(key)
-            recent.addLast(key)
-            buildList { while (recent.size > 2) add(recent.removeFirst()) }
-        }
+        val stale =
+            synchronized(recent) {
+                recent.remove(key)
+                recent.addLast(key)
+                buildList { while (recent.size > 2) add(recent.removeFirst()) }
+            }
         stale.forEach { k -> waveformEntries.remove(k)?.job?.cancel() }
         waveformEntry(track)
     }
@@ -434,9 +476,10 @@ private const val WaveformUserAgent =
 private const val DownloadChunk = 1_048_576
 private const val MaxDownload = 48L * 1_048_576
 
-private val waveformCache = object : LinkedHashMap<String, FloatArray>(16, 0.75f, true) {
-    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, FloatArray>?) = size > 24
-}
+private val waveformCache =
+    object : LinkedHashMap<String, FloatArray>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, FloatArray>?) = size > 24
+    }
 
 private class WaveformEntry {
     val data = mutableStateOf(FloatArray(0))
@@ -454,20 +497,22 @@ private fun waveformEntry(track: Track): WaveformEntry {
         return WaveformEntry().also { it.data.value = cached }
     }
     var created: WaveformEntry? = null
-    val entry = waveformEntries.computeIfAbsent(key) { k ->
-        WaveformEntry().also { e ->
-            e.job = waveformScope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
-                try {
-                    delay(WaveformStartDelayMs)
-                    val real = loadWaveform(track) { partial -> e.data.value = partial }
-                    if (real != null && real.isNotEmpty()) e.data.value = real
-                } finally {
-                    waveformEntries.remove(k, e)
-                }
+    val entry =
+        waveformEntries.computeIfAbsent(key) { k ->
+            WaveformEntry().also { e ->
+                e.job =
+                    waveformScope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+                        try {
+                            delay(WaveformStartDelayMs)
+                            val real = loadWaveform(track) { partial -> e.data.value = partial }
+                            if (real != null && real.isNotEmpty()) e.data.value = real
+                        } finally {
+                            waveformEntries.remove(k, e)
+                        }
+                    }
+                created = e
             }
-            created = e
         }
-    }
     if (created === entry) entry.job?.start()
     return entry
 }
@@ -486,21 +531,35 @@ private inline fun <T> lowPriority(block: () -> T): T {
     }
 }
 
-private class LocalAudio(val file: java.io.File, val temp: Boolean)
+private class LocalAudio(
+    val file: java.io.File,
+    val temp: Boolean,
+)
 
 private fun asLocalAudio(source: String): LocalAudio? {
     fun existing(path: String?): java.io.File? = path?.let { java.io.File(it) }?.takeIf { it.isFile && it.length() > 0 }
     return when {
-        source.startsWith("/") -> existing(source)?.let { LocalAudio(it, false) }
+        source.startsWith("/") -> {
+            existing(source)?.let { LocalAudio(it, false) }
+        }
 
-        source.startsWith("file:") -> existing(android.net.Uri.parse(source).path)?.let { LocalAudio(it, false) }
+        source.startsWith("file:") -> {
+            existing(
+                android.net.Uri
+                    .parse(source)
+                    .path,
+            )?.let { LocalAudio(it, false) }
+        }
 
         source.startsWith("content:") -> {
             val ctx = WaveformSource.appContext ?: return null
             val tmp = java.io.File.createTempFile("waveform", ".audio")
-            val ok = runCatching {
-                ctx.contentResolver.openInputStream(android.net.Uri.parse(source))?.use { input -> tmp.outputStream().use { out -> input.copyTo(out) } }
-            }.isSuccess && tmp.length() > 0
+            val ok =
+                runCatching {
+                    ctx.contentResolver.openInputStream(android.net.Uri.parse(source))?.use { input ->
+                        tmp.outputStream().use { out -> input.copyTo(out) }
+                    }
+                }.isSuccess && tmp.length() > 0
             if (ok) {
                 LocalAudio(tmp, true)
             } else {
@@ -509,11 +568,16 @@ private fun asLocalAudio(source: String): LocalAudio? {
             }
         }
 
-        else -> null
+        else -> {
+            null
+        }
     }
 }
 
-private suspend fun loadWaveform(track: Track, onPartial: (FloatArray) -> Unit): FloatArray? {
+private suspend fun loadWaveform(
+    track: Track,
+    onPartial: (FloatArray) -> Unit,
+): FloatArray? {
     val key = WaveformSource.keyOf(track)
     synchronized(waveformCache) { waveformCache[key] }?.let { return it }
     var url = WaveformSource.urlFor(track)
@@ -523,45 +587,47 @@ private suspend fun loadWaveform(track: Track, onPartial: (FloatArray) -> Unit):
         url = WaveformSource.urlFor(track)
         tries++
     }
-    val source = url ?: run {
-        Log.w(WaveformTag, "No audio URL registered for \"${track.title}\" (played without WaveformSource.register?)")
-        return null
-    }
+    val source =
+        url ?: run {
+            Log.w(WaveformTag, "No audio URL registered for \"${track.title}\" (played without WaveformSource.register?)")
+            return null
+        }
     waveformGate.acquire()
     val startedAt = System.currentTimeMillis()
-    val result = try {
-        withContext(Dispatchers.IO) {
-            lowPriority {
-                val local = asLocalAudio(source)
-                if (local != null) {
-                    try {
-                        sampleEnvelope(local.file.path)
-                    } finally {
-                        if (local.temp) local.file.delete()
-                    }
-                } else {
-                    val job = currentCoroutineContext()[Job]
-                    val file = downloadAudio(source) { job?.isActive != false }
-                    if (file == null) {
-                        null
-                    } else {
+    val result =
+        try {
+            withContext(Dispatchers.IO) {
+                lowPriority {
+                    val local = asLocalAudio(source)
+                    if (local != null) {
                         try {
-                            sampleEnvelope(file.path)
+                            sampleEnvelope(local.file.path)
                         } finally {
-                            file.delete()
+                            if (local.temp) local.file.delete()
+                        }
+                    } else {
+                        val job = currentCoroutineContext()[Job]
+                        val file = downloadAudio(source) { job?.isActive != false }
+                        if (file == null) {
+                            null
+                        } else {
+                            try {
+                                sampleEnvelope(file.path)
+                            } finally {
+                                file.delete()
+                            }
                         }
                     }
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Log.w(WaveformTag, "Decoding failed for \"${track.title}\"", e)
+            null
+        } finally {
+            waveformGate.release()
         }
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Throwable) {
-        Log.w(WaveformTag, "Decoding failed for \"${track.title}\"", e)
-        null
-    } finally {
-        waveformGate.release()
-    }
     if (result == null) {
         Log.w(WaveformTag, "No waveform for \"${track.title}\"")
     } else {
@@ -577,7 +643,11 @@ private suspend fun loadWaveform(track: Track, onPartial: (FloatArray) -> Unit):
 
 private const val DownloadParallel = 4
 
-private fun fetchChunk(url: String, start: Long, chunked: Boolean): Pair<Int, ByteArray>? {
+private fun fetchChunk(
+    url: String,
+    start: Long,
+    chunked: Boolean,
+): Pair<Int, ByteArray>? {
     val end = start + DownloadChunk - 1
     val connection = java.net.URL(if (chunked) "$url&range=$start-$end" else url).openConnection() as java.net.HttpURLConnection
     return try {
@@ -600,10 +670,15 @@ private fun fetchChunk(url: String, start: Long, chunked: Boolean): Pair<Int, By
     }
 }
 
-private fun downloadAudio(url: String, stillActive: () -> Boolean): java.io.File? {
+private fun downloadAudio(
+    url: String,
+    stillActive: () -> Boolean,
+): java.io.File? {
     val file = java.io.File.createTempFile("waveform", ".audio")
     var ok = false
-    val pool = java.util.concurrent.Executors.newFixedThreadPool(DownloadParallel)
+    val pool =
+        java.util.concurrent.Executors
+            .newFixedThreadPool(DownloadParallel)
     try {
         val chunked = url.contains("googlevideo.com") && !url.contains("range=")
         file.outputStream().use { out ->
@@ -614,9 +689,10 @@ private fun downloadAudio(url: String, stillActive: () -> Boolean): java.io.File
             while (more && start < MaxDownload) {
                 if (!stillActive()) return null
                 val base = start
-                val wave = (0 until DownloadParallel).map { i ->
-                    pool.submit<Pair<Int, ByteArray>?> { fetchChunk(url, base + i.toLong() * DownloadChunk, chunked) }
-                }
+                val wave =
+                    (0 until DownloadParallel).map { i ->
+                        pool.submit<Pair<Int, ByteArray>?> { fetchChunk(url, base + i.toLong() * DownloadChunk, chunked) }
+                    }
                 var done = false
                 for (f in wave) {
                     if (done) {
@@ -646,24 +722,33 @@ private fun sampleEnvelope(path: String): FloatArray? {
         Log.w(WaveformTag, "WaveformSource.init(context) was never called")
         return null
     }
-    val amps: List<Int> = com.linc.amplituda.Amplituda(context).processAudio(path).get()?.amplitudesAsList() ?: emptyList()
+    val amps: List<Int> =
+        com.linc.amplituda
+            .Amplituda(context)
+            .processAudio(path)
+            .get()
+            ?.amplitudesAsList() ?: emptyList()
     val peak = amps.maxOrNull() ?: 0
     if (peak <= 0) {
         Log.w(WaveformTag, "Amplituda returned no audio (${amps.size} samples)")
         return null
     }
     val n = amps.size
-    val levels = FloatArray(EnvelopeSamples) { b ->
-        val from = (b.toLong() * n / EnvelopeSamples).toInt().coerceIn(0, n - 1)
-        val to = ((b + 1).toLong() * n / EnvelopeSamples).toInt().coerceIn(from + 1, n)
-        var sum = 0L
-        for (k in from until to) sum += amps[k]
-        sum.toFloat() / (to - from) / peak
-    }
+    val levels =
+        FloatArray(EnvelopeSamples) { b ->
+            val from = (b.toLong() * n / EnvelopeSamples).toInt().coerceIn(0, n - 1)
+            val to = ((b + 1).toLong() * n / EnvelopeSamples).toInt().coerceIn(from + 1, n)
+            var sum = 0L
+            for (k in from until to) sum += amps[k]
+            sum.toFloat() / (to - from) / peak
+        }
     return levelsToEnvelope(levels, EnvelopeSamples - 1)
 }
 
-private fun levelsToEnvelope(levels: FloatArray, upTo: Int): FloatArray {
+private fun levelsToEnvelope(
+    levels: FloatArray,
+    upTo: Int,
+): FloatArray {
     var carry = 0f
     return FloatArray(levels.size) { i ->
         if (i > upTo) {
@@ -682,12 +767,13 @@ internal fun shapeWaveform(wave: FloatArray): FloatArray {
     if (measured < 8) return FloatArray(wave.size)
     val r = 12
     val prefix = DoubleArray(measured + 1).also { for (i in 0 until measured) it[i + 1] = it[i] + wave[i] }
-    val mixed = FloatArray(measured) { i ->
-        val a = (i - r).coerceAtLeast(0)
-        val b = (i + r + 1).coerceAtMost(measured)
-        val local = ((prefix[b] - prefix[a]) / (b - a)).toFloat()
-        0.5f * wave[i] + 1.0f * (wave[i] - local)
-    }
+    val mixed =
+        FloatArray(measured) { i ->
+            val a = (i - r).coerceAtLeast(0)
+            val b = (i + r + 1).coerceAtMost(measured)
+            val local = ((prefix[b] - prefix[a]) / (b - a)).toFloat()
+            0.5f * wave[i] + 1.0f * (wave[i] - local)
+        }
     val sorted = mixed.sortedArray()
     val lo = sorted[(sorted.size * 0.05f).toInt().coerceIn(0, sorted.lastIndex)]
     val hi = sorted[(sorted.size * 0.97f).toInt().coerceIn(0, sorted.lastIndex)]
@@ -725,7 +811,12 @@ internal fun rememberCoverAccent(url: String?): Color {
         }
         accent = withContext(Dispatchers.IO) {
             runCatching {
-                val request = ImageRequest.Builder(context).data(url).allowHardware(false).build()
+                val request =
+                    ImageRequest
+                        .Builder(context)
+                        .data(url)
+                        .allowHardware(false)
+                        .build()
                 val result = context.imageLoader.execute(request)
                 val bitmap = (result as? SuccessResult)?.drawable?.toBitmapOrNull() ?: return@runCatching null
                 accentFromBitmap(bitmap)
@@ -774,7 +865,10 @@ private fun accentsFromBitmap(bitmap: Bitmap): Pair<Color?, Color?> {
     return main to subAccentFor(bitmap)
 }
 
-private fun hueDistance(a: Float, b: Float): Float = kotlin.math.abs(a - b).let { if (it > 180f) 360f - it else it }
+private fun hueDistance(
+    a: Float,
+    b: Float,
+): Float = kotlin.math.abs(a - b).let { if (it > 180f) 360f - it else it }
 
 private fun subAccentFor(bitmap: Bitmap): Color? {
     val size = 64
@@ -804,7 +898,14 @@ private fun subAccentFor(bitmap: Bitmap): Color? {
     if (pixels < 20 || total <= 0f) return null
 
     val claimed = BooleanArray(fine)
-    class Family(val weight: Float, val count: Int, val hue: Float, val sat: Float, val value: Float)
+
+    class Family(
+        val weight: Float,
+        val count: Int,
+        val hue: Float,
+        val sat: Float,
+        val value: Float,
+    )
     val families = ArrayList<Family>()
     for (seed in (0 until fine).sortedByDescending { binW[it] }) {
         if (binW[seed] <= 0f || claimed[seed]) continue
@@ -851,7 +952,10 @@ private fun subAccentFor(bitmap: Bitmap): Color? {
 private val subAccentCache = HashMap<String, Color?>()
 
 @Composable
-internal fun rememberCoverSubAccent(url: String?, fallback: Color): Color {
+internal fun rememberCoverSubAccent(
+    url: String?,
+    fallback: Color,
+): Color {
     val context = LocalContext.current
     var sub by remember { mutableStateOf<Color?>(url?.let { subAccentCache[it] }) }
     LaunchedEffect(url) {
@@ -863,14 +967,20 @@ internal fun rememberCoverSubAccent(url: String?, fallback: Color): Color {
             sub = subAccentCache[url]
             return@LaunchedEffect
         }
-        sub = withContext(Dispatchers.IO) {
-            runCatching {
-                val request = ImageRequest.Builder(context).data(url).allowHardware(false).build()
-                val result = context.imageLoader.execute(request)
-                val bitmap = (result as? SuccessResult)?.drawable?.toBitmapOrNull() ?: return@runCatching null
-                subAccentFromBitmap(bitmap)
-            }.getOrNull()
-        }
+        sub =
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val request =
+                        ImageRequest
+                            .Builder(context)
+                            .data(url)
+                            .allowHardware(false)
+                            .build()
+                    val result = context.imageLoader.execute(request)
+                    val bitmap = (result as? SuccessResult)?.drawable?.toBitmapOrNull() ?: return@runCatching null
+                    subAccentFromBitmap(bitmap)
+                }.getOrNull()
+            }
         subAccentCache[url] = sub
     }
     val animated by animateColorAsState(sub ?: fallback, tween(600), label = "lyrics-sub-accent")

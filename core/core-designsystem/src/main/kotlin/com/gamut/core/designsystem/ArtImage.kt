@@ -30,9 +30,14 @@ fun ArtImage(
     @Suppress("UNUSED_PARAMETER") fallback: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    val request = remember(url) {
-        ImageRequest.Builder(context).data(url?.takeIf { it.isNotBlank() }).crossfade(false).build()
-    }
+    val request =
+        remember(url) {
+            ImageRequest
+                .Builder(context)
+                .data(url?.takeIf { it.isNotBlank() })
+                .crossfade(false)
+                .build()
+        }
     var failed by remember(url) { mutableStateOf(false) }
     val tile = artTileColor()
     Box(modifier.background(tile), contentAlignment = Alignment.Center) {

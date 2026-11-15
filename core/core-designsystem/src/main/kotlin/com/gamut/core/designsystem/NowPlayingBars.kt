@@ -22,17 +22,26 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun NowPlayingBars(color: Color, modifier: Modifier = Modifier) {
+fun NowPlayingBars(
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
     val t = rememberInfiniteTransition(label = "now-playing")
     val periods = listOf(420, 560, 480)
-    val levels = periods.mapIndexed { i, ms ->
-        t.animateFloat(
-            initialValue = 0.25f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(ms, easing = LinearEasing), RepeatMode.Reverse, initialStartOffset = StartOffset(i * 90)),
-            label = "bar-$i",
-        )
-    }
+    val levels =
+        periods.mapIndexed { i, ms ->
+            t.animateFloat(
+                initialValue = 0.25f,
+                targetValue = 1f,
+                animationSpec =
+                    infiniteRepeatable(
+                        tween(ms, easing = LinearEasing),
+                        RepeatMode.Reverse,
+                        initialStartOffset = StartOffset(i * 90),
+                    ),
+                label = "bar-$i",
+            )
+        }
     Row(
         modifier.height(14.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),

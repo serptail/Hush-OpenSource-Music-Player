@@ -50,20 +50,28 @@ fun ProfileAvatar(
     if (seed == null && invertedGuest) {
         val disc = ink(0.9f)
         Box(
-            modifier.size(size).graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.clip(shape).background(disc),
+            modifier
+                .size(size)
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                .clip(shape)
+                .background(disc),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 guestIcon,
                 null,
                 tint = Color.Black,
-                modifier = Modifier.size(size * 0.55f).drawWithContent {
-                    drawIntoCanvas { canvas ->
-                        canvas.saveLayer(Rect(0f, 0f, this.size.width, this.size.height), Paint().apply { blendMode = BlendMode.DstOut })
-                        drawContent()
-                        canvas.restore()
-                    }
-                },
+                modifier =
+                    Modifier.size(size * 0.55f).drawWithContent {
+                        drawIntoCanvas { canvas ->
+                            canvas.saveLayer(
+                                Rect(0f, 0f, this.size.width, this.size.height),
+                                Paint().apply { blendMode = BlendMode.DstOut },
+                            )
+                            drawContent()
+                            canvas.restore()
+                        }
+                    },
             )
         }
         return
@@ -75,7 +83,12 @@ fun ProfileAvatar(
         return
     }
     val color = remember(seed) { Color.hsv(Math.floorMod(seed.hashCode(), 360).toFloat(), 0.45f, 0.80f) }
-    val initial = name?.trim()?.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "?"
+    val initial =
+        name
+            ?.trim()
+            ?.firstOrNull { it.isLetterOrDigit() }
+            ?.uppercaseChar()
+            ?.toString() ?: "?"
     Box(modifier.size(size).clip(shape).background(color), contentAlignment = Alignment.Center) {
         Text(
             initial,

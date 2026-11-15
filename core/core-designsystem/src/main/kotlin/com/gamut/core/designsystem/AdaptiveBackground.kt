@@ -40,13 +40,13 @@ import androidx.core.graphics.scale
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.sin
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 data class CoverPalette(
     val primary: Color,
@@ -59,25 +59,27 @@ data class CoverPalette(
     val flows: Boolean = true,
 ) {
     companion object {
-        val Neutral = CoverPalette(
-            primary = Color(0xFF2B2D3A),
-            secondary = Color(0xFF2B2D3A),
-            tertiary = Color(0xFF2B2D3A),
-            accent = Color.White,
-            base = Color(0xFF0B0B0D),
-            flows = false,
-        )
+        val Neutral =
+            CoverPalette(
+                primary = Color(0xFF2B2D3A),
+                secondary = Color(0xFF2B2D3A),
+                tertiary = Color(0xFF2B2D3A),
+                accent = Color.White,
+                base = Color(0xFF0B0B0D),
+                flows = false,
+            )
 
-        val NeutralLight = CoverPalette(
-            primary = Color(0xFFE4E4EA),
-            secondary = Color(0xFFE4E4EA),
-            tertiary = Color(0xFFE4E4EA),
-            accent = Color(0xFF141414),
-            base = Color(0xFFF4F4F6),
-            onBase = Color(0xFF141414),
-            isLight = true,
-            flows = false,
-        )
+        val NeutralLight =
+            CoverPalette(
+                primary = Color(0xFFE4E4EA),
+                secondary = Color(0xFFE4E4EA),
+                tertiary = Color(0xFFE4E4EA),
+                accent = Color(0xFF141414),
+                base = Color(0xFFF4F4F6),
+                onBase = Color(0xFF141414),
+                isLight = true,
+                flows = false,
+            )
     }
 }
 
@@ -86,31 +88,38 @@ private const val ThemeTransitionMs = 450
 val LocalCoverPalette = staticCompositionLocalOf { CoverPalette.Neutral }
 
 @Composable
-fun CoverTheme(palette: CoverPalette, content: @Composable () -> Unit) {
+fun CoverTheme(
+    palette: CoverPalette,
+    content: @Composable () -> Unit,
+) {
     val onBase by animateColorAsState(palette.onBase, tween(ThemeTransitionMs), label = "cover-onbase")
     val accent by animateColorAsState(palette.accent, tween(ThemeTransitionMs), label = "cover-accent")
     val parent = MaterialTheme.colorScheme
     val surfaceBase by animateColorAsState(palette.base, tween(ThemeTransitionMs), label = "cover-surface")
-    val scheme = remember(parent, onBase, accent, surfaceBase) {
-        val lift = if (palette.isLight) Color.Black else Color.White
-        fun tone(a: Float) = androidx.compose.ui.graphics.lerp(surfaceBase, lift, a)
-        parent.copy(
-            background = Color.Transparent,
-            onBackground = onBase,
-            surface = surfaceBase,
-            onSurface = onBase,
-            surfaceVariant = tone(0.06f),
-            surfaceContainerLowest = surfaceBase,
-            surfaceContainerLow = tone(0.02f),
-            surfaceContainer = tone(0.04f),
-            surfaceContainerHigh = tone(0.06f),
-            surfaceContainerHighest = tone(0.08f),
-            onSurfaceVariant = onBase.copy(alpha = 0.65f),
-            outline = onBase.copy(alpha = 0.30f),
-            outlineVariant = onBase.copy(alpha = 0.15f),
-            primary = accent,
-        )
-    }
+    val scheme =
+        remember(parent, onBase, accent, surfaceBase) {
+            val lift = if (palette.isLight) Color.Black else Color.White
+
+            fun tone(a: Float) =
+                androidx.compose.ui.graphics
+                    .lerp(surfaceBase, lift, a)
+            parent.copy(
+                background = Color.Transparent,
+                onBackground = onBase,
+                surface = surfaceBase,
+                onSurface = onBase,
+                surfaceVariant = tone(0.06f),
+                surfaceContainerLowest = surfaceBase,
+                surfaceContainerLow = tone(0.02f),
+                surfaceContainer = tone(0.04f),
+                surfaceContainerHigh = tone(0.06f),
+                surfaceContainerHighest = tone(0.08f),
+                onSurfaceVariant = onBase.copy(alpha = 0.65f),
+                outline = onBase.copy(alpha = 0.30f),
+                outlineVariant = onBase.copy(alpha = 0.15f),
+                primary = accent,
+            )
+        }
     MaterialTheme(colorScheme = scheme) {
         CompositionLocalProvider(
             LocalContentColor provides onBase,
@@ -120,12 +129,16 @@ fun CoverTheme(palette: CoverPalette, content: @Composable () -> Unit) {
     }
 }
 
-private val paletteCache = object : LinkedHashMap<String, CoverPalette>(24, 0.75f, true) {
-    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CoverPalette>?): Boolean = size > 24
-}
+private val paletteCache =
+    object : LinkedHashMap<String, CoverPalette>(24, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CoverPalette>?): Boolean = size > 24
+    }
 
 @Composable
-fun rememberCoverPalette(url: String?, forceLight: Boolean? = null): CoverPalette {
+fun rememberCoverPalette(
+    url: String?,
+    forceLight: Boolean? = null,
+): CoverPalette {
     val context = LocalContext.current
     val neutral = if (forceLight == true) CoverPalette.NeutralLight else CoverPalette.Neutral
     var palette by remember { mutableStateOf(url?.let { paletteCache["$it|$forceLight"] } ?: neutral) }
@@ -142,14 +155,28 @@ fun rememberCoverPalette(url: String?, forceLight: Boolean? = null): CoverPalett
     return palette
 }
 
-private suspend fun loadPalette(context: Context, url: String, forceLight: Boolean?): CoverPalette? = runCatching {
-    val request = ImageRequest.Builder(context).data(url).size(96).allowHardware(false).build()
-    val result = context.imageLoader.execute(request) as? SuccessResult ?: return@runCatching null
-    val bitmap = (result.drawable as? BitmapDrawable)?.bitmap ?: return@runCatching null
-    paletteFromBitmap(bitmap, forceLight)
-}.getOrNull()
+private suspend fun loadPalette(
+    context: Context,
+    url: String,
+    forceLight: Boolean?,
+): CoverPalette? =
+    runCatching {
+        val request =
+            ImageRequest
+                .Builder(context)
+                .data(url)
+                .size(96)
+                .allowHardware(false)
+                .build()
+        val result = context.imageLoader.execute(request) as? SuccessResult ?: return@runCatching null
+        val bitmap = (result.drawable as? BitmapDrawable)?.bitmap ?: return@runCatching null
+        paletteFromBitmap(bitmap, forceLight)
+    }.getOrNull()
 
-private fun paletteFromBitmap(bitmap: Bitmap, forceLight: Boolean? = null): CoverPalette {
+private fun paletteFromBitmap(
+    bitmap: Bitmap,
+    forceLight: Boolean? = null,
+): CoverPalette {
     val size = 48
     val sample = bitmap.scale(size, size, true)
     val pixels = IntArray(size * size) { i -> sample[i % size, i / size] }
@@ -162,17 +189,35 @@ private const val NeutralChroma = 0.035
 private const val LightBaseThreshold = 0.72
 private const val MaxAccents = 3
 
-private class Cluster(val count: Int, val l: Double, val a: Double, val b: Double) {
+private class Cluster(
+    val count: Int,
+    val l: Double,
+    val a: Double,
+    val b: Double,
+) {
     val chroma: Double get() = hypot(a, b)
     val hue: Double get() = atan2(b, a)
 }
 
-private class Lch(val l: Double, val c: Double, val h: Double) {
+private class Lch(
+    val l: Double,
+    val c: Double,
+    val h: Double,
+) {
     fun toColor(): Color = oklch(l, c, h)
-    fun shaded(dL: Double, chromaMul: Double, lo: Double, hi: Double) = Lch((l + dL).coerceIn(lo, hi), c * chromaMul, h)
+
+    fun shaded(
+        dL: Double,
+        chromaMul: Double,
+        lo: Double,
+        hi: Double,
+    ) = Lch((l + dL).coerceIn(lo, hi), c * chromaMul, h)
 }
 
-internal fun paletteFromPixels(pixels: IntArray, forceLight: Boolean? = null): CoverPalette {
+internal fun paletteFromPixels(
+    pixels: IntArray,
+    forceLight: Boolean? = null,
+): CoverPalette {
     val n = pixels.size
     val lab = Array(n) { argbToOklab(pixels[it]) }
     val clusters = quantize(lab, ClusterCount)
@@ -182,30 +227,35 @@ internal fun paletteFromPixels(pixels: IntArray, forceLight: Boolean? = null): C
 
     val accents = pickAccents(clusters, n, minFraction = 0.015).ifEmpty { pickAccents(clusters, n, minFraction = 0.0) }
 
-    val base = if (isLight) {
-        oklch(0.965, minOf(baseCluster.chroma * 0.5, 0.03), baseCluster.hue)
-    } else {
-        val (tintHue, tintChroma) = when {
-            baseCluster.chroma >= 0.03 -> baseCluster.hue to minOf(baseCluster.chroma * 0.7, 0.05)
-            accents.isNotEmpty() -> accents[0].hue to 0.04
-            else -> baseCluster.hue to baseCluster.chroma
+    val base =
+        if (isLight) {
+            oklch(0.965, minOf(baseCluster.chroma * 0.5, 0.03), baseCluster.hue)
+        } else {
+            val (tintHue, tintChroma) =
+                when {
+                    baseCluster.chroma >= 0.03 -> baseCluster.hue to minOf(baseCluster.chroma * 0.7, 0.05)
+                    accents.isNotEmpty() -> accents[0].hue to 0.04
+                    else -> baseCluster.hue to baseCluster.chroma
+                }
+            oklch((0.12 + baseCluster.l * 0.20).coerceIn(0.17, 0.23), tintChroma, tintHue)
         }
-        oklch((0.12 + baseCluster.l * 0.20).coerceIn(0.17, 0.23), tintChroma, tintHue)
-    }
 
     val lMin = if (isLight) 0.58 else 0.55
     val glow = accents.map { Lch(it.l.coerceIn(lMin, 0.80), minOf(it.chroma * 1.15, 0.30), it.hue) }
     val first = glow.firstOrNull() ?: Lch(if (isLight) 0.70 else 0.42, minOf(baseCluster.chroma, 0.03), baseCluster.hue)
-    val second = glow.getOrNull(1)
-        ?: if (isLight) first.shaded(+0.10, 0.7, 0.50, 0.88) else first.shaded(-0.10, 0.9, 0.40, 0.85)
-    val third = glow.getOrNull(2)
-        ?: if (isLight) first.shaded(-0.10, 0.9, 0.50, 0.88) else first.shaded(+0.08, 0.7, 0.40, 0.88)
+    val second =
+        glow.getOrNull(1)
+            ?: if (isLight) first.shaded(+0.10, 0.7, 0.50, 0.88) else first.shaded(-0.10, 0.9, 0.40, 0.85)
+    val third =
+        glow.getOrNull(2)
+            ?: if (isLight) first.shaded(-0.10, 0.9, 0.50, 0.88) else first.shaded(+0.08, 0.7, 0.40, 0.88)
 
-    val accent = if (accents.isNotEmpty()) {
-        oklch(if (isLight) 0.52 else 0.82, first.c.coerceIn(0.06, 0.16), first.h)
-    } else {
-        onBase
-    }
+    val accent =
+        if (accents.isNotEmpty()) {
+            oklch(if (isLight) 0.52 else 0.82, first.c.coerceIn(0.06, 0.16), first.h)
+        } else {
+            onBase
+        }
 
     return CoverPalette(
         primary = first.toColor(),
@@ -218,14 +268,21 @@ internal fun paletteFromPixels(pixels: IntArray, forceLight: Boolean? = null): C
     )
 }
 
-private fun labDist(x: Cluster, y: Cluster): Double {
+private fun labDist(
+    x: Cluster,
+    y: Cluster,
+): Double {
     val dl = x.l - y.l
     val da = x.a - y.a
     val db = x.b - y.b
     return Math.sqrt(dl * dl + da * da + db * db)
 }
 
-private fun pickAccents(clusters: List<Cluster>, total: Int, minFraction: Double): List<Cluster> {
+private fun pickAccents(
+    clusters: List<Cluster>,
+    total: Int,
+    minFraction: Double,
+): List<Cluster> {
     var candidates = clusters.filter { it.chroma >= NeutralChroma && it.count.toDouble() / total >= minFraction }
     val chosen = mutableListOf<Cluster>()
     while (candidates.isNotEmpty() && chosen.size < MaxAccents) {
@@ -260,14 +317,22 @@ private fun pickAccents(clusters: List<Cluster>, total: Int, minFraction: Double
     return chosen
 }
 
-private fun quantize(lab: Array<DoubleArray>, k: Int): List<Cluster> {
+private fun quantize(
+    lab: Array<DoubleArray>,
+    k: Int,
+): List<Cluster> {
     val n = lab.size
     var seed = 42L
+
     fun rnd(): Double {
         seed = (seed * 1103515245L + 12345L) and 0x7fffffffL
         return seed / 2147483648.0
     }
-    fun dist2(p: DoubleArray, q: DoubleArray): Double {
+
+    fun dist2(
+        p: DoubleArray,
+        q: DoubleArray,
+    ): Double {
         val a = p[0] - q[0]
         val b = p[1] - q[1]
         val c = p[2] - q[2]
@@ -299,6 +364,7 @@ private fun quantize(lab: Array<DoubleArray>, k: Int): List<Cluster> {
     }
 
     val assign = IntArray(n)
+
     fun assignAll() {
         for (i in 0 until n) {
             var bestC = 0
@@ -348,12 +414,13 @@ private fun quantize(lab: Array<DoubleArray>, k: Int): List<Cluster> {
                     val x = list[i]
                     val y = list[j]
                     val t = x.count + y.count
-                    list[i] = Cluster(
-                        t,
-                        (x.count * x.l + y.count * y.l) / t,
-                        (x.count * x.a + y.count * y.a) / t,
-                        (x.count * x.b + y.count * y.b) / t,
-                    )
+                    list[i] =
+                        Cluster(
+                            t,
+                            (x.count * x.l + y.count * y.l) / t,
+                            (x.count * x.a + y.count * y.a) / t,
+                            (x.count * x.b + y.count * y.b) / t,
+                        )
                     list.removeAt(j)
                     merged = true
                     break@search
@@ -386,7 +453,11 @@ private fun argbToOklab(argb: Int): DoubleArray {
     )
 }
 
-private fun oklabToLinear(lightness: Double, a: Double, b: Double): DoubleArray {
+private fun oklabToLinear(
+    lightness: Double,
+    a: Double,
+    b: Double,
+): DoubleArray {
     val l = Math.pow(lightness + 0.3963377774 * a + 0.2158037573 * b, 3.0)
     val m = Math.pow(lightness - 0.1055613458 * a - 0.0638541728 * b, 3.0)
     val s = Math.pow(lightness - 0.0894841775 * a - 1.2914855480 * b, 3.0)
@@ -397,12 +468,19 @@ private fun oklabToLinear(lightness: Double, a: Double, b: Double): DoubleArray 
     )
 }
 
-private fun inGamut(lightness: Double, chroma: Double, hue: Double): Boolean {
+private fun inGamut(
+    lightness: Double,
+    chroma: Double,
+    hue: Double,
+): Boolean {
     val rgb = oklabToLinear(lightness, chroma * cos(hue), chroma * sin(hue))
     return rgb.all { it >= -1e-4 && it <= 1.0 + 1e-4 }
 }
 
-private fun maxChroma(lightness: Double, hue: Double): Double {
+private fun maxChroma(
+    lightness: Double,
+    hue: Double,
+): Double {
     var lo = 0.0
     var hi = 0.4
     repeat(14) {
@@ -412,7 +490,11 @@ private fun maxChroma(lightness: Double, hue: Double): Double {
     return lo
 }
 
-private fun oklch(lightness: Double, chroma: Double, hue: Double): Color {
+private fun oklch(
+    lightness: Double,
+    chroma: Double,
+    hue: Double,
+): Color {
     val c = minOf(chroma, maxChroma(lightness, hue))
     val rgb = oklabToLinear(lightness, c * cos(hue), c * sin(hue))
     return Color(linearToSrgb(rgb[0]).toFloat(), linearToSrgb(rgb[1]).toFloat(), linearToSrgb(rgb[2]).toFloat())
@@ -444,12 +526,13 @@ private class Blob(
     val colorIndex: Int,
 )
 
-private val Blobs = listOf(
-    Blob(0.20f, 0.10f, 0.30f, 0.14f, 0.71f, 0.53f, 0.0f, 0.62f, 1.7f, 0.31f, 0),
-    Blob(0.85f, 0.32f, 0.26f, 0.18f, 0.47f, 0.83f, 2.1f, 0.55f, 1.5f, -0.27f, 1),
-    Blob(0.35f, 0.62f, 0.34f, 0.16f, 0.59f, 0.41f, 4.0f, 0.60f, 1.8f, 0.22f, 2),
-    Blob(0.80f, 0.90f, 0.28f, 0.12f, 0.37f, 0.67f, 5.3f, 0.52f, 1.4f, -0.35f, 0),
-)
+private val Blobs =
+    listOf(
+        Blob(0.20f, 0.10f, 0.30f, 0.14f, 0.71f, 0.53f, 0.0f, 0.62f, 1.7f, 0.31f, 0),
+        Blob(0.85f, 0.32f, 0.26f, 0.18f, 0.47f, 0.83f, 2.1f, 0.55f, 1.5f, -0.27f, 1),
+        Blob(0.35f, 0.62f, 0.34f, 0.16f, 0.59f, 0.41f, 4.0f, 0.60f, 1.8f, 0.22f, 2),
+        Blob(0.80f, 0.90f, 0.28f, 0.12f, 0.37f, 0.67f, 5.3f, 0.52f, 1.4f, -0.35f, 0),
+    )
 
 @Composable
 fun FlowingBackground(
@@ -470,30 +553,35 @@ fun FlowingBackground(
     )
     val fullStrength by animateFloatAsState(settings.flowIntensity.flowStrength, tween(1400), label = "flow-strength-full")
     val flow by animateFloatAsState(if (palette.flows) 1f else 0f, tween(1400), label = "flow-amount")
-    val clock = rememberFlowClock(
-        isPlaying = isPlaying,
-        running = visible && (palette.flows || flow > 0f),
-        animated = settings.flowAnimated,
-        speedScale = settings.flowSpeed.flowSpeed,
-        freezeWhenPaused = settings.freezeWhenPaused,
-    )
+    val clock =
+        rememberFlowClock(
+            isPlaying = isPlaying,
+            running = visible && (palette.flows || flow > 0f),
+            animated = settings.flowAnimated,
+            speedScale = settings.flowSpeed.flowSpeed,
+            freezeWhenPaused = settings.freezeWhenPaused,
+        )
 
     if (!visible) {
     } else if (flow <= 0f) {
         Box(modifier.fillMaxSize().background(base))
     } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         when (settings.flowStyle) {
-            FlowStyle.Mercury ->
+            FlowStyle.Mercury -> {
                 MercuryBackground(base, primary, secondary, tertiary, fullStrength * flow, palette.isLight, clock, modifier)
+            }
 
-            FlowStyle.Metaballs ->
+            FlowStyle.Metaballs -> {
                 MetaballsBackground(base, primary, secondary, tertiary, fullStrength * flow, palette.isLight, clock, modifier)
+            }
 
-            FlowStyle.Dithering ->
+            FlowStyle.Dithering -> {
                 DitheringBackground(base, primary, secondary, tertiary, strength * flow, palette.isLight, clock, modifier)
+            }
 
-            FlowStyle.Flow ->
+            FlowStyle.Flow -> {
                 MeshBackground(base, primary, secondary, tertiary, strength * flow, clock, modifier)
+            }
         }
     } else {
         BlobBackground(base, primary, secondary, tertiary, strength * flow, clock, modifier)
@@ -512,13 +600,14 @@ private fun rememberFlowClock(
     val pausedSpeed = if (freezeWhenPaused) 0f else PausedSpeed
     val speed by animateFloatAsState((if (isPlaying) 1f else pausedSpeed) * speedScale, tween(1200), label = "flow-speed")
     val clock = remember { mutableFloatStateOf(0f) }
-    val animationsOn = remember {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
-            Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f
-        } else {
-            true
+    val animationsOn =
+        remember {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
+                Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f
+            } else {
+                true
+            }
         }
-    }
     LaunchedEffect(animationsOn, running, animated) {
         if (!running) return@LaunchedEffect
         if (!animationsOn || !animated) {
@@ -610,6 +699,7 @@ private fun MeshBackground(
         shader.setFloatUniform("strength", strength)
         val aspect = size.width / size.height
         val t = clock.floatValue
+
         fun unit(v: Float) = 0.10f + 0.80f * (0.5f + 0.5f * v)
         shader.setFloatUniform("pa", aspect * unit(sin(t * 0.37f)), unit(cos(t * 0.29f + 1.0f)))
         shader.setFloatUniform("pb", aspect * unit(cos(t * 0.31f + 2.0f)), unit(sin(t * 0.41f + 3.0f)))
@@ -638,10 +728,11 @@ private fun BlobBackground(
 
         drawRect(base)
         for ((i, b) in Blobs.withIndex()) {
-            val blobCenter = Offset(
-                x = w * (0.10f + 0.80f * (0.5f + 0.5f * sin(t * b.fx * 0.6f + b.phase))),
-                y = h * (0.10f + 0.80f * (0.5f + 0.5f * cos(t * b.fy * 0.6f + b.phase * 1.3f))),
-            )
+            val blobCenter =
+                Offset(
+                    x = w * (0.10f + 0.80f * (0.5f + 0.5f * sin(t * b.fx * 0.6f + b.phase))),
+                    y = h * (0.10f + 0.80f * (0.5f + 0.5f * cos(t * b.fy * 0.6f + b.phase * 1.3f))),
+                )
             val breathe = 1f + 0.10f * sin(t * 1.2f + i * 1.7f)
             val r = longSide * b.radius * BlobScale * breathe
             val color = colors[b.colorIndex]
@@ -650,14 +741,15 @@ private fun BlobBackground(
                 scale(scaleX = b.stretch, scaleY = 0.8f, pivot = blobCenter)
             }) {
                 drawCircle(
-                    brush = Brush.radialGradient(
-                        0.00f to color.copy(alpha = Intensity * strength),
-                        0.45f to color.copy(alpha = Intensity * strength * 0.75f),
-                        0.75f to color.copy(alpha = Intensity * strength * 0.12f),
-                        1.00f to Color.Transparent,
-                        center = blobCenter,
-                        radius = r,
-                    ),
+                    brush =
+                        Brush.radialGradient(
+                            0.00f to color.copy(alpha = Intensity * strength),
+                            0.45f to color.copy(alpha = Intensity * strength * 0.75f),
+                            0.75f to color.copy(alpha = Intensity * strength * 0.12f),
+                            1.00f to Color.Transparent,
+                            center = blobCenter,
+                            radius = r,
+                        ),
                     radius = r,
                     center = blobCenter,
                 )

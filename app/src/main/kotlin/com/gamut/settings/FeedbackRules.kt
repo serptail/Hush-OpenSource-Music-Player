@@ -4,7 +4,13 @@ import android.content.Context
 import android.util.Patterns
 import java.security.MessageDigest
 
-enum class FeedbackType(val label: String) { BUG("Bug"), FEEDBACK("Feedback"), IDEA("Idea") }
+enum class FeedbackType(
+    val label: String,
+) {
+    BUG("Bug"),
+    FEEDBACK("Feedback"),
+    IDEA("Idea"),
+}
 
 enum class MessageProblem { TOO_SHORT, TOO_LONG, TOO_MANY_LINKS, REPETITIVE }
 
@@ -22,7 +28,10 @@ object FeedbackRules {
     private val LINK = Regex("(?i)(https?://|www\\.)\\S+")
     private val LONG_RUN = Regex("(.)\\1{19,}")
 
-    fun sanitize(input: String, multiline: Boolean): String {
+    fun sanitize(
+        input: String,
+        multiline: Boolean,
+    ): String {
         var s = input.replace("\r\n", "\n").replace('\r', '\n').replace(INVISIBLE, "")
         if (!multiline) s = s.replace('\n', ' ')
         s = s.replace(CONTROL, "")
@@ -42,7 +51,10 @@ object FeedbackRules {
         return count
     }
 
-    fun limitWords(s: String, max: Int): String {
+    fun limitWords(
+        s: String,
+        max: Int,
+    ): String {
         var count = 0
         var i = 0
         while (i < s.length) {
@@ -55,7 +67,8 @@ object FeedbackRules {
         return s
     }
 
-    fun isValidEmail(s: String): Boolean = s.length <= MAX_EMAIL && s.none { it.isWhitespace() } && Patterns.EMAIL_ADDRESS.matcher(s).matches()
+    fun isValidEmail(s: String): Boolean =
+        s.length <= MAX_EMAIL && s.none { it.isWhitespace() } && Patterns.EMAIL_ADDRESS.matcher(s).matches()
 
     fun checkMessage(message: String): MessageProblem? {
         val words = wordCount(message)
@@ -76,20 +89,33 @@ object FeedbackRules {
 
     fun fingerprint(message: String): String {
         val normal = message.lowercase().replace(Regex("\\s+"), " ").trim()
-        return MessageDigest.getInstance("SHA-256").digest(normal.toByteArray()).joinToString("") { "%02x".format(it) }.take(24)
+        return MessageDigest
+            .getInstance("SHA-256")
+            .digest(normal.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+            .take(24)
     }
 }
 
 sealed interface SendBlock {
-    data class Cooldown(val seconds: Int) : SendBlock
+    data class Cooldown(
+        val seconds: Int,
+    ) : SendBlock
+
     object DailyLimit : SendBlock
+
     object Duplicate : SendBlock
 }
 
-class SubmissionGuard(context: Context) {
+class SubmissionGuard(
+    context: Context,
+) {
     private val prefs = context.getSharedPreferences("feedback_guard", Context.MODE_PRIVATE)
 
-    fun check(fingerprint: String, now: Long = System.currentTimeMillis()): SendBlock? {
+    fun check(
+        fingerprint: String,
+        now: Long = System.currentTimeMillis(),
+    ): SendBlock? {
         val recent = recentTimes(now)
         if (recent.size >= DAILY_LIMIT) return SendBlock.DailyLimit
         val last = recent.maxOrNull()
@@ -99,12 +125,25 @@ class SubmissionGuard(context: Context) {
         return null
     }
 
-    fun record(fingerprint: String, now: Long = System.currentTimeMillis()) {
+    fun record(
+        fingerprint: String,
+        now: Long = System.currentTimeMillis(),
+    ) {
         val times = (recentTimes(now) + now).joinToString(",")
-        prefs.edit().putString("times", times).putString("fp", fingerprint).putLong("fp_at", now).apply()
+        prefs
+            .edit()
+            .putString("times", times)
+            .putString("fp", fingerprint)
+            .putLong("fp_at", now)
+            .apply()
     }
 
-    private fun recentTimes(now: Long): List<Long> = prefs.getString("times", "").orEmpty().split(",").mapNotNull { it.toLongOrNull() }.filter { now - it in 0 until DAY_MS }
+    private fun recentTimes(now: Long): List<Long> =
+        prefs.getString("times", "").orEmpty().split(",").mapNotNull { it.toLongOrNull() }.filter {
+            now -
+                it in
+                0 until DAY_MS
+        }
 
     private companion object {
         const val COOLDOWN_MS = 60_000L

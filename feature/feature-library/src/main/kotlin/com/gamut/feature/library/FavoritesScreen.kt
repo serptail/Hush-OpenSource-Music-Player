@@ -128,13 +128,13 @@ import com.gamut.core.designsystem.rememberArtistTap
 import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.model.Track
 import com.gamut.feature.resolver.DownloadState
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.asin
 import kotlin.math.cos
 import kotlin.math.pow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.launch
 
 private const val VisibleSlots = 5
 
@@ -210,7 +210,8 @@ fun FavoritesScreen(
                         } else if (downloading) {
                             "Downloading ${minOf(downloadUi.done + 1, downloadUi.total)} of ${downloadUi.total}"
                         } else {
-                            (if (songs.size == 1) "1 song" else "${songs.size} songs") + if (totalMs > 0) " \u00B7 ${formatTotal(totalMs)}" else ""
+                            (if (songs.size == 1) "1 song" else "${songs.size} songs") +
+                                if (totalMs > 0) " \u00B7 ${formatTotal(totalMs)}" else ""
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color = ink(0.6f),
@@ -219,7 +220,11 @@ fun FavoritesScreen(
                     )
                 }
                 Row(
-                    Modifier.pressScale(onClick = { if (songs.isNotEmpty()) onShuffle(songs) }).glass(ShufflePill).padding(horizontal = 16.dp, vertical = 9.dp),
+                    Modifier
+                        .pressScale(
+                            onClick = { if (songs.isNotEmpty()) onShuffle(songs) },
+                        ).glass(ShufflePill)
+                        .padding(horizontal = 16.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(PhosphorIcons.Bold.Shuffle, null, tint = ink(), modifier = Modifier.size(16.dp))
@@ -238,12 +243,17 @@ fun FavoritesScreen(
                         glyphSize = 24.dp,
                         onClick = {
                             when (downloadUi.status) {
-                                PlaylistDownloadStatus.Idle ->
+                                PlaylistDownloadStatus.Idle -> {
                                     downloads.download(remote.filter { downloadStates[it.isrc] != DownloadState.Done }, label = "Favorites")
+                                }
 
-                                PlaylistDownloadStatus.Active -> downloads.cancel(remote.map { it.isrc })
+                                PlaylistDownloadStatus.Active -> {
+                                    downloads.cancel(remote.map { it.isrc })
+                                }
 
-                                PlaylistDownloadStatus.Done -> showManage = true
+                                PlaylistDownloadStatus.Done -> {
+                                    showManage = true
+                                }
                             }
                         },
                     )
@@ -309,7 +319,12 @@ fun FavoritesScreen(
                 onDismiss = { showManage = false },
                 onReorder = onReorder,
                 onRemove = onRemove,
-                onDownloadAll = { downloads.download(remote.filter { downloadStates[it.isrc] != DownloadState.Done }, label = "Favorites") },
+                onDownloadAll = {
+                    downloads.download(
+                        remote.filter { downloadStates[it.isrc] != DownloadState.Done },
+                        label = "Favorites",
+                    )
+                },
                 onCancelDownloads = { downloads.cancel(remote.map { it.isrc }) },
                 onRemoveDownloads = { downloads.remove(remote.map { it.isrc }) },
             )
@@ -317,11 +332,12 @@ fun FavoritesScreen(
     }
 }
 
-private fun slotOffset(i: Int): Int = when {
-    i == 0 -> 0
-    i % 2 == 1 -> (i + 1) / 2
-    else -> -(i / 2)
-}
+private fun slotOffset(i: Int): Int =
+    when {
+        i == 0 -> 0
+        i % 2 == 1 -> (i + 1) / 2
+        else -> -(i / 2)
+    }
 
 private fun wheelOrder(songs: List<Track>): List<Track> = songs.indices.sortedBy { slotOffset(it) }.map { songs[it] }
 
@@ -383,51 +399,53 @@ private fun SongWheel(
         val showJump by remember(playingIndex) { derivedStateOf { playingIndex >= 0 && state.focusOf(playingIndex) < 0.5f } }
 
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .focusProperties { if (!live) canFocus = false }
-                .focusRequester(wheelFocus)
-                .onFocusChanged { wheelFocused = it.isFocused }
-                .onKeyEvent { e ->
-                    val last = ordered.lastIndex
-                    when (e.key) {
-                        Key.DirectionDown, Key.DirectionUp -> {
-                            val step = if (e.key == Key.DirectionDown) 1 else -1
-                            val next = target + step
-                            if (next !in 0..last) {
-                                false
-                            } else {
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .focusProperties { if (!live) canFocus = false }
+                    .focusRequester(wheelFocus)
+                    .onFocusChanged { wheelFocused = it.isFocused }
+                    .onKeyEvent { e ->
+                        val last = ordered.lastIndex
+                        when (e.key) {
+                            Key.DirectionDown, Key.DirectionUp -> {
+                                val step = if (e.key == Key.DirectionDown) 1 else -1
+                                val next = target + step
+                                if (next !in 0..last) {
+                                    false
+                                } else {
+                                    if (e.type == KeyEventType.KeyDown) {
+                                        target = next
+                                        scope.launch { state.animateScrollToItem(next) }
+                                    }
+                                    true
+                                }
+                            }
+
+                            Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
                                 if (e.type == KeyEventType.KeyDown) {
-                                    target = next
-                                    scope.launch { state.animateScrollToItem(next) }
+                                    if (e.nativeKeyEvent.isLongPress) {
+                                        enterLong = true
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        menuTrack = ordered.getOrNull(target)
+                                    }
+                                } else if (e.type == KeyEventType.KeyUp) {
+                                    if (!enterLong) ordered.getOrNull(target)?.let { onTrackSelected(it, songs) }
+                                    enterLong = false
                                 }
                                 true
                             }
-                        }
 
-                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                            if (e.type == KeyEventType.KeyDown) {
-                                if (e.nativeKeyEvent.isLongPress) {
-                                    enterLong = true
-                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    menuTrack = ordered.getOrNull(target)
-                                }
-                            } else if (e.type == KeyEventType.KeyUp) {
-                                if (!enterLong) ordered.getOrNull(target)?.let { onTrackSelected(it, songs) }
-                                enterLong = false
+                            Key.Menu -> {
+                                if (e.type == KeyEventType.KeyDown) menuTrack = ordered.getOrNull(target)
+                                true
                             }
-                            true
-                        }
 
-                        Key.Menu -> {
-                            if (e.type == KeyEventType.KeyDown) menuTrack = ordered.getOrNull(target)
-                            true
+                            else -> {
+                                false
+                            }
                         }
-
-                        else -> false
-                    }
-                }
-                .focusable(),
+                    }.focusable(),
             state = state,
             flingBehavior = rememberSnapFlingBehavior(state),
             contentPadding = PaddingValues(vertical = pad),
@@ -549,8 +567,7 @@ private fun WheelRow(
             .graphicsLayer {
                 scaleX = pressScale
                 scaleY = pressScale
-            }
-            .focusProperties { canFocus = false }
+            }.focusProperties { canFocus = false }
             .combinedClickable(
                 interactionSource = interaction,
                 indication = null,
@@ -767,18 +784,19 @@ private fun Modifier.wheelTransform(
     itemHeight: Dp,
     pivotX: Dp,
     radiusFactor: Float = 0.75f,
-): Modifier = graphicsLayer {
-    val d = state.distanceFromCenter(key) ?: return@graphicsLayer
-    val y = d * itemHeight.toPx()
-    val r = state.layoutInfo.viewportSize.height * radiusFactor
-    val angle = asin((y / r).coerceIn(-0.85f, 0.85f))
+): Modifier =
+    graphicsLayer {
+        val d = state.distanceFromCenter(key) ?: return@graphicsLayer
+        val y = d * itemHeight.toPx()
+        val r = state.layoutInfo.viewportSize.height * radiusFactor
+        val angle = asin((y / r).coerceIn(-0.85f, 0.85f))
 
-    transformOrigin = TransformOrigin(pivotX.toPx() / size.width, 0.5f)
-    translationX = r * (1f - cos(angle))
-    rotationZ = -Math.toDegrees(angle.toDouble()).toFloat()
-    val dist = abs(d)
-    val s = (1f - 0.05f * dist).coerceAtLeast(0.8f)
-    scaleX = s
-    scaleY = s
-    alpha = (1f - dist / 2.6f).coerceIn(0f, 1f).pow(0.8f)
-}
+        transformOrigin = TransformOrigin(pivotX.toPx() / size.width, 0.5f)
+        translationX = r * (1f - cos(angle))
+        rotationZ = -Math.toDegrees(angle.toDouble()).toFloat()
+        val dist = abs(d)
+        val s = (1f - 0.05f * dist).coerceAtLeast(0.8f)
+        scaleX = s
+        scaleY = s
+        alpha = (1f - dist / 2.6f).coerceIn(0f, 1f).pow(0.8f)
+    }

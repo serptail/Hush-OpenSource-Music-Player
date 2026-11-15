@@ -65,14 +65,22 @@ import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ModSheet(accent: Color, onDismiss: () -> Unit) {
+internal fun ModSheet(
+    accent: Color,
+    onDismiss: () -> Unit,
+) {
     val state by ModController.state.collectAsState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     GamutSheet(onDismiss = onDismiss, sheetState = sheetState) {
         Column(
-            Modifier.softResize().fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding()
-                .padding(horizontal = 20.dp).padding(bottom = 16.dp),
+            Modifier
+                .softResize()
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 16.dp),
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -94,11 +102,12 @@ internal fun ModSheet(accent: Color, onDismiss: () -> Unit) {
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                         color = accent,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .border(1.dp, accent.copy(alpha = 0.6f), RoundedCornerShape(50))
-                            .bounceTap(onClick = ModController::reset)
-                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                        modifier =
+                            Modifier
+                                .clip(RoundedCornerShape(50))
+                                .border(1.dp, accent.copy(alpha = 0.6f), RoundedCornerShape(50))
+                                .bounceTap(onClick = ModController::reset)
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
                     )
                 }
             }
@@ -139,11 +148,25 @@ internal fun ModSheet(accent: Color, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun PresetCell(preset: ModPreset, selected: Boolean, accent: Color, modifier: Modifier, onClick: () -> Unit) {
+private fun PresetCell(
+    preset: ModPreset,
+    selected: Boolean,
+    accent: Color,
+    modifier: Modifier,
+    onClick: () -> Unit,
+) {
     val shape = RoundedCornerShape(18.dp)
-    val cellBg by animateColorAsState(if (selected) accent.copy(alpha = 0.20f) else ink(0.06f), tween(GamutMotion.CONTENT_MS), label = "mod-cell-bg")
+    val cellBg by animateColorAsState(
+        if (selected) accent.copy(alpha = 0.20f) else ink(0.06f),
+        tween(GamutMotion.CONTENT_MS),
+        label = "mod-cell-bg",
+    )
     val cellEdge by animateColorAsState(if (selected) accent else ink(0.07f), tween(GamutMotion.CONTENT_MS), label = "mod-cell-edge")
-    val chipBg by animateColorAsState(if (selected) accent.copy(alpha = 0.28f) else ink(0.07f), tween(GamutMotion.CONTENT_MS), label = "mod-chip-bg")
+    val chipBg by animateColorAsState(
+        if (selected) accent.copy(alpha = 0.28f) else ink(0.07f),
+        tween(GamutMotion.CONTENT_MS),
+        label = "mod-chip-bg",
+    )
     Column(
         modifier
             .height(76.dp)
@@ -176,11 +199,12 @@ private fun PresetCell(preset: ModPreset, selected: Boolean, accent: Color, modi
     }
 }
 
-private fun presetHint(preset: ModPreset): String = when (preset) {
-    ModPreset.ORIGINAL -> "No effect"
-    ModPreset.CUSTOM -> "Everything"
-    else -> "%.2fx".format(preset.defaults().speed)
-}
+private fun presetHint(preset: ModPreset): String =
+    when (preset) {
+        ModPreset.ORIGINAL -> "No effect"
+        ModPreset.CUSTOM -> "Everything"
+        else -> "%.2fx".format(preset.defaults().speed)
+    }
 
 private class Spec(
     val label: String,
@@ -192,40 +216,67 @@ private class Spec(
     val format: (Float) -> String,
 )
 
-private fun specFor(control: ModControl): Spec? = when (control) {
-    ModControl.SPEED -> Spec("Speed", 0.5f, 2f, 0.05f, { it.speed }, { s, v -> s.copy(speed = v) }, { "%.2fx".format(it) })
+private fun specFor(control: ModControl): Spec? =
+    when (control) {
+        ModControl.SPEED -> {
+            Spec("Speed", 0.5f, 2f, 0.05f, { it.speed }, { s, v -> s.copy(speed = v) }, { "%.2fx".format(it) })
+        }
 
-    ModControl.PITCH -> Spec("Pitch", -12f, 12f, 0.5f, { it.pitchSemitones }, { s, v -> s.copy(pitchSemitones = v) }, { "%+.1f st".format(it) })
+        ModControl.PITCH -> {
+            Spec("Pitch", -12f, 12f, 0.5f, { it.pitchSemitones }, { s, v -> s.copy(pitchSemitones = v) }, { "%+.1f st".format(it) })
+        }
 
-    ModControl.BASS -> Spec("Bass", -6f, 10f, 0.5f, { it.bassDb }, { s, v -> s.copy(bassDb = v) }, { "%+.1f dB".format(it) })
+        ModControl.BASS -> {
+            Spec("Bass", -6f, 10f, 0.5f, { it.bassDb }, { s, v -> s.copy(bassDb = v) }, { "%+.1f dB".format(it) })
+        }
 
-    ModControl.REVERB_MIX -> Spec("Reverb", 0f, 1f, 0.05f, { it.reverbMix }, { s, v -> s.copy(reverbMix = v) }, { "${(it * 100).roundToInt()}%" })
+        ModControl.REVERB_MIX -> {
+            Spec("Reverb", 0f, 1f, 0.05f, { it.reverbMix }, { s, v -> s.copy(reverbMix = v) }, { "${(it * 100).roundToInt()}%" })
+        }
 
-    ModControl.DECAY -> Spec("Decay", 0.3f, 8f, 0.1f, { it.reverbDecaySec }, { s, v -> s.copy(reverbDecaySec = v) }, { "%.1f s".format(it) })
+        ModControl.DECAY -> {
+            Spec("Decay", 0.3f, 8f, 0.1f, { it.reverbDecaySec }, { s, v -> s.copy(reverbDecaySec = v) }, { "%.1f s".format(it) })
+        }
 
-    ModControl.PREDELAY -> Spec("Pre-delay", 0f, 100f, 5f, { it.reverbPreDelayMs }, { s, v -> s.copy(reverbPreDelayMs = v) }, { "${it.roundToInt()} ms" })
+        ModControl.PREDELAY -> {
+            Spec("Pre-delay", 0f, 100f, 5f, { it.reverbPreDelayMs }, { s, v -> s.copy(reverbPreDelayMs = v) }, { "${it.roundToInt()} ms" })
+        }
 
-    ModControl.DAMPING -> Spec("Damping", 0f, 1f, 0.05f, { it.reverbDamping }, { s, v -> s.copy(reverbDamping = v) }, { "${(it * 100).roundToInt()}%" })
+        ModControl.DAMPING -> {
+            Spec("Damping", 0f, 1f, 0.05f, { it.reverbDamping }, { s, v -> s.copy(reverbDamping = v) }, { "${(it * 100).roundToInt()}%" })
+        }
 
-    ModControl.LOWPASS -> Spec(
-        "Low-pass",
-        1_500f,
-        20_000f,
-        500f,
-        { it.lowPassHz },
-        { s, v -> s.copy(lowPassHz = v) },
-        { if (it >= 20_000f) "Off" else "%.1f kHz".format(it / 1000f) },
-    )
+        ModControl.LOWPASS -> {
+            Spec(
+                "Low-pass",
+                1_500f,
+                20_000f,
+                500f,
+                { it.lowPassHz },
+                { s, v -> s.copy(lowPassHz = v) },
+                { if (it >= 20_000f) "Off" else "%.1f kHz".format(it / 1000f) },
+            )
+        }
 
-    ModControl.WOBBLE -> Spec("Tape wobble", 0f, 40f, 1f, { it.wobbleCents }, { s, v -> s.copy(wobbleCents = v) }, { "${it.roundToInt()} ct" })
+        ModControl.WOBBLE -> {
+            Spec("Tape wobble", 0f, 40f, 1f, { it.wobbleCents }, { s, v -> s.copy(wobbleCents = v) }, { "${it.roundToInt()} ct" })
+        }
 
-    ModControl.VINYL -> Spec("Vinyl noise", 0f, 1f, 0.05f, { it.vinylNoise }, { s, v -> s.copy(vinylNoise = v) }, { "${(it * 100).roundToInt()}%" })
+        ModControl.VINYL -> {
+            Spec("Vinyl noise", 0f, 1f, 0.05f, { it.vinylNoise }, { s, v -> s.copy(vinylNoise = v) }, { "${(it * 100).roundToInt()}%" })
+        }
 
-    ModControl.LINK -> null
-}
+        ModControl.LINK -> {
+            null
+        }
+    }
 
 @Composable
-private fun ControlRow(control: ModControl, settings: ModSettings, accent: Color) {
+private fun ControlRow(
+    control: ModControl,
+    settings: ModSettings,
+    accent: Color,
+) {
     if (control == ModControl.LINK) {
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -258,29 +309,40 @@ private fun ControlRow(control: ModControl, settings: ModSettings, accent: Color
 }
 
 @Composable
-private fun TogglePill(on: Boolean, accent: Color, onClick: () -> Unit) {
+private fun TogglePill(
+    on: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+) {
     val shape = RoundedCornerShape(50)
     Text(
         if (on) "On" else "Off",
         color = if (on) LocalCoverPalette.current.base else ink(0.75f),
         style = MaterialTheme.typography.labelLarge,
-        modifier = Modifier
-            .clip(shape)
-            .then(
-                if (on) {
-                    Modifier.background(accent)
-                } else {
-                    Modifier.border(1.dp, ink(0.18f), shape)
-                },
-            )
-            .focusRing(shape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 7.dp),
+        modifier =
+            Modifier
+                .clip(shape)
+                .then(
+                    if (on) {
+                        Modifier.background(accent)
+                    } else {
+                        Modifier.border(1.dp, ink(0.18f), shape)
+                    },
+                ).focusRing(shape)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 7.dp),
     )
 }
 
 @Composable
-private fun LineSlider(value: Float, min: Float, max: Float, step: Float, accent: Color, onChange: (Float) -> Unit) {
+private fun LineSlider(
+    value: Float,
+    min: Float,
+    max: Float,
+    step: Float,
+    accent: Color,
+    onChange: (Float) -> Unit,
+) {
     val onChangeNow by rememberUpdatedState(onChange)
     val trackC = ink(0.16f)
     val tickC = ink(0.3f)
@@ -291,22 +353,23 @@ private fun LineSlider(value: Float, min: Float, max: Float, step: Float, accent
             .height(32.dp)
             .focusRing(RoundedCornerShape(12.dp))
             .onKeyEvent { e ->
-                val dir = when (e.key) {
-                    Key.DirectionLeft -> -1
-                    Key.DirectionRight -> 1
-                    else -> 0
-                }
+                val dir =
+                    when (e.key) {
+                        Key.DirectionLeft -> -1
+                        Key.DirectionRight -> 1
+                        else -> 0
+                    }
                 if (dir == 0) return@onKeyEvent false
                 if (e.type == KeyEventType.KeyDown) {
                     val mult = (1 + e.nativeKeyEvent.repeatCount / 4).coerceAtMost(8)
                     onChangeNow((value + dir * step * mult).coerceIn(min, max))
                 }
                 true
-            }
-            .focusable()
+            }.focusable()
             .pointerInput(min, max, step) {
                 awaitEachGesture {
                     val pad = 6.dp.toPx()
+
                     fun apply(x: Float) {
                         val f = ((x - pad) / (size.width - 2 * pad)).coerceIn(0f, 1f)
                         val snapped = min + ((f * (max - min)) / step).roundToInt() * step

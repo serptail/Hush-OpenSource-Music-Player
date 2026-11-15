@@ -45,15 +45,21 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 enum class NoticeKind { Info, Success, Warning, Error, Loading }
 
 @Immutable
-data class Notice(val id: Long, val message: String, val kind: NoticeKind, val durationMs: Long, val key: Any)
+data class Notice(
+    val id: Long,
+    val message: String,
+    val kind: NoticeKind,
+    val durationMs: Long,
+    val key: Any,
+)
 
 @Stable
 class Notifier {
@@ -63,7 +69,12 @@ class Notifier {
     private val lock = Any()
     private var counter = 0L
 
-    fun show(message: String, kind: NoticeKind = NoticeKind.Info, durationMs: Long = DEFAULT_DURATION_MS, key: Any = kind to message): Long {
+    fun show(
+        message: String,
+        kind: NoticeKind = NoticeKind.Info,
+        durationMs: Long = DEFAULT_DURATION_MS,
+        key: Any = kind to message,
+    ): Long {
         val text = message.trim().take(MAX_MESSAGE_CHARS)
         if (text.isEmpty()) return NO_ID
         val duration = if (durationMs <= 0L) DEFAULT_DURATION_MS else durationMs.coerceIn(MIN_DURATION_MS, MAX_DURATION_MS)
@@ -75,13 +86,22 @@ class Notifier {
     }
 
     fun info(message: String) = show(message, NoticeKind.Info)
+
     fun success(message: String) = show(message, NoticeKind.Success)
+
     fun warning(message: String) = show(message, NoticeKind.Warning, 2800L)
+
     fun error(message: String) = show(message, NoticeKind.Error, 3200L)
 
-    fun loading(message: String, timeoutMs: Long = LOADING_TIMEOUT_MS): Long = show(message, NoticeKind.Loading, timeoutMs, key = "loading")
+    fun loading(
+        message: String,
+        timeoutMs: Long = LOADING_TIMEOUT_MS,
+    ): Long = show(message, NoticeKind.Loading, timeoutMs, key = "loading")
 
-    fun update(id: Long, message: String) {
+    fun update(
+        id: Long,
+        message: String,
+    ) {
         val text = message.trim().take(MAX_MESSAGE_CHARS)
         if (text.isEmpty()) return
         synchronized(lock) {
@@ -117,7 +137,10 @@ private const val MIN_VISIBLE_MS = 450L
 private const val SWIPE_FLING_PX_S = 900f
 
 @Composable
-fun NoticeHost(modifier: Modifier = Modifier, notifier: Notifier = LocalNotifier.current) {
+fun NoticeHost(
+    modifier: Modifier = Modifier,
+    notifier: Notifier = LocalNotifier.current,
+) {
     var shown by remember(notifier) { mutableStateOf<Notice?>(null) }
     val hide = remember(notifier) { Animatable(1f) }
     val drag = remember(notifier) { Animatable(0f) }
@@ -174,49 +197,54 @@ fun NoticeHost(modifier: Modifier = Modifier, notifier: Notifier = LocalNotifier
 
     val n = shown ?: return
     val raw = remember { floatArrayOf(0f) }
-    val dragState = rememberDraggableState { dy ->
-        raw[0] += dy
-        val visual = if (raw[0] > 0f) raw[0] * 0.2f else raw[0]
-        scope.launch { drag.snapTo(visual) }
-    }
+    val dragState =
+        rememberDraggableState { dy ->
+            raw[0] += dy
+            val visual = if (raw[0] > 0f) raw[0] * 0.2f else raw[0]
+            scope.launch { drag.snapTo(visual) }
+        }
     Box(
         modifier
             .fillMaxWidth()
             .layout { measurable, constraints ->
                 val p = measurable.measure(constraints)
                 layout(p.width, p.height) { p.place(0, (-hide.value * p.height + drag.value).roundToInt()) }
-            }
-            .statusBarsPadding()
+            }.statusBarsPadding()
             .padding(top = 10.dp, start = 24.dp, end = 24.dp),
         contentAlignment = Alignment.TopCenter,
     ) {
         NoticePill(
             notice = n,
             onTap = { notifier.dismiss(n.id) },
-            modifier = Modifier.draggable(
-                state = dragState,
-                orientation = Orientation.Vertical,
-                onDragStarted = {
-                    dragging = true
-                    drag.stop()
-                    raw[0] = drag.value
-                },
-                onDragStopped = { velocity ->
-                    dragging = false
-                    if (drag.value < -dismissPx || velocity < -SWIPE_FLING_PX_S) {
-                        notifier.dismiss(n.id)
-                    } else {
-                        drag.animateTo(0f, spring(dampingRatio = 0.7f, stiffness = 600f))
-                    }
-                    raw[0] = 0f
-                },
-            ),
+            modifier =
+                Modifier.draggable(
+                    state = dragState,
+                    orientation = Orientation.Vertical,
+                    onDragStarted = {
+                        dragging = true
+                        drag.stop()
+                        raw[0] = drag.value
+                    },
+                    onDragStopped = { velocity ->
+                        dragging = false
+                        if (drag.value < -dismissPx || velocity < -SWIPE_FLING_PX_S) {
+                            notifier.dismiss(n.id)
+                        } else {
+                            drag.animateTo(0f, spring(dampingRatio = 0.7f, stiffness = 600f))
+                        }
+                        raw[0] = 0f
+                    },
+                ),
         )
     }
 }
 
 @Composable
-private fun NoticePill(notice: Notice, onTap: () -> Unit, modifier: Modifier = Modifier) {
+private fun NoticePill(
+    notice: Notice,
+    onTap: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val shape = RoundedCornerShape(50)
     val tone = if (LocalCoverPalette.current.isLight) AcrylicTone.Light else AcrylicTone.Dark
     Row(

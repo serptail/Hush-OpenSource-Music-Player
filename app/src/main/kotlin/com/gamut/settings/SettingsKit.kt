@@ -96,13 +96,26 @@ fun GamutPage(
                 Box(Modifier.size(44.dp).pressScale(onClick = onBack), contentAlignment = Alignment.Center) {
                     Icon(PhosphorIcons.Bold.CaretLeft, "Back", tint = ink(0.85f), modifier = Modifier.size(24.dp))
                 }
-                if (title.isNotEmpty()) Text(title, style = MaterialTheme.typography.titleLarge, color = ink(), modifier = Modifier.padding(start = 4.dp))
+                if (title.isNotEmpty()) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = ink(),
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                }
                 if (actions != null) {
                     Spacer(Modifier.weight(1f))
                     actions()
                 }
             }
-            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp),
+            ) {
                 content()
                 Spacer(Modifier.height(32.dp))
             }
@@ -117,7 +130,10 @@ fun GroupLabel(text: String) {
 }
 
 @Composable
-fun GroupCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+fun GroupCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Column(modifier.fillMaxWidth(), content = content)
 }
 
@@ -176,24 +192,51 @@ fun Tile(
 ) {
     val tone = if (destructive) GamutDestructive else ink()
     Box(
-        modifier.aspectRatio(1f).pressScale(onClick = onClick, scaleDown = 0.97f)
-            .clip(RoundedCornerShape(26.dp)).background(ink(0.07f)).padding(18.dp),
+        modifier
+            .aspectRatio(1f)
+            .pressScale(onClick = onClick, scaleDown = 0.97f)
+            .clip(RoundedCornerShape(26.dp))
+            .background(ink(0.07f))
+            .padding(18.dp),
     ) {
-        Icon(icon, null, tint = if (destructive) GamutDestructive else ink(0.85f), modifier = Modifier.size(28.dp).align(Alignment.TopStart))
+        Icon(
+            icon,
+            null,
+            tint = if (destructive) GamutDestructive else ink(0.85f),
+            modifier = Modifier.size(28.dp).align(Alignment.TopStart),
+        )
         if (badge != null) Box(Modifier.align(Alignment.TopEnd)) { badge() }
         Column(Modifier.align(Alignment.BottomStart)) {
             Text(label, style = MaterialTheme.typography.titleMedium, color = tone, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (subtitle !=
+                null
+            ) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink(0.55f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
 
 @Composable
-fun GamutButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, filled: Boolean = true) {
+fun GamutButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    filled: Boolean = true,
+) {
     val onInk = if (LocalCoverPalette.current.isLight) Color.White else Color.Black
     Box(
-        modifier.pressScale(onClick = onClick).clip(RoundedCornerShape(16.dp))
-            .background(if (filled) ink(0.95f) else ink(0.12f)).padding(horizontal = 20.dp, vertical = 15.dp),
+        modifier
+            .pressScale(onClick = onClick)
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (filled) ink(0.95f) else ink(0.12f))
+            .padding(horizontal = 20.dp, vertical = 15.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(label, style = MaterialTheme.typography.titleMedium, color = if (filled) onInk else ink(), maxLines = 1)
@@ -201,29 +244,49 @@ fun GamutButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifie
 }
 
 @Composable
-fun GamutSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
+fun GamutSwitch(
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
     val onInk = if (LocalCoverPalette.current.isLight) Color.White else Color.Black
     val x by animateDpAsState(if (checked) 20.dp else 0.dp, label = "switch")
     val track by animateColorAsState(if (checked) ink(0.95f) else ink(0.18f), tween(GamutMotion.CONTENT_MS), label = "switch-track")
     val thumb by animateColorAsState(if (checked) onInk else ink(0.7f), tween(GamutMotion.CONTENT_MS), label = "switch-thumb")
     Box(
-        Modifier.pressScale(onClick = { onChange(!checked) }).size(width = 48.dp, height = 28.dp).clip(CircleShape)
-            .background(track).padding(3.dp),
+        Modifier
+            .pressScale(onClick = { onChange(!checked) })
+            .size(width = 48.dp, height = 28.dp)
+            .clip(CircleShape)
+            .background(track)
+            .padding(3.dp),
     ) {
         Box(Modifier.offset(x = x).size(22.dp).background(thumb, CircleShape))
     }
 }
 
 @Composable
-fun GamutCheck(checked: Boolean, label: String, onChange: (Boolean) -> Unit, warn: Boolean = false) {
+fun GamutCheck(
+    checked: Boolean,
+    label: String,
+    onChange: (Boolean) -> Unit,
+    warn: Boolean = false,
+) {
     val onInk = if (LocalCoverPalette.current.isLight) Color.White else Color.Black
     val shape = RoundedCornerShape(7.dp)
     Row(
         Modifier.fillMaxWidth().pressScale(onClick = { onChange(!checked) }, scaleDown = 0.98f).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val fill by animateColorAsState(if (checked) ink(0.95f) else ink(0.95f).copy(alpha = 0f), tween(GamutMotion.CONTENT_MS), label = "check-fill")
-        val edge by animateColorAsState(if (checked) ink(0.3f).copy(alpha = 0f) else ink(0.3f), tween(GamutMotion.CONTENT_MS), label = "check-edge")
+        val fill by animateColorAsState(
+            if (checked) ink(0.95f) else ink(0.95f).copy(alpha = 0f),
+            tween(GamutMotion.CONTENT_MS),
+            label = "check-fill",
+        )
+        val edge by animateColorAsState(
+            if (checked) ink(0.3f).copy(alpha = 0f) else ink(0.3f),
+            tween(GamutMotion.CONTENT_MS),
+            label = "check-edge",
+        )
         Box(
             Modifier
                 .size(22.dp)
@@ -235,8 +298,9 @@ fun GamutCheck(checked: Boolean, label: String, onChange: (Boolean) -> Unit, war
             androidx.compose.animation.AnimatedVisibility(
                 visible = checked,
                 modifier = Modifier,
-                enter = fadeIn(tween(120)) +
-                    scaleIn(tween(160), initialScale = 0.6f),
+                enter =
+                    fadeIn(tween(120)) +
+                        scaleIn(tween(160), initialScale = 0.6f),
                 exit = fadeOut(tween(100)),
                 label = "check-visibility",
             ) {
@@ -267,11 +331,23 @@ fun GamutField(
     trailing: (@Composable () -> Unit)? = null,
 ) {
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ink(0.07f)).padding(horizontal = 16.dp, vertical = 14.dp),
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(ink(0.07f))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.weight(1f)) {
-            if (value.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = ink(0.4f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (value.isEmpty()) {
+                Text(
+                    placeholder,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = ink(0.4f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             BasicTextField(
                 value = value,
                 onValueChange = onChange,
@@ -325,7 +401,10 @@ fun GamutDialog(
         AnimatedVisibility(
             visibleState = state,
             enter = fadeIn(tween(180)) + scaleIn(tween(GamutMotion.CONTENT_MS + 40, easing = GamutMotion.Standard), initialScale = 0.92f),
-            exit = fadeOut(tween(DIALOG_EXIT_MS - 20)) + scaleOut(tween(DIALOG_EXIT_MS, easing = GamutMotion.Standard), targetScale = 0.97f),
+            exit =
+                fadeOut(
+                    tween(DIALOG_EXIT_MS - 20),
+                ) + scaleOut(tween(DIALOG_EXIT_MS, easing = GamutMotion.Standard), targetScale = 0.97f),
         ) {
             val dim by transition.animateFloat(label = "dialog-dim", transitionSpec = { tween(GamutMotion.CONTENT_MS) }) {
                 if (it == EnterExitState.Visible) 0.5f else 0f
@@ -333,10 +412,29 @@ fun GamutDialog(
             SideEffect { window?.setDimAmount(dim) }
             CompositionLocalProvider(LocalDialogDismiss provides dismiss) {
                 CoverTheme(palette) {
-                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(palette.base).padding(24.dp)) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(palette.base)
+                            .padding(24.dp),
+                    ) {
                         Text(title, style = MaterialTheme.typography.titleLarge, color = ink())
-                        if (body != null) Text(body, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), modifier = Modifier.padding(top = 10.dp))
-                        if (content != null) Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(2.dp), content = content)
+                        if (body !=
+                            null
+                        ) {
+                            Text(
+                                body,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ink(0.6f),
+                                modifier = Modifier.padding(top = 10.dp),
+                            )
+                        }
+                        if (content !=
+                            null
+                        ) {
+                            Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(2.dp), content = content)
+                        }
                         Row(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.End) {
                             if (dismissLabel != null) {
                                 Text(

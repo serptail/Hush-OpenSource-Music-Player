@@ -5,7 +5,11 @@ internal object LyricsAudioAligner {
     private const val MIN_GAP_MS = 700L
     private const val MAX_LINE_MS = 15_000L
 
-    fun refine(lines: List<LyricsLine>, env: FloatArray, durationMs: Long): List<LyricsLine> {
+    fun refine(
+        lines: List<LyricsLine>,
+        env: FloatArray,
+        durationMs: Long,
+    ): List<LyricsLine> {
         if (env.size < 32 || durationMs <= 0L) return lines
         val dt = durationMs.toFloat() / env.size
         return lines.mapIndexed { i, line ->
@@ -35,6 +39,7 @@ internal object LyricsAudioAligner {
             if (runs.size < 2) return@mapIndexed line
 
             val voiced = runs.sumOf { it[1] - it[0] }.coerceAtLeast(1L)
+
             fun realTime(v: Float): Long {
                 var left = v
                 for (r in runs) {
@@ -47,12 +52,13 @@ internal object LyricsAudioAligner {
             val weights = line.words.map { maxOf(it.text.trim().length, 2) }
             val total = weights.sum().toFloat()
             var cum = 0f
-            val words = line.words.mapIndexed { wi, w ->
-                val s = realTime(voiced * cum / total)
-                cum += weights[wi]
-                val e = realTime(voiced * cum / total)
-                LyricsWord(s, e.coerceAtLeast(s + 1), w.text)
-            }
+            val words =
+                line.words.mapIndexed { wi, w ->
+                    val s = realTime(voiced * cum / total)
+                    cum += weights[wi]
+                    val e = realTime(voiced * cum / total)
+                    LyricsWord(s, e.coerceAtLeast(s + 1), w.text)
+                }
             line.copy(words = words, endMs = runs.last()[1])
         }
     }

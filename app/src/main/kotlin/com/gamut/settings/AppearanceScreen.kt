@@ -47,18 +47,28 @@ import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.softResize
 import dagger.hilt.android.lifecycle.HiltViewModel
-import javax.inject.Inject
 import kotlinx.coroutines.flow.StateFlow
+import javax.inject.Inject
 
 @HiltViewModel
-class AppearanceViewModel @Inject constructor(private val store: AppearanceStore) : ViewModel() {
-    val settings: StateFlow<AppearanceSettings> = store.settings
-    fun update(transform: (AppearanceSettings) -> AppearanceSettings) = store.update(transform)
-    fun reset() = store.update { AppearanceSettings() }
-}
+class AppearanceViewModel
+    @Inject
+    constructor(
+        private val store: AppearanceStore,
+    ) : ViewModel() {
+        val settings: StateFlow<AppearanceSettings> = store.settings
+
+        fun update(transform: (AppearanceSettings) -> AppearanceSettings) = store.update(transform)
+
+        fun reset() = store.update { AppearanceSettings() }
+    }
 
 @Composable
-fun AppearanceScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm: AppearanceViewModel = hiltViewModel()) {
+fun AppearanceScreen(
+    onBack: () -> Unit,
+    nowPlaying: @Composable () -> Unit,
+    vm: AppearanceViewModel = hiltViewModel(),
+) {
     val s by vm.settings.collectAsState()
     val systemDark = isSystemInDarkTheme()
     val showDark = s.resolvedDark(systemDark) ?: !LocalCoverPalette.current.isLight
@@ -69,19 +79,21 @@ fun AppearanceScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm:
 
         SoftHeader("Theme")
         SoftCard {
-            val modes = buildList {
-                if (s.adaptive) add(Choice(AppThemeMode.Auto, "Auto"))
-                add(Choice(AppThemeMode.System, "System"))
-                add(Choice(AppThemeMode.Light, "Light"))
-                add(Choice(AppThemeMode.Dark, "Dark"))
-            }
+            val modes =
+                buildList {
+                    if (s.adaptive) add(Choice(AppThemeMode.Auto, "Auto"))
+                    add(Choice(AppThemeMode.System, "System"))
+                    add(Choice(AppThemeMode.Light, "Light"))
+                    add(Choice(AppThemeMode.Dark, "Dark"))
+                }
             OptionBlock(
-                caption = when (s.effectiveMode) {
-                    AppThemeMode.Auto -> "Each album decides: light covers give a light app, dark covers a dark one."
-                    AppThemeMode.System -> "Follows your phone's light / dark setting."
-                    AppThemeMode.Light -> "Light everywhere, including sheets and pop-ups."
-                    AppThemeMode.Dark -> "Dark everywhere, including sheets and pop-ups."
-                },
+                caption =
+                    when (s.effectiveMode) {
+                        AppThemeMode.Auto -> "Each album decides: light covers give a light app, dark covers a dark one."
+                        AppThemeMode.System -> "Follows your phone's light / dark setting."
+                        AppThemeMode.Light -> "Light everywhere, including sheets and pop-ups."
+                        AppThemeMode.Dark -> "Dark everywhere, including sheets and pop-ups."
+                    },
             ) {
                 SegmentedControl(options = modes, selected = s.effectiveMode, onSelect = { m -> vm.update { it.copy(mode = m) } })
             }
@@ -100,12 +112,13 @@ fun AppearanceScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm:
                     SoftDivider()
                     OptionBlock(title = "Style") {
                         SegmentedControl(
-                            options = listOf(
-                                Choice(FlowStyle.Flow, "Flow"),
-                                Choice(FlowStyle.Mercury, "Mercury"),
-                                Choice(FlowStyle.Metaballs, "Blobs"),
-                                Choice(FlowStyle.Dithering, "Dither"),
-                            ),
+                            options =
+                                listOf(
+                                    Choice(FlowStyle.Flow, "Flow"),
+                                    Choice(FlowStyle.Mercury, "Mercury"),
+                                    Choice(FlowStyle.Metaballs, "Blobs"),
+                                    Choice(FlowStyle.Dithering, "Dither"),
+                                ),
                             selected = s.flowStyle,
                             onSelect = { v -> vm.update { it.copy(flowStyle = v) } },
                         )
@@ -121,7 +134,9 @@ fun AppearanceScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm:
                         Column {
                             SoftDivider()
                             OptionBlock(title = "Speed") {
-                                SegmentedControl(levels("Slow", "Normal", "Fast"), s.flowSpeed, onSelect = { v -> vm.update { it.copy(flowSpeed = v) } })
+                                SegmentedControl(levels("Slow", "Normal", "Fast"), s.flowSpeed, onSelect = { v ->
+                                    vm.update { it.copy(flowSpeed = v) }
+                                })
                             }
                             SoftDivider()
                             SoftSwitchRow(
@@ -134,7 +149,9 @@ fun AppearanceScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm:
                     }
                     SoftDivider()
                     OptionBlock(title = "Intensity") {
-                        SegmentedControl(levels("Calm", "Balanced", "Vivid"), s.flowIntensity, onSelect = { v -> vm.update { it.copy(flowIntensity = v) } })
+                        SegmentedControl(levels("Calm", "Balanced", "Vivid"), s.flowIntensity, onSelect = { v ->
+                            vm.update { it.copy(flowIntensity = v) }
+                        })
                     }
                 }
             }
@@ -160,7 +177,9 @@ fun AppearanceScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm:
                 Column {
                     SoftDivider()
                     OptionBlock(title = "Density") {
-                        SegmentedControl(levels("Light", "Balanced", "Dense"), s.glassDensity, onSelect = { v -> vm.update { it.copy(glassDensity = v) } })
+                        SegmentedControl(levels("Light", "Balanced", "Dense"), s.glassDensity, onSelect = { v ->
+                            vm.update { it.copy(glassDensity = v) }
+                        })
                     }
                 }
             }
@@ -168,8 +187,12 @@ fun AppearanceScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm:
 
         Spacer(Modifier.height(24.dp))
         Box(
-            Modifier.fillMaxWidth().pressScale(onClick = vm::reset)
-                .clip(RoundedCornerShape(20.dp)).background(GamutDestructive.copy(alpha = 0.12f)).padding(vertical = 16.dp),
+            Modifier
+                .fillMaxWidth()
+                .pressScale(onClick = vm::reset)
+                .clip(RoundedCornerShape(20.dp))
+                .background(GamutDestructive.copy(alpha = 0.12f))
+                .padding(vertical = 16.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text("Reset to defaults", style = MaterialTheme.typography.titleMedium, color = GamutDestructive)
@@ -177,14 +200,22 @@ fun AppearanceScreen(onBack: () -> Unit, nowPlaying: @Composable () -> Unit, vm:
     }
 }
 
-private fun levels(low: String, mid: String, high: String) = listOf(
+private fun levels(
+    low: String,
+    mid: String,
+    high: String,
+) = listOf(
     Choice(AppearanceLevel.Low, low),
     Choice(AppearanceLevel.Medium, mid),
     Choice(AppearanceLevel.High, high),
 )
 
 @Composable
-private fun OptionBlock(title: String? = null, caption: String? = null, content: @Composable () -> Unit) {
+private fun OptionBlock(
+    title: String? = null,
+    caption: String? = null,
+    content: @Composable () -> Unit,
+) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
         if (title != null) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = ink(), modifier = Modifier.padding(bottom = 12.dp))
@@ -193,7 +224,12 @@ private fun OptionBlock(title: String? = null, caption: String? = null, content:
         if (caption != null) {
             Box(Modifier.softResize()) {
                 Crossfade(targetState = caption, animationSpec = tween(GamutMotion.CONTENT_MS), label = "option-caption") { c ->
-                    Text(c, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 10.dp, start = 4.dp))
+                    Text(
+                        c,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ink(0.55f),
+                        modifier = Modifier.padding(top = 10.dp, start = 4.dp),
+                    )
                 }
             }
         }
@@ -204,7 +240,13 @@ private fun OptionBlock(title: String? = null, caption: String? = null, content:
 private fun Preview() {
     val palette = LocalCoverPalette.current
     val active = LocalPageActive.current
-    Box(Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(26.dp)).border(1.dp, ink(0.12f), RoundedCornerShape(26.dp))) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(150.dp)
+            .clip(RoundedCornerShape(26.dp))
+            .border(1.dp, ink(0.12f), RoundedCornerShape(26.dp)),
+    ) {
         AcrylicHost(Modifier.fillMaxSize()) {
             FlowingBackground(palette = palette, isPlaying = active, visible = active, modifier = Modifier.fillMaxSize().acrylicSource())
             AcrylicPill(Modifier.align(Alignment.Center).padding(horizontal = 28.dp)) {
@@ -215,23 +257,50 @@ private fun Preview() {
 }
 
 @Composable
-private fun PresetGrid(selectedId: String, dark: Boolean, onPick: (String) -> Unit) {
+private fun PresetGrid(
+    selectedId: String,
+    dark: Boolean,
+    onPick: (String) -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         AppColorPresets.all.chunked(4).forEach { row ->
             Row(Modifier.fillMaxWidth()) {
                 row.forEach { p ->
                     val pal = if (dark) p.dark else p.light
                     val selected = p.id == selectedId
-                    val ringWidth by animateDpAsState(if (selected) 2.dp else 1.dp, tween(GamutMotion.CONTENT_MS), label = "preset-ring-width")
-                    val ringColor by animateColorAsState(if (selected) ink(0.95f) else ink(0.2f), tween(GamutMotion.CONTENT_MS), label = "preset-ring-color")
-                    val labelColor by animateColorAsState(ink(if (selected) 0.95f else 0.6f), tween(GamutMotion.CONTENT_MS), label = "preset-label")
-                    Column(Modifier.weight(1f).pressScale(onClick = { onPick(p.id) }, scaleDown = 0.95f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    val ringWidth by animateDpAsState(
+                        if (selected) 2.dp else 1.dp,
+                        tween(GamutMotion.CONTENT_MS),
+                        label = "preset-ring-width",
+                    )
+                    val ringColor by animateColorAsState(
+                        if (selected) ink(0.95f) else ink(0.2f),
+                        tween(GamutMotion.CONTENT_MS),
+                        label = "preset-ring-color",
+                    )
+                    val labelColor by animateColorAsState(
+                        ink(if (selected) 0.95f else 0.6f),
+                        tween(GamutMotion.CONTENT_MS),
+                        label = "preset-label",
+                    )
+                    Column(
+                        Modifier.weight(1f).pressScale(onClick = { onPick(p.id) }, scaleDown = 0.95f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
                         Box(
-                            Modifier.size(52.dp).clip(CircleShape).background(pal.base)
+                            Modifier
+                                .size(52.dp)
+                                .clip(CircleShape)
+                                .background(pal.base)
                                 .border(ringWidth, ringColor, CircleShape),
                             contentAlignment = Alignment.Center,
                         ) { Box(Modifier.size(22.dp).background(pal.accent, CircleShape)) }
-                        Text(p.name, style = MaterialTheme.typography.labelMedium, color = labelColor, modifier = Modifier.padding(top = 6.dp))
+                        Text(
+                            p.name,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = labelColor,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
                     }
                 }
                 repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }

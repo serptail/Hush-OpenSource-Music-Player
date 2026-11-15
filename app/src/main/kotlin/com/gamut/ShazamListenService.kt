@@ -11,17 +11,17 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import com.gamut.core.designsystem.R as DesignR
 import com.gamut.feature.search.ShazamSession
 import com.gamut.feature.search.ShazamState
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import javax.inject.Inject
+import com.gamut.core.designsystem.R as DesignR
 
 @AndroidEntryPoint
 class ShazamListenService : Service() {
@@ -31,18 +31,24 @@ class ShazamListenService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    override fun onStartCommand(
+        intent: Intent?,
+        flags: Int,
+        startId: Int,
+    ): Int {
         createChannels(this)
-        val listening = NotificationCompat.Builder(this, CHANNEL_LISTENING)
-            .setSmallIcon(DesignR.drawable.ic_shazam)
-            .setContentTitle("Listening…")
-            .setContentText("Gamut is identifying the music around you")
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setCategory(Notification.CATEGORY_SERVICE)
-            .setContentIntent(openAppIntent(this))
-            .addAction(0, "Cancel", cancelIntent(this))
-            .build()
+        val listening =
+            NotificationCompat
+                .Builder(this, CHANNEL_LISTENING)
+                .setSmallIcon(DesignR.drawable.ic_shazam)
+                .setContentTitle("Listening…")
+                .setContentText("Gamut is identifying the music around you")
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setCategory(Notification.CATEGORY_SERVICE)
+                .setContentIntent(openAppIntent(this))
+                .addAction(0, "Cancel", cancelIntent(this))
+                .build()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(ID_LISTENING, listening, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
         } else {
@@ -72,22 +78,25 @@ class ShazamListenService : Service() {
     }
 
     private fun postResult(end: ShazamState) {
-        val (title, text) = when (end) {
-            is ShazamState.Found -> end.track.title to end.track.artist
-            ShazamState.PermissionDenied -> "Microphone access is off" to "Tap to open Gamut"
-            ShazamState.NotFound -> "Couldn’t recognize this one" to "Tap to try again"
-            is ShazamState.Failed -> "Something went wrong" to end.message
-            else -> return
-        }
-        val notification = NotificationCompat.Builder(this, CHANNEL_RESULT)
-            .setSmallIcon(DesignR.drawable.ic_shazam)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setAutoCancel(true)
-            .setCategory(Notification.CATEGORY_STATUS)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(openAppIntent(this))
-            .build()
+        val (title, text) =
+            when (end) {
+                is ShazamState.Found -> end.track.title to end.track.artist
+                ShazamState.PermissionDenied -> "Microphone access is off" to "Tap to open Gamut"
+                ShazamState.NotFound -> "Couldn’t recognize this one" to "Tap to try again"
+                is ShazamState.Failed -> "Something went wrong" to end.message
+                else -> return
+            }
+        val notification =
+            NotificationCompat
+                .Builder(this, CHANNEL_RESULT)
+                .setSmallIcon(DesignR.drawable.ic_shazam)
+                .setContentTitle(title)
+                .setContentText(text)
+                .setAutoCancel(true)
+                .setCategory(Notification.CATEGORY_STATUS)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setContentIntent(openAppIntent(this))
+                .build()
         getSystemService(NotificationManager::class.java).notify(ID_RESULT, notification)
     }
 
@@ -117,8 +126,9 @@ class ShazamListenService : Service() {
         }
 
         private fun openAppIntent(context: Context): PendingIntent {
-            val intent = Intent(context, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            val intent =
+                Intent(context, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             return PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         }
 

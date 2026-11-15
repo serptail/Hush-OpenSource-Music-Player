@@ -1,5 +1,10 @@
 package com.gamut.settings
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.IOException
 import java.io.OutputStream
 import java.net.ConnectException
@@ -9,11 +14,6 @@ import java.net.URL
 import java.net.UnknownHostException
 import java.util.UUID
 import javax.net.ssl.SSLException
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
 
 data class FeedbackPayload(
     val type: FeedbackType,
@@ -28,12 +28,23 @@ data class FeedbackPayload(
 
 sealed interface SendResult {
     data object Success : SendResult
+
     data object NoNetwork : SendResult
+
     data object Timeout : SendResult
+
     data object RateLimited : SendResult
+
     data object ServerError : SendResult
-    data class Rejected(val code: Int, val reason: String?) : SendResult
-    data class Failed(val reason: String) : SendResult
+
+    data class Rejected(
+        val code: Int,
+        val reason: String?,
+    ) : SendResult
+
+    data class Failed(
+        val reason: String,
+    ) : SendResult
 }
 
 object FeedbackSender {
@@ -46,46 +57,49 @@ object FeedbackSender {
     private const val MAX_RESPONSE_BYTES = 64 * 1024
     private const val MAX_ATTEMPTS = 2
 
-    suspend fun send(p: FeedbackPayload): SendResult = withContext(Dispatchers.IO) {
-        var last: SendResult = SendResult.Failed("unknown")
-        for (attempt in 1..MAX_ATTEMPTS) {
-            val (result, retryable) = try {
-                post(p) to false
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: UnknownHostException) {
-                SendResult.NoNetwork to true
-            } catch (e: ConnectException) {
-                SendResult.NoNetwork to true
-            } catch (e: SocketTimeoutException) {
-                SendResult.Timeout to false
-            } catch (e: SSLException) {
-                SendResult.Failed("secure connection failed") to false
-            } catch (e: IOException) {
-                SendResult.Failed(e.javaClass.simpleName) to false
-            } catch (e: Exception) {
-                SendResult.Failed(e.javaClass.simpleName) to false
+    suspend fun send(p: FeedbackPayload): SendResult =
+        withContext(Dispatchers.IO) {
+            var last: SendResult = SendResult.Failed("unknown")
+            for (attempt in 1..MAX_ATTEMPTS) {
+                val (result, retryable) =
+                    try {
+                        post(p) to false
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: UnknownHostException) {
+                        SendResult.NoNetwork to true
+                    } catch (e: ConnectException) {
+                        SendResult.NoNetwork to true
+                    } catch (e: SocketTimeoutException) {
+                        SendResult.Timeout to false
+                    } catch (e: SSLException) {
+                        SendResult.Failed("secure connection failed") to false
+                    } catch (e: IOException) {
+                        SendResult.Failed(e.javaClass.simpleName) to false
+                    } catch (e: Exception) {
+                        SendResult.Failed(e.javaClass.simpleName) to false
+                    }
+                last = result
+                if (!retryable || attempt == MAX_ATTEMPTS) break
+                delay(1_500)
             }
-            last = result
-            if (!retryable || attempt == MAX_ATTEMPTS) break
-            delay(1_500)
+            last
         }
-        last
-    }
 
     private fun post(p: FeedbackPayload): SendResult {
         val boundary = "----gamut${UUID.randomUUID().toString().replace("-", "")}"
-        val conn = (URL(ENDPOINT).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            connectTimeout = CONNECT_TIMEOUT_MS
-            readTimeout = READ_TIMEOUT_MS
-            instanceFollowRedirects = false
-            doOutput = true
-            useCaches = false
-            setChunkedStreamingMode(0)
-            setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
-            setRequestProperty("Accept", "application/json")
-        }
+        val conn =
+            (URL(ENDPOINT).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = READ_TIMEOUT_MS
+                instanceFollowRedirects = false
+                doOutput = true
+                useCaches = false
+                setChunkedStreamingMode(0)
+                setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+                setRequestProperty("Accept", "application/json")
+            }
         try {
             conn.outputStream.use { out ->
                 val form = Multipart(out, boundary)
@@ -122,12 +136,18 @@ object FeedbackSender {
     }
 
     private fun subjectFor(p: FeedbackPayload): String {
-        val parts = buildList {
-            add("Gamut")
-            add(p.type.label)
-            if (p.rating > 0) add("${p.rating}\u2605")
-            add(p.message.replace(Regex("\\s+"), " ").take(48).trim())
-        }
+        val parts =
+            buildList {
+                add("Gamut")
+                add(p.type.label)
+                if (p.rating > 0) add("${p.rating}\u2605")
+                add(
+                    p.message
+                        .replace(Regex("\\s+"), " ")
+                        .take(48)
+                        .trim(),
+                )
+            }
         return parts.joinToString(" \u00B7 ")
     }
 
@@ -145,8 +165,14 @@ object FeedbackSender {
         }
     }
 
-    private class Multipart(private val out: OutputStream, private val boundary: String) {
-        fun field(name: String, value: String) {
+    private class Multipart(
+        private val out: OutputStream,
+        private val boundary: String,
+    ) {
+        fun field(
+            name: String,
+            value: String,
+        ) {
             write("--$boundary\r\nContent-Disposition: form-data; name=\"$name\"\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n")
             out.write(value.toByteArray(Charsets.UTF_8))
             write("\r\n")

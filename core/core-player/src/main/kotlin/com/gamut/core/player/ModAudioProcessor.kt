@@ -80,6 +80,7 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
     override fun onFlush() {
         clearState()
     }
+
     override fun onReset() {
         clearState()
     }
@@ -255,6 +256,7 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
 
     private fun allocate() {
         val k = rate / 44100f
+
         fun size(n: Int) = (n * k).roundToInt().coerceAtLeast(8)
         combL = Array(COMB.size) { FloatArray(size(COMB[it])) }
         combR = Array(COMB.size) { FloatArray(size(COMB[it] + SPREAD)) }

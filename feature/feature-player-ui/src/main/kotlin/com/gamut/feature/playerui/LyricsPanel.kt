@@ -86,6 +86,7 @@ private fun vividLyricColor(base: Color): Color {
     if (hsv[1] < 0.12f) return Color.White
     return Color(android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], (hsv[1] * 1.5f).coerceIn(0.65f, 0.95f), 1f)))
 }
+
 private const val PanelStepMs = 40L
 
 @Composable
@@ -103,7 +104,8 @@ internal fun CurrentLyricLine(
     val sungColor = highlight ?: remember(tint.top) { vividLyricColor(tint.top) }
     val unsungColor = Color.White.copy(alpha = 0.5f)
     val latest by rememberUpdatedState(positionMs)
-    val style = TextStyle(fontFamily = font, fontWeight = FontWeight.Normal, fontSize = 19.sp, lineHeight = 25.sp, textAlign = TextAlign.Center)
+    val style =
+        TextStyle(fontFamily = font, fontWeight = FontWeight.Normal, fontSize = 19.sp, lineHeight = 25.sp, textAlign = TextAlign.Center)
     AnimatedVisibility(
         visible = show,
         modifier = modifier,
@@ -121,18 +123,19 @@ internal fun CurrentLyricLine(
             ) { index ->
                 val line = loaded?.lines?.getOrNull(index)
                 val step by remember(index) { derivedStateOf { latest() / PanelStepMs } }
-                val text = if (line == null || line.words.isEmpty()) {
-                    buildAnnotatedString { append(line?.text ?: "\u266A") }
-                } else {
-                    val now = step * PanelStepMs
-                    buildAnnotatedString {
-                        line.words.forEach { w ->
-                            val span = (w.endMs - w.startMs).coerceAtLeast(1L)
-                            val p = ((now - w.startMs).toFloat() / span).coerceIn(0f, 1f)
-                            withStyle(SpanStyle(color = lerp(unsungColor, sungColor, p))) { append(w.text) }
+                val text =
+                    if (line == null || line.words.isEmpty()) {
+                        buildAnnotatedString { append(line?.text ?: "\u266A") }
+                    } else {
+                        val now = step * PanelStepMs
+                        buildAnnotatedString {
+                            line.words.forEach { w ->
+                                val span = (w.endMs - w.startMs).coerceAtLeast(1L)
+                                val p = ((now - w.startMs).toFloat() / span).coerceIn(0f, 1f)
+                                withStyle(SpanStyle(color = lerp(unsungColor, sungColor, p))) { append(w.text) }
+                            }
                         }
                     }
-                }
                 Text(
                     text = text,
                     style = style,
@@ -168,14 +171,15 @@ internal fun LyricsPreviewCard(
                 } else if (lyricsState !is LyricsState.Loading) {
                     onRetry()
                 }
-            }
-            .padding(20.dp),
+            }.padding(20.dp),
     ) {
         Text("Lyrics preview", color = Color.White, style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(16.dp))
         when (lyricsState) {
-            is LyricsState.Loading -> Box(Modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
-                PlayerSpinner(Modifier.size(26.dp), Color.White.copy(alpha = 0.8f))
+            is LyricsState.Loading -> {
+                Box(Modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
+                    PlayerSpinner(Modifier.size(26.dp), Color.White.copy(alpha = 0.8f))
+                }
             }
 
             is LyricsState.Loaded -> {
@@ -194,12 +198,13 @@ internal fun LyricsPreviewCard(
                                 Text(
                                     text = line.text,
                                     color = if (active) Color.White else soft.copy(alpha = if (idx < 0) 0.9f else 0.7f),
-                                    style = TextStyle(
-                                        fontFamily = font,
-                                        fontWeight = FontWeight.Normal,
-                                        fontSize = if (active) 24.sp else 20.sp,
-                                        lineHeight = if (active) 30.sp else 26.sp,
-                                    ),
+                                    style =
+                                        TextStyle(
+                                            fontFamily = font,
+                                            fontWeight = FontWeight.Normal,
+                                            fontSize = if (active) 24.sp else 20.sp,
+                                            lineHeight = if (active) 30.sp else 26.sp,
+                                        ),
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -219,15 +224,22 @@ internal fun LyricsPreviewCard(
                 }
             }
 
-            is LyricsState.NotAvailable -> PreviewMessage("No lyrics found for this track\nTap to try again", soft)
+            is LyricsState.NotAvailable -> {
+                PreviewMessage("No lyrics found for this track\nTap to try again", soft)
+            }
 
-            is LyricsState.Error -> PreviewMessage("Couldn't load the lyrics\nRetrying\u2026 tap to retry now", soft)
+            is LyricsState.Error -> {
+                PreviewMessage("Couldn't load the lyrics\nRetrying\u2026 tap to retry now", soft)
+            }
         }
     }
 }
 
 @Composable
-private fun PreviewMessage(text: String, color: Color) {
+private fun PreviewMessage(
+    text: String,
+    color: Color,
+) {
     Box(Modifier.fillMaxWidth().height(110.dp), contentAlignment = Alignment.Center) {
         Text(text, color = color.copy(alpha = 0.85f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
     }
@@ -273,8 +285,20 @@ internal fun FullLyricsPanel(
                     Modifier.align(Alignment.CenterStart).tapTarget(onClose).padding(12.dp),
                 )
                 Column(Modifier.align(Alignment.Center).padding(horizontal = 56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(title, color = Color.White, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(artist, color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        title,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        artist,
+                        color = Color.White.copy(alpha = 0.85f),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
 
@@ -289,23 +313,31 @@ internal fun FullLyricsPanel(
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (lyricsState) {
-                    is LyricsState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        PlayerSpinner(Modifier.size(30.dp), Color.White.copy(alpha = 0.8f))
+                    is LyricsState.Loading -> {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            PlayerSpinner(Modifier.size(30.dp), Color.White.copy(alpha = 0.8f))
+                        }
                     }
 
-                    is LyricsState.Loaded -> PanelLyricsList(
-                        lines = lyricsState.lines,
-                        isSynced = lyricsState.isSynced,
-                        activeIndex = activeIndex,
-                        positionMs = positionMs,
-                        soft = soft,
-                        onSeekToMs = onSeekToMs,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    is LyricsState.Loaded -> {
+                        PanelLyricsList(
+                            lines = lyricsState.lines,
+                            isSynced = lyricsState.isSynced,
+                            activeIndex = activeIndex,
+                            positionMs = positionMs,
+                            soft = soft,
+                            onSeekToMs = onSeekToMs,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
 
-                    is LyricsState.NotAvailable -> LyricsEmptyState("${lyricsState.reason}\nTap to retry", onRetry)
+                    is LyricsState.NotAvailable -> {
+                        LyricsEmptyState("${lyricsState.reason}\nTap to retry", onRetry)
+                    }
 
-                    is LyricsState.Error -> LyricsEmptyState("${lyricsState.message}\nRetrying\u2026 tap to retry now", onRetry)
+                    is LyricsState.Error -> {
+                        LyricsEmptyState("${lyricsState.message}\nRetrying\u2026 tap to retry now", onRetry)
+                    }
                 }
             }
 
@@ -359,12 +391,13 @@ private fun PanelLyricsList(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().fadingEdges(0.08f),
-            contentPadding = PaddingValues(
-                start = 24.dp,
-                end = 24.dp,
-                top = if (isSynced) viewport * 0.14f else 12.dp,
-                bottom = viewport * 0.55f,
-            ),
+            contentPadding =
+                PaddingValues(
+                    start = 24.dp,
+                    end = 24.dp,
+                    top = if (isSynced) viewport * 0.14f else 12.dp,
+                    bottom = viewport * 0.55f,
+                ),
             verticalArrangement = Arrangement.spacedBy(22.dp),
         ) {
             itemsIndexed(lines) { index, line ->
@@ -393,7 +426,8 @@ private fun PanelLine(
     onClick: (() -> Unit)?,
 ) {
     val font = rememberLyricsFont()
-    val style = TextStyle(fontFamily = font, fontWeight = FontWeight.Normal, fontSize = 28.sp, lineHeight = 36.sp, textAlign = TextAlign.Start)
+    val style =
+        TextStyle(fontFamily = font, fontWeight = FontWeight.Normal, fontSize = 28.sp, lineHeight = 36.sp, textAlign = TextAlign.Start)
     val rowModifier = Modifier.fillMaxWidth().let { if (onClick != null) it.tapTarget(onClick) else it }
 
     if (!isSynced || line.words.isEmpty()) {
@@ -403,18 +437,20 @@ private fun PanelLine(
     val dim = soft.copy(alpha = 0.5f)
     val sung = Color.White.copy(alpha = 0.85f)
     val step by remember(isActive, readPosition) { derivedStateOf { if (isActive) readPosition() / PanelStepMs else 0L } }
-    val now = when {
-        isActive -> step * PanelStepMs
-        isPast -> Long.MAX_VALUE / 2
-        else -> -1_000_000L
-    }
-    val text = buildAnnotatedString {
-        line.words.forEach { word ->
-            val span = (word.endMs - word.startMs).coerceAtLeast(1L)
-            val p = ((now - word.startMs).toFloat() / span).coerceIn(0f, 1f)
-            val target = if (isActive) Color.White else sung
-            withStyle(SpanStyle(color = lerp(dim, target, p))) { append(word.text) }
+    val now =
+        when {
+            isActive -> step * PanelStepMs
+            isPast -> Long.MAX_VALUE / 2
+            else -> -1_000_000L
         }
-    }
+    val text =
+        buildAnnotatedString {
+            line.words.forEach { word ->
+                val span = (word.endMs - word.startMs).coerceAtLeast(1L)
+                val p = ((now - word.startMs).toFloat() / span).coerceIn(0f, 1f)
+                val target = if (isActive) Color.White else sung
+                withStyle(SpanStyle(color = lerp(dim, target, p))) { append(word.text) }
+            }
+        }
     Text(text, style = style, modifier = rowModifier)
 }

@@ -12,7 +12,11 @@ private val NoStreamDuration = MutableStateFlow(0L)
 private val NeverLoadingTrack = MutableStateFlow(false)
 
 fun interface TrackSourceResolver {
-    suspend fun resolve(track: Track, forceRefresh: Boolean, onProgress: (Float) -> Unit): String?
+    suspend fun resolve(
+        track: Track,
+        forceRefresh: Boolean,
+        onProgress: (Float) -> Unit,
+    ): String?
 }
 
 interface MusicPlayer {
@@ -32,20 +36,37 @@ interface MusicPlayer {
 
     fun currentPositionMs(): Long = -1L
 
-    fun play(track: Track, sourceUrl: String)
+    fun play(
+        track: Track,
+        sourceUrl: String,
+    )
+
     fun pause()
+
     fun resume()
+
     fun seekTo(positionMs: Long)
+
     fun skipNext()
+
     fun skipPrevious()
 
-    fun setQueue(tracks: List<Track>, startIndex: Int)
+    fun setQueue(
+        tracks: List<Track>,
+        startIndex: Int,
+    )
 
     fun setShuffle(enabled: Boolean)
+
     fun setRepeatMode(mode: RepeatMode)
 
     fun skipTo(index: Int)
-    fun addToQueue(track: Track, playNext: Boolean = false)
+
+    fun addToQueue(
+        track: Track,
+        playNext: Boolean = false,
+    )
+
     fun removeFromQueue(index: Int)
 
     fun setSourceResolver(resolver: TrackSourceResolver?)

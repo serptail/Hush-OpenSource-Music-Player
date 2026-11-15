@@ -45,20 +45,42 @@ import kotlinx.coroutines.launch
 
 private val SPLIT = Regex("(?i)\\s+(featuring|feat\\.?|ft\\.?|with|x|&|and)\\s+|\\s*,\\s*|\\s*/\\s*|\\s*;\\s*")
 
-private val KEEP_TOGETHER = listOf(
-    "tyler, the creator", "earth, wind & fire", "crosby, stills & nash", "crosby, stills, nash & young",
-    "simon & garfunkel", "hall & oates", "salt-n-pepa", "florence + the machine", "years & years",
-    "mumford & sons", "of monsters and men", "king gizzard & the lizard wizard", "belle & sebastian",
-    "brooks & dunn", "ac/dc", "kc and the sunshine band", "bell biv devoe", "dan + shay", "coheed and cambria",
-    "panic! at the disco", "iron & wine", "matt and kim", "me first and the gimme gimmes",
-)
+private val KEEP_TOGETHER =
+    listOf(
+        "tyler, the creator",
+        "earth, wind & fire",
+        "crosby, stills & nash",
+        "crosby, stills, nash & young",
+        "simon & garfunkel",
+        "hall & oates",
+        "salt-n-pepa",
+        "florence + the machine",
+        "years & years",
+        "mumford & sons",
+        "of monsters and men",
+        "king gizzard & the lizard wizard",
+        "belle & sebastian",
+        "brooks & dunn",
+        "ac/dc",
+        "kc and the sunshine band",
+        "bell biv devoe",
+        "dan + shay",
+        "coheed and cambria",
+        "panic! at the disco",
+        "iron & wine",
+        "matt and kim",
+        "me first and the gimme gimmes",
+    )
 
 fun splitArtists(credit: String): List<String> {
     val trimmed = credit.trim()
     if (trimmed.isEmpty()) return emptyList()
     if (KEEP_TOGETHER.any { it.equals(trimmed, ignoreCase = true) }) return listOf(trimmed)
     val unwrapped = trimmed.replace(Regex("[(\\[]"), " feat. ").replace(Regex("[)\\]]"), "")
-    return unwrapped.split(SPLIT).map { it.trim() }.filter { it.isNotEmpty() }
+    return unwrapped
+        .split(SPLIT)
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
         .distinctBy { it.lowercase() }
         .ifEmpty { listOf(trimmed) }
 }
@@ -66,7 +88,10 @@ fun splitArtists(credit: String): List<String> {
 val LocalArtistPhotoResolver = compositionLocalOf<suspend (name: String, albumTitle: String?) -> String?> { { _, _ -> null } }
 
 @Composable
-fun rememberArtistPhotos(names: List<String>, albumTitle: String?): Map<String, String?> {
+fun rememberArtistPhotos(
+    names: List<String>,
+    albumTitle: String?,
+): Map<String, String?> {
     val resolver = LocalArtistPhotoResolver.current
     var photos by remember(names) { mutableStateOf<Map<String, String?>>(emptyMap()) }
     LaunchedEffect(names, albumTitle) {
@@ -135,10 +160,17 @@ fun ArtistStack(
 }
 
 @Composable
-private fun Initial(name: String, size: Dp) {
+private fun Initial(
+    name: String,
+    size: Dp,
+) {
     Box(Modifier.size(size).background(ink(0.14f)), contentAlignment = Alignment.Center) {
         Text(
-            name.trim().firstOrNull()?.uppercase().orEmpty(),
+            name
+                .trim()
+                .firstOrNull()
+                ?.uppercase()
+                .orEmpty(),
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
             color = ink(0.85f),
         )
@@ -182,15 +214,19 @@ fun ArtistPickerSheet(
                                     }
                                 },
                                 scaleDown = 0.98f,
-                            )
-                            .padding(horizontal = 24.dp, vertical = 10.dp),
+                            ).padding(horizontal = 24.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         val url = photos[name]
                         Box(Modifier.size(48.dp).clip(CircleShape).border(1.dp, ink(0.12f), CircleShape)) {
                             if (url != null) {
-                                ArtImage(url = url, modifier = Modifier.size(48.dp), contentDescription = name, fallback = { Initial(name, 48.dp) })
+                                ArtImage(
+                                    url = url,
+                                    modifier = Modifier.size(48.dp),
+                                    contentDescription = name,
+                                    fallback = { Initial(name, 48.dp) },
+                                )
                             } else {
                                 Initial(name, 48.dp)
                             }
@@ -211,7 +247,10 @@ fun ArtistPickerSheet(
     }
 }
 
-class ArtistTap internal constructor(val onClick: () -> Unit, internal val sheet: @Composable () -> Unit) {
+class ArtistTap internal constructor(
+    val onClick: () -> Unit,
+    internal val sheet: @Composable () -> Unit,
+) {
     @Composable fun Sheet() = sheet()
 }
 
@@ -255,11 +294,12 @@ fun ArtistLine(
     val multi = names.size > 1
     val tap = rememberArtistTap(credit, albumTitle, onArtist)
     val resolved = rememberArtistPhotos(if (multi) names else emptyList(), albumTitle)
-    val photos = when {
-        multi -> resolved
-        showSingle && names.isNotEmpty() -> mapOf(names[0] to singlePhoto)
-        else -> emptyMap()
-    }
+    val photos =
+        when {
+            multi -> resolved
+            showSingle && names.isNotEmpty() -> mapOf(names[0] to singlePhoto)
+            else -> emptyMap()
+        }
     Row(
         modifier.pressScale(onClick = tap.onClick, scaleDown = 0.97f),
         verticalAlignment = Alignment.CenterVertically,

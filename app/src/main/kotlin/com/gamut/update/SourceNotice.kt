@@ -21,13 +21,17 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import com.gamut.feature.resolver.PlaybackHealth
 import dagger.hilt.android.lifecycle.HiltViewModel
-import javax.inject.Inject
 import kotlinx.coroutines.flow.StateFlow
+import javax.inject.Inject
 
 @HiltViewModel
-class SourceNoticeViewModel @Inject constructor(health: PlaybackHealth) : ViewModel() {
-    val failing: StateFlow<Boolean> = health.failing
-}
+class SourceNoticeViewModel
+    @Inject
+    constructor(
+        health: PlaybackHealth,
+    ) : ViewModel() {
+        val failing: StateFlow<Boolean> = health.failing
+    }
 
 @Composable
 fun SourceNoticeBanner(

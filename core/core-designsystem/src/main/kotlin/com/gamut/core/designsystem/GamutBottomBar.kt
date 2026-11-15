@@ -70,7 +70,10 @@ fun GamutBottomBar(
 }
 
 @Composable
-private fun BottomBarTab(item: BottomBarItem, modifier: Modifier) {
+private fun BottomBarTab(
+    item: BottomBarItem,
+    modifier: Modifier,
+) {
     val tint by animateColorAsState(if (item.selected) ink() else ink(0.45f), tween(200), label = "bar-tint")
     val marker by animateFloatAsState(if (item.selected) 1f else 0f, tween(200), label = "bar-marker")
     Box(

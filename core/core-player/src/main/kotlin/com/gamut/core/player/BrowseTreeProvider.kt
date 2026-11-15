@@ -12,10 +12,16 @@ sealed interface BrowseEntry {
         val artUrl: String? = null,
     ) : BrowseEntry
 
-    data class Song(override val id: String, val track: Track) : BrowseEntry
+    data class Song(
+        override val id: String,
+        val track: Track,
+    ) : BrowseEntry
 }
 
-data class BrowseQueue(val tracks: List<Track>, val startIndex: Int)
+data class BrowseQueue(
+    val tracks: List<Track>,
+    val startIndex: Int,
+)
 
 interface BrowseTreeProvider {
     suspend fun children(parentId: String): List<BrowseEntry>

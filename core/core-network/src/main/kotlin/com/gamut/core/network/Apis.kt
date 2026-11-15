@@ -19,7 +19,9 @@ interface MusicBrainzApi {
 
 interface CoverArtApi {
     @GET("release/{mbid}")
-    suspend fun getCoverArt(@Path("mbid") releaseMbid: String): Response<CoverArtResponse>
+    suspend fun getCoverArt(
+        @Path("mbid") releaseMbid: String,
+    ): Response<CoverArtResponse>
 }
 
 interface ItunesApi {
@@ -55,22 +57,37 @@ interface ItunesApi {
 
 interface DeezerApi {
     @GET("search/artist")
-    suspend fun searchArtists(@Query("q") query: String, @Query("limit") limit: Int = 5): DeezerArtistSearchResponse
+    suspend fun searchArtists(
+        @Query("q") query: String,
+        @Query("limit") limit: Int = 5,
+    ): DeezerArtistSearchResponse
 
     @GET("artist/{artistId}/top")
-    suspend fun topTracks(@Path("artistId") artistId: Long, @Query("limit") limit: Int = 100): DeezerTrackResponse
+    suspend fun topTracks(
+        @Path("artistId") artistId: Long,
+        @Query("limit") limit: Int = 100,
+    ): DeezerTrackResponse
 
     @GET("search")
-    suspend fun searchTracks(@Query("q") query: String, @Query("limit") limit: Int = 25): DeezerTrackResponse
+    suspend fun searchTracks(
+        @Query("q") query: String,
+        @Query("limit") limit: Int = 25,
+    ): DeezerTrackResponse
 
     @GET("chart/0/tracks")
-    suspend fun chartTracks(@Query("limit") limit: Int = 25): DeezerTrackResponse
+    suspend fun chartTracks(
+        @Query("limit") limit: Int = 25,
+    ): DeezerTrackResponse
 
     @GET("chart/0/albums")
-    suspend fun chartAlbums(@Query("limit") limit: Int = 12): DeezerAlbumResponse
+    suspend fun chartAlbums(
+        @Query("limit") limit: Int = 12,
+    ): DeezerAlbumResponse
 
     @GET("chart/0/artists")
-    suspend fun chartArtists(@Query("limit") limit: Int = 12): DeezerArtistSearchResponse
+    suspend fun chartArtists(
+        @Query("limit") limit: Int = 12,
+    ): DeezerArtistSearchResponse
 
     @GET("artist/{artistId}/albums")
     suspend fun artistAlbums(
@@ -80,49 +97,80 @@ interface DeezerApi {
     ): DeezerAlbumResponse
 
     @GET("artist/{artistId}/related")
-    suspend fun relatedArtists(@Path("artistId") artistId: Long, @Query("limit") limit: Int = 20): DeezerArtistSearchResponse
+    suspend fun relatedArtists(
+        @Path("artistId") artistId: Long,
+        @Query("limit") limit: Int = 20,
+    ): DeezerArtistSearchResponse
 
     @GET("artist/{artistId}")
-    suspend fun artist(@Path("artistId") artistId: Long): DeezerArtistDto
+    suspend fun artist(
+        @Path("artistId") artistId: Long,
+    ): DeezerArtistDto
 
     @GET("search/artist")
-    suspend fun searchArtistPhotos(@Query("q") query: String, @Query("limit") limit: Int = 10): DeezerPhotoSearchResponse
+    suspend fun searchArtistPhotos(
+        @Query("q") query: String,
+        @Query("limit") limit: Int = 10,
+    ): DeezerPhotoSearchResponse
 
     @GET("artist/{artistId}/albums")
-    suspend fun artistAlbumTitles(@Path("artistId") artistId: Long, @Query("limit") limit: Int = 100): DeezerTitleResponse
+    suspend fun artistAlbumTitles(
+        @Path("artistId") artistId: Long,
+        @Query("limit") limit: Int = 100,
+    ): DeezerTitleResponse
 
     @GET("album/{albumId}/tracks")
-    suspend fun albumTracks(@Path("albumId") albumId: Long, @Query("limit") limit: Int = 100): DeezerTrackResponse
+    suspend fun albumTracks(
+        @Path("albumId") albumId: Long,
+        @Query("limit") limit: Int = 100,
+    ): DeezerTrackResponse
 }
 
 interface AppleChartsApi {
     @GET("music/most-played/{limit}/songs.json")
-    suspend fun topSongs(@Path("limit") limit: Int = 10): AppleChartResponse
+    suspend fun topSongs(
+        @Path("limit") limit: Int = 10,
+    ): AppleChartResponse
 
     @GET("music/most-played/{limit}/albums.json")
-    suspend fun topAlbums(@Path("limit") limit: Int = 10): AppleChartResponse
+    suspend fun topAlbums(
+        @Path("limit") limit: Int = 10,
+    ): AppleChartResponse
 }
 
 interface YoutubeMusicApi {
     @POST("search")
-    suspend fun search(@Body request: YoutubeSearchRequest): YoutubeSearchResponse
+    suspend fun search(
+        @Body request: YoutubeSearchRequest,
+    ): YoutubeSearchResponse
 }
 
 interface ResolverSyncApi {
     @GET("resolve/{isrc}")
-    suspend fun get(@Path("isrc") isrc: String): Response<ResolvedSourceDto>
+    suspend fun get(
+        @Path("isrc") isrc: String,
+    ): Response<ResolvedSourceDto>
 
     @POST("resolve")
-    suspend fun save(@Body source: ResolvedSourceDto): Response<Unit>
+    suspend fun save(
+        @Body source: ResolvedSourceDto,
+    ): Response<Unit>
 
     @GET("charts/{name}")
-    suspend fun chart(@Path("name") name: String, @Query("limit") limit: Int = 50): Response<BillboardChartDto>
+    suspend fun chart(
+        @Path("name") name: String,
+        @Query("limit") limit: Int = 50,
+    ): Response<BillboardChartDto>
 
     @GET("youtube/search")
-    suspend fun searchYoutube(@Query("query") query: String): YoutubeSearchResponse
+    suspend fun searchYoutube(
+        @Query("query") query: String,
+    ): YoutubeSearchResponse
 
     @GET("youtube/stream/{videoId}")
-    suspend fun youtubeStream(@Path("videoId") videoId: String): Response<AudioStreamDto>
+    suspend fun youtubeStream(
+        @Path("videoId") videoId: String,
+    ): Response<AudioStreamDto>
 }
 
 interface BillboardApi {
