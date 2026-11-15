@@ -201,6 +201,7 @@ class TrackTagger
 
                 "coverartarchive.org" in url -> {
                     url.replace(Regex("""-(250|500)(\.\w+)$"""), "-1200$2")
+ 
                 }
 
                 else -> {
