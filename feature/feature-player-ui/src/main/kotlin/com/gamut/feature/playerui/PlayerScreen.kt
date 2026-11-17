@@ -191,8 +191,8 @@ fun PlayerScreen(
     val eq = remember { EqualizerController.get(context) }
     val eqState by eq.state.collectAsState()
     var showEq by remember { mutableStateOf(false) }
+    var showStats by remember { mutableStateOf(false) }
     var showSleep by remember { mutableStateOf(false) }
-    var showVisualizer by remember { mutableStateOf(false) }
     var showMore by remember { mutableStateOf(false) }
     var showShare by remember { mutableStateOf(false) }
     var showAddToPlaylist by remember { mutableStateOf(false) }
@@ -726,9 +726,9 @@ fun PlayerScreen(
                 showMore = false
                 showSleep = true
             },
-            onVisualizer = {
+            onStats = {
                 showMore = false
-                showVisualizer = true
+                showStats = true
             },
             onDismiss = { showMore = false },
         )
@@ -763,7 +763,7 @@ fun PlayerScreen(
         )
     }
     if (showEq) EqualizerSheet(eq, accent, onDismiss = { showEq = false })
-    if (showVisualizer) com.gamut.feature.playerui.visualizer.VisualizerScreen(onDismiss = { showVisualizer = false })
+    if (showStats) StatsForNerdsSheet(accent, onDismiss = { showStats = false })
     if (showMod) ModSheet(accent, onDismiss = { showMod = false })
     if (showSleep) {
         SleepTimerSheet(

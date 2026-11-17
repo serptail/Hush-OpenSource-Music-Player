@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.media.AudioManager
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
@@ -36,7 +37,6 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
-import androidx.media3.exoplayer.audio.TeeAudioProcessor
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.gamut.core.model.LocalCovers
 import com.gamut.core.model.PlaybackState
@@ -101,6 +101,9 @@ class Media3MusicPlayer
             val mod: ModAudioProcessor,
             val engine: SoundEngineProcessor,
             val exo: ExoPlayer,
+            /** Rate, channel count and encoding the output last opened with for this slot. */
+            val pcm: IntArray = IntArray(3),
+            var decoder: String = "",
         )
 
         private var activeSlot: Slot? = null
@@ -122,7 +125,7 @@ class Media3MusicPlayer
         private fun newSlot(handleFocus: Boolean): Slot {
             val mod = ModAudioProcessor()
             val engine = SoundEngineProcessor()
-            val tee = TeeAudioProcessor(AudioAnalyzer.newSink { activeSlot?.engine === engine })
+            val pcm = IntArray(3)
             val renderers =
                 object : DefaultRenderersFactory(context) {
                     override fun buildAudioSink(
@@ -134,7 +137,7 @@ class Media3MusicPlayer
                             .Builder(context)
                             .setEnableFloatOutput(enableFloatOutput)
                             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                            .setAudioProcessors(arrayOf<AudioProcessor>(mod, engine, tee))
+                            .setAudioProcessors(arrayOf<AudioProcessor>(mod, engine))
                             .build()
                 }
             val exo =
@@ -166,11 +169,15 @@ class Media3MusicPlayer
                                 .build()
                     }
             engine.onFormat = { rate, channels, encoding ->
+                pcm[0] = rate
+                pcm[1] = channels
+                pcm[2] = encoding
                 if (activeSlot == null || activeSlot?.engine === engine) {
+                    AudioPipelineInfo.onPcm(rate, channels, encoding)
                     router.onSinkConfigure(bitPerfect, rate, channels, encoding)
                 }
             }
-            return Slot(mod, engine, exo).also { slot ->
+            return Slot(mod, engine, exo, pcm).also { slot ->
                 attachPlayerListener(slot)
                 exo.addAnalyticsListener(
                     object : AnalyticsListener {
@@ -179,18 +186,119 @@ class Media3MusicPlayer
                             format: Format,
                             decoderReuseEvaluation: DecoderReuseEvaluation?,
                         ) {
-                            if (slot === activeSlot) AudioPipelineInfo.onSource(format)
+                            if (slot === activeSlot) {
+                                AudioPipelineInfo.onSource(format)
+                                publishOrigin(slot)
+                            }
+                        }
+
+                        override fun onAudioDecoderInitialized(
+                            eventTime: AnalyticsListener.EventTime,
+                            decoderName: String,
+                            initializedTimestampMs: Long,
+                            initializationDurationMs: Long,
+                        ) {
+                            slot.decoder = decoderName
+                            if (slot === activeSlot) AudioPipelineInfo.onDecoder(decoderName)
+                        }
+
+                        override fun onAudioUnderrun(
+                            eventTime: AnalyticsListener.EventTime,
+                            bufferSize: Int,
+                            bufferSizeMs: Long,
+                            elapsedSinceLastFeedMs: Long,
+                        ) {
+                            if (slot === activeSlot) AudioPipelineInfo.onUnderrun()
+                        }
+
+                        override fun onBandwidthEstimate(
+                            eventTime: AnalyticsListener.EventTime,
+                            totalLoadTimeMs: Int,
+                            totalBytesLoaded: Long,
+                            bitrateEstimate: Long,
+                        ) {
+                            AudioPipelineInfo.onBandwidth(bitrateEstimate / 1000L)
                         }
                     },
                 )
                 applyMod(slot, ModController.state.value.settings)
                 applyPlaybackSettings(slot, settings.state.value)
                 engine.params = sound.state.value.toParams()
+                publishDsp()
             }
         }
 
+        /** Tells the stats panel where the playing stream came from and which quality it was asked for. */
+        private fun publishOrigin(slot: Slot) {
+            val item = slot.exo.currentMediaItem
+            val scheme = item?.localConfiguration?.uri?.scheme
+            val origin =
+                when (scheme) {
+                    null -> ""
+                    "file", "content" -> AudioStatsReport.LOCAL
+                    else -> AudioStatsReport.NETWORK
+                }
+            AudioPipelineInfo.onOrigin(origin, settings.state.value.streamQuality.label, settings.effectiveQuality().label)
+        }
+
+        /** Hands the stats panel every setting that changes the sound, flattened to plain values. */
+        private fun publishDsp() {
+            val st = settings.state.value
+            val snd = sound.state.value
+            val mod = ModController.state.value.settings
+            AudioPipelineInfo.onDsp(
+                DspState(
+                    bitPerfectRequested = st.bitPerfect,
+                    speed = mod.speed,
+                    pitchRatio = mod.pitchRatio,
+                    bassDb = mod.bassDb,
+                    reverbMix = mod.reverbMix,
+                    reverbDecaySec = mod.reverbDecaySec,
+                    reverbPreDelayMs = mod.reverbPreDelayMs,
+                    reverbDamping = mod.reverbDamping,
+                    lowPassHz = mod.lowPassHz,
+                    wobbleCents = mod.wobbleCents,
+                    vinylNoise = mod.vinylNoise,
+                    mono = st.mono,
+                    balance = st.balance,
+                    eqEnabled = snd.eqEnabled,
+                    eqPreset = snd.preset,
+                    eqBandsShaped = snd.bands.count { kotlin.math.abs(it.gainDb) >= 0.05f },
+                    eqBandCount = snd.bands.size,
+                    autoHeadroom = snd.autoHeadroom,
+                    limiter = snd.limiter,
+                    dither = snd.dither,
+                    crossfeed = snd.crossfeed.label,
+                    widthPercent = snd.widthPercent,
+                    spatial = snd.spatial.label,
+                    fadeMs = st.fadeMs,
+                    crossfadeMs = st.crossfadeMs,
+                    skipSilence = st.skipSilence,
+                ),
+            )
+        }
+
         private fun startSettingsObservers() {
-            scope.launch { ModController.state.collect { st -> allSlots().forEach { applyMod(it, st.settings) } } }
+            val audioManager = context.getSystemService(AudioManager::class.java)
+            AudioPipelineInfo.onEnvironment(
+                mixerRateHz = audioManager?.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull() ?: 0,
+                sdk = Build.VERSION.SDK_INT,
+            )
+            scope.launch {
+                ModController.state.collect { st ->
+                    allSlots().forEach { applyMod(it, st.settings) }
+                    publishDsp()
+                }
+            }
+            scope.launch {
+                while (isActive) {
+                    if (AudioPipelineInfo.watching) {
+                        val exo = activeSlot?.exo
+                        AudioPipelineInfo.onBuffer(exo?.takeIf { it.mediaItemCount > 0 }?.totalBufferedDuration ?: -1L)
+                    }
+                    delay(1_000L)
+                }
+            }
             router.start { onOutputDevicesChanged() }
             scope.launch {
                 settings.state.collect { st ->
@@ -202,12 +310,14 @@ class Media3MusicPlayer
                         reopenOutput()
                     }
                     onCrossfadeChanged()
+                    publishDsp()
                 }
             }
             scope.launch {
                 sound.state.collect { st ->
                     val params = st.toParams()
                     allSlots().forEach { it.engine.params = params }
+                    publishDsp()
                 }
             }
         }
@@ -1080,6 +1190,9 @@ class Media3MusicPlayer
             outgoingSlot = outgoing
             activeSlot = incoming
             incoming.exo.audioFormat?.let(AudioPipelineInfo::onSource)
+            publishOrigin(incoming)
+            AudioPipelineInfo.onDecoder(incoming.decoder)
+            if (incoming.pcm[0] > 0) AudioPipelineInfo.onPcm(incoming.pcm[0], incoming.pcm[1], incoming.pcm[2])
 
             outgoing.exo.setAudioAttributes(musicAttributes, false)
             incoming.exo.setAudioAttributes(musicAttributes, true)
