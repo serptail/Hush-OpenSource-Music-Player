@@ -67,6 +67,7 @@ import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.softResize
+import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.feature.resolver.DownloadQuality
 import com.gamut.feature.resolver.DownloadState
 import com.gamut.feature.resolver.MigrationState
@@ -845,7 +846,7 @@ private fun SongRow(
                 } else {
                     ArtImage(
                         url = song.artUrl,
-                        modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)),
+                        modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).thumbnailBorder(RoundedCornerShape(12.dp)),
                     )
                 }
             }

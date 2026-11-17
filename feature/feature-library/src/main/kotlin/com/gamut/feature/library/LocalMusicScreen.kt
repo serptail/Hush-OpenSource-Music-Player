@@ -126,6 +126,7 @@ import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.isWideLayout
 import com.gamut.core.designsystem.pressScale
+import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.Track
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -564,7 +565,7 @@ fun LocalMusicScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         BadgedCover(local = true) {
-                            CoverImage(song.track.albumArtUrl.orEmpty(), Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)))
+                            CoverImage(song.track.albumArtUrl.orEmpty(), Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)).thumbnailBorder(RoundedCornerShape(10.dp)))
                         }
                         Column(Modifier.weight(1f).padding(start = 16.dp)) {
                             Text(
@@ -992,7 +993,7 @@ private fun ManualEditSheet(
 
             Box(Modifier.size(132.dp)) {
                 Crossfade(preview, animationSpec = tween(300), label = "cover") { url ->
-                    CoverImage(url, Modifier.fillMaxSize().clip(RoundedCornerShape(18.dp)))
+                    CoverImage(url, Modifier.fillMaxSize().clip(RoundedCornerShape(18.dp)).thumbnailBorder(RoundedCornerShape(18.dp)))
                 }
                 BoxScopeDeviceBadge(Modifier.align(Alignment.BottomEnd).padding(6.dp))
             }
@@ -1248,7 +1249,7 @@ private fun FoundRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (c.artUrl != null) {
-                CoverImage(c.artUrl, Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)))
+                CoverImage(c.artUrl, Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)).thumbnailBorder(RoundedCornerShape(10.dp)))
             } else {
                 Box(Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)).background(ink(0.10f)), contentAlignment = Alignment.Center) {
                     Icon(PhosphorIcons.Bold.Image, null, tint = ink(0.4f), modifier = Modifier.size(22.dp))

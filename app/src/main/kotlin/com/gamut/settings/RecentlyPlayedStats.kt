@@ -55,6 +55,7 @@ import com.gamut.core.designsystem.LocalArtistPhotoResolver
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.squareArtUrl
+import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -152,7 +153,7 @@ internal fun StatsTab(vm: StatsViewModel) {
                         leading = {
                             ArtImage(
                                 url = remember(s.song.artUrl) { squareArtUrl(s.song.artUrl, 200) },
-                                modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)),
+                                modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).thumbnailBorder(RoundedCornerShape(8.dp)),
                             )
                         },
                     )
@@ -437,7 +438,7 @@ private fun ArtistCircle(
     size: Dp,
 ) {
     val photo = rememberArtistPhoto(artist.name, artist.album)
-    Box(Modifier.size(size).clip(CircleShape).background(ink(0.1f)), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(size).clip(CircleShape).background(ink(0.1f)).thumbnailBorder(CircleShape), contentAlignment = Alignment.Center) {
         if (photo != null) {
             ArtImage(url = photo, modifier = Modifier.fillMaxSize())
         } else {

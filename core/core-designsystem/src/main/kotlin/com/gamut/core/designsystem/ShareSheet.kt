@@ -420,7 +420,7 @@ private fun LinkPreview(
     ) {
         ArtImage(
             url = remember(track.artUrl) { squareArtUrl(track.artUrl, 256) },
-            modifier = Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)),
+            modifier = Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)).thumbnailBorder(RoundedCornerShape(8.dp)),
             fallback = { Icon(PhosphorIcons.Bold.MusicNote, null, tint = ink(0.5f)) },
         )
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
@@ -455,7 +455,7 @@ private fun ShareCard(
     ) {
         ArtImage(
             url = remember(track.artUrl) { squareArtUrl(track.artUrl, 600) },
-            modifier = Modifier.fillMaxWidth().height(CardW - 44.dp).clip(RoundedCornerShape(10.dp)),
+            modifier = Modifier.fillMaxWidth().height(CardW - 44.dp).clip(RoundedCornerShape(10.dp)).thumbnailBorder(RoundedCornerShape(10.dp)),
             fallback = { Icon(PhosphorIcons.Bold.MusicNote, null, tint = style.text.copy(alpha = 0.5f), modifier = Modifier.size(48.dp)) },
         )
         Spacer(Modifier.height(18.dp))

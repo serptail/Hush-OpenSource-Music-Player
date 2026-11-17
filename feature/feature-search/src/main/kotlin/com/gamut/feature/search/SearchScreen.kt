@@ -140,6 +140,7 @@ import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.rememberArtistTap
 import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.designsystem.squareArtUrl
+import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.Track
 import com.gamut.core.model.TrackSource
 import dev.chrisbanes.haze.HazeState
@@ -995,7 +996,8 @@ private fun ArtistHit(
                         clip = false,
                         ambientColor = Color.Black.copy(alpha = 0.25f),
                         spotColor = Color.Black.copy(alpha = 0.35f),
-                    ).clip(CircleShape),
+                    ).clip(CircleShape)
+                    .thumbnailBorder(CircleShape),
             contentDescription = item.title,
             fallback = { ArtworkFallbackIcon() },
         )
@@ -1060,7 +1062,8 @@ private fun TrackResultRow(
                         clip = false,
                         ambientColor = Color.Black.copy(alpha = 0.20f),
                         spotColor = Color.Black.copy(alpha = 0.30f),
-                    ).clip(ThumbShape),
+                    ).clip(ThumbShape)
+                    .thumbnailBorder(ThumbShape),
             fallback = { ArtworkFallbackIcon() },
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {

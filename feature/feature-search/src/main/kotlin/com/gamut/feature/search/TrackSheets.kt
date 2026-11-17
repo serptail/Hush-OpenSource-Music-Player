@@ -65,6 +65,7 @@ import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.squareArtUrl
+import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.Track
 import com.adamglin.phosphoricons.fill.Heart as HeartFill
 
@@ -148,7 +149,7 @@ private fun TrackHeader(track: Track) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
         ArtImage(
             url = remember(track.albumArtUrl) { squareArtUrl(track.albumArtUrl, 256) },
-            modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)),
+            modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)).thumbnailBorder(RoundedCornerShape(8.dp)),
             fallback = { Icon(PhosphorIcons.Bold.MusicNote, null, tint = ink(0.5f)) },
         )
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
@@ -270,7 +271,7 @@ private fun PlaylistRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(ink(0.07f)),
+            Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(ink(0.07f)).thumbnailBorder(RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center,
         ) {
             if (coverUrl != null) {

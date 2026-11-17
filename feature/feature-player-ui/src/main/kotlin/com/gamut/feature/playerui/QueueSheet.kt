@@ -38,6 +38,7 @@ import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.QueueState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -81,7 +82,7 @@ internal fun QueueSheet(
                         model = track.albumArtUrl,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)),
+                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).thumbnailBorder(RoundedCornerShape(8.dp)),
                     )
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {

@@ -34,6 +34,7 @@ import com.adamglin.phosphoricons.bold.MusicNote
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
+import com.gamut.core.designsystem.thumbnailBorder
 
 object EmptyStateCovers {
     var urls by mutableStateOf<List<String>>(emptyList())
@@ -125,7 +126,8 @@ private fun CoverSpread(
                     .size(size.dp)
                     .graphicsLayer { this.alpha = alpha }
                     .clip(if (circle) CircleShape else RoundedCornerShape(8.dp))
-                    .background(ink(0.12f)),
+                    .background(ink(0.12f))
+                    .thumbnailBorder(if (circle) CircleShape else RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 if (url != null) {

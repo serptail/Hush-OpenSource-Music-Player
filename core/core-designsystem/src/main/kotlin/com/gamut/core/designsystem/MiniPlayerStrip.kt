@@ -85,7 +85,7 @@ fun MiniPlayerStrip(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val artShape = RoundedCornerShape(8.dp)
-            Box(Modifier.size(42.dp).clip(artShape).background(ink(0.08f))) {
+            Box(Modifier.size(42.dp).clip(artShape).background(ink(0.08f)).thumbnailBorder(artShape)) {
                 if (artUrl != null) {
                     AsyncImage(
                         model = artUrl,

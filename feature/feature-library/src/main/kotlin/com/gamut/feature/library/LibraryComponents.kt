@@ -27,6 +27,7 @@ import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.bold.MusicNote
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.thumbnailBorder
 
 internal val RowArtShape = RoundedCornerShape(14.dp)
 
@@ -70,3 +71,4 @@ internal fun Modifier.softCover(shape: androidx.compose.ui.graphics.Shape = RowA
     this
         .shadow(4.dp, shape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
         .clip(shape)
+        .thumbnailBorder(shape)

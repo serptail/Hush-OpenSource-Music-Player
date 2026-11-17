@@ -31,6 +31,7 @@ import coil.compose.AsyncImage
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.bold.MusicNote
+import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.Track
 import com.gamut.feature.playerui.components.PlayerSpinner
 import com.gamut.feature.playerui.components.tapTarget
@@ -306,6 +307,7 @@ internal fun ArtistAboutSection(
                     .size(140.dp)
                     .clip(CircleShape)
                     .background(Color.White.copy(alpha = 0.1f))
+                    .thumbnailBorder(CircleShape)
                     .tapTarget(onArtistClick),
                 contentAlignment = Alignment.Center,
             ) {

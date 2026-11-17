@@ -69,6 +69,7 @@ import com.adamglin.phosphoricons.regular.Play
 import com.gamut.core.designsystem.ArtPlaceholder
 import com.gamut.core.designsystem.LocalFocusLive
 import com.gamut.core.designsystem.focusRing
+import com.gamut.core.designsystem.thumbnailBorder
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -169,7 +170,8 @@ internal fun ArtworkWithRing(
                     .padding(RingInset)
                     .fillMaxSize()
                     .shadow(elevation = 14.dp, shape = CoverShape, ambientColor = Color.Black, spotColor = Color.Black, clip = false)
-                    .clip(CoverShape),
+                    .clip(CoverShape)
+                    .thumbnailBorder(CoverShape),
                 contentAlignment = Alignment.Center,
             ) {
                 if (enabled) {

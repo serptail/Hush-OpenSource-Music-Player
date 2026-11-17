@@ -92,6 +92,7 @@ import com.gamut.core.designsystem.rememberArtistTap
 import com.gamut.core.designsystem.shimmer
 import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.designsystem.squareArtUrl
+import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
@@ -369,7 +370,8 @@ private fun ArtistOverview(
                             if (wide) Modifier.widthIn(max = 300.dp) else Modifier,
                         ).fillMaxWidth(0.92f)
                         .aspectRatio(1f)
-                        .clip(CircleShape),
+                        .clip(CircleShape)
+                        .thumbnailBorder(CircleShape),
                 contentScale = ContentScale.Crop,
                 loading = { ArtistPlaceholder() },
                 error = { ArtistPlaceholder() },
@@ -570,7 +572,8 @@ private fun AlbumCard(
                     .fillMaxWidth()
                     .aspectRatio(1f)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(ink(0.08f)),
+                    .background(ink(0.08f))
+                    .thumbnailBorder(RoundedCornerShape(10.dp)),
             contentScale = ContentScale.Crop,
         )
         Text(
@@ -601,7 +604,7 @@ private fun TrackLine(
         AsyncImage(
             model = remember(track.albumArtUrl) { squareArtUrl(track.albumArtUrl, 200) },
             contentDescription = null,
-            modifier = Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)).background(ink(0.08f)),
+            modifier = Modifier.size(54.dp).clip(RoundedCornerShape(8.dp)).background(ink(0.08f)).thumbnailBorder(RoundedCornerShape(8.dp)),
             contentScale = ContentScale.Crop,
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
@@ -656,7 +659,7 @@ private fun SimilarArtistCard(
         SubcomposeAsyncImage(
             model = artist.imageUrl,
             contentDescription = artist.title,
-            modifier = Modifier.size(96.dp).clip(CircleShape),
+            modifier = Modifier.size(96.dp).clip(CircleShape).thumbnailBorder(CircleShape),
             contentScale = ContentScale.Crop,
             loading = { ArtistPlaceholder() },
             error = { ArtistPlaceholder() },
@@ -681,7 +684,7 @@ private fun AlbumLine(album: DiscoverItem) {
         SubcomposeAsyncImage(
             model = album.imageUrl,
             contentDescription = album.title,
-            modifier = Modifier.size(64.dp).shadow(3.dp, RoundedCornerShape(10.dp)).clip(RoundedCornerShape(10.dp)),
+            modifier = Modifier.size(64.dp).shadow(3.dp, RoundedCornerShape(10.dp)).clip(RoundedCornerShape(10.dp)).thumbnailBorder(RoundedCornerShape(10.dp)),
             contentScale = ContentScale.Crop,
             loading = { ArtistPlaceholder() },
             error = { ArtistPlaceholder() },

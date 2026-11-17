@@ -219,7 +219,7 @@ fun ArtistPickerSheet(
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         val url = photos[name]
-                        Box(Modifier.size(48.dp).clip(CircleShape).border(1.dp, ink(0.12f), CircleShape)) {
+                        Box(Modifier.size(48.dp).clip(CircleShape).thumbnailBorder(CircleShape)) {
                             if (url != null) {
                                 ArtImage(
                                     url = url,

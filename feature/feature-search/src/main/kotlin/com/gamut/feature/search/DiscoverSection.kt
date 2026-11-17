@@ -51,6 +51,7 @@ import com.gamut.core.designsystem.TrackRowSkeleton
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.squareArtUrl
+import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.Track
 
 private val NUMBERED_TABS = setOf("Trending", "Billboard")
@@ -319,7 +320,8 @@ private fun HeroCard(
                 ambientColor = Color.Black.copy(alpha = 0.25f),
                 spotColor = Color.Black.copy(alpha = 0.35f),
             ).pressScale(onClick = onClick, scaleDown = 0.98f)
-            .clip(CardShapeLarge),
+            .clip(CardShapeLarge)
+            .thumbnailBorder(CardShapeLarge),
     ) {
         ArtImage(
             url = remember(item.imageUrl) { squareArtUrl(item.imageUrl, 600) },
@@ -391,7 +393,8 @@ private fun ArtistBubble(
                         clip = false,
                         ambientColor = Color.Black.copy(alpha = 0.22f),
                         spotColor = Color.Black.copy(alpha = 0.3f),
-                    ).clip(CircleShape),
+                    ).clip(CircleShape)
+                    .thumbnailBorder(CircleShape),
             contentDescription = item.title,
             fallback = { ArtworkFallbackIcon() },
         )
@@ -425,7 +428,8 @@ private fun AlbumCard(
                         clip = false,
                         ambientColor = Color.Black.copy(alpha = 0.22f),
                         spotColor = Color.Black.copy(alpha = 0.3f),
-                    ).clip(RoundedCornerShape(14.dp)),
+                    ).clip(RoundedCornerShape(14.dp))
+                    .thumbnailBorder(RoundedCornerShape(14.dp)),
             contentDescription = item.title,
             fallback = { ArtworkFallbackIcon() },
         )
@@ -505,7 +509,8 @@ private fun ChartRow(
                         clip = false,
                         ambientColor = Color.Black.copy(alpha = 0.20f),
                         spotColor = Color.Black.copy(alpha = 0.30f),
-                    ).clip(ThumbShape),
+                    ).clip(ThumbShape)
+                    .thumbnailBorder(ThumbShape),
             fallback = { ArtworkFallbackIcon() },
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {

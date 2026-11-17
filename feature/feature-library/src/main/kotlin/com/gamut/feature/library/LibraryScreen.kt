@@ -102,6 +102,7 @@ import com.gamut.core.designsystem.fadeEdges
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.isWideLayout
 import com.gamut.core.designsystem.pressScale
+import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.Track
 
 private val TextPrimary: Color
@@ -719,7 +720,7 @@ private fun TileCover(
         if (!coverUrl.isNullOrBlank()) {
             CoverImage(
                 remember(coverUrl) { resolveCoverUrl(coverUrl, 400) },
-                Modifier.fillMaxWidth().aspectRatio(1f).then(if (circle) Modifier.clip(shape) else Modifier.softCover()),
+                Modifier.fillMaxWidth().aspectRatio(1f).then(if (circle) Modifier.clip(shape).thumbnailBorder(shape) else Modifier.softCover()),
             )
         } else {
             Box(
@@ -807,7 +808,7 @@ private fun RowCover(
     if (!coverUrl.isNullOrBlank()) {
         CoverImage(
             remember(coverUrl) { resolveCoverUrl(coverUrl, 200) },
-            Modifier.size(58.dp).then(if (circle) Modifier.clip(CircleShape) else Modifier.softCover()),
+            Modifier.size(58.dp).then(if (circle) Modifier.clip(CircleShape).thumbnailBorder(CircleShape) else Modifier.softCover()),
         )
     } else {
         Box(

@@ -38,6 +38,7 @@ import com.adamglin.phosphoricons.bold.MusicNote
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.thumbnailBorder
 
 data class PlaylistPickerItem(
     val id: String,
@@ -85,7 +86,7 @@ internal fun AddToPlaylistSheet(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(
-                        Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(ink(0.07f)),
+                        Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(ink(0.07f)).thumbnailBorder(RoundedCornerShape(8.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(PhosphorIcons.Bold.MusicNote, contentDescription = null, tint = ink(0.4f), modifier = Modifier.size(20.dp))

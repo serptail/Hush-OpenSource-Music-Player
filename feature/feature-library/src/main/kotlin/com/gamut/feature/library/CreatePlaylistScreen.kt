@@ -86,6 +86,7 @@ import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.isWideLayout
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.softResize
+import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.Track
 
 private val PreviewShape = RoundedCornerShape(20.dp)
@@ -311,7 +312,8 @@ private fun CoverPreview(
                             clip = false,
                             ambientColor = Color.Black.copy(alpha = 0.35f),
                             spotColor = Color.Black.copy(alpha = 0.35f),
-                        ).clip(PreviewShape),
+                        ).clip(PreviewShape)
+                        .thumbnailBorder(PreviewShape),
                 )
             }
         }

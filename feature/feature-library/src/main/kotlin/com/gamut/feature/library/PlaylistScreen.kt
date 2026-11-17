@@ -112,6 +112,7 @@ import com.gamut.core.designsystem.isWideLayout
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.rememberArtistTap
 import com.gamut.core.designsystem.splitArtists
+import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.Track
 import com.gamut.feature.resolver.DownloadState
 import kotlinx.coroutines.launch
@@ -411,7 +412,7 @@ fun PlaylistScreen(
                         } else {
                             CoverImage(
                                 remember(coverUrl) { resolveCoverUrl(coverUrl, 160) },
-                                Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)),
+                                Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)).thumbnailBorder(RoundedCornerShape(10.dp)),
                             )
                         }
                         Column(Modifier.weight(1f).padding(start = 16.dp)) {
@@ -489,7 +490,7 @@ fun PlaylistScreen(
                         } else {
                             CoverImage(
                                 remember(shownCover) { resolveCoverUrl(shownCover, 400) },
-                                Modifier.fillMaxSize().clip(HeaderCoverShape),
+                                Modifier.fillMaxSize().clip(HeaderCoverShape).thumbnailBorder(HeaderCoverShape),
                             )
                         }
                         Box(
@@ -697,7 +698,8 @@ private fun PlaylistHeader(
                             clip = false,
                             ambientColor = Color.Black.copy(alpha = 0.35f),
                             spotColor = Color.Black.copy(alpha = 0.35f),
-                        ).clip(HeaderCoverShape),
+                        ).clip(HeaderCoverShape)
+                        .thumbnailBorder(HeaderCoverShape),
                 )
             }
         }
@@ -873,7 +875,7 @@ private fun TrackOptionsPanel(
                 .padding(vertical = 8.dp),
         ) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                CoverImage(resolveCoverUrl(track.albumArtUrl, 160), Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)))
+                CoverImage(resolveCoverUrl(track.albumArtUrl, 160), Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).thumbnailBorder(RoundedCornerShape(8.dp)))
                 Column(Modifier.weight(1f).padding(start = 14.dp)) {
                     Text(
                         track.title,

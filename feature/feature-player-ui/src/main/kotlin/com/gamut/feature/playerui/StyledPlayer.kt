@@ -80,6 +80,7 @@ import com.gamut.core.designsystem.AdaptiveLayout
 import com.gamut.core.designsystem.PlayerStyle
 import com.gamut.core.designsystem.adaptiveGutter
 import com.gamut.core.designsystem.squareArtUrl
+import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.Track
 import com.gamut.feature.playerui.components.DepthIcon
 import com.gamut.feature.playerui.components.PlayerSpinner
@@ -543,7 +544,7 @@ private fun LyricsHeader(
     Row(modifier.height(56.dp), verticalAlignment = Alignment.CenterVertically) {
         DepthIcon(PhosphorIcons.Bold.CaretDown, "Close lyrics", Modifier.bounceTap(onClick = onClose).padding(8.dp))
         Spacer(Modifier.size(8.dp))
-        Box(Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.12f))) {
+        Box(Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.12f)).thumbnailBorder(RoundedCornerShape(8.dp))) {
             if (artUrl != null) {
                 AsyncImage(model = artUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             }

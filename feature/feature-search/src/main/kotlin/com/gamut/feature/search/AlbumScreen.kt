@@ -7,7 +7,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -87,6 +86,7 @@ import com.gamut.core.designsystem.isWideLayout
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.rememberArtistTap
 import com.gamut.core.designsystem.splitArtists
+import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -290,7 +290,8 @@ private fun AlbumHero(
                     ambientColor = Color.Black.copy(alpha = 0.30f),
                     spotColor = Color.Black.copy(alpha = 0.45f),
                 ).clip(RoundedCornerShape(14.dp))
-                .background(artTileColor()),
+                .background(artTileColor())
+                .thumbnailBorder(RoundedCornerShape(14.dp)),
         ) {
             SubcomposeAsyncImage(
                 model = album.imageUrl,
@@ -360,7 +361,7 @@ private fun ArtistAvatar(
         SubcomposeAsyncImage(
             model = url,
             contentDescription = artist,
-            modifier = modifier.border(1.dp, ink(0.15f), CircleShape),
+            modifier = modifier.thumbnailBorder(CircleShape),
             contentScale = ContentScale.Crop,
             loading = { ArtistAvatarFallback() },
             error = { ArtistAvatarFallback() },

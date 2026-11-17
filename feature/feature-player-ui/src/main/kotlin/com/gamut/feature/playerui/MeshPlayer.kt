@@ -82,6 +82,7 @@ import com.adamglin.phosphoricons.regular.SkipBack
 import com.adamglin.phosphoricons.regular.SkipForward
 import com.gamut.core.designsystem.acrylicSource
 import com.gamut.core.designsystem.focusRing
+import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.feature.playerui.components.ArtworkPlaceholder
 import com.gamut.feature.playerui.components.DepthIcon
 import com.gamut.feature.playerui.components.PlayerSpinner
@@ -466,7 +467,8 @@ internal fun MeshSleeve(
                 } else {
                     Modifier
                 },
-            ).clip(SleeveShape),
+            ).clip(SleeveShape)
+            .thumbnailBorder(SleeveShape),
     ) {
         if (shownUrl == null) {
             ArtworkPlaceholder()

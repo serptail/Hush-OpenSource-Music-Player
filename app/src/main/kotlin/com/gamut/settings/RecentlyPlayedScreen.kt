@@ -39,6 +39,7 @@ import com.gamut.core.designsystem.GamutMotion
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.squareArtUrl
+import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.Track
 
 private enum class RecentTab(
@@ -141,7 +142,7 @@ private fun RecentRow(
     Row(Modifier.fillMaxWidth().pressScale(onClick = onClick).padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         ArtImage(
             url = remember(track.albumArtUrl) { squareArtUrl(track.albumArtUrl, 200) },
-            modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)),
+            modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)).thumbnailBorder(RoundedCornerShape(8.dp)),
         )
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

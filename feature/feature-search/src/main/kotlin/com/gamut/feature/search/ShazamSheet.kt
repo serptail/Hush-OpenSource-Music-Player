@@ -62,6 +62,7 @@ import com.gamut.core.designsystem.ShareSheet
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.splitArtists
+import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.Track
 
 private val FavoriteRed = Color(0xFFFF4D6D)
@@ -258,7 +259,7 @@ private fun FoundContent(
                 model = track.albumArtUrl,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(104.dp).clip(RoundedCornerShape(14.dp)).background(ink(0.08f)),
+                modifier = Modifier.size(104.dp).clip(RoundedCornerShape(14.dp)).background(ink(0.08f)).thumbnailBorder(RoundedCornerShape(14.dp)),
             )
             Column(Modifier.weight(1f).padding(start = 16.dp)) {
                 Text(

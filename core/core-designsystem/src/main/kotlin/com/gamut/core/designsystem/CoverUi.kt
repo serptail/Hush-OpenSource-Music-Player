@@ -15,6 +15,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
@@ -26,6 +27,7 @@ import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
@@ -37,6 +39,12 @@ import androidx.core.view.WindowCompat
 @Composable
 @ReadOnlyComposable
 fun ink(alpha: Float = 1f): Color = MaterialTheme.colorScheme.onBackground.copy(alpha = alpha)
+
+@Composable
+fun thumbnailBorderColor(): Color =
+    if (ink().luminance() > 0.5f) Color.White.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.15f)
+
+fun Modifier.thumbnailBorder(shape: Shape): Modifier = composed { border(1.dp, thumbnailBorderColor(), shape) }
 
 @Composable
 fun Modifier.glass(
