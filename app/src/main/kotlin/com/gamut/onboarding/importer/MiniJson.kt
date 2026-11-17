@@ -1,6 +1,5 @@
 package com.gamut.onboarding.importer
 
-/** A tiny JSON reader (objects, arrays, strings, numbers, booleans, null), enough for Spotify's export files. */
 object MiniJson {
     fun parse(text: String): Any? {
         val p = Parser(text.removePrefix("\uFEFF"))
@@ -41,7 +40,7 @@ object MiniJson {
         }
 
         private fun obj(depth: Int): Map<String, Any?> {
-            i++ // {
+            i++
             val map = LinkedHashMap<String, Any?>()
             skipWhitespace()
             if (peek() == '}') {
@@ -69,7 +68,7 @@ object MiniJson {
         }
 
         private fun arr(depth: Int): List<Any?> {
-            i++ // [
+            i++
             val list = ArrayList<Any?>()
             skipWhitespace()
             if (peek() == ']') {
@@ -91,7 +90,7 @@ object MiniJson {
         }
 
         private fun str(): String {
-            i++ // opening quote
+            i++
             val sb = StringBuilder()
             while (true) {
                 require(i < s.length) { "Unterminated string" }

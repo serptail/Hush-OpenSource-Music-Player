@@ -40,18 +40,15 @@ class SetupViewModel @Inject constructor(
     private val auth: AuthRepository,
 ) : ViewModel() {
     init {
-        // From here on the gate keeps the setup on screen until it is finished, even once someone signs in.
         store.markSetupStarted()
     }
 
-    /** Whether there is an account to offer at all. Without a backend the setup simply ends after the import. */
     val syncAvailable: Boolean = SyncConfig.enabled
 
     val initialName: String get() = profile.localName().orEmpty()
 
     val appearance: StateFlow<AppearanceSettings> = appearanceStore.settings
 
-    /** Readable path of the chosen music folder, or null while downloads stay in app storage. */
     val folder: StateFlow<String?> = storageSettings.state
         .map { it.musicFolderUri?.let(storage::folderLabel) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, storageSettings.current.musicFolderUri?.let(storage::folderLabel))
@@ -65,10 +62,8 @@ class SetupViewModel @Inject constructor(
 
     fun setMode(mode: AppThemeMode) = appearanceStore.update { it.copy(mode = mode) }
 
-    /** Colours taken from the album art, like the rest of the app does by default. */
     fun useAdaptive() = appearanceStore.update { it.copy(adaptive = true) }
 
-    /** A fixed colour. "Auto" only makes sense with adaptive colours, so it falls back to following the system. */
     fun usePreset(id: String) = appearanceStore.update {
         it.copy(adaptive = false, preset = id, mode = if (it.mode == AppThemeMode.Auto) AppThemeMode.System else it.mode)
     }
@@ -87,14 +82,12 @@ class SetupViewModel @Inject constructor(
 
     fun cancelImport() = importer.cancel()
 
-    /** Signs in with Google on the setup's last page. Success ends the setup; the gate then lets the app in. */
     fun signIn(activityContext: Context) {
         if (mutableAccount.value.busy) return
         viewModelScope.launch {
             mutableAccount.value = WelcomeUi(busy = true)
             auth.signInWithGoogle(activityContext).fold(
                 onSuccess = {
-                    // Let the session settle first, so the gate never sees a half signed-in account.
                     withTimeoutOrNull(SESSION_WAIT_MS) { auth.authState.first { it == true } }
                     profile.adoptLocalName(auth.currentUserId())
                     mutableAccount.value = WelcomeUi()
@@ -108,20 +101,17 @@ class SetupViewModel @Inject constructor(
         }
     }
 
-    /** Backing out of the account picker isn't an error, so it says nothing. */
     private fun signInMessage(error: Throwable): String? = when (error) {
         is GetCredentialCancellationException -> null
         is NoCredentialException -> "No Google account was available on this device."
         else -> "Couldn\u2019t sign in. Check your connection and try again."
     }
 
-    /** The last page's other choice: everything stays on this device. */
     fun continueWithoutAccount() {
         store.chooseLocal()
         store.completeSetup()
     }
 
-    /** The end of the setup when there is no account page. */
     fun finish() = store.completeSetup()
 
     private companion object {

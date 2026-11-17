@@ -16,25 +16,13 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
-/** YouTube Music refused the signed-in session (expired, signed out, or not a real login). */
 class YtAuthException(message: String) : IOException(message)
 
-/**
- * A minimal YouTube Music (WEB_REMIX) client that reads the library as the signed-in user.
- *
- * Requests carry the session cookie and a SAPISIDHASH signature derived from it, exactly like the music.youtube.com
- * web player. Blocking by design: call it from a background dispatcher.
- */
 class YtMusicClient(private val http: OkHttpClient, private val session: YtSession) {
-    /**
-     * The page's own visitor id when it handed one over. If it didn't, the first answer carries one and it is used from
-     * then on, as BitChord does: a session without one is treated as a stranger.
-     */
     @Volatile private var visitorData: String? = session.visitorData
 
     fun browse(browseId: String): Any? = post("browse", emptyMap()) { put("browseId", browseId) }
 
-    /** Playlist and library pages come back about 100 rows at a time; the token for the next page goes in both places. */
     fun continuation(token: String): Any? = post(
         "browse",
         mapOf("ctoken" to token, "continuation" to token, "type" to "next"),
@@ -77,7 +65,6 @@ class YtMusicClient(private val http: OkHttpClient, private val session: YtSessi
             .header("X-YouTube-Client-Name", "67")
             .header("X-YouTube-Client-Version", version)
             .apply {
-                // An anonymous session (a pasted public playlist link) has no cookie, so nothing is sent for it.
                 if (session.cookie.isNotBlank()) {
                     header("Cookie", session.cookie)
                     header("X-Goog-AuthUser", session.authUser ?: "0")
@@ -90,7 +77,6 @@ class YtMusicClient(private val http: OkHttpClient, private val session: YtSessi
 
         var last: IOException? = null
         repeat(ATTEMPTS) { attempt ->
-            // Back off between attempts, as BitChord's withRetry does, rather than asking again at once.
             if (attempt > 0) Thread.sleep(BACKOFF_MS shl (attempt - 1))
             try {
                 http.newCall(request).execute().use { response ->
@@ -105,7 +91,6 @@ class YtMusicClient(private val http: OkHttpClient, private val session: YtSessi
             } catch (e: YtAuthException) {
                 throw e
             } catch (e: InterruptedIOException) {
-                // A timeout is the request's own ceiling being reached; asking again just waits that long again.
                 throw e
             } catch (e: IOException) {
                 last = e
@@ -126,9 +111,7 @@ class YtMusicClient(private val http: OkHttpClient, private val session: YtSessi
     }
 }
 
-/** Reads Liked Music and the library's playlists into an [ImportLibrary]. */
 class YtMusicLibraryReader(private val client: YtMusicClient) {
-    /** [onProgress] gets a short description of what is being read, for the progress line. */
     suspend fun read(onProgress: (String) -> Unit): ImportLibrary {
         var failure: IOException? = null
 
@@ -145,8 +128,8 @@ class YtMusicLibraryReader(private val client: YtMusicClient) {
         val refs = try {
             playlistRefs()
         } catch (e: YtAuthException) {
-            if (liked.isEmpty()) throw e // nothing read yet: the sign-in itself wasn't accepted
-            emptyList() // the session gave out after Liked songs were read; keep them
+            if (liked.isEmpty()) throw e
+            emptyList()
         } catch (e: IOException) {
             failure = failure ?: e
             emptyList()
@@ -159,9 +142,9 @@ class YtMusicLibraryReader(private val client: YtMusicClient) {
                 tracksOf(ref.browseId)
             } catch (e: YtAuthException) {
                 if (liked.isEmpty() && playlists.isEmpty()) throw e
-                break // the session gave out part-way through: keep everything read so far, not nothing
+                break
             } catch (_: IOException) {
-                continue // one unreadable playlist shouldn't lose the rest
+                continue
             }
             if (tracks.isNotEmpty()) playlists += ImportPlaylist(ref.title, tracks)
         }
@@ -171,11 +154,6 @@ class YtMusicLibraryReader(private val client: YtMusicClient) {
         return library
     }
 
-    /**
-     * One playlist by its id, from a pasted link. Public and unlisted playlists read with no sign-in. Null when the
-     * page holds no readable songs (a private or removed playlist, which YouTube Music answers like an empty one).
-     * Throws [IOException] when YouTube Music can't be reached or refuses the request.
-     */
     suspend fun readPlaylist(playlistId: String): ImportPlaylist? {
         val (title, tracks) = readPages("VL$playlistId")
         return if (tracks.isEmpty()) null else ImportPlaylist(title ?: DEFAULT_TITLE, tracks)
@@ -183,7 +161,6 @@ class YtMusicLibraryReader(private val client: YtMusicClient) {
 
     private suspend fun tracksOf(browseId: String): List<ImportTrack> = readPages(browseId).second
 
-    /** Every page of one playlist: its name (when the header has one) and its songs. */
     private suspend fun readPages(browseId: String): Pair<String?, List<ImportTrack>> {
         val out = ArrayList<ImportTrack>()
         coroutineContext.ensureActive()
@@ -195,10 +172,8 @@ class YtMusicLibraryReader(private val client: YtMusicClient) {
         var pages = 1
         while (pages < MAX_PAGES) {
             val token = page.continuation ?: break
-            if (!seen.add(token)) break // a page pointing back at one already read would loop forever
+            if (!seen.add(token)) break
             coroutineContext.ensureActive()
-            // A page that fails keeps the pages already read, as BitChord's songsPaged does: losing a whole playlist
-            // (or all of Liked Music) for one bad page would be far worse than ending it a little short.
             page = try {
                 YtMusicParser.parseTrackPage(client.continuation(token))
             } catch (_: IOException) {
@@ -224,7 +199,7 @@ class YtMusicLibraryReader(private val client: YtMusicClient) {
             page = try {
                 YtMusicParser.parsePlaylistPage(client.continuation(token))
             } catch (_: IOException) {
-                break // keep the playlists already listed
+                break
             }
             page.playlists.forEach { out.putIfAbsent(it.browseId, it) }
             pages++

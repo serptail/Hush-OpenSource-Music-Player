@@ -94,22 +94,8 @@ import com.gamut.feature.playerui.components.volumeHudHeaderAnchor
 import com.gamut.feature.playerui.components.youtubeThumbCandidates
 import kotlinx.coroutines.delay
 
-/*
- * The two non-classic player looks, switched on under Settings > Appearance > Player.
- *
- *  - Mesh:  a square cover (MeshSleeve) over a blurred, flipped colour mesh hung from the cover's bottom edge.
- *  - Cover: the artwork runs full screen, edge to edge and up behind the status bar, and its bottom part
- *           dissolves along a smootherstep into the same mesh, which is the artwork's own bottom edge flipped
- *           and rotated sideways so it reads as a blurred refraction of the cover rather than a reflection.
- *
- * Both share the controls, the one-line lyric strip and the lyrics window, which swaps the cover for a blurred
- * full-cover backdrop and a small header and lets the flowing lyrics (FlowLyrics.kt) take the middle of the screen.
- */
-
-/** Share of the banner's height given over to its dissolve. Generous, so it reads as a picture that ran out. */
 private const val COVER_FADE_FRACTION = 0.34f
 
-/** Smootherstep, 6t^5 - 15t^4 + 10t^3: eases in from nothing and settles into nothing, so the fade has no edge. */
 private fun smootherStep(t: Float): Float {
     val x = t.coerceIn(0f, 1f)
     return x * x * x * (x * (x * 6f - 15f) + 10f)
@@ -169,16 +155,12 @@ internal fun StyledPlayerLayer(
     val gutter = adaptiveGutter(AdaptiveLayout.PlayerMaxWidth)
     val edge = 24.dp + gutter
 
-    // How far the lyrics window is open. Read only in graphicsLayer blocks, so the animation recomposes nothing.
     val lyricsT by animateFloatAsState(if (lyricsOpen) 1f else 0f, LyricsMotion, label = "styledLyricsT")
 
-    // The page scrolls: the player is one screen tall, the lyrics preview and the artist's About sit below it.
     val scroll = rememberScrollState()
-    // How far the pill has been pulled, in pixels. The whole page follows the finger by this.
     val pull = remember { mutableFloatStateOf(0f) }
     LaunchedEffect(lyricsOpen) { if (lyricsOpen) scroll.animateScrollTo(0) }
 
-    // The blurred full-cover backdrop only exists while the lyrics window does.
     var lyricsBackdrop by remember { mutableStateOf(lyricsOpen) }
     LaunchedEffect(lyricsOpen) {
         if (lyricsOpen) {
@@ -193,18 +175,14 @@ internal fun StyledPlayerLayer(
     val loaded = lyricsState as? LyricsState.Loaded
     val flowLines = remember(loaded) { loaded?.lines?.toFlowLines(loaded.isSynced) }
 
-    // The whole screen, backdrop and banner included, follows the pill as it is pulled.
     BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer { translationY = pull.floatValue }.then(seam.onHost)) {
         val width = maxWidth
         val height = maxHeight
         val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-        // Where the banner stops, and so where the mesh is hung from. Roughly the player's width of picture
-        // below the status bar, kept off the lower half of a short screen so the controls still have room.
         val bannerHeight = (width + statusTop + 40.dp).coerceAtMost(height * 0.55f)
         val bannerPx = with(density) { bannerHeight.toPx() }
         val cover = style == PlayerStyle.Cover
 
-        // Backdrop: the mesh under the main player, the blurred cover under the lyrics window.
         Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - lyricsT }) {
             ArtworkMeshBackdrop(mesh = mesh, seam = if (cover) ({ bannerPx - scroll.value }) else ({ seam.px - scroll.value }))
         }
@@ -222,7 +200,6 @@ internal fun StyledPlayerLayer(
                     .align(Alignment.TopCenter)
                     .volumeHudAnchor(volumeHud)
                     .graphicsLayer {
-                        // The banner gives way as the lyrics open: it lifts a little and lets go.
                         alpha = 1f - lyricsT
                         translationY = -lyricsT * 28.dp.toPx() - scroll.value
                     },
@@ -235,7 +212,6 @@ internal fun StyledPlayerLayer(
                 .verticalScroll(scroll, enabled = !lyricsOpen),
         ) {
         Column(Modifier.fillMaxWidth().height(height).statusBarsPadding().navigationBarsPadding()) {
-            // Top: the plain bar over the picture, or the small header once the lyrics are open.
             Crossfade(targetState = lyricsOpen, animationSpec = tween(300), label = "styledTopBar") { open ->
                 if (open) {
                     LyricsHeader(
@@ -251,7 +227,6 @@ internal fun StyledPlayerLayer(
                 }
             }
 
-            // Middle: cover and credits, or the lyrics.
             Crossfade(
                 targetState = lyricsOpen,
                 animationSpec = tween(420, easing = FastOutSlowInEasing),
@@ -271,7 +246,6 @@ internal fun StyledPlayerLayer(
                         highlight = highlight,
                     )
                 } else if (cover) {
-                    // The credits sit below the banner, in the mesh.
                     Column(
                         Modifier.fillMaxSize().padding(horizontal = edge),
                         verticalArrangement = Arrangement.Bottom,
@@ -320,9 +294,7 @@ internal fun StyledPlayerLayer(
                 }
             }
 
-            // Bottom: the controls, the same either way up so the lyrics window only changes what is above them.
             Column(Modifier.fillMaxWidth().padding(horizontal = edge)) {
-                // A fixed slot for the one-line lyric, so the controls don't move as the lyrics open and close.
                 Box(Modifier.fillMaxWidth().height(56.dp).graphicsLayer { alpha = 1f - lyricsT }, contentAlignment = Alignment.CenterStart) {
                     if (lyricsOn && !lyricsOpen) {
                         when {
@@ -378,7 +350,6 @@ internal fun StyledPlayerLayer(
                 }
             }
         }
-            // Below the player: the lyrics preview (opens the lyrics window above) and the artist's About.
             Column(Modifier.fillMaxWidth().padding(horizontal = edge)) {
                 Spacer(Modifier.height(8.dp))
                 extras()
@@ -388,11 +359,6 @@ internal fun StyledPlayerLayer(
     }
 }
 
-/**
- * The small centred pill at the top of the player. Pull it down and the whole page comes with the finger, stiffening the
- * further it goes; let go past the threshold and the player closes, short of it and the page springs back. A tap works
- * too. The grab area is the full width and well taller than the pill.
- */
 @Composable
 private fun PullPill(pull: MutableFloatState, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val dismiss by rememberUpdatedState(onDismiss)
@@ -425,7 +391,6 @@ private fun PullPill(pull: MutableFloatState, onDismiss: () -> Unit, modifier: M
                     onDragCancel = { release(fast = false) },
                     onVerticalDrag = { change, dy ->
                         change.consume()
-                        // Follows the finger, with resistance building towards the limit.
                         val resistance = 1f - 0.65f * (pull.floatValue / limit).coerceIn(0f, 1f)
                         pull.floatValue = (pull.floatValue + dy * resistance).coerceIn(0f, limit)
                     },
@@ -454,11 +419,6 @@ private fun RowScope.Cell(content: @Composable () -> Unit) {
     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { content() }
 }
 
-/**
- * The full-screen artwork: the player's whole width, up behind the status bar, with its bottom [COVER_FADE_FRACTION]
- * dissolved along a smootherstep so neither end of the fade shows as a line. The dissolve erases from the image's own
- * layer, which therefore has to be offscreen.
- */
 @Composable
 private fun CoverBanner(url: String?, height: Dp, modifier: Modifier = Modifier) {
     val model = remember(url) {
@@ -494,7 +454,6 @@ private fun CoverBanner(url: String?, height: Dp, modifier: Modifier = Modifier)
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
-            // Just enough shade at the top to keep the status bar and the chevron legible over a bright cover.
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -505,7 +464,6 @@ private fun CoverBanner(url: String?, height: Dp, modifier: Modifier = Modifier)
     }
 }
 
-/** What stands in for the player's top bar once the lyrics are open: the cover shrunk to a thumbnail, and the credits. */
 @Composable
 private fun LyricsHeader(
     artUrl: String?,
@@ -532,7 +490,6 @@ private fun LyricsHeader(
     }
 }
 
-/** The lyrics themselves, or the reason there aren't any. */
 @Composable
 private fun LyricsWindow(
     lyricsState: LyricsState,

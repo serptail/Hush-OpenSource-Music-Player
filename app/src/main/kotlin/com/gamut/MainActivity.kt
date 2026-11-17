@@ -1406,7 +1406,6 @@ private fun HomeTabs(
         }
     }
 
-    // The Library's + menu opens these. Both hand over to the Library's own progress card once an import starts.
     val importRunning = importProgress is com.gamut.feature.library.ImportProgressUi.Running
     CoverTheme(palette) {
         SpotifyImportSheet(

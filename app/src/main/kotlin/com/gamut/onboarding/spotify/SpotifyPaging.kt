@@ -6,16 +6,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-/**
- * Reads a public playlist past the embed page's 100-song cut-off. Ported from BitChord's `fetchRemainingTracks`:
- * the web player's own `fetchPlaylist` query, called with the anonymous token the embed page hands out
- * ([SpotifyLinks.embedToken]), a page of 100 at a time.
- *
- * This is an undocumented Spotify endpoint, so it can stop working. Callers treat any failure as "keep the 100
- * already read" and never as an import failure.
- */
 object SpotifyPaging {
-    /** How many songs the embed page lists before it stops. */
     const val EMBED_LIMIT = 100
 
     private const val PAGE_SIZE = 100
@@ -23,7 +14,6 @@ object SpotifyPaging {
     private const val URL = "https://api-partner.spotify.com/pathfinder/v1/query"
     private const val FETCH_PLAYLIST_HASH = "19ff1327c29e99c208c86d7a9d8f1929cfdf3d3202a0ff4253c821f1901aa94d"
 
-    /** Songs from [start] to the end of the playlist. Blocking; call off the main thread. Throws on any HTTP error. */
     fun fetchRemaining(http: OkHttpClient, playlistId: String, token: String, start: Int, userAgent: String): List<ImportTrack> {
         val out = ArrayList<ImportTrack>()
         var offset = start

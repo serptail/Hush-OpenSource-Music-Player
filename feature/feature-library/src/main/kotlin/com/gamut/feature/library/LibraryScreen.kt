@@ -120,14 +120,11 @@ data class LibraryArtist(
     val imageUrl: String? = null,
 )
 
-/** Which service an import is coming from; the card shows its logo. Null shows none. */
 enum class ImportSourceUi { Spotify, YouTubeMusic, AppleMusic }
 
-/** What the Library's import card shows. Built by the app from the importer's state, so this module needn't know it. */
 sealed interface ImportProgressUi {
     val source: ImportSourceUi?
 
-    /** [total] of 0 means the size isn't known yet, and the bar just moves. */
     data class Running(
         val title: String,
         val done: Int,
@@ -453,10 +450,6 @@ fun LibraryScreen(
     }
 }
 
-/**
- * Progress of a running import, or its result once it has finished. Lives in the Library because that is where the
- * playlists it creates appear, and nobody waits for an import on the setup page.
- */
 @Composable
 private fun ImportProgressCard(
     state: ImportProgressUi,
@@ -531,13 +524,6 @@ private fun ImportProgressCard(
     }
 }
 
-/**
- * What the Library's + opens: make a playlist, or bring one in from Spotify or YouTube Music.
- *
- * This is a [Popup] rather than a Material [androidx.compose.material3.DropdownMenu] because that one caps its width
- * at 280dp, which made "Import from YouTube Music" wrap onto two rows and left dead space on the right. Here the card
- * is exactly as wide as its widest row, and it grows out of the + button's corner.
- */
 @Composable
 private fun AddMenu(
     expanded: Boolean,
@@ -547,13 +533,12 @@ private fun AddMenu(
     onImportYouTubeMusic: () -> Unit,
     onImportAppleMusic: () -> Unit,
 ) {
-    // Stays composed while the exit animation plays, then leaves the tree.
     val visibleState = remember { MutableTransitionState(false) }
     visibleState.targetState = expanded
     if (!visibleState.currentState && !visibleState.targetState) return
 
     val density = LocalDensity.current
-    val shadowRoom = 14.dp // popup windows clip to their content, so the shadow needs room to breathe
+    val shadowRoom = 14.dp
     val shape = RoundedCornerShape(18.dp)
     val container = ink(0.10f).compositeOver(LocalCoverPalette.current.base)
     val offset = with(density) { IntOffset(shadowRoom.roundToPx(), (44.dp + 2.dp - shadowRoom).roundToPx()) }
@@ -629,7 +614,6 @@ private fun AddMenuItem(
     }
 }
 
-/** The colourless logo of the service being imported from, tinted like the rest of the card. */
 @Composable
 private fun ImportSourceLogo(source: ImportSourceUi?) {
     val (icon, name) = when (source) {

@@ -15,12 +15,10 @@ class OnboardingStore @Inject constructor(@ApplicationContext context: Context) 
 
     private val _setupDone = MutableStateFlow(prefs.getBoolean(KEY_SETUP, false))
 
-    /** True once the first-run setup (name, look, music folder, Spotify import) has been finished or skipped. */
     val setupDone: StateFlow<Boolean> = _setupDone
 
     private val _setupStarted = MutableStateFlow(prefs.getBoolean(KEY_SETUP_STARTED, false))
 
-    /** True once the setup has been shown, so signing in on its last page can't end it early. */
     val setupStarted: StateFlow<Boolean> = _setupStarted
 
     fun markSetupStarted() {

@@ -10,7 +10,6 @@ enum class AppThemeMode { Auto, System, Light, Dark }
 
 enum class AppearanceLevel { Low, Medium, High }
 
-/** How the Now Playing screen looks. [Classic] is the blurred-cover player, [Mesh] hangs a colour mesh from a plain cover sleeve, [Cover] runs the artwork full screen and dissolves it into the mesh. */
 enum class PlayerStyle { Classic, Mesh, Cover }
 
 @Immutable

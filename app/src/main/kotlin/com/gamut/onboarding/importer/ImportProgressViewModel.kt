@@ -12,10 +12,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
-/**
- * Feeds the import's progress to the Library screen. The importer outlives every screen, so this only reads its
- * state, turns it into what the card shows, and passes cancel and dismiss back.
- */
 @HiltViewModel
 class ImportProgressViewModel @Inject constructor(
     private val importer: LibraryImporter,
@@ -26,19 +22,14 @@ class ImportProgressViewModel @Inject constructor(
 
     fun cancel() = importer.cancel()
 
-    /** Pasted open.spotify.com links (public playlists and albums). */
     fun importSpotifyLinks(text: String) = importer.startFromSpotifyLinks(text)
 
-    /** Spotify's data download (.zip or .json) or Exportify .csv files picked from storage. */
     fun importSpotifyFiles(uris: List<Uri>) = importer.startFromFiles(uris)
 
-    /** Pasted YouTube Music playlist links (public or unlisted). No sign-in. */
     fun importYouTubeLinks(text: String) = importer.startFromYouTubeLinks(text)
 
-    /** Pasted Apple Music playlist or album links (public). No sign-in. */
     fun importAppleMusicLinks(text: String) = importer.startFromAppleMusicLinks(text)
 
-    /** Clears a finished or failed result once it has been read. */
     fun dismiss() = importer.acknowledge()
 
     private fun toUi(state: ImportState): ImportProgressUi? = when (state) {

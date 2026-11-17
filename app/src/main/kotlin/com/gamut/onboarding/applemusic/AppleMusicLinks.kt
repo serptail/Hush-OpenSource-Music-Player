@@ -4,22 +4,10 @@ import com.gamut.onboarding.importer.ImportPlaylist
 import com.gamut.onboarding.importer.ImportTrack
 import com.gamut.onboarding.importer.MiniJson
 
-/**
- * Importing straight from Apple Music links: finds playlist and album links in whatever text was pasted, and reads
- * the songs from the public music.apple.com page for each one, so no Apple account or developer token is involved.
- *
- * Only what a signed-out visitor can see is readable: public playlists (`pl.…`) and albums. Playlists that live only
- * in someone's library (`p.…`) are private and can't be read from a link. A link to a single song of an album
- * (`?i=…`) is ignored rather than importing the whole album by surprise.
- *
- * This reads an undocumented page, so like [com.gamut.onboarding.spotify.SpotifyLinks] it is forgiving: the track
- * list is found by shape, and the callers treat a page that can't be read as an unreadable link, never a crash.
- */
 object AppleMusicLinks {
     enum class Kind(val path: String) { Playlist("playlist"), Album("album") }
 
     data class Ref(val kind: Kind, val id: String, val storefront: String, val slug: String) {
-        /** The public page for the playlist or album. Apple ignores the slug, but keeping it avoids a redirect. */
         val pageUrl: String get() = "https://music.apple.com/$storefront/${kind.path}/$slug/$id"
     }
 
@@ -27,7 +15,6 @@ object AppleMusicLinks {
     private val PATH = Regex("""/([a-z]{2})/(playlist|album)/(?:([^/?#\s]+)/)?(pl\.[A-Za-z0-9_-]+|\d+)""", RegexOption.IGNORE_CASE)
     private val SINGLE_SONG = Regex("""[?&]i=\d+""")
 
-    /** Every playlist and album in [text], in order, without repeats. */
     fun parse(text: String): List<Ref> {
         val found = LinkedHashMap<String, Ref>()
         URL.findAll(text).forEach { match ->
@@ -36,7 +23,6 @@ object AppleMusicLinks {
             val m = PATH.find(url) ?: return@forEach
             val kind = if (m.groupValues[2].equals("album", ignoreCase = true)) Kind.Album else Kind.Playlist
             val id = m.groupValues[4]
-            // An album id is all digits and a playlist id starts "pl."; a mismatch is some other kind of page.
             if ((kind == Kind.Playlist) != id.startsWith("pl.", ignoreCase = true)) return@forEach
             val slug = m.groupValues[3].ifEmpty { kind.path }
             found.putIfAbsent(kind.path + id, Ref(kind, id, m.groupValues[1].lowercase(), slug))
@@ -44,15 +30,8 @@ object AppleMusicLinks {
         return found.values.toList()
     }
 
-    // ---- Reading the page --------------------------------------------------------------------
-
     private class Found(val name: String?, val tracks: List<ImportTrack>)
 
-    /**
-     * The songs on a playlist or album page, or null when the page doesn't hold a track list (a private or removed
-     * playlist, or a layout this doesn't know). Two sources are tried in turn: the page's schema.org JSON-LD, then
-     * the app data the page renders itself from.
-     */
     fun parsePage(html: String, kind: Kind, fallbackName: String? = null): ImportPlaylist? {
         val found = fromJsonLd(html) ?: fromServerData(html) ?: return null
         val default = fallbackName ?: if (kind == Kind.Album) "Apple Music album" else "Apple Music playlist"
@@ -72,7 +51,7 @@ object AppleMusicLinks {
             val entityArtist = artistNames(entity["byArtist"] ?: entity["author"])
             val tracks = (entity["track"] as? List<*>).orEmpty().mapNotNull { row ->
                 val outer = row as? Map<*, *> ?: return@mapNotNull null
-                val track = outer["item"] as? Map<*, *> ?: outer // some pages wrap each row in a ListItem
+                val track = outer["item"] as? Map<*, *> ?: outer
                 val title = (track["name"] as? String)?.trim().orEmpty()
                 if (title.isEmpty()) return@mapNotNull null
                 val album = ((track["inAlbum"] as? Map<*, *>)?.get("name") as? String)?.trim()?.takeIf { it.isNotEmpty() }
@@ -127,7 +106,6 @@ object AppleMusicLinks {
     private fun firstLinkTitle(node: Any?): String? =
         ((node as? List<*>)?.firstOrNull() as? Map<*, *>)?.get("title")?.let { it as? String }?.trim()?.takeIf { it.isNotEmpty() }
 
-    /** schema.org lets an artist be one object, a list of them, or a bare string. */
     private fun artistNames(node: Any?): String = when (node) {
         is String -> node.trim()
         is Map<*, *> -> (node["name"] as? String).orEmpty().trim()
@@ -135,7 +113,6 @@ object AppleMusicLinks {
         else -> ""
     }
 
-    /** "PT3M45S" or "PT1H2M3S" to milliseconds. */
     private fun isoDurationMs(text: String?): Long? {
         val m = ISO_DURATION.matchEntire(text?.trim().orEmpty()) ?: return null
         val hours = m.groupValues[1].toLongOrNull() ?: 0
@@ -147,12 +124,9 @@ object AppleMusicLinks {
 
     private val ISO_DURATION = Regex("""PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?""", RegexOption.IGNORE_CASE)
 
-    // ---- Names -------------------------------------------------------------------------------
-
     private val OG_TITLE = Regex("""<meta[^>]+property="og:title"[^>]+content="([^"]*)"""", RegexOption.IGNORE_CASE)
     private val TITLE_TAG = Regex("""<title[^>]*>(.*?)</title>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
 
-    /** "Road Trip - playlist by Someone on Apple Music" down to "Road Trip". */
     private fun pageName(html: String): String? {
         val raw = OG_TITLE.find(html)?.groupValues?.get(1) ?: TITLE_TAG.find(html)?.groupValues?.get(1) ?: return null
         return unescape(raw)
@@ -167,22 +141,14 @@ object AppleMusicLinks {
         .replace("&quot;", "\"").replace("&#39;", "'").replace("&#x27;", "'").replace("&#x2F;", "/")
         .replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
 
-    /** The page's own name for the playlist or album, or a generic one. */
     fun pageTitle(html: String, kind: Kind): String =
         pageName(html) ?: if (kind == Kind.Album) "Apple Music album" else "Apple Music playlist"
-
-    // ---- Song ids (the dependable fallback) --------------------------------------------------
 
     private val META_TAG = Regex("""<meta\b[^>]*>""", RegexOption.IGNORE_CASE)
     private val META_SONG = Regex("""(?:property|name)\s*=\s*["']music:song["']""", RegexOption.IGNORE_CASE)
     private val META_CONTENT = Regex("""content\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
     private val SONG_ID = Regex("""/(\d+)(?:[?#].*)?$""")
 
-    /**
-     * The catalog ids of the songs a playlist or album page lists in its `music:song` meta tags, in order. The page
-     * always carries these for the share preview, whatever its visible layout is, so they survive redesigns. The ids
-     * are turned into titles and artists by the iTunes lookup ([parseLookup]).
-     */
     fun songIds(html: String): List<String> = META_TAG.findAll(html).mapNotNull { tag ->
         val text = tag.value
         if (!META_SONG.containsMatchIn(text)) return@mapNotNull null
@@ -190,11 +156,9 @@ object AppleMusicLinks {
         SONG_ID.find(unescape(url))?.groupValues?.get(1)
     }.toList()
 
-    /** The URL that resolves [ids] (songs) to their details, as the public iTunes lookup API serves them. */
     fun lookupUrl(ids: List<String>, storefront: String): String =
         "https://itunes.apple.com/lookup?id=${ids.joinToString(",")}&country=$storefront"
 
-    /** (song id, track) for every song in an iTunes lookup response. Anything that isn't a song is skipped. */
     fun parseLookup(json: String): List<Pair<String, ImportTrack>> {
         val root = parseJson(json) as? Map<*, *> ?: return emptyList()
         return (root["results"] as? List<*>).orEmpty().mapNotNull { row ->
@@ -212,15 +176,12 @@ object AppleMusicLinks {
         }
     }
 
-    // ---- JSON helpers ------------------------------------------------------------------------
-
     private fun parseJson(text: String): Any? = try {
         MiniJson.parse(text)
     } catch (_: Exception) {
         null
     }
 
-    /** The first object anywhere in [node] that carries a "track" array. */
     private fun findEntity(node: Any?, depth: Int): Map<*, *>? {
         if (depth > 24) return null
         when (node) {

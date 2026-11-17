@@ -30,22 +30,15 @@ class WelcomeViewModel @Inject constructor(
     private val store: OnboardingStore,
     private val profile: ProfileStore,
 ) : ViewModel() {
-    /**
-     * Local users and signed-in users go straight in. Anyone else sees the first-run setup once, then (when sync is
-     * available) the sign-in page.
-     */
     val gate: StateFlow<Gate> = combine(store.localMode, store.setupDone, store.setupStarted, auth.authState) { local, setupDone, started, signedIn ->
         android.util.Log.d("GamutGate", "local=$local setupDone=$setupDone started=$started signedIn=$signedIn")
         when {
             local -> Gate.Ready
-            // Once the setup has started it owns the screen. That has to be decided before anything else: signing in
-            // on its last page briefly makes the account state "unknown", and that must not tear the setup down.
             started && !setupDone -> Gate.Setup
             SyncConfig.enabled && signedIn == null -> Gate.Loading
             signedIn == true -> Gate.Ready
             !setupDone -> Gate.Setup
             !SyncConfig.enabled -> Gate.Ready
-            // Setup is done but nobody is signed in (they signed out): just the sign-in choice.
             else -> Gate.Welcome
         }
     }.stateIn(

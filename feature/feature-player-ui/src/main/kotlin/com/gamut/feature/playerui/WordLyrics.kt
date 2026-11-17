@@ -12,19 +12,11 @@ import org.w3c.dom.Element
 import org.w3c.dom.Node
 import org.xml.sax.InputSource
 
-/*
- * Word-timed lyrics, the way BitChord gets them: Apple Music's TTML, with every syllable stamped, served by the
- * BetterLyrics host. The parser follows BitChord's TtmlLyrics: spans become pieces, pieces become words, and a
- * word keeps the timing of each of its syllables so "rea" can be swept and "lly" held.
- *
- * Backing vocals, translations and romanisations are skipped: Gamut's panel has nowhere to put them.
- */
 internal object WordLyrics {
     private const val BASE = "https://lyrics-api.boidu.dev/getLyrics"
     private const val USER_AGENT = "Gamut/1.0 (Android)"
     private val SKIPPED_ROLES = setOf("x-translation", "x-roman", "x-bg")
 
-    /** The track's word-timed lines, or null when the host has none. Blocking: call off the main thread. */
     fun fetch(title: String, artist: String, durationMs: Long, album: String? = null): List<LyricsLine>? = runCatching {
         val query = buildString {
             append("?s=").append(URLEncoder.encode(title, "UTF-8"))
@@ -53,7 +45,6 @@ internal object WordLyrics {
         }
     }
 
-    /** The host wraps the TTML in one or two JSON envelopes; this digs the document out. */
     private fun unwrap(raw: String): String? {
         val value = raw.replace("\uFEFF", "").trim()
         if (value.isEmpty()) return null
@@ -80,13 +71,9 @@ internal object WordLyrics {
             .replace("&#39;", "'").replace("&apos;", "'").replace("&amp;", "&")
     } else value
 
-    // ----------------------------------------------------------------------------------------------------------
-
     fun parse(ttml: String): List<LyricsLine> = runCatching {
         val factory = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = false
-            // Lyrics arrive from a third-party host; refuse to resolve anything the document asks us to fetch.
-            // Each feature is attempted on its own: a parser lacking one throws rather than saying no.
             harden("http://apache.org/xml/features/disallow-doctype-decl")
             harden("http://xml.org/sax/features/external-general-entities", false)
             harden("http://xml.org/sax/features/external-parameter-entities", false)
@@ -129,15 +116,12 @@ internal object WordLyrics {
         val paragraphEnd = time(paragraph.getAttribute("end"))
 
         if (words.isEmpty()) {
-            // Line-synced TTML: a stamp and bare text, no spans. Nothing to time words with.
             val text = paragraph.textContent?.trim().orEmpty()
             val begin = paragraphBegin ?: return null
             if (text.isEmpty()) return null
             return LyricsLine(timestampMs = begin, text = text, endMs = paragraphEnd?.takeIf { it > begin } ?: begin)
         }
 
-        // The paragraph's own stamp: Apple sets it a hair before the first syllable on lines that open with a soft
-        // consonant, and that lead-in is when the line should appear.
         val begin = paragraphBegin ?: words.first().startMs
         return LyricsLine(
             timestampMs = minOf(begin, words.first().startMs),
@@ -180,14 +164,10 @@ internal object WordLyrics {
         return false
     }
 
-    /** Pieces to words: a space between two spans ends a word, and spans with none between them are its syllables. */
     private fun mergeIntoWords(pieces: List<Piece>): List<LyricsWord> {
         val words = mutableListOf<LyricsWord>()
         val current = StringBuilder()
         val syllables = mutableListOf<LyricsSyllable>()
-        // Some lines arrive with every word stamped as its own span and no space anywhere between them. Read by the
-        // rule above that is one enormous word, and it renders with the words stuck together. With no break to be
-        // seen and several spans, each span is taken as a word instead.
         val spans = pieces.count { it is Piece.Timed && it.text.isNotBlank() }
         val hasBreak = pieces.any { p ->
             when (p) {
@@ -198,7 +178,6 @@ internal object WordLyrics {
         val glued = !hasBreak && spans >= 4
         var start = 0L
         var end = 0L
-        // Untimed text is punctuation hanging off a span: it can't carry a word of its own.
         var timed = false
 
         fun flush() {
@@ -215,7 +194,6 @@ internal object WordLyrics {
             when (piece) {
                 is Piece.Text -> when {
                     piece.text.isBlank() -> flush()
-                    // Trailing punctuation belongs to the word it follows; a space on either side ends the word.
                     timed -> {
                         val leading = piece.text.first().isWhitespace()
                         if (leading) flush() else current.append(piece.text)

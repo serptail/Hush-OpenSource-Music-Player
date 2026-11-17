@@ -43,7 +43,6 @@ private const val LOGIN_URL =
     "https://accounts.google.com/ServiceLogin?ltmpl=music&service=youtube&prompt=select_account" +
         "&continue=https%3A%2F%2Fmusic.youtube.com%2F"
 
-/** Reads the identity the signed-in page is using, from the page's own config. Null when it isn't a YouTube page. */
 private const val PAGE_PROBE = """
 (function () {
   try {
@@ -66,7 +65,6 @@ private const val PAGE_PROBE = """
 })()
 """
 
-/** Where the Google and YouTube login lives: the pages the sign-in passes through, and the cookies they share. */
 private val GOOGLE_ORIGINS = listOf(
     "https://music.youtube.com",
     "https://www.youtube.com",
@@ -76,18 +74,6 @@ private val GOOGLE_ORIGINS = listOf(
     "https://google.com",
 )
 
-/**
- * Forgets the Google login the in-app browser is holding, so the next sign-in starts clean and nothing is left behind.
- * Done the way BitChord does it: Google's cookies only, by name, rather than `removeAllCookies`, because the same cookie
- * jar can hold other logins and an import is no reason to sign out of those. There is no per-domain removal in the API,
- * so each cookie is overwritten with an expired one of the same name.
- *
- * Without this, Google recognises the account that was just used, redirects straight through to music.youtube.com and
- * hands back that same account, with no chance to pick another.
- *
- * Best effort throughout: CookieManager needs a WebView provider, and a device without one should get a less convenient
- * next sign-in, not a crash.
- */
 fun clearYouTubeLogin() {
     val manager = try {
         CookieManager.getInstance()
@@ -101,9 +87,6 @@ fun clearYouTubeLogin() {
             jar.split(';').forEach { entry ->
                 val name = entry.substringBefore('=').trim()
                 if (name.isEmpty()) return@forEach
-                // Secure on every one: Chrome ignores a "__Secure-" or "__Host-" cookie that isn't, even an expired one,
-                // and those prefixed cookies are the ones Google's session actually rides on. Both the host-only and
-                // the domain-wide forms, because a cookie set on ".google.com" isn't removed by expiring it on the host.
                 val expired = "$name=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; Secure"
                 manager.setCookie(origin, "$expired; Path=/")
                 manager.setCookie(origin, "$expired; Path=/; Domain=$host")
@@ -119,11 +102,6 @@ fun clearYouTubeLogin() {
     }
 }
 
-/**
- * Full-screen sign-in to YouTube Music: Google's real login page in a WebView, so passkeys and two-step
- * verification work as usual. Once music.youtube.com has loaded, "Import my library" reads the session and hands
- * it over. Nothing is kept: Google's login in the browser is wiped when this opens and again after the import.
- */
 @Suppress("DEPRECATION")
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -156,8 +134,6 @@ fun YtMusicLoginScreen(onCaptured: (YtSession) -> Unit, onClose: () -> Unit) {
             factory = { context ->
                 clearYouTubeLogin()
                 WebView(context).apply {
-                    // A fresh browser each time, not just fresh cookies: cached pages and autofill can still lead Google
-                    // to the account that was used last.
                     clearCache(true)
                     clearHistory()
                     clearFormData()

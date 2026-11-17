@@ -316,7 +316,6 @@ internal fun FullLyricsPanel(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
                 )
             }
-            // The same flowing, word-swept lyrics as the Cover player, over this player's own colours.
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (lyricsState) {
                     is LyricsState.Loading -> {
@@ -349,7 +348,6 @@ internal fun FullLyricsPanel(
                 }
             }
 
-            // The same scrubber and transport as the Mesh player, so the panel reads as part of it.
             Column(Modifier.padding(horizontal = 28.dp)) {
                 MeshScrubber(progress = progress, onScrub = onScrub, onSeekFraction = onSeekFraction)
                 TimeRow(labelPositionMs, durationMs)

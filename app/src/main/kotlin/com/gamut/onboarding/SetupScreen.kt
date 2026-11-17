@@ -149,10 +149,6 @@ private const val NAME_LIMIT = 40
 private val BUTTON_HEIGHT = 58.dp
 private const val SPOTIFY_DATA_URL = "https://www.spotify.com/account/privacy/"
 
-/**
- * First-run setup: pages you can swipe through, over the app's adaptive background in gamut colours, with frosted
- * acrylic panels on top. Each page says as little as it can and lets the controls do the talking.
- */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SetupScreen(vm: SetupViewModel = hiltViewModel()) {
@@ -163,8 +159,6 @@ fun SetupScreen(vm: SetupViewModel = hiltViewModel()) {
     val scope = rememberCoroutineScope()
     val view = LocalView.current
 
-    // The window must resize for the keyboard (imePadding then does the rest). With "pan" the whole screen is shoved
-    // up instead, which is what lifted the page and cut the field off.
     DisposableEffect(view) {
         val window = view.context.findActivity()?.window
         val previous = window?.attributes?.softInputMode
@@ -184,7 +178,6 @@ fun SetupScreen(vm: SetupViewModel = hiltViewModel()) {
     val busy = importState is ImportState.Reading || importState is ImportState.Matching
     val keyboard = WindowInsets.isImeVisible
 
-    // Once the import is running its progress shows on the page, so the link sheet gets out of the way.
     LaunchedEffect(busy) {
         if (busy) {
             spotifyOpen = false
@@ -200,7 +193,6 @@ fun SetupScreen(vm: SetupViewModel = hiltViewModel()) {
     BackHandler(enabled = appleOpen) { appleOpen = false }
     BackHandler(enabled = pager.currentPage > 0 && !showYouTubeLogin && !spotifyOpen && !appleOpen) { goTo(pager.currentPage - 1) }
 
-    // The name is kept as soon as you leave its page, however you leave it.
     LaunchedEffect(pager.settledPage) {
         if (pager.settledPage != PAGE_NAME) {
             focus.clearFocus()
@@ -257,7 +249,6 @@ fun SetupScreen(vm: SetupViewModel = hiltViewModel()) {
                     }
                 }
 
-                // Hidden while typing: the keyboard needs the room.
                 AnimatedVisibility(visible = !keyboard) {
                     val page = pager.currentPage
                     if (vm.syncAvailable && page == PAGE_ACCOUNT) {
@@ -325,8 +316,6 @@ private tailrec fun Context.findActivity(): Activity? =
         is ContextWrapper -> baseContext.findActivity()
         else -> null
     }
-
-// ---- Pages -----------------------------------------------------------------------------------
 
 @Composable
 private fun NamePage(name: String, onNameChange: (String) -> Unit) {
@@ -502,7 +491,6 @@ private fun ImportPage(vm: SetupViewModel, onYouTube: () -> Unit, onSpotify: () 
     ImportStatus(state, onCancel = vm::cancelImport)
 }
 
-/** Apple Music's wordmark, tinted with the page's ink so it follows light and dark. Sized like the other logos. */
 @Composable
 private fun AppleMusicLogo(modifier: Modifier = Modifier) {
     Box(modifier.height(30.dp), contentAlignment = Alignment.CenterStart) {
@@ -510,7 +498,6 @@ private fun AppleMusicLogo(modifier: Modifier = Modifier) {
     }
 }
 
-/** The last page; its choices sit in the bottom bar. */
 @Composable
 private fun AccountPage(vm: SetupViewModel) {
     val account by vm.account.collectAsState()
@@ -523,9 +510,6 @@ private fun AccountPage(vm: SetupViewModel) {
     }
 }
 
-// ---- Import ----------------------------------------------------------------------------------
-
-/** A source as one full-width row: its logo and a line about it on the left, the one thing you do with it on the right. */
 @Composable
 private fun SourceTile(
     modifier: Modifier,
@@ -564,7 +548,6 @@ private fun SourceTile(
     }
 }
 
-/** A plain, softly tinted panel. Used for anything you tap; the frosted acrylic is kept for the palette sheet. */
 @Composable
 private fun Panel(modifier: Modifier = Modifier, cornerRadius: Dp = 24.dp, content: @Composable BoxScope.() -> Unit) {
     val shape = RoundedCornerShape(cornerRadius)
@@ -596,7 +579,6 @@ private fun Pill(label: String, modifier: Modifier = Modifier, onClick: (() -> U
     )
 }
 
-/** Progress of a running import, or its result. Appears under the tiles and says only what changes. */
 @Composable
 private fun ImportStatus(state: ImportState, onCancel: () -> Unit) {
     AnimatedVisibility(
@@ -673,7 +655,6 @@ private fun ImportStatus(state: ImportState, onCancel: () -> Unit) {
     }
 }
 
-/** A tick that draws itself in. */
 @Composable
 private fun CheckBadge() {
     val progress = remember { Animatable(0f) }
@@ -692,7 +673,6 @@ private fun CheckBadge() {
     }
 }
 
-/** Where Spotify links go. The shared [LinkSheet] plus Spotify's logo and its data-download shortcuts. */
 @Composable
 private fun SpotifySheet(
     visible: Boolean,
@@ -731,7 +711,6 @@ private fun SpotifySheet(
     )
 }
 
-/** Where Apple Music links go: public playlists and albums, read without any sign-in. */
 @Composable
 private fun AppleMusicSheet(
     visible: Boolean,
@@ -755,7 +734,6 @@ private fun AppleMusicSheet(
     )
 }
 
-/** A solid sheet for pasting links that rides above the keyboard, so nothing on the page moves. */
 @Composable
 private fun LinkSheet(
     visible: Boolean,
@@ -879,8 +857,6 @@ private fun LinkField(value: String, onChange: (String) -> Unit, placeholder: St
     }
 }
 
-// ---- Folder ----------------------------------------------------------------------------------
-
 @Composable
 private fun OptionCard(
     modifier: Modifier,
@@ -945,9 +921,6 @@ private fun PhosphorGlyph(icon: ImageVector, color: Color) {
     Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(60.dp))
 }
 
-// ---- Chrome ----------------------------------------------------------------------------------
-
-/** Progress as dots in plain black or white: the current page stretches into a pill. Tap any dot to jump. */
 @Composable
 private fun ProgressDots(current: Int, count: Int, onSelect: (Int) -> Unit) {
     Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
@@ -979,7 +952,6 @@ private fun BarFrame(content: @Composable ColumnScope.() -> Unit) {
     }
 }
 
-/** Back grows in on the left from the second page on; the main action takes the rest. */
 @Composable
 private fun BarRow(showBack: Boolean, onBack: () -> Unit, backEnabled: Boolean = true, main: @Composable (Modifier) -> Unit) {
     val backWeight by animateFloatAsState(if (showBack) 1f else 0f, tween(260), label = "backWeight")
@@ -1012,8 +984,6 @@ private fun AccountActions(vm: SetupViewModel, onBack: () -> Unit) {
     }
 }
 
-// ---- Building blocks -------------------------------------------------------------------------
-
 @Composable
 private fun PageTitle(text: String) {
     Text(
@@ -1039,7 +1009,6 @@ private fun SheetLabel(text: String) {
     Text(text, style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.4.sp, fontWeight = FontWeight.Bold), color = ink(0.5f))
 }
 
-/** A frosted acrylic panel that holds a page's controls. */
 @Composable
 private fun Sheet(content: @Composable ColumnScope.() -> Unit) {
     AcrylicCard(Modifier.fillMaxWidth(), cornerRadius = 26.dp, material = AcrylicMaterials.Regular) {
@@ -1088,7 +1057,6 @@ private fun NameField(value: String, onValueChange: (String) -> Unit) {
     Box(Modifier.fillMaxWidth().height(3.dp).clip(CircleShape).background(line))
 }
 
-/** Polished solid fill for the main actions: a vertical sheen and a bright rim, black on light and white on dark. */
 @Composable
 private fun Modifier.chrome(shape: Shape): Modifier {
     val light = LocalCoverPalette.current.isLight
@@ -1123,7 +1091,6 @@ private fun PrimaryButton(label: String, onClick: () -> Unit, modifier: Modifier
     }
 }
 
-/** The quieter pill beside the main action. */
 @Composable
 private fun GhostButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     val interaction = remember { MutableInteractionSource() }

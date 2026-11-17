@@ -168,7 +168,6 @@ object LyricsRepository {
         val key = cacheKey(track)
         val seconds = (durationMs / 1000).toInt()
         cache[key]?.let { hit -> if (hit.isSynced || cachedSeconds[key] == seconds) return hit }
-        // Word-timed (Apple TTML via BetterLyrics) first: it is the only source whose words carry real timings.
         val timed = withContext(Dispatchers.IO) {
             WordLyrics.fetch(cleanTitle(track.title), primaryArtist(track.artist), durationMs, track.album)
         }

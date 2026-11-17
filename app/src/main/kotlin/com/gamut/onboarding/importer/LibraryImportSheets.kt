@@ -59,11 +59,6 @@ import com.gamut.onboarding.ytmusic.YtMusicLinks
 
 private const val SPOTIFY_DATA_URL = "https://www.spotify.com/account/privacy/"
 
-/**
- * The Library's "Import from Spotify" sheet: paste playlist or album links, or pick Spotify's data download. Starting
- * an import is the caller's job ([onImportLinks], [onImportFiles]); the caller also closes the sheet, because the
- * Library's own progress card takes over from there. [busy] is true while another import is running.
- */
 @Composable
 fun SpotifyImportSheet(
     visible: Boolean,
@@ -100,10 +95,6 @@ fun SpotifyImportSheet(
     )
 }
 
-/**
- * The Library's "Import from YouTube Music" sheet: paste playlist links. No sign-in, so only public and unlisted
- * playlists can be read. Same contract as [SpotifyImportSheet].
- */
 @Composable
 fun YouTubeMusicImportSheet(
     visible: Boolean,
@@ -132,10 +123,6 @@ fun YouTubeMusicImportSheet(
     )
 }
 
-/**
- * The Library's "Import from Apple Music" sheet: paste playlist or album links. No sign-in, so only public playlists
- * and albums can be read. Same contract as [SpotifyImportSheet].
- */
 @Composable
 fun AppleMusicImportSheet(
     visible: Boolean,
@@ -162,7 +149,6 @@ fun AppleMusicImportSheet(
     )
 }
 
-/** The shared sheet: a logo, a box for links, how many were recognised, and the Import button. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LinkImportSheet(

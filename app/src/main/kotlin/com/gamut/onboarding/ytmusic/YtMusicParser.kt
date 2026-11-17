@@ -2,12 +2,6 @@ package com.gamut.onboarding.ytmusic
 
 import com.gamut.onboarding.importer.ImportTrack
 
-/**
- * Reads YouTube Music's browse responses (already parsed to maps and lists) into songs and playlists.
- *
- * Deliberately forgiving: a row or field that isn't there is skipped, never fatal, because the response layout
- * shifts over time and a partial library is far better than none.
- */
 object YtMusicParser {
     data class TrackPage(val tracks: List<ImportTrack>, val continuation: String?)
 
@@ -15,12 +9,6 @@ object YtMusicParser {
 
     data class PlaylistPage(val playlists: List<PlaylistRef>, val continuation: String?)
 
-    /**
-     * The songs on a playlist page (Liked Music is one) or on a continuation page, and the token for the next one.
-     *
-     * A playlist you own can carry a "Suggestions" shelf below the real tracks, so the rows are taken from the
-     * playlist shelf itself, not from anywhere on the page.
-     */
     fun parseTrackPage(root: Any?): TrackPage {
         val scope: Any? = root.obj("continuationContents")?.obj("musicPlaylistShelfContinuation")
             ?: collect(root.obj("contents"), "musicPlaylistShelfRenderer").firstOrNull()
@@ -35,10 +23,6 @@ object YtMusicParser {
         return TrackPage(tracks, scope?.let(::continuationToken))
     }
 
-    /**
-     * The playlist's name from a browse response's header, or null when the header isn't one of the layouts known.
-     * A playlist read from a link has no library row to take its name from.
-     */
     fun parsePlaylistTitle(root: Any?): String? {
         for (header in HEADER_RENDERERS) {
             val title = collect(root, header).firstOrNull().obj("title").runs().trim()
@@ -47,7 +31,6 @@ object YtMusicParser {
         return null
     }
 
-    /** The playlists on the library's playlist page (grid or list view), minus Liked Music and episodes. */
     fun parsePlaylistPage(root: Any?): PlaylistPage {
         val out = LinkedHashMap<String, PlaylistRef>()
         fun add(title: String, browseId: String?) {
@@ -65,18 +48,12 @@ object YtMusicParser {
         return PlaylistPage(out.values.toList(), continuationToken(root))
     }
 
-    // ---- Rows --------------------------------------------------------------------------------
-
-    /** (videoId, track), or null for anything that isn't a playable song row. */
     private fun parseRow(row: Map<*, *>): Pair<String, ImportTrack>? {
-        // A greyed-out row is a song that was removed or isn't available here.
         if (row.str("musicItemRendererDisplayPolicy")?.contains("GREY_OUT") == true) return null
         val videoId = row.obj("playlistItemData").str("videoId")
             ?: row.obj("overlay").obj("musicItemThumbnailOverlayRenderer").obj("content")
                 .obj("musicPlayButtonRenderer").obj("playNavigationEndpoint").obj("watchEndpoint").str("videoId")
             ?: return null
-        // A podcast episode isn't a recording a music catalog can have: it would only be matched to some unrelated song.
-        // Told apart by the type its play action states, as BitChord does.
         if (findString(row, "musicVideoType") == "MUSIC_VIDEO_TYPE_PODCAST_EPISODE") return null
 
         val columns = row.arr("flexColumns").orEmpty()
@@ -103,13 +80,6 @@ object YtMusicParser {
         return parts.fold(0L) { acc, n -> acc * 60 + n } * 1000
     }
 
-    // ---- Continuations -----------------------------------------------------------------------
-
-    /**
-     * Token for the next page, or null at the end. Two layouts are in circulation: the command nested directly in
-     * the continuation item, and one wrapped in a command executor beside other commands. The older
-     * `nextContinuationData` form is read as a last resort.
-     */
     fun continuationToken(root: Any?): String? {
         val endpoint = collect(root, "continuationItemRenderer").firstOrNull().obj("continuationEndpoint")
         val command = endpoint.obj("continuationCommand")
@@ -118,9 +88,6 @@ object YtMusicParser {
         return collect(root, "nextContinuationData").firstOrNull().str("continuation")
     }
 
-    // ---- JSON helpers ------------------------------------------------------------------------
-
-    /** Every object stored under [name] anywhere inside [root]. */
     private fun collect(root: Any?, name: String): List<Map<*, *>> {
         val out = ArrayList<Map<*, *>>()
         fun walk(node: Any?) {
@@ -136,7 +103,6 @@ object YtMusicParser {
         return out
     }
 
-    /** The first string stored under [key] anywhere inside [node]. */
     private fun findString(node: Any?, key: String): String? = when (node) {
         is Map<*, *> -> (node[key] as? String) ?: node.values.firstNotNullOfOrNull { findString(it, key) }
         is List<*> -> node.firstNotNullOfOrNull { findString(it, key) }
@@ -149,7 +115,6 @@ object YtMusicParser {
 
     private fun Any?.str(key: String): String? = (this as? Map<*, *>)?.get(key) as? String
 
-    /** The text of a "runs" value, joined. */
     private fun Any?.runs(): String =
         this.arr("runs")?.joinToString("") { it.str("text").orEmpty() }.orEmpty()
 

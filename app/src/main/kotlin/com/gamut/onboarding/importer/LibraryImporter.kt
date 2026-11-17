@@ -46,16 +46,13 @@ import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-/** Where an import is coming from. The Library's import card shows the matching logo. */
 enum class ImportSource { Spotify, YouTubeMusic, AppleMusic }
 
 sealed interface ImportState {
     data object Idle : ImportState
 
-    /** [what] says what is being read, like "your YouTube Music library" or "Road Trip". */
     data class Reading(val what: String, val source: ImportSource? = null) : ImportState
 
-    /** [playlist] names the playlist being filled, or null while liked songs are matched. */
     data class Matching(
         val done: Int,
         val total: Int,
@@ -64,7 +61,6 @@ sealed interface ImportState {
         val source: ImportSource? = null,
     ) : ImportState
 
-    /** [unreadable] counts pasted links that couldn't be read at all (private, removed, or not a playlist). */
     data class Done(
         val playlists: Int,
         val songs: Int,
@@ -77,16 +73,6 @@ sealed interface ImportState {
     data class Failed(val message: String, val source: ImportSource? = null) : ImportState
 }
 
-/**
- * Brings playlists and liked songs from another service into Gamut: from Spotify's export files, pasted Spotify,
- * YouTube Music and Apple Music links, or straight from a signed-in YouTube Music account.
- *
- * Every song is searched in Gamut's own catalog and judged by [TrackMatcher], ported from BitChord. A search with
- * results but no confident match falls back to its first result (see [FALLBACK_TO_FIRST_RESULT]); only a search that
- * returns nothing counts as missed. Playlists are created as soon as their first songs match and then filled a
- * batch at a time, so they appear in the Library while the import is still running. It runs in the application
- * scope, so leaving the screen doesn't stop it.
- */
 @Singleton
 class LibraryImporter @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -105,7 +91,6 @@ class LibraryImporter @Inject constructor(
 
     @Volatile private var job: Job? = null
 
-    /** Spotify's data download (.zip, or its .json files) and Exportify's .csv files. */
     fun startFromFiles(uris: List<Uri>) {
         if (uris.isEmpty() || job?.isActive == true) return
         mutableState.value = ImportState.Reading("your files", ImportSource.Spotify)
@@ -123,7 +108,6 @@ class LibraryImporter @Inject constructor(
         }.also(::resetReadingOnCancel)
     }
 
-    /** Playlist and album links pasted from Spotify (open.spotify.com, spotify: URIs, spotify.link). Public ones only. */
     fun startFromSpotifyLinks(text: String) {
         if (job?.isActive == true) return
         val direct = SpotifyLinks.parse(text)
@@ -161,11 +145,6 @@ class LibraryImporter @Inject constructor(
         }.also(::resetReadingOnCancel)
     }
 
-    /**
-     * Playlist links pasted from YouTube Music (music.youtube.com/playlist?list=\u2026, youtube.com/playlist and watch
-     * links with a list). No sign-in: they are read as a signed-out visitor would, so only public and unlisted
-     * playlists work. Private ones need [startFromYouTubeMusic].
-     */
     fun startFromYouTubeLinks(text: String) {
         if (job?.isActive == true) return
         val ids = YtMusicLinks.parse(text)
@@ -203,10 +182,6 @@ class LibraryImporter @Inject constructor(
         }.also(::resetReadingOnCancel)
     }
 
-    /**
-     * Playlist and album links pasted from Apple Music (music.apple.com/\u2026/playlist/\u2026). No sign-in: they are read
-     * as a signed-out visitor would see them, so only public playlists and albums work.
-     */
     fun startFromAppleMusicLinks(text: String) {
         if (job?.isActive == true) return
         val refs = AppleMusicLinks.parse(text)
@@ -236,7 +211,6 @@ class LibraryImporter @Inject constructor(
         }.also(::resetReadingOnCancel)
     }
 
-    /** The signed-in user's Liked Music and playlists. The session is used for this import only and never stored. */
     fun startFromYouTubeMusic(session: YtSession) {
         if (job?.isActive == true) return
         mutableState.value = ImportState.Reading("your YouTube Music library", ImportSource.YouTubeMusic)
@@ -257,7 +231,6 @@ class LibraryImporter @Inject constructor(
                 mutableState.value = ImportState.Failed("Couldn\u2019t read your YouTube Music library.", ImportSource.YouTubeMusic)
                 return@launch
             } finally {
-                // The login was only ever for this import.
                 clearYouTubeLogin()
             }
             run(found, ImportSource.YouTubeMusic, emptyMessage = "Your YouTube Music library looks empty. Liked songs and playlists are what get imported.")
@@ -268,19 +241,12 @@ class LibraryImporter @Inject constructor(
         job?.cancel()
     }
 
-    /**
-     * A cancel while still reading never reaches [run], which is what turns a cancel into a result, so nothing else
-     * would clear the card: it would sit on "Reading\u2026" with a Cancel button that does nothing. Reading a YouTube Music
-     * library takes long enough for people to hit it. Done once the job has actually finished, so a last progress update
-     * from a request still in flight can't bring the card back.
-     */
     private fun resetReadingOnCancel(launched: Job) {
         launched.invokeOnCompletion { cause ->
             if (cause is CancellationException) mutableState.update { if (it is ImportState.Reading) ImportState.Idle else it }
         }
     }
 
-    /** Call once a Done or Failed result has been shown. */
     fun acknowledge() {
         mutableState.update { if (it is ImportState.Done || it is ImportState.Failed) ImportState.Idle else it }
     }
@@ -306,13 +272,10 @@ class LibraryImporter @Inject constructor(
                     missed += matched.count { it == null }
                     val fresh = matched.filterNotNull().filter { seen.add(keyOf(it)) }
                     if (fresh.isEmpty()) continue
-                    // Created with its first songs rather than up front, so a playlist nothing matched for is never left empty.
                     val id = playlistId ?: library.createPlaylist(playlist.name).also {
                         playlistId = it
                         playlists++
                     }
-                    // appendTrack saves the track itself as well as its place in the playlist. replaceTracks only links
-                    // by id, so tracks that aren't in the track table yet never showed up in the playlist.
                     fresh.forEach { library.appendTrack(id, it) }
                     songs += fresh.size
                 }
@@ -377,16 +340,11 @@ class LibraryImporter @Inject constructor(
         }.awaitAll()
     }
 
-    /**
-     * BitChord's way of finding a song: one fast search for "title artist", let [TrackMatcher] pick the best candidate, and when it
-     * rejects them all take the search's first result rather than give up.
-     */
     private suspend fun find(wanted: ImportTrack, results: ConcurrentHashMap<String, List<Track>>, stats: MatchStats): Track? {
         val query = listOf(wanted.title, wanted.artist).filter { it.isNotBlank() }.joinToString(" ").take(120)
         val key = query.lowercase()
         val candidates = (
             results[key] ?: run {
-                // One Deezer request first; the app's full search (slow, rate-limited by iTunes) only for songs that found nothing.
                 val quick = catalog.search(query)
                 val found = quick.ifEmpty {
                     withTimeoutOrNull(SEARCH_TIMEOUT_MS) { search.search(query).lastOrNull()?.tracks }.orEmpty()
@@ -399,8 +357,6 @@ class LibraryImporter @Inject constructor(
             stats.none.incrementAndGet()
             return null
         }
-        // The album is what tells apart the same recording on the album, the single and a compilation, which Deezer
-        // returns as separate rows with different cover art. Without it the first of them wins.
         val rows = candidates.map { MatchSong(it.title, it.artist, durationText(it.durationMs), albumName = it.album) }
         val target = TrackMatcher.Target(
             title = wanted.title,
@@ -421,18 +377,12 @@ class LibraryImporter @Inject constructor(
         return candidates.first()
     }
 
-    /** "3:45" for a runtime in milliseconds; null when the catalog row has none. */
     private fun durationText(ms: Long): String? {
         if (ms <= 0) return null
         val seconds = ms / 1000
         return "%d:%02d".format(seconds / 60, seconds % 60)
     }
 
-    /**
-     * The songs on one Spotify playlist or album page, or null when it can't be read. Blocking; called off the main
-     * thread. A playlist the embed page cut off at 100 songs is read on through [SpotifyPaging]; if that is refused,
-     * the 100 already read stand.
-     */
     private fun fetchSpotifyPage(ref: SpotifyLinks.Ref): ImportPlaylist? {
         repeat(2) {
             try {
@@ -457,13 +407,6 @@ class LibraryImporter @Inject constructor(
         return null
     }
 
-    /**
-     * The songs on one public Apple Music playlist or album page, or null when it can't be read. Blocking.
-     *
-     * The page's own track data is read first. The share-preview meta tags list every song's catalog id regardless
-     * of layout, so when they name more songs than that read found (or it found none), the ids are resolved through
-     * the public iTunes lookup instead, and whichever way got more songs wins.
-     */
     private fun fetchAppleMusicPage(ref: AppleMusicLinks.Ref): ImportPlaylist? {
         repeat(2) {
             try {
@@ -487,10 +430,8 @@ class LibraryImporter @Inject constructor(
         return null
     }
 
-    /** Titles and artists for Apple Music song ids, in the order given. Songs that can't be resolved are left out. */
     private fun lookupAppleSongs(ids: List<String>, storefront: String): List<ImportTrack> {
         val byId = HashMap<String, ImportTrack>()
-        // The page's own storefront first; a song that storefront doesn't carry may still resolve in the US one.
         for (country in listOf(storefront, "us").distinct()) {
             val missing = ids.distinct().filter { it !in byId }
             if (missing.isEmpty()) break
@@ -508,7 +449,6 @@ class LibraryImporter @Inject constructor(
         return ids.mapNotNull { byId[it] }
     }
 
-    /** Follows a spotify.link share link to the playlist or album it points at. */
     private fun resolveShortLink(link: String): SpotifyLinks.Ref? = try {
         http.newCall(browserRequest(link)).execute().use { response ->
             SpotifyLinks.parse(response.request.url.toString()).firstOrNull()
@@ -524,7 +464,6 @@ class LibraryImporter @Inject constructor(
         .header("Accept-Language", "en-US,en;q=0.9")
         .build()
 
-    /** The files behind one picked URI. A zip is streamed and yields its json/csv entries; anything else is one file. */
     private fun readFiles(uri: Uri): List<ExportFile> {
         val name = displayName(uri)
         val input = context.contentResolver.openInputStream(uri) ?: return emptyList()
@@ -537,7 +476,6 @@ class LibraryImporter @Inject constructor(
         }
     }
 
-    /** Reads at most [MAX_FILE_BYTES]; a longer file is cut off rather than risking running out of memory. */
     private fun readLimited(stream: java.io.InputStream): ByteArray {
         val out = java.io.ByteArrayOutputStream()
         val chunk = ByteArray(16 * 1024)
@@ -565,17 +503,13 @@ class LibraryImporter @Inject constructor(
     private companion object {
         const val TAG = "GamutImport"
 
-        /** Searches in flight at once, as in BitChord. */
         const val PARALLEL = 4
 
-        /** Songs matched between writes to the library, so a playlist fills in visibly as the import goes. */
         const val BATCH = 24
 
-        /** BitChord's behaviour: a search with results is never written off, its first result is the last resort. Set false to leave unsure songs out instead. */
         const val FALLBACK_TO_FIRST_RESULT = true
         const val CANDIDATES = 15
 
-        /** Song ids per iTunes lookup request (the API takes up to 200). */
         const val APPLE_LOOKUP_CHUNK = 150
         const val SEARCH_TIMEOUT_MS = 12_000L
         const val MAX_FILE_BYTES = 64 * 1024 * 1024

@@ -8,13 +8,8 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.zip.ZipInputStream
 
-/** One file the user picked: a name (for the playlist title) and its bytes. */
 class ExportFile(val name: String, val bytes: ByteArray)
 
-/**
- * Reads what Spotify hands out: the official data download (a .zip, or its Playlist*.json and YourLibrary.json files)
- * and Exportify's per-playlist .csv files. Anything it doesn't understand is skipped, never fatal.
- */
 object SpotifyExportParser {
     fun parse(files: List<ExportFile>): ImportLibrary {
         val playlists = ArrayList<ImportPlaylist>()
@@ -53,8 +48,6 @@ object SpotifyExportParser {
         return ImportLibrary(playlists.filter { it.tracks.isNotEmpty() }, liked.values.toList())
     }
 
-    // ---- JSON (the official export) ----------------------------------------------------------
-
     private fun readJson(root: Map<*, *>, onPlaylist: (ImportPlaylist) -> Unit, onLiked: (ImportTrack) -> Unit) {
         (root["playlists"] as? List<*>)?.forEach { entry ->
             val playlist = entry as? Map<*, *> ?: return@forEach
@@ -72,8 +65,6 @@ object SpotifyExportParser {
             makeTrack(track["track"] as? String, track["artist"] as? String, track["album"] as? String, null)?.let(onLiked)
         }
     }
-
-    // ---- CSV (Exportify and similar) ---------------------------------------------------------
 
     private val TITLE_COLUMNS = listOf("trackname", "name", "title", "songname", "song", "track")
     private val ARTIST_COLUMNS = listOf("artistnames", "artistname", "artists", "artist")
@@ -99,7 +90,6 @@ object SpotifyExportParser {
         }
     }
 
-    /** RFC 4180: quoted fields may contain commas, doubled quotes and line breaks. */
     private fun csvRows(text: String): List<List<String>> {
         val rows = ArrayList<List<String>>()
         var row = ArrayList<String>()
@@ -136,12 +126,6 @@ object SpotifyExportParser {
         return rows
     }
 
-    // ---- Zip ---------------------------------------------------------------------------------
-
-    /**
-     * Pulls the json, csv and nested zip entries out of a zip, one at a time, so a big data download is never held
-     * in memory whole. Streaming history and other large files that have nothing to import are skipped.
-     */
     fun unzip(stream: InputStream): List<ExportFile> {
         val out = ArrayList<ExportFile>()
         try {
@@ -169,8 +153,6 @@ object SpotifyExportParser {
         }
         return out
     }
-
-    // ---- Helpers -----------------------------------------------------------------------------
 
     private fun makeTrack(title: String?, artist: String?, album: String?, durationMs: Long?): ImportTrack? {
         val t = title?.trim().orEmpty()

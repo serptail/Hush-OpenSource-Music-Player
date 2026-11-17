@@ -2,11 +2,9 @@ package com.gamut.onboarding.importer
 
 import com.gamut.core.common.TextMatch
 
-/** Decides whether a catalog search result is the song an imported row meant. */
 object TrackMatching {
     const val THRESHOLD = 0.72
 
-    /** What to type into the search box for [track]. */
     fun query(track: ImportTrack): String {
         val artist = track.artist.split(',').firstOrNull().orEmpty().trim()
         return "${cleanTitle(track.title)} $artist".trim().take(120)
@@ -30,7 +28,6 @@ object TrackMatching {
                 }
             }
         }
-        // A remix, live cut or karaoke version of a song that wasn't asked for as one is a different song.
         val unwanted = (foundTitle intersect TextMatch.DERIVATIVE) - wantedTitle
         val penalty = if (unwanted.isNotEmpty()) 0.4 else 0.0
 
@@ -61,7 +58,6 @@ object TrackMatching {
 
     private fun tokens(title: String): Set<String> = TextMatch.toks(cleanTitle(title))
 
-    /** Drops "(feat. X)" and "- Remastered 2011" style suffixes, which differ between catalogs. */
     private fun cleanTitle(title: String): String = title
         .replace(Regex("""\s*[(\[]\s*(feat|ft|with)\b[^)\]]*[)\]]""", RegexOption.IGNORE_CASE), "")
         .replace(Regex("""\s+-\s+(\d{4}\s+)?(remaster(ed)?|single version|radio edit|mono|stereo|deluxe|bonus track)\b.*$""", RegexOption.IGNORE_CASE), "")

@@ -337,12 +337,9 @@ fun PlayerScreen(
 
     val gutter = adaptiveGutter(AdaptiveLayout.PlayerMaxWidth)
 
-    // Settings > Appearance > Player. Mesh swaps the blurred-cover backdrop and the ringed
-    // artwork for a plain sleeve with the artwork's colour mesh hung from its bottom edge.
     val meshStyle = LocalAppearance.current.playerStyle == PlayerStyle.Mesh
     val artworkMesh = if (meshStyle) rememberArtworkMesh(artUrl) else null
     val meshSeam = remember { MeshSeam() }
-    // The lyrics panel has no sleeve to hang the mesh from, so the seam lifts to the top while it is open.
     val meshSeamLift = animateFloatAsState(if (lyricsPanelOpen) 0f else 1f, tween(400), label = "mesh-seam-lift")
 
     CompositionLocalProvider(LocalCoverPalette provides CoverPalette.Neutral) {
@@ -354,7 +351,6 @@ fun PlayerScreen(
                 .then(if (lyricsPanelOpen) Modifier else Modifier.swipeVolumeGesture(volumeHud)),
         ) {
             val coverStyle = LocalAppearance.current.playerStyle == PlayerStyle.Cover
-            // Word-timed lyrics are exact, so they run on the raw reading; the offset is only a tuning for line-synced ones.
             val exactLyrics = (shownLyrics as? LyricsState.Loaded)?.lines?.any { it.exact } == true
             val playhead = remember(clock, exactLyrics) { FlowPlayhead(clock, if (exactLyrics) 0L else LyricsSyncOffsetMs) }
             val lyricsLoaded = shownLyrics as? LyricsState.Loaded
@@ -872,7 +868,6 @@ internal class PlayerClock {
     var positionMs by mutableFloatStateOf(0f)
         private set
 
-    /** The player's latest reading, when it was taken (System.nanoTime) and how many deliberate jumps there have been. Read by the lyrics clock. */
     var readingMs = 0L
         private set
     var readingAtNanos = 0L

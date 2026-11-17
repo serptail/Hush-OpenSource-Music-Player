@@ -9,10 +9,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-/**
- * The current lyric line for the Mesh and Classic players: the same word-swept strip the Cover player uses, centred,
- * up to two lines so a long line is shown whole. Draws nothing until synced lyrics are loaded.
- */
 @Composable
 internal fun LyricStripBlock(
     lyricsOn: Boolean,
@@ -28,7 +24,6 @@ internal fun LyricStripBlock(
 ) {
     val loaded = lyricsState as? LyricsState.Loaded
     if (!lyricsOn || loaded == null || !loaded.isSynced || flowLines.isNullOrEmpty()) return
-    // A fixed two-line slot, so the controls don't shift as lines change between one row and two.
     Box(modifier.fillMaxWidth().height(56.dp), contentAlignment = Alignment.Center) {
         FlowLyricStrip(
             lines = flowLines,
