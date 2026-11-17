@@ -1,13 +1,26 @@
 package com.gamut.feature.library
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,6 +28,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope
@@ -27,6 +41,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -45,11 +60,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
@@ -97,6 +120,30 @@ data class LibraryArtist(
     val imageUrl: String? = null,
 )
 
+/** Which service an import is coming from; the card shows its logo. Null shows none. */
+enum class ImportSourceUi { Spotify, YouTubeMusic, AppleMusic }
+
+/** What the Library's import card shows. Built by the app from the importer's state, so this module needn't know it. */
+sealed interface ImportProgressUi {
+    val source: ImportSourceUi?
+
+    /** [total] of 0 means the size isn't known yet, and the bar just moves. */
+    data class Running(
+        val title: String,
+        val done: Int,
+        val total: Int,
+        val current: String?,
+        override val source: ImportSourceUi? = null,
+    ) : ImportProgressUi
+
+    data class Finished(
+        val title: String,
+        val detail: String?,
+        val isError: Boolean,
+        override val source: ImportSourceUi? = null,
+    ) : ImportProgressUi
+}
+
 private enum class LibraryFilter(
     val label: String,
 ) {
@@ -112,6 +159,9 @@ fun LibraryScreen(
     onOpenPlaylist: (String) -> Unit,
     onCreatePlaylist: () -> Unit,
     barHeight: androidx.compose.ui.unit.Dp,
+    onImportSpotify: () -> Unit = {},
+    onImportYouTubeMusic: () -> Unit = {},
+    onImportAppleMusic: () -> Unit = {},
     artists: List<LibraryArtist> = emptyList(),
     artistsLoading: Boolean = false,
     onOpenArtist: (String) -> Unit = {},
@@ -119,6 +169,9 @@ fun LibraryScreen(
     onOpenSearch: () -> Unit = {},
     onOpenLocal: () -> Unit = {},
     onPlayTrack: (Track, List<Track>) -> Unit = { _, _ -> },
+    importProgress: ImportProgressUi? = null,
+    onCancelImport: () -> Unit = {},
+    onDismissImport: () -> Unit = {},
 ) {
     val downloaded by viewModel.downloadedTracks.collectAsStateWithLifecycle()
     val userPlaylists by viewModel.playlists.collectAsStateWithLifecycle()
@@ -130,6 +183,7 @@ fun LibraryScreen(
 
     var filter by rememberSaveable { mutableStateOf<LibraryFilter?>(null) }
     var isGrid by rememberSaveable { mutableStateOf(false) }
+    var addMenuOpen by remember { mutableStateOf(false) }
     val addedTo = remember(selectedTrack?.isrc) { mutableStateListOf<Long>() }
 
     CoverTheme(palette) {
@@ -153,8 +207,18 @@ fun LibraryScreen(
                             color = TextPrimary,
                             modifier = Modifier.weight(1f),
                         )
-                        Box(Modifier.size(44.dp).pressScale(onClick = onCreatePlaylist), contentAlignment = Alignment.Center) {
-                            Icon(PhosphorIcons.Bold.Plus, "Create playlist", tint = ink(0.85f), modifier = Modifier.size(24.dp))
+                        Box {
+                            Box(Modifier.size(44.dp).pressScale(onClick = { addMenuOpen = true }), contentAlignment = Alignment.Center) {
+                                Icon(PhosphorIcons.Bold.Plus, "Create or import a playlist", tint = ink(0.85f), modifier = Modifier.size(24.dp))
+                            }
+                            AddMenu(
+                                expanded = addMenuOpen,
+                                onDismiss = { addMenuOpen = false },
+                                onCreatePlaylist = onCreatePlaylist,
+                                onImportSpotify = onImportSpotify,
+                                onImportYouTubeMusic = onImportYouTubeMusic,
+                                onImportAppleMusic = onImportAppleMusic,
+                            )
                         }
                     }
 
@@ -175,6 +239,15 @@ fun LibraryScreen(
                                 modifier = Modifier.size(22.dp),
                             )
                         }
+                    }
+
+                    importProgress?.let {
+                        ImportProgressCard(
+                            it,
+                            onCancel = onCancelImport,
+                            onDismiss = onDismissImport,
+                            modifier = Modifier.padding(horizontal = 24.dp + gutter).padding(top = 12.dp),
+                        )
                     }
 
                     if (selectedTrack !=
@@ -378,6 +451,194 @@ fun LibraryScreen(
             }
         }
     }
+}
+
+/**
+ * Progress of a running import, or its result once it has finished. Lives in the Library because that is where the
+ * playlists it creates appear, and nobody waits for an import on the setup page.
+ */
+@Composable
+private fun ImportProgressCard(
+    state: ImportProgressUi,
+    onCancel: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier.fillMaxWidth().clip(PanelShape).background(ink(0.08f)).padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        when (state) {
+            is ImportProgressUi.Running -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ImportSourceLogo(state.source)
+                    Text(
+                        state.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (state.total > 0) {
+                        Text("${state.done} / ${state.total}", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
+                    }
+                }
+                state.current?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                if (state.total > 0) {
+                    val fraction = (state.done.toFloat() / state.total).coerceIn(0f, 1f)
+                    val bar by animateFloatAsState(fraction, tween(300), label = "libraryImportBar")
+                    Box(Modifier.fillMaxWidth().height(6.dp).clip(CircleShape).background(ink(0.12f))) {
+                        Box(Modifier.fillMaxWidth(bar.coerceAtLeast(0.02f)).fillMaxHeight().background(ink(0.85f), CircleShape))
+                    }
+                } else {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
+                        color = ink(0.85f),
+                        trackColor = ink(0.12f),
+                    )
+                }
+                Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onCancel) { Text("Cancel", color = TextPrimary) }
+                }
+            }
+            is ImportProgressUi.Finished -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ImportSourceLogo(state.source)
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            state.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = if (state.isError) MaterialTheme.colorScheme.error else TextPrimary,
+                        )
+                        state.detail?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = TextSecondary, modifier = Modifier.padding(top = 2.dp))
+                        }
+                    }
+                    TextButton(onClick = onDismiss) { Text("Dismiss", color = TextPrimary) }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * What the Library's + opens: make a playlist, or bring one in from Spotify or YouTube Music.
+ *
+ * This is a [Popup] rather than a Material [androidx.compose.material3.DropdownMenu] because that one caps its width
+ * at 280dp, which made "Import from YouTube Music" wrap onto two rows and left dead space on the right. Here the card
+ * is exactly as wide as its widest row, and it grows out of the + button's corner.
+ */
+@Composable
+private fun AddMenu(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    onCreatePlaylist: () -> Unit,
+    onImportSpotify: () -> Unit,
+    onImportYouTubeMusic: () -> Unit,
+    onImportAppleMusic: () -> Unit,
+) {
+    // Stays composed while the exit animation plays, then leaves the tree.
+    val visibleState = remember { MutableTransitionState(false) }
+    visibleState.targetState = expanded
+    if (!visibleState.currentState && !visibleState.targetState) return
+
+    val density = LocalDensity.current
+    val shadowRoom = 14.dp // popup windows clip to their content, so the shadow needs room to breathe
+    val shape = RoundedCornerShape(18.dp)
+    val container = ink(0.10f).compositeOver(LocalCoverPalette.current.base)
+    val offset = with(density) { IntOffset(shadowRoom.roundToPx(), (44.dp + 2.dp - shadowRoom).roundToPx()) }
+
+    Popup(
+        alignment = Alignment.TopEnd,
+        offset = offset,
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        AnimatedVisibility(
+            visibleState = visibleState,
+            enter = fadeIn(tween(120)) + scaleIn(
+                initialScale = 0.6f,
+                transformOrigin = TransformOrigin(1f, 0f),
+                animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow),
+            ),
+            exit = fadeOut(tween(90)) + scaleOut(
+                targetScale = 0.85f,
+                transformOrigin = TransformOrigin(1f, 0f),
+                animationSpec = tween(120),
+            ),
+        ) {
+            Column(
+                Modifier
+                    .padding(shadowRoom)
+                    .shadow(10.dp, shape, clip = false)
+                    .clip(shape)
+                    .background(container)
+                    .width(IntrinsicSize.Max)
+                    .widthIn(min = 200.dp)
+                    .padding(vertical = 8.dp),
+            ) {
+                AddMenuItem("Create playlist", onClick = { onDismiss(); onCreatePlaylist() }) {
+                    Icon(PhosphorIcons.Bold.Plus, null, tint = ink(0.85f), modifier = Modifier.size(22.dp))
+                }
+                AddMenuItem("Import from Spotify", onClick = { onDismiss(); onImportSpotify() }) {
+                    Icon(painterResource(R.drawable.ic_spotify_mono), null, tint = ink(0.85f), modifier = Modifier.size(22.dp))
+                }
+                AddMenuItem("Import from YouTube Music", onClick = { onDismiss(); onImportYouTubeMusic() }) {
+                    Icon(painterResource(R.drawable.ic_ytmusic_mono), null, tint = ink(0.85f), modifier = Modifier.size(22.dp))
+                }
+                AddMenuItem("Import from Apple Music", onClick = { onDismiss(); onImportAppleMusic() }) {
+                    Icon(painterResource(R.drawable.ic_applemusic_mono), null, tint = ink(0.85f), modifier = Modifier.size(22.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddMenuItem(
+    label: String,
+    onClick: () -> Unit,
+    icon: @Composable () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        icon()
+        Spacer(Modifier.width(14.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = TextPrimary,
+            maxLines = 1,
+            softWrap = false,
+        )
+    }
+}
+
+/** The colourless logo of the service being imported from, tinted like the rest of the card. */
+@Composable
+private fun ImportSourceLogo(source: ImportSourceUi?) {
+    val (icon, name) = when (source) {
+        ImportSourceUi.Spotify -> R.drawable.ic_spotify_mono to "Spotify"
+        ImportSourceUi.YouTubeMusic -> R.drawable.ic_ytmusic_mono to "YouTube Music"
+        ImportSourceUi.AppleMusic -> R.drawable.ic_applemusic_mono to "Apple Music"
+        null -> return
+    }
+    Icon(painterResource(icon), name, tint = ink(0.85f), modifier = Modifier.padding(end = 12.dp).size(26.dp))
 }
 
 @Composable

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- YouTube Music logo mark, converted from the supplied Youtube_Music_icon.svg (red disc, white ring, white play triangle). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="176"
+    android:viewportHeight="176">
+    <!-- Disc -->
+    <path
+        android:fillColor="#FF0000"
+        android:pathData="M88,0a88,88 0 0,1 0,176a88,88 0 0,1 0,-176z" />
+    <!-- Ring: two circles wound in opposite directions, so the band between them is filled and the middle is not -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M88,46c23.1,0 42,18.8 42,42s-18.8,42 -42,42s-42,-18.8 -42,-42S64.9,46 88,46 M88,42c-25.4,0 -46,20.6 -46,46s20.6,46 46,46s46,-20.6 46,-46S113.4,42 88,42z" />
+    <!-- Play triangle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M72,111L111,87L72,65z" />
+</vector>

@@ -148,6 +148,9 @@ import com.gamut.feature.search.ShazamSheet
 import com.gamut.feature.search.ShazamState
 import com.gamut.feature.search.ShazamViewModel
 import com.gamut.feature.search.TrackPlaylistOption
+import com.gamut.onboarding.importer.AppleMusicImportSheet
+import com.gamut.onboarding.importer.SpotifyImportSheet
+import com.gamut.onboarding.importer.YouTubeMusicImportSheet
 import com.gamut.settings.AboutScreen
 import com.gamut.settings.AppearanceScreen
 import com.gamut.settings.AppearanceStore
@@ -1230,6 +1233,11 @@ private fun HomeTabs(
     val favoriteIsrcs by libraryVm.favoriteIsrcs.collectAsState()
     val libraryPlaylists by libraryVm.playlists.collectAsState()
     val playlistInfo by libraryVm.playlistInfo.collectAsState()
+    val importVm = hiltViewModel<com.gamut.onboarding.importer.ImportProgressViewModel>()
+    val importProgress by importVm.progress.collectAsState()
+    var spotifySheetOpen by rememberSaveable { mutableStateOf(false) }
+    var youTubeSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var appleMusicSheetOpen by rememberSaveable { mutableStateOf(false) }
     val tracksByPlaylist by libraryVm.tracksByPlaylist.collectAsState()
     val playlistOptions =
         remember(libraryPlaylists, playlistInfo, tracksByPlaylist) {
@@ -1346,6 +1354,12 @@ private fun HomeTabs(
                             focusSearchTick++
                         },
                         barHeight = barHeight,
+                        onImportSpotify = { spotifySheetOpen = true },
+                        onImportYouTubeMusic = { youTubeSheetOpen = true },
+                        onImportAppleMusic = { appleMusicSheetOpen = true },
+                        importProgress = importProgress,
+                        onCancelImport = importVm::cancel,
+                        onDismissImport = importVm::dismiss,
                     )
                 }
             }
@@ -1390,6 +1404,42 @@ private fun HomeTabs(
                 }
             }
         }
+    }
+
+    // The Library's + menu opens these. Both hand over to the Library's own progress card once an import starts.
+    val importRunning = importProgress is com.gamut.feature.library.ImportProgressUi.Running
+    CoverTheme(palette) {
+        SpotifyImportSheet(
+            visible = spotifySheetOpen,
+            busy = importRunning,
+            onImportLinks = {
+                importVm.importSpotifyLinks(it)
+                spotifySheetOpen = false
+            },
+            onImportFiles = {
+                importVm.importSpotifyFiles(it)
+                spotifySheetOpen = false
+            },
+            onDismiss = { spotifySheetOpen = false },
+        )
+        YouTubeMusicImportSheet(
+            visible = youTubeSheetOpen,
+            busy = importRunning,
+            onImportLinks = {
+                importVm.importYouTubeLinks(it)
+                youTubeSheetOpen = false
+            },
+            onDismiss = { youTubeSheetOpen = false },
+        )
+        AppleMusicImportSheet(
+            visible = appleMusicSheetOpen,
+            busy = importRunning,
+            onImportLinks = {
+                importVm.importAppleMusicLinks(it)
+                appleMusicSheetOpen = false
+            },
+            onDismiss = { appleMusicSheetOpen = false },
+        )
     }
 }
 

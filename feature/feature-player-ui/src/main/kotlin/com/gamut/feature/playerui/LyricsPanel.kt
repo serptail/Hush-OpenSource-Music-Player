@@ -250,8 +250,9 @@ internal fun FullLyricsPanel(
     title: String,
     artist: String,
     lyricsState: LyricsState,
-    positionMs: () -> Long,
-    activeIndex: () -> Int,
+    flowLines: List<FlowLine>?,
+    trackKey: String,
+    playhead: FlowPlayhead,
     tint: CoverTint,
     isPlaying: Boolean,
     isLoading: Boolean,
@@ -262,7 +263,6 @@ internal fun FullLyricsPanel(
     onSeekFraction: (Float) -> Unit,
     onSeekToMs: (Long) -> Unit,
     onClose: () -> Unit,
-    onShare: () -> Unit,
     onMore: () -> Unit,
     onTogglePlay: () -> Unit,
     onPrevious: () -> Unit,
@@ -278,7 +278,7 @@ internal fun FullLyricsPanel(
             .pointerInput(Unit) { detectTapGestures { } },
     ) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-            Box(Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 12.dp)) {
+            Box(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 12.dp)) {
                 DepthIcon(
                     PhosphorIcons.Bold.CaretDown,
                     "Close lyrics",
@@ -300,6 +300,11 @@ internal fun FullLyricsPanel(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                DepthIcon(
+                    PhosphorIcons.Bold.DotsThreeVertical,
+                    "More",
+                    Modifier.align(Alignment.CenterEnd).tapTarget(onMore).padding(12.dp),
+                )
             }
 
             if (lyricsState is LyricsState.Loaded && !lyricsState.isSynced) {
@@ -311,6 +316,7 @@ internal fun FullLyricsPanel(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
                 )
             }
+            // The same flowing, word-swept lyrics as the Cover player, over this player's own colours.
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (lyricsState) {
                     is LyricsState.Loading -> {
@@ -319,15 +325,17 @@ internal fun FullLyricsPanel(
                         }
                     }
 
-                    is LyricsState.Loaded -> {
-                        PanelLyricsList(
-                            lines = lyricsState.lines,
+                    is LyricsState.Loaded -> if (flowLines != null) {
+                        FlowLyricsPanel(
+                            lines = flowLines,
                             isSynced = lyricsState.isSynced,
-                            activeIndex = activeIndex,
-                            positionMs = positionMs,
-                            soft = soft,
-                            onSeekToMs = onSeekToMs,
+                            trackKey = trackKey,
+                            playhead = playhead,
+                            isPlaying = isPlaying,
+                            onSeekToLine = onSeekToMs,
                             modifier = Modifier.fillMaxSize(),
+                            topPadding = 16.dp,
+                            gutter = 24.dp,
                         )
                     }
 
@@ -341,25 +349,20 @@ internal fun FullLyricsPanel(
                 }
             }
 
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                DepthIcon(PhosphorIcons.Bold.ShareNetwork, "Share", Modifier.bounceTap(onClick = onShare).padding(6.dp), size = 22.dp)
-                Spacer(Modifier.weight(1f))
-                DepthIcon(PhosphorIcons.Bold.DotsThreeVertical, "More", Modifier.bounceTap(onClick = onMore).padding(6.dp), size = 22.dp)
-            }
-            Column(Modifier.padding(horizontal = 24.dp)) {
-                SeekBar(progress = progress, onScrub = onScrub, onSeek = onSeekFraction)
+            // The same scrubber and transport as the Mesh player, so the panel reads as part of it.
+            Column(Modifier.padding(horizontal = 28.dp)) {
+                MeshScrubber(progress = progress, onScrub = onScrub, onSeekFraction = onSeekFraction)
                 TimeRow(labelPositionMs, durationMs)
             }
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 40.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                DepthIcon(PhosphorIcons.Bold.SkipBack, "Previous", Modifier.bounceTap(onClick = onPrevious).padding(8.dp), size = 30.dp)
-                PlayPauseButton(isPlaying = isPlaying, isLoading = isLoading, onClick = onTogglePlay, size = 64.dp)
-                DepthIcon(PhosphorIcons.Bold.SkipForward, "Next", Modifier.bounceTap(onClick = onNext).padding(8.dp), size = 30.dp)
-            }
-            Spacer(Modifier.height(8.dp))
+            MeshTransport(
+                isPlaying = isPlaying,
+                loading = isLoading,
+                onPrevious = onPrevious,
+                onTogglePlay = onTogglePlay,
+                onNext = onNext,
+                modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp),
+            )
+            Spacer(Modifier.height(12.dp))
         }
     }
 }

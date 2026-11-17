@@ -109,6 +109,7 @@ data class LyricsWord(
     val startMs: Long,
     val endMs: Long,
     val text: String,
+    val syllables: List<LyricsSyllable> = emptyList(),
 )
 
 @Immutable
@@ -117,6 +118,7 @@ data class LyricsLine(
     val text: String,
     val endMs: Long = timestampMs,
     val words: List<LyricsWord> = emptyList(),
+    val exact: Boolean = false,
 )
 
 private class FetchedLyrics(
@@ -166,6 +168,17 @@ object LyricsRepository {
         val key = cacheKey(track)
         val seconds = (durationMs / 1000).toInt()
         cache[key]?.let { hit -> if (hit.isSynced || cachedSeconds[key] == seconds) return hit }
+        // Word-timed (Apple TTML via BetterLyrics) first: it is the only source whose words carry real timings.
+        val timed = withContext(Dispatchers.IO) {
+            WordLyrics.fetch(cleanTitle(track.title), primaryArtist(track.artist), durationMs, track.album)
+        }
+        if (timed != null) {
+            Log.i(TAG, "\"${track.title}\": word-timed, ${timed.size} lines")
+            return LyricsState.Loaded(timed, isSynced = true).also {
+                cache[key] = it
+                cachedSeconds[key] = seconds
+            }
+        }
         val stored = withContext(Dispatchers.IO) { readStored(track) }
         if (stored != null && stored.isSynced) {
             cache[key] = stored
