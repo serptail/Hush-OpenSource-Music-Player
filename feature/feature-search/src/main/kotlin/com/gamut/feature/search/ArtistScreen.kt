@@ -74,6 +74,7 @@ import com.gamut.core.designsystem.ArtPlaceholder
 import com.gamut.core.designsystem.ArtistLine
 import com.gamut.core.designsystem.ArtistPickerSheet
 import com.gamut.core.designsystem.CoverTheme
+import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNavSettled
 import com.gamut.core.designsystem.NowPlayingBars
@@ -606,6 +607,7 @@ private fun TrackLine(
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (isPlaying) NowPlayingBars(color = accent, modifier = Modifier.padding(end = 8.dp))
+                ExplicitMark(track.isExplicit, ink(0.6f))
                 Text(
                     track.title,
                     color = if (isPlaying) accent else ink(),

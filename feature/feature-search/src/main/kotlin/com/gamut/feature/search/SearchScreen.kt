@@ -122,6 +122,7 @@ import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.ArtistLine
 import com.gamut.core.designsystem.ArtistPickerSheet
 import com.gamut.core.designsystem.CoverTheme
+import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.GamutBottomBarTabsHeight
 import com.gamut.core.designsystem.LocalAcrylicState
 import com.gamut.core.designsystem.LocalCoverPalette
@@ -1066,6 +1067,7 @@ private fun TrackResultRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (isPlaying) NowPlayingBars(color = accent, modifier = Modifier.padding(end = 8.dp))
                 val titleColor = if (isPlaying) accent else ink(0.85f)
+                ExplicitMark(track.isExplicit, ink(0.6f))
                 Text(
                     text = highlight(track.title, query, if (isPlaying) accent else TextPrimary),
                     style =

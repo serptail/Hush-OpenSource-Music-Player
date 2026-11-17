@@ -6,6 +6,7 @@ import com.gamut.core.model.TrackSource
 import com.gamut.core.network.AppleChartItem
 import com.gamut.core.network.AppleChartsApi
 import com.gamut.core.network.ItunesApi
+import com.gamut.core.network.explicitFromApple
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -143,7 +144,7 @@ class DiscoverRepository
                 if (stale != null) send(stale)
                 val (songs, rawAlbums, bb) =
                     coroutineScope {
-                        val songsJob = async { fetchList("apple top songs", CHART_TIMEOUT_MS) { apple.topSongs(100).feed.results } }
+                        val songsJob = async { fetchList("apple top songs", CHART_TIMEOUT_MS) { apple.topSongs(100).feed.results.withExplicitness() } }
                         val albumsJob =
                             async {
                                 fetchList("apple top albums", CHART_TIMEOUT_MS) {
@@ -413,6 +414,7 @@ class DiscoverRepository
                                 durationMs = it.trackTimeMillis ?: 0L,
                                 albumArtUrl = item.imageUrl,
                                 source = TrackSource.ITUNES,
+                                isExplicit = explicitFromApple(it.trackExplicitness),
                             )
                         }
                     if (tracks.isEmpty()) {
@@ -448,7 +450,27 @@ class DiscoverRepository
                 durationMs = 0L,
                 albumArtUrl = artworkUrl100.big(),
                 source = TrackSource.ITUNES,
+                isExplicit = contentAdvisoryRating?.equals("Explicit", ignoreCase = true),
             )
+
+        /**
+         * The chart feed doesn't reliably carry an explicit flag, so ask iTunes for the whole chart in a
+         * single lookup (comma-separated ids) and stamp each item. Any failure leaves items unchanged.
+         */
+        private suspend fun List<AppleChartItem>.withExplicitness(): List<AppleChartItem> {
+            val missing = filter { it.contentAdvisoryRating == null }
+            if (missing.isEmpty()) return this
+            val byId =
+                withTimeoutOrNull(EXPLICIT_LOOKUP_TIMEOUT_MS) {
+                    runCatching { itunes.lookupAll(missing.joinToString(",") { it.id }).results }.getOrNull()
+                }?.mapNotNull { row -> row.trackId?.let { it.toString() to row.trackExplicitness } }
+                    ?.toMap()
+                    .orEmpty()
+            return map { item ->
+                val rating = byId[item.id] ?: return@map item
+                item.copy(contentAdvisoryRating = if (explicitFromApple(rating) == true) "Explicit" else "Clean")
+            }
+        }
 
         private fun AppleChartItem.toDiscoverAlbum() =
             DiscoverItem(
@@ -461,6 +483,7 @@ class DiscoverRepository
         private companion object {
             const val TAG = "DiscoverRepo"
             const val CHART_TIMEOUT_MS = 10_000L
+            const val EXPLICIT_LOOKUP_TIMEOUT_MS = 4_000L
             const val ARTIST_IMAGES_TIMEOUT_MS = 20_000L
             const val ALBUM_TIMEOUT_MS = 10_000L
             const val FEED_TIMEOUT_MS = 25_000L

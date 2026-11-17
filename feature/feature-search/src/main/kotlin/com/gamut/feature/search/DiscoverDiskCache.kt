@@ -141,6 +141,7 @@ class DiscoverDiskCache
                 .put("albumArtUrl", albumArtUrl ?: JSONObject.NULL)
                 .put("source", source.name)
                 .put("youtubeVideoId", youtubeVideoId ?: JSONObject.NULL)
+                .put("isExplicit", isExplicit ?: JSONObject.NULL)
 
         private fun JSONObject.toItem() =
             DiscoverItem(
@@ -167,6 +168,7 @@ class DiscoverDiskCache
                 albumArtUrl = str("albumArtUrl"),
                 source = runCatching { TrackSource.valueOf(getString("source")) }.getOrDefault(TrackSource.ITUNES),
                 youtubeVideoId = str("youtubeVideoId"),
+                isExplicit = if (isNull("isExplicit")) null else optBoolean("isExplicit"),
             )
 
         private fun JSONObject.str(name: String): String? = if (isNull(name)) null else getString(name)
@@ -174,6 +176,6 @@ class DiscoverDiskCache
         private fun JSONArray.objects(): List<JSONObject> = List(length()) { getJSONObject(it) }
 
         private companion object {
-            const val VERSION = 4
+            const val VERSION = 5
         }
     }

@@ -8,6 +8,7 @@ import com.gamut.core.network.DeezerApi
 import com.gamut.core.network.DeezerArtistDto
 import com.gamut.core.network.DeezerPhotoArtist
 import com.gamut.core.network.ItunesApi
+import com.gamut.core.network.explicitFromApple
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -307,6 +308,7 @@ class AppleCatalogRepository
                 durationMs = trackTimeMillis ?: 0L,
                 albumArtUrl = artworkUrl100.big(),
                 source = TrackSource.ITUNES,
+                isExplicit = explicitFromApple(trackExplicitness),
             )
     }
 

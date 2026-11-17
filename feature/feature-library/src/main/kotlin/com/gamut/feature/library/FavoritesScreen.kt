@@ -112,6 +112,7 @@ import com.adamglin.phosphoricons.fill.Play
 import com.gamut.core.designsystem.ArtistLine
 import com.gamut.core.designsystem.ArtistPickerSheet
 import com.gamut.core.designsystem.CoverTheme
+import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.FocusLive
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
@@ -594,13 +595,17 @@ private fun WheelRow(
                     CoverImage(song.albumArtUrl.orEmpty(), Modifier.size(coverSize).softCover(WheelCoverShape))
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
-                    Text(
-                        song.title,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = if (playing) accent else ink(),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        ExplicitMark(song.isExplicit, ink(0.6f), size = 15.dp)
+                        Text(
+                            song.title,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = if (playing) accent else ink(),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                    }
                     ArtistLine(song.artist, song.album, onArtist, stackSize = 20.dp) { m ->
                         Text(
                             song.artist,
@@ -710,13 +715,17 @@ private fun TrackActionsSheet(
                     CoverImage(track.albumArtUrl.orEmpty(), Modifier.size(52.dp).softCover(RoundedCornerShape(12.dp)))
                 }
                 Column(Modifier.weight(1f).padding(start = 14.dp)) {
-                    Text(
-                        track.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = ink(),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        ExplicitMark(track.isExplicit, ink(0.6f))
+                        Text(
+                            track.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = ink(),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                    }
                     Text(
                         track.artist,
                         style = MaterialTheme.typography.bodyMedium,

@@ -69,6 +69,7 @@ import com.adamglin.phosphoricons.bold.TrashSimple
 import com.adamglin.phosphoricons.fill.Archive
 import com.adamglin.phosphoricons.fill.CheckCircle
 import com.gamut.core.designsystem.CoverPalette
+import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.focusRing
@@ -503,7 +504,17 @@ private fun ManageRow(
             CoverImage(track.albumArtUrl.orEmpty(), Modifier.size(46.dp).softCover(RoundedCornerShape(10.dp)))
         }
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-            Text(track.title, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ExplicitMark(track.isExplicit, ink(0.6f))
+                Text(
+                    track.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = ink(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
             Text(
                 track.artist,
                 style = MaterialTheme.typography.bodyMedium,

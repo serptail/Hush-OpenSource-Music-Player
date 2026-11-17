@@ -470,6 +470,7 @@ class FeedRepository
             durationMs = duration * 1_000L,
             albumArtUrl = art ?: album.coverBig ?: album.coverXl,
             source = TrackSource.ITUNES,
+            isExplicit = explicitLyrics,
         )
 
         private fun DeezerTrackDto.toTrackItem() =

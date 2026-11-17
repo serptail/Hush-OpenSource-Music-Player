@@ -45,6 +45,7 @@ import com.adamglin.phosphoricons.bold.CaretRight
 import com.adamglin.phosphoricons.bold.DotsThreeVertical
 import com.adamglin.phosphoricons.fill.Play
 import com.gamut.core.designsystem.ArtImage
+import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.TrackRowSkeleton
 import com.gamut.core.designsystem.ink
@@ -339,13 +340,17 @@ private fun HeroCard(
                 Text(label, style = MaterialTheme.typography.labelMedium, color = Color.White)
             }
             Spacer(Modifier.height(6.dp))
-            Text(
-                item.title,
-                style = MaterialTheme.typography.headlineMedium,
-                color = Color.White,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ExplicitMark(item.track?.isExplicit, Color.White.copy(alpha = 0.78f), size = 17.dp)
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
             Text(
                 item.subtitle,
                 style = MaterialTheme.typography.bodyMedium,
@@ -425,13 +430,17 @@ private fun AlbumCard(
             fallback = { ArtworkFallbackIcon() },
         )
         Spacer(Modifier.height(10.dp))
-        Text(
-            item.title,
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium),
-            color = if (isPlaying) MaterialTheme.colorScheme.primary else TextPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ExplicitMark(item.track?.isExplicit, TextSecondary, size = 11.dp)
+            Text(
+                item.title,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium),
+                color = if (isPlaying) MaterialTheme.colorScheme.primary else TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+        }
         Text(
             item.subtitle,
             style = MaterialTheme.typography.labelMedium,
@@ -500,13 +509,17 @@ private fun ChartRow(
             fallback = { ArtworkFallbackIcon() },
         )
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-            Text(
-                item.title,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Normal),
-                color = if (isPlaying) accent else ink(0.9f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ExplicitMark(item.track?.isExplicit, TextSecondary)
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Normal),
+                    color = if (isPlaying) accent else ink(0.9f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
             Text(
                 item.subtitle,
                 style = MaterialTheme.typography.bodyMedium,
@@ -658,13 +671,18 @@ private fun QuickPickTile(
             contentDescription = item.title,
             fallback = { ArtworkFallbackIcon() },
         )
+        val explicit = item.track?.isExplicit == true
+        if (explicit) {
+            Spacer(Modifier.width(10.dp))
+            ExplicitMark(true, TextSecondary, size = 12.dp)
+        }
         Text(
             item.title,
             style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium),
             color = if (isPlaying) accent else TextPrimary,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
+            modifier = Modifier.weight(1f).padding(start = if (explicit) 0.dp else 10.dp, end = 10.dp),
         )
         if (isPlaying) NowPlayingBars(color = accent, modifier = Modifier.padding(end = 10.dp))
     }

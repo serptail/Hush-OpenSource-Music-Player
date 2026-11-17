@@ -1146,6 +1146,7 @@ private fun NowPlayingStrip(
             MiniPlayerStrip(
                 title = shown.title,
                 artist = shown.artist,
+                explicit = shown.isExplicit,
                 artUrl = remember(shown.albumArtUrl) { artFor(shown.albumArtUrl, 200) },
                 isPlaying = isPlaying,
                 isLoading = isLoading,

@@ -19,7 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         RecentEntity::class,
         FollowEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class GamutDatabase : RoomDatabase() {
@@ -113,5 +113,12 @@ val MIGRATION_7_8 =
                 "CREATE TABLE IF NOT EXISTS artist_follows (artistKey TEXT NOT NULL, name TEXT NOT NULL, " +
                     "imageUrl TEXT, followedAtEpochMs INTEGER NOT NULL, PRIMARY KEY(artistKey))",
             )
+        }
+    }
+
+val MIGRATION_8_9 =
+    object : Migration(8, 9) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            database.execSQL("ALTER TABLE tracks ADD COLUMN isExplicit INTEGER")
         }
     }

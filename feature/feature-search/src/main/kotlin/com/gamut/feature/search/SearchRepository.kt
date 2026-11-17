@@ -9,6 +9,7 @@ import com.gamut.core.network.DeezerTrackDto
 import com.gamut.core.network.ItunesApi
 import com.gamut.core.network.ItunesTrackDto
 import com.gamut.core.network.YoutubeCandidate
+import com.gamut.core.network.explicitFromApple
 import com.gamut.core.network.YoutubeMusicSearchSource
 import com.gamut.core.network.isValidYoutubeVideoId
 import dagger.Binds
@@ -308,6 +309,7 @@ private fun ItunesTrackDto.toDomain(): Track {
         albumArtUrl = artworkUrl100?.upscaleArtwork(),
         source = TrackSource.ITUNES,
         youtubeVideoId = null,
+        isExplicit = explicitFromApple(trackExplicitness),
     )
 }
 
@@ -322,6 +324,7 @@ private fun DeezerTrackDto.toDomain(): Track =
         durationMs = duration * 1_000L,
         albumArtUrl = album.coverXl ?: album.coverBig,
         source = TrackSource.ITUNES,
+        isExplicit = explicitLyrics,
     )
 
 private fun String.upscaleArtwork(size: Int = 600): String = replace(Regex("/\\d+x\\d+bb\\."), "/${size}x${size}bb.")

@@ -16,6 +16,8 @@ data class Track(
     val albumArtUrl: String? = null,
     val source: TrackSource = TrackSource.ITUNES,
     val youtubeVideoId: String? = null,
+    /** Explicit-content flag from the catalogue; null when the source doesn't say (never assumed clean). */
+    val isExplicit: Boolean? = null,
 )
 
 @Serializable

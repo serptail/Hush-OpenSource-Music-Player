@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.gamut.core.designsystem.ArtImage
+import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.GamutMotion
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
@@ -143,7 +144,17 @@ private fun RecentRow(
             modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)),
         )
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
-            Text(track.title, style = MaterialTheme.typography.bodyLarge, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ExplicitMark(track.isExplicit, ink(0.6f))
+                Text(
+                    track.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = ink(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
             Text(
                 track.artist,
                 style = MaterialTheme.typography.bodyMedium,

@@ -60,6 +60,7 @@ import com.adamglin.phosphoricons.bold.UserCircle
 import com.adamglin.phosphoricons.fill.CheckCircle
 import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.CoverPalette
+import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
@@ -151,7 +152,17 @@ private fun TrackHeader(track: Track) {
             fallback = { Icon(PhosphorIcons.Bold.MusicNote, null, tint = ink(0.5f)) },
         )
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
-            Text(track.title, style = MaterialTheme.typography.titleMedium, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ExplicitMark(track.isExplicit, ink(0.6f))
+                Text(
+                    track.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = ink(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
             Text(
                 track.artist,
                 style = MaterialTheme.typography.bodyMedium,

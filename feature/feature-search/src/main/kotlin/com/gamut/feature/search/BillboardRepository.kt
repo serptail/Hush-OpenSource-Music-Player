@@ -182,6 +182,7 @@ class BillboardRepository
                 durationMs = duration * 1_000L,
                 albumArtUrl = album.coverXl ?: album.coverBig,
                 source = TrackSource.ITUNES,
+                isExplicit = explicitLyrics,
             )
 
         private companion object {

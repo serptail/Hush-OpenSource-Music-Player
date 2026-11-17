@@ -88,6 +88,7 @@ import com.gamut.core.designsystem.AdaptiveLayout
 import com.gamut.core.designsystem.ArtistLine
 import com.gamut.core.designsystem.ArtistPickerSheet
 import com.gamut.core.designsystem.CoverPalette
+import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.FocusLive
 import com.gamut.core.designsystem.GamutMotion
 import com.gamut.core.designsystem.LocalAppearance
@@ -453,6 +454,7 @@ fun PlayerScreen(
                             title = track?.title.orEmpty(),
                             artist = track?.artist.orEmpty(),
                             albumTitle = track?.album,
+                            explicit = track?.isExplicit,
                             onArtist = { name -> track?.let { t -> onGoToArtist(t.copy(artist = name)) } },
                             isFavorite = track?.isrc?.let { it in favoriteIsrcs } == true,
                             onToggleFavorite = { track?.let(onToggleFavorite) },
@@ -811,14 +813,19 @@ internal fun TrackHeader(
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     onMore: (() -> Unit)? = null,
+    explicit: Boolean? = null,
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f)) {
-            BouncingText(
-                text = title,
-                style = MaterialTheme.typography.headlineLarge.copy(letterSpacing = (-0.3).sp),
-                color = Color.White,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ExplicitMark(explicit, Color.White.copy(alpha = 0.65f), size = 18.dp)
+                BouncingText(
+                    text = title,
+                    style = MaterialTheme.typography.headlineLarge.copy(letterSpacing = (-0.3).sp),
+                    color = Color.White,
+                    modifier = Modifier.weight(1f),
+                )
+            }
             Spacer(Modifier.height(2.dp))
             ArtistLine(artist, albumTitle, onArtist, stackSize = 22.dp) { m ->
                 Box(m) {

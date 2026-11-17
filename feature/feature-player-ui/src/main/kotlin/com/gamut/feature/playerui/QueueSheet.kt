@@ -34,6 +34,7 @@ import coil.compose.AsyncImage
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.bold.X
+import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
@@ -84,14 +85,18 @@ internal fun QueueSheet(
                     )
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
-                        Text(
-                            text = track.title,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (isCurrent) accent else ink(),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            ExplicitMark(track.isExplicit, ink(0.6f))
+                            Text(
+                                text = track.title,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (isCurrent) accent else ink(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                        }
                         Text(
                             text = track.artist,
                             style = MaterialTheme.typography.bodyMedium,

@@ -72,6 +72,7 @@ import com.gamut.core.designsystem.ArtPlaceholder
 import com.gamut.core.designsystem.ArtistLine
 import com.gamut.core.designsystem.ArtistPickerSheet
 import com.gamut.core.designsystem.CoverTheme
+import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.HeroListSkeleton
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNavSettled
@@ -457,13 +458,17 @@ private fun AlbumTrackRow(
             }
         }
         Column(Modifier.weight(1f)) {
-            Text(
-                track.title,
-                color = if (isPlaying) accent else ink(),
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ExplicitMark(track.isExplicit, ink(0.55f))
+                Text(
+                    track.title,
+                    color = if (isPlaying) accent else ink(),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
             if (showArtist || splitArtists(track.artist).size > 1) {
                 ArtistLine(track.artist, track.album, onArtist, stackSize = 16.dp, modifier = Modifier.padding(vertical = 2.dp)) { m ->
                     Text(

@@ -70,6 +70,8 @@ data class ItunesTrackDto(
     val trackTimeMillis: Long? = null,
     val artworkUrl100: String? = null,
     val kind: String? = null,
+    /** iTunes: "explicit", "cleaned" or "notExplicit". */
+    val trackExplicitness: String? = null,
 )
 
 @Serializable
@@ -156,6 +158,7 @@ data class DeezerTrackDto(
     val isrc: String? = null,
     val artist: DeezerArtistDto,
     val album: DeezerAlbumDto = DeezerAlbumDto(),
+    @SerialName("explicit_lyrics") val explicitLyrics: Boolean? = null,
 )
 
 @Serializable
@@ -188,6 +191,8 @@ data class AppleChartItem(
     val artistId: String? = null,
     val artworkUrl100: String? = null,
     val url: String? = null,
+    /** "Explicit" when the chart feed (or our iTunes lookup) says so; null = unknown. */
+    val contentAdvisoryRating: String? = null,
 )
 
 @Serializable
@@ -225,6 +230,7 @@ data class AppleLookupItem(
     val artworkUrl100: String? = null,
     val releaseDate: String? = null,
     val kind: String? = null,
+    val trackExplicitness: String? = null,
 )
 
 @Serializable
@@ -242,3 +248,14 @@ data class BillboardSongDto(
     @SerialName("peak_position") val peak: Int = 0,
     @SerialName("weeks_on_chart") val weeks: Int = 0,
 )
+
+/**
+ * Apple reports `trackExplicitness` as "explicit", "cleaned" or "notExplicit".
+ * Only "explicit" earns the badge; a missing field stays null (unknown), not clean.
+ */
+fun explicitFromApple(trackExplicitness: String?): Boolean? =
+    when (trackExplicitness?.lowercase()) {
+        null -> null
+        "explicit" -> true
+        else -> false
+    }
