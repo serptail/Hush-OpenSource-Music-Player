@@ -88,17 +88,19 @@ import com.gamut.feature.playerui.components.PlayerSpinner
 import com.gamut.feature.playerui.components.bounceTap
 import com.gamut.feature.playerui.components.coverArtCandidates
 import com.gamut.feature.playerui.components.youtubeThumbCandidates
-import kotlin.math.floor
-import kotlin.math.roundToInt
-import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlin.math.floor
+import kotlin.math.roundToInt
+import kotlin.random.Random
 
 internal val MeshSleeveMaxWidth = 420.dp
 
 @Immutable
-internal class ArtworkMesh internal constructor(internal val image: ImageBitmap)
+internal class ArtworkMesh internal constructor(
+    internal val image: ImageBitmap,
+)
 
 @Composable
 internal fun rememberArtworkMesh(url: String?): ArtworkMesh? {
@@ -112,7 +114,13 @@ internal fun rememberArtworkMesh(url: String?): ArtworkMesh? {
         if (url == null || meshUrl == url) return@LaunchedEffect
         repeat(MESH_ATTEMPTS) { attempt ->
             if (attempt > 0) delay(MESH_RETRY_DELAY_MS)
-            val request = ImageRequest.Builder(context).data(url).size(MESH_PX).allowHardware(false).build()
+            val request =
+                ImageRequest
+                    .Builder(context)
+                    .data(url)
+                    .size(MESH_PX)
+                    .allowHardware(false)
+                    .build()
             val bitmap = (context.imageLoader.execute(request) as? SuccessResult)?.drawable?.toBitmapOrNull()
             if (bitmap != null) {
                 val found = withContext(Dispatchers.Default) { meshOf(bitmap, url.hashCode()) }
@@ -163,15 +171,20 @@ internal fun ArtworkMeshBackdrop(
             incoming?.let { drawMesh(it, seamY, alpha = fade.value) }
 
             drawRect(
-                brush = Brush.verticalGradient(
-                    listOf(Color.Black.copy(alpha = 0.08f), Color.Black.copy(alpha = 0.36f)),
-                ),
+                brush =
+                    Brush.verticalGradient(
+                        listOf(Color.Black.copy(alpha = 0.08f), Color.Black.copy(alpha = 0.36f)),
+                    ),
             )
         }
     }
 }
 
-private fun DrawScope.drawMesh(mesh: ArtworkMesh, seamY: Float, alpha: Float) {
+private fun DrawScope.drawMesh(
+    mesh: ArtworkMesh,
+    seamY: Float,
+    alpha: Float,
+) {
     if (alpha <= 0.001f) return
     val image = mesh.image
     val width = size.width.roundToInt()
@@ -206,15 +219,17 @@ internal class MeshSeam {
     var px by mutableFloatStateOf(0f)
         private set
 
-    val onHost: Modifier = Modifier.onGloballyPositioned {
-        host = it
-        update()
-    }
+    val onHost: Modifier =
+        Modifier.onGloballyPositioned {
+            host = it
+            update()
+        }
 
-    val onSleeve: Modifier = Modifier.onGloballyPositioned {
-        sleeve = it
-        update()
-    }
+    val onSleeve: Modifier =
+        Modifier.onGloballyPositioned {
+            sleeve = it
+            update()
+        }
 
     private fun update() {
         val root = host?.takeIf { it.isAttached } ?: return
@@ -225,9 +240,10 @@ internal class MeshSeam {
 
 private val FallbackBackdrop = Color(0xFF121212)
 
-private val meshCache = object : LinkedHashMap<String, ArtworkMesh>(0, 0.75f, true) {
-    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ArtworkMesh>?) = size > MESH_CACHE_ENTRIES
-}
+private val meshCache =
+    object : LinkedHashMap<String, ArtworkMesh>(0, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ArtworkMesh>?) = size > MESH_CACHE_ENTRIES
+    }
 
 private const val MESH_CACHE_ENTRIES = 64
 
@@ -250,7 +266,10 @@ private const val MESH_SAMPLE = 128
 private const val MESH_VIBRANCE = 1.12f
 private const val MESH_FLOOR = 0.045f
 
-private fun meshOf(source: Bitmap, seed: Int): ArtworkMesh? {
+private fun meshOf(
+    source: Bitmap,
+    seed: Int,
+): ArtworkMesh? {
     val width = source.width
     val height = source.height
     if (width < 1 || height < 1) return null
@@ -284,10 +303,11 @@ private fun meshOf(source: Bitmap, seed: Int): ArtworkMesh? {
         y += rowStep
     }
 
-    val grid = IntArray(cells) { cell ->
-        val n = count[cell].coerceAtLeast(1)
-        argb((red[cell] / n).toInt(), (green[cell] / n).toInt(), (blue[cell] / n).toInt()).lifted()
-    }
+    val grid =
+        IntArray(cells) { cell ->
+            val n = count[cell].coerceAtLeast(1)
+            argb((red[cell] / n).toInt(), (green[cell] / n).toInt(), (blue[cell] / n).toInt()).lifted()
+        }
     val texels = grid.rotatedBelowSeam(cols, rows, seed).resampled(cols, rows, MESH_TEX)
     val scratch = IntArray(texels.size)
     repeat(MESH_BLUR_PASSES) {
@@ -297,7 +317,11 @@ private fun meshOf(source: Bitmap, seed: Int): ArtworkMesh? {
     return ArtworkMesh(Bitmap.createBitmap(texels, MESH_TEX, MESH_TEX, Bitmap.Config.ARGB_8888).asImageBitmap())
 }
 
-private fun IntArray.rotatedBelowSeam(cols: Int, rows: Int, seed: Int): IntArray {
+private fun IntArray.rotatedBelowSeam(
+    cols: Int,
+    rows: Int,
+    seed: Int,
+): IntArray {
     if (rows <= 1) return this
     val random = Random(seed)
     val mirror = random.nextBoolean()
@@ -313,7 +337,11 @@ private fun IntArray.rotatedBelowSeam(cols: Int, rows: Int, seed: Int): IntArray
     return out
 }
 
-private fun IntArray.resampled(cols: Int, rows: Int, size: Int): IntArray {
+private fun IntArray.resampled(
+    cols: Int,
+    rows: Int,
+    size: Int,
+): IntArray {
     val out = IntArray(size * size)
     for (ty in 0 until size) {
         val fy = (ty + 0.5f) / size * rows - 0.5f
@@ -338,9 +366,14 @@ private fun smoothstep(t: Float): Float {
     return x * x * (3f - 2f * x)
 }
 
-private fun lerpArgb(from: Int, to: Int, t: Float): Int {
+private fun lerpArgb(
+    from: Int,
+    to: Int,
+    t: Float,
+): Int {
     if (t <= 0f) return from
     if (t >= 1f) return to
+
     fun channel(shift: Int): Int {
         val a = (from shr shift) and 0xFF
         val b = (to shr shift) and 0xFF
@@ -349,7 +382,11 @@ private fun lerpArgb(from: Int, to: Int, t: Float): Int {
     return argb(channel(16), channel(8), channel(0))
 }
 
-private fun argb(red: Int, green: Int, blue: Int): Int = (0xFF shl 24) or (red shl 16) or (green shl 8) or blue
+private fun argb(
+    red: Int,
+    green: Int,
+    blue: Int,
+): Int = (0xFF shl 24) or (red shl 16) or (green shl 8) or blue
 
 private fun Int.lifted(): Int {
     val hsl = FloatArray(3).also { ColorUtils.colorToHSL(this, it) }
@@ -358,7 +395,14 @@ private fun Int.lifted(): Int {
     return ColorUtils.HSLToColor(hsl)
 }
 
-private fun boxBlurPass(source: IntArray, target: IntArray, width: Int, height: Int, radius: Int, horizontal: Boolean) {
+private fun boxBlurPass(
+    source: IntArray,
+    target: IntArray,
+    width: Int,
+    height: Int,
+    radius: Int,
+    horizontal: Boolean,
+) {
     val major = if (horizontal) width else height
     val minor = if (horizontal) height else width
     val window = radius * 2 + 1
@@ -366,6 +410,7 @@ private fun boxBlurPass(source: IntArray, target: IntArray, width: Int, height: 
         var red = 0
         var green = 0
         var blue = 0
+
         fun pixel(at: Int): Int {
             val position = at.coerceIn(0, major - 1)
             return if (horizontal) source[fixed * width + position] else source[position * width + fixed]
@@ -393,7 +438,11 @@ private val SleeveShape = RoundedCornerShape(8.dp)
 private const val PausedSleeveScale = 0.86f
 
 @Composable
-internal fun MeshSleeve(url: String?, isPlaying: Boolean, modifier: Modifier = Modifier) {
+internal fun MeshSleeve(
+    url: String?,
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val scale by animateFloatAsState(
         targetValue = if (isPlaying) 1f else PausedSleeveScale,
         animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
@@ -411,15 +460,13 @@ internal fun MeshSleeve(url: String?, isPlaying: Boolean, modifier: Modifier = M
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-            }
-            .then(
+            }.then(
                 if (shownUrl != null) {
                     Modifier.shadow(10.dp, SleeveShape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
                 } else {
                     Modifier
                 },
-            )
-            .clip(SleeveShape),
+            ).clip(SleeveShape),
     ) {
         if (shownUrl == null) {
             ArtworkPlaceholder()
@@ -429,13 +476,13 @@ internal fun MeshSleeve(url: String?, isPlaying: Boolean, modifier: Modifier = M
                     model = shownUrl,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            scaleX = 1.3f
-                            scaleY = 1.3f
-                        }
-                        .then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(28.dp) else Modifier),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                scaleX = 1.3f
+                                scaleY = 1.3f
+                            }.then(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Modifier.blur(28.dp) else Modifier),
                 )
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
             }
@@ -508,10 +555,11 @@ internal fun MeshScrubber(
                         true
                     }
 
-                    else -> false
+                    else -> {
+                        false
+                    }
                 }
-            }
-            .focusable()
+            }.focusable()
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
@@ -521,8 +569,7 @@ internal fun MeshScrubber(
                     },
                     onTap = { at -> currentSeek((at.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)) },
                 )
-            }
-            .pointerInput(Unit) {
+            }.pointerInput(Unit) {
                 detectHorizontalDragGestures(
                     onDragStart = { at ->
                         dragging = true
@@ -544,8 +591,7 @@ internal fun MeshScrubber(
                         currentScrub(lastFraction)
                     },
                 )
-            }
-            .semantics { contentDescription = "Seek" },
+            }.semantics { contentDescription = "Seek" },
     ) {
         Canvas(Modifier.fillMaxSize()) {
             val h = thickness.toPx()

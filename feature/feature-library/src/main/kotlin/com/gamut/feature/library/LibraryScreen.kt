@@ -206,7 +206,12 @@ fun LibraryScreen(
                         )
                         Box {
                             Box(Modifier.size(44.dp).pressScale(onClick = { addMenuOpen = true }), contentAlignment = Alignment.Center) {
-                                Icon(PhosphorIcons.Bold.Plus, "Create or import a playlist", tint = ink(0.85f), modifier = Modifier.size(24.dp))
+                                Icon(
+                                    PhosphorIcons.Bold.Plus,
+                                    "Create or import a playlist",
+                                    tint = ink(0.85f),
+                                    modifier = Modifier.size(24.dp),
+                                )
                             }
                             AddMenu(
                                 expanded = addMenuOpen,
@@ -458,7 +463,11 @@ private fun ImportProgressCard(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier.fillMaxWidth().clip(PanelShape).background(ink(0.08f)).padding(horizontal = 16.dp, vertical = 14.dp),
+        modifier
+            .fillMaxWidth()
+            .clip(PanelShape)
+            .background(ink(0.08f))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
         when (state) {
             is ImportProgressUi.Running -> {
@@ -490,7 +499,13 @@ private fun ImportProgressCard(
                 if (state.total > 0) {
                     val fraction = (state.done.toFloat() / state.total).coerceIn(0f, 1f)
                     val bar by animateFloatAsState(fraction, tween(300), label = "libraryImportBar")
-                    Box(Modifier.fillMaxWidth().height(6.dp).clip(CircleShape).background(ink(0.12f))) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(CircleShape)
+                            .background(ink(0.12f)),
+                    ) {
                         Box(Modifier.fillMaxWidth(bar.coerceAtLeast(0.02f)).fillMaxHeight().background(ink(0.85f), CircleShape))
                     }
                 } else {
@@ -504,6 +519,7 @@ private fun ImportProgressCard(
                     TextButton(onClick = onCancel) { Text("Cancel", color = TextPrimary) }
                 }
             }
+
             is ImportProgressUi.Finished -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     ImportSourceLogo(state.source)
@@ -514,7 +530,12 @@ private fun ImportProgressCard(
                             color = if (state.isError) MaterialTheme.colorScheme.error else TextPrimary,
                         )
                         state.detail?.let {
-                            Text(it, style = MaterialTheme.typography.bodySmall, color = TextSecondary, modifier = Modifier.padding(top = 2.dp))
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
                         }
                     }
                     TextButton(onClick = onDismiss) { Text("Dismiss", color = TextPrimary) }
@@ -551,16 +572,20 @@ private fun AddMenu(
     ) {
         AnimatedVisibility(
             visibleState = visibleState,
-            enter = fadeIn(tween(120)) + scaleIn(
-                initialScale = 0.6f,
-                transformOrigin = TransformOrigin(1f, 0f),
-                animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow),
-            ),
-            exit = fadeOut(tween(90)) + scaleOut(
-                targetScale = 0.85f,
-                transformOrigin = TransformOrigin(1f, 0f),
-                animationSpec = tween(120),
-            ),
+            enter =
+                fadeIn(tween(120)) +
+                    scaleIn(
+                        initialScale = 0.6f,
+                        transformOrigin = TransformOrigin(1f, 0f),
+                        animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow),
+                    ),
+            exit =
+                fadeOut(tween(90)) +
+                    scaleOut(
+                        targetScale = 0.85f,
+                        transformOrigin = TransformOrigin(1f, 0f),
+                        animationSpec = tween(120),
+                    ),
         ) {
             Column(
                 Modifier
@@ -572,16 +597,28 @@ private fun AddMenu(
                     .widthIn(min = 200.dp)
                     .padding(vertical = 8.dp),
             ) {
-                AddMenuItem("Create playlist", onClick = { onDismiss(); onCreatePlaylist() }) {
+                AddMenuItem("Create playlist", onClick = {
+                    onDismiss()
+                    onCreatePlaylist()
+                }) {
                     Icon(PhosphorIcons.Bold.Plus, null, tint = ink(0.85f), modifier = Modifier.size(22.dp))
                 }
-                AddMenuItem("Import from Spotify", onClick = { onDismiss(); onImportSpotify() }) {
+                AddMenuItem("Import from Spotify", onClick = {
+                    onDismiss()
+                    onImportSpotify()
+                }) {
                     Icon(painterResource(R.drawable.ic_spotify_mono), null, tint = ink(0.85f), modifier = Modifier.size(22.dp))
                 }
-                AddMenuItem("Import from YouTube Music", onClick = { onDismiss(); onImportYouTubeMusic() }) {
+                AddMenuItem("Import from YouTube Music", onClick = {
+                    onDismiss()
+                    onImportYouTubeMusic()
+                }) {
                     Icon(painterResource(R.drawable.ic_ytmusic_mono), null, tint = ink(0.85f), modifier = Modifier.size(22.dp))
                 }
-                AddMenuItem("Import from Apple Music", onClick = { onDismiss(); onImportAppleMusic() }) {
+                AddMenuItem("Import from Apple Music", onClick = {
+                    onDismiss()
+                    onImportAppleMusic()
+                }) {
                     Icon(painterResource(R.drawable.ic_applemusic_mono), null, tint = ink(0.85f), modifier = Modifier.size(22.dp))
                 }
             }
@@ -616,12 +653,13 @@ private fun AddMenuItem(
 
 @Composable
 private fun ImportSourceLogo(source: ImportSourceUi?) {
-    val (icon, name) = when (source) {
-        ImportSourceUi.Spotify -> R.drawable.ic_spotify_mono to "Spotify"
-        ImportSourceUi.YouTubeMusic -> R.drawable.ic_ytmusic_mono to "YouTube Music"
-        ImportSourceUi.AppleMusic -> R.drawable.ic_applemusic_mono to "Apple Music"
-        null -> return
-    }
+    val (icon, name) =
+        when (source) {
+            ImportSourceUi.Spotify -> R.drawable.ic_spotify_mono to "Spotify"
+            ImportSourceUi.YouTubeMusic -> R.drawable.ic_ytmusic_mono to "YouTube Music"
+            ImportSourceUi.AppleMusic -> R.drawable.ic_applemusic_mono to "Apple Music"
+            null -> return
+        }
     Icon(painterResource(icon), name, tint = ink(0.85f), modifier = Modifier.padding(end = 12.dp).size(26.dp))
 }
 

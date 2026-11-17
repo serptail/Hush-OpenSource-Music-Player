@@ -76,7 +76,10 @@ internal data class FlowLine(
         maxOf(endMs, settled, grown)
     }
 
-    fun wordLift(index: Int, positionMs: Long): Float {
+    fun wordLift(
+        index: Int,
+        positionMs: Long,
+    ): Float {
         val word = words.getOrNull(index) ?: return 0f
         val riseMs = (word.endMs - word.startMs).toFloat().coerceIn(RISE_MIN_MS, RISE_MS)
         val rising = ((positionMs - word.startMs) / riseMs).coerceIn(0f, 1f)
@@ -109,7 +112,10 @@ internal data class FlowLine(
         return text.length.toFloat()
     }
 
-    fun wordFall(index: Int, positionMs: Long): Float {
+    fun wordFall(
+        index: Int,
+        positionMs: Long,
+    ): Float {
         val word = words.getOrNull(index) ?: return 0f
         val falling = (1f - (positionMs - word.endMs) / RISE_MS).coerceIn(0f, 1f)
         return liftHeight(word) * smooth(falling)
@@ -123,9 +129,10 @@ internal data class FlowLine(
 
     fun growingAt(index: Int): GrowingWord? = growingWords.firstOrNull { it.index == index }
 
-    fun isGrowing(positionMs: Long): Boolean = growingWords.any {
-        positionMs >= it.startMs && positionMs <= it.restsAtMs
-    }
+    fun isGrowing(positionMs: Long): Boolean =
+        growingWords.any {
+            positionMs >= it.startMs && positionMs <= it.restsAtMs
+        }
 }
 
 internal class GrowingWord(
@@ -145,16 +152,18 @@ internal class GrowingWord(
 
     init {
         val held = (endMs - startMs).coerceAtLeast(1L).toFloat()
-        val earned = ((held - GROW_RAMP_MIN_MS) / (GROW_RAMP_MAX_MS - GROW_RAMP_MIN_MS))
-            .coerceIn(0f, 1f)
-            .let { it * it * it }
+        val earned =
+            ((held - GROW_RAMP_MIN_MS) / (GROW_RAMP_MAX_MS - GROW_RAMP_MIN_MS))
+                .coerceIn(0f, 1f)
+                .let { it * it * it }
         val decay = decayRate(chars, held)
         val bloomPace = minOf(GROW_BLOOM_PACE_MAX, held / GROW_BLOOM_PACE_MS)
-        val bloomSpread = when {
-            chars <= 3 -> GROW_BLOOM_SHORT
-            chars >= 6 -> GROW_BLOOM_LONG
-            else -> 1f
-        }
+        val bloomSpread =
+            when {
+                chars <= 3 -> GROW_BLOOM_SHORT
+                chars >= 6 -> GROW_BLOOM_LONG
+                else -> 1f
+            }
         val base = if (chars <= 3) GROW_BASE_SHORT else GROW_BASE_LONG
         val liftPace = (held / GROW_LIFT_PACE_MS).coerceIn(GROW_LIFT_FLOOR, 1f)
 
@@ -173,7 +182,11 @@ internal class GrowingWord(
         restsAtMs = startMs + (held * last).toLong()
     }
 
-    fun sampleInto(charIndex: Int, positionMs: Long, into: CharGrowth) {
+    fun sampleInto(
+        charIndex: Int,
+        positionMs: Long,
+        into: CharGrowth,
+    ) {
         val span = (endMs - startMs).coerceAtLeast(1L).toFloat()
         val elapsed = positionMs - startMs - charIndex * span * GROW_STAGGER
         val phase = (elapsed / (span * GROW_SPAN)).coerceIn(0f, 1f)
@@ -251,7 +264,10 @@ private fun FlowWord.canGrow(): Boolean {
     }
 }
 
-private fun decayRate(length: Int, heldMs: Float): Float {
+private fun decayRate(
+    length: Int,
+    heldMs: Float,
+): Float {
     val long = length > GROW_DECAY_LONG_CHARS
     val quick = heldMs < GROW_DECAY_QUICK_MS
     if (!long && !quick) return 0f
@@ -340,7 +356,10 @@ internal fun List<FlowLine>.withInstrumentalBreaks(): List<FlowLine> {
 
 private const val ACTIVE_LOOKBACK = 3
 
-internal fun activeFlowRows(lines: List<FlowLine>, positionMs: Long): List<Int> {
+internal fun activeFlowRows(
+    lines: List<FlowLine>,
+    positionMs: Long,
+): List<Int> {
     var lo = 0
     var hi = lines.lastIndex
     var cursor = -1

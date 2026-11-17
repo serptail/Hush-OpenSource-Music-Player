@@ -168,9 +168,10 @@ object LyricsRepository {
         val key = cacheKey(track)
         val seconds = (durationMs / 1000).toInt()
         cache[key]?.let { hit -> if (hit.isSynced || cachedSeconds[key] == seconds) return hit }
-        val timed = withContext(Dispatchers.IO) {
-            WordLyrics.fetch(cleanTitle(track.title), primaryArtist(track.artist), durationMs, track.album)
-        }
+        val timed =
+            withContext(Dispatchers.IO) {
+                WordLyrics.fetch(cleanTitle(track.title), primaryArtist(track.artist), durationMs, track.album)
+            }
         if (timed != null) {
             Log.i(TAG, "\"${track.title}\": word-timed, ${timed.size} lines")
             return LyricsState.Loaded(timed, isSynced = true).also {

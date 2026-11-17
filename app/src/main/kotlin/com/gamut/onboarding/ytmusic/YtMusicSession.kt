@@ -13,7 +13,8 @@ class YtSession(
     override fun toString() = "YtSession(redacted)"
 
     companion object {
-        fun anonymous() = YtSession(cookie = "", dataSyncId = null, pageId = null, authUser = null, visitorData = null, clientVersion = null)
+        fun anonymous() =
+            YtSession(cookie = "", dataSyncId = null, pageId = null, authUser = null, visitorData = null, clientVersion = null)
     }
 }
 
@@ -23,11 +24,14 @@ object YtSigning {
     fun hasApiSid(cookieHeader: String): Boolean = sapisidFrom(cookieHeader) != null
 
     fun sapisidFrom(cookieHeader: String): String? {
-        val jar = cookieHeader.split(';').mapNotNull { entry ->
-            val name = entry.substringBefore('=').trim()
-            val value = entry.substringAfter('=', "").trim()
-            if (name.isEmpty() || value.isEmpty()) null else name to value
-        }.toMap()
+        val jar =
+            cookieHeader
+                .split(';')
+                .mapNotNull { entry ->
+                    val name = entry.substringBefore('=').trim()
+                    val value = entry.substringAfter('=', "").trim()
+                    if (name.isEmpty() || value.isEmpty()) null else name to value
+                }.toMap()
         return SAPISID_NAMES.firstNotNullOfOrNull { jar[it] }
     }
 
@@ -37,10 +41,16 @@ object YtSigning {
         return value.substringAfter("||").takeIf { it.isNotBlank() } ?: value.substringBefore("||").takeIf { it.isNotBlank() }
     }
 
-    fun sapisidHash(sapisid: String, origin: String, nowSeconds: Long = System.currentTimeMillis() / 1000): String {
-        val digest = MessageDigest.getInstance("SHA-1")
-            .digest("$nowSeconds $sapisid $origin".toByteArray())
-            .joinToString("") { "%02x".format(it) }
+    fun sapisidHash(
+        sapisid: String,
+        origin: String,
+        nowSeconds: Long = System.currentTimeMillis() / 1000,
+    ): String {
+        val digest =
+            MessageDigest
+                .getInstance("SHA-1")
+                .digest("$nowSeconds $sapisid $origin".toByteArray())
+                .joinToString("") { "%02x".format(it) }
         return "SAPISIDHASH ${nowSeconds}_$digest"
     }
 }

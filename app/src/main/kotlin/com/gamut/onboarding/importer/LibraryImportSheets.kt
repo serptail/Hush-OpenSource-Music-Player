@@ -68,9 +68,10 @@ fun SpotifyImportSheet(
     onDismiss: () -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
-    val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) onImportFiles(uris)
-    }
+    val files =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            if (uris.isNotEmpty()) onImportFiles(uris)
+        }
     LinkImportSheet(
         visible = visible,
         busy = busy,
@@ -215,7 +216,11 @@ private fun LinkImportSheet(
 }
 
 @Composable
-private fun LinkField(value: String, onChange: (String) -> Unit, placeholder: String) {
+private fun LinkField(
+    value: String,
+    onChange: (String) -> Unit,
+    placeholder: String,
+) {
     val shape = RoundedCornerShape(18.dp)
     Box(
         Modifier
@@ -241,7 +246,11 @@ private fun LinkField(value: String, onChange: (String) -> Unit, placeholder: St
 }
 
 @Composable
-private fun ImportButton(label: String, enabled: Boolean, onClick: () -> Unit) {
+private fun ImportButton(
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
     val onPrimary = if (LocalCoverPalette.current.isLight) Color.White else Color.Black
     Box(
         Modifier
@@ -262,22 +271,29 @@ private fun ImportButton(label: String, enabled: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun Pill(label: String, onClick: () -> Unit) {
+private fun Pill(
+    label: String,
+    onClick: () -> Unit,
+) {
     Text(
         label,
         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
         color = ink(0.9f),
         maxLines = 1,
-        modifier = Modifier
-            .clip(CircleShape)
-            .background(ink(0.12f))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 9.dp),
+        modifier =
+            Modifier
+                .clip(CircleShape)
+                .background(ink(0.12f))
+                .clickable(onClick = onClick)
+                .padding(horizontal = 18.dp, vertical = 9.dp),
     )
 }
 
 @Composable
-private fun TextLink(label: String, onClick: () -> Unit) {
+private fun TextLink(
+    label: String,
+    onClick: () -> Unit,
+) {
     Text(
         label,
         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),

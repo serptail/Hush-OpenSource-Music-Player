@@ -4,83 +4,104 @@ import com.gamut.onboarding.importer.ImportLibrary
 import com.gamut.onboarding.importer.ImportPlaylist
 import com.gamut.onboarding.importer.ImportTrack
 import com.gamut.onboarding.importer.MiniJson
-import java.io.IOException
-import java.io.InterruptedIOException
-import java.net.URLEncoder
-import java.util.Locale
-import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.ensureActive
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.io.IOException
+import java.io.InterruptedIOException
+import java.net.URLEncoder
+import java.util.Locale
+import kotlin.coroutines.coroutineContext
 
-class YtAuthException(message: String) : IOException(message)
+class YtAuthException(
+    message: String,
+) : IOException(message)
 
-class YtMusicClient(private val http: OkHttpClient, private val session: YtSession) {
+class YtMusicClient(
+    private val http: OkHttpClient,
+    private val session: YtSession,
+) {
     @Volatile private var visitorData: String? = session.visitorData
 
     fun browse(browseId: String): Any? = post("browse", emptyMap()) { put("browseId", browseId) }
 
-    fun continuation(token: String): Any? = post(
-        "browse",
-        mapOf("ctoken" to token, "continuation" to token, "type" to "next"),
-    ) { put("continuation", token) }
+    fun continuation(token: String): Any? =
+        post(
+            "browse",
+            mapOf("ctoken" to token, "continuation" to token, "type" to "next"),
+        ) { put("continuation", token) }
 
-    private fun post(endpoint: String, query: Map<String, String>, extras: JSONObject.() -> Unit): Any? {
-        val params = buildString {
-            append("?prettyPrint=false&hl=en")
-            query.forEach { (key, value) -> append('&').append(key).append('=').append(URLEncoder.encode(value, "UTF-8")) }
-        }
-        val version = session.clientVersion ?: FALLBACK_VERSION
-        val body = JSONObject().apply {
-            put(
-                "context",
-                JSONObject()
-                    .put(
-                        "client",
-                        JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", version).put("hl", "en")
-                            .put("gl", Locale.getDefault().country.ifEmpty { "US" })
-                            .also { client -> visitorData?.let { client.put("visitorData", it) } },
-                    )
-                    .put(
-                        "user",
-                        JSONObject().put("lockedSafetyMode", false)
-                            .also { user -> session.dataSyncId?.let { user.put("onBehalfOfUser", it) } },
-                    )
-                    .put("request", JSONObject().put("useSsl", true)),
-            )
-            extras()
-        }.toString().toRequestBody(JSON)
-
-        val request = Request.Builder()
-            .url("$BASE/$endpoint$params")
-            .post(body)
-            .header("User-Agent", USER_AGENT)
-            .header("Accept-Language", "en-US,en;q=0.9")
-            .header("X-Origin", ORIGIN)
-            .header("Origin", ORIGIN)
-            .header("Referer", "$ORIGIN/")
-            .header("X-YouTube-Client-Name", "67")
-            .header("X-YouTube-Client-Version", version)
-            .apply {
-                if (session.cookie.isNotBlank()) {
-                    header("Cookie", session.cookie)
-                    header("X-Goog-AuthUser", session.authUser ?: "0")
-                }
-                visitorData?.let { header("X-Goog-Visitor-Id", it) }
-                session.pageId?.let { header("X-Goog-PageId", it) }
-                YtSigning.sapisidFrom(session.cookie)?.let { header("Authorization", YtSigning.sapisidHash(it, ORIGIN)) }
+    private fun post(
+        endpoint: String,
+        query: Map<String, String>,
+        extras: JSONObject.() -> Unit,
+    ): Any? {
+        val params =
+            buildString {
+                append("?prettyPrint=false&hl=en")
+                query.forEach { (key, value) -> append('&').append(key).append('=').append(URLEncoder.encode(value, "UTF-8")) }
             }
-            .build()
+        val version = session.clientVersion ?: FALLBACK_VERSION
+        val body =
+            JSONObject()
+                .apply {
+                    put(
+                        "context",
+                        JSONObject()
+                            .put(
+                                "client",
+                                JSONObject()
+                                    .put("clientName", "WEB_REMIX")
+                                    .put("clientVersion", version)
+                                    .put("hl", "en")
+                                    .put("gl", Locale.getDefault().country.ifEmpty { "US" })
+                                    .also { client -> visitorData?.let { client.put("visitorData", it) } },
+                            ).put(
+                                "user",
+                                JSONObject()
+                                    .put("lockedSafetyMode", false)
+                                    .also { user -> session.dataSyncId?.let { user.put("onBehalfOfUser", it) } },
+                            ).put("request", JSONObject().put("useSsl", true)),
+                    )
+                    extras()
+                }.toString()
+                .toRequestBody(JSON)
+
+        val request =
+            Request
+                .Builder()
+                .url("$BASE/$endpoint$params")
+                .post(body)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .header("X-Origin", ORIGIN)
+                .header("Origin", ORIGIN)
+                .header("Referer", "$ORIGIN/")
+                .header("X-YouTube-Client-Name", "67")
+                .header("X-YouTube-Client-Version", version)
+                .apply {
+                    if (session.cookie.isNotBlank()) {
+                        header("Cookie", session.cookie)
+                        header("X-Goog-AuthUser", session.authUser ?: "0")
+                    }
+                    visitorData?.let { header("X-Goog-Visitor-Id", it) }
+                    session.pageId?.let { header("X-Goog-PageId", it) }
+                    YtSigning.sapisidFrom(session.cookie)?.let { header("Authorization", YtSigning.sapisidHash(it, ORIGIN)) }
+                }.build()
 
         var last: IOException? = null
         repeat(ATTEMPTS) { attempt ->
             if (attempt > 0) Thread.sleep(BACKOFF_MS shl (attempt - 1))
             try {
                 http.newCall(request).execute().use { response ->
-                    if (response.code == 401 || response.code == 403) throw YtAuthException("YouTube Music rejected the sign-in (${response.code})")
+                    if (response.code == 401 ||
+                        response.code == 403
+                    ) {
+                        throw YtAuthException("YouTube Music rejected the sign-in (${response.code})")
+                    }
                     if (!response.isSuccessful) throw IOException("YouTube Music answered ${response.code}")
                     val parsed = MiniJson.parse(response.body?.string().orEmpty())
                     if (visitorData == null) {
@@ -111,41 +132,46 @@ class YtMusicClient(private val http: OkHttpClient, private val session: YtSessi
     }
 }
 
-class YtMusicLibraryReader(private val client: YtMusicClient) {
+class YtMusicLibraryReader(
+    private val client: YtMusicClient,
+) {
     suspend fun read(onProgress: (String) -> Unit): ImportLibrary {
         var failure: IOException? = null
 
         onProgress("Liked songs")
-        val liked = try {
-            tracksOf("VLLM")
-        } catch (e: YtAuthException) {
-            throw e
-        } catch (e: IOException) {
-            failure = e
-            emptyList()
-        }
+        val liked =
+            try {
+                tracksOf("VLLM")
+            } catch (e: YtAuthException) {
+                throw e
+            } catch (e: IOException) {
+                failure = e
+                emptyList()
+            }
 
-        val refs = try {
-            playlistRefs()
-        } catch (e: YtAuthException) {
-            if (liked.isEmpty()) throw e
-            emptyList()
-        } catch (e: IOException) {
-            failure = failure ?: e
-            emptyList()
-        }
+        val refs =
+            try {
+                playlistRefs()
+            } catch (e: YtAuthException) {
+                if (liked.isEmpty()) throw e
+                emptyList()
+            } catch (e: IOException) {
+                failure = failure ?: e
+                emptyList()
+            }
 
         val playlists = ArrayList<ImportPlaylist>()
         for (ref in refs.take(MAX_PLAYLISTS)) {
             onProgress(ref.title)
-            val tracks = try {
-                tracksOf(ref.browseId)
-            } catch (e: YtAuthException) {
-                if (liked.isEmpty() && playlists.isEmpty()) throw e
-                break
-            } catch (_: IOException) {
-                continue
-            }
+            val tracks =
+                try {
+                    tracksOf(ref.browseId)
+                } catch (e: YtAuthException) {
+                    if (liked.isEmpty() && playlists.isEmpty()) throw e
+                    break
+                } catch (_: IOException) {
+                    continue
+                }
             if (tracks.isNotEmpty()) playlists += ImportPlaylist(ref.title, tracks)
         }
 
@@ -174,11 +200,12 @@ class YtMusicLibraryReader(private val client: YtMusicClient) {
             val token = page.continuation ?: break
             if (!seen.add(token)) break
             coroutineContext.ensureActive()
-            page = try {
-                YtMusicParser.parseTrackPage(client.continuation(token))
-            } catch (_: IOException) {
-                break
-            }
+            page =
+                try {
+                    YtMusicParser.parseTrackPage(client.continuation(token))
+                } catch (_: IOException) {
+                    break
+                }
             out += page.tracks
             pages++
         }
@@ -196,11 +223,12 @@ class YtMusicLibraryReader(private val client: YtMusicClient) {
             val token = page.continuation ?: break
             if (!seen.add(token)) break
             coroutineContext.ensureActive()
-            page = try {
-                YtMusicParser.parsePlaylistPage(client.continuation(token))
-            } catch (_: IOException) {
-                break
-            }
+            page =
+                try {
+                    YtMusicParser.parsePlaylistPage(client.continuation(token))
+                } catch (_: IOException) {
+                    break
+                }
             page.playlists.forEach { out.putIfAbsent(it.browseId, it) }
             pages++
         }

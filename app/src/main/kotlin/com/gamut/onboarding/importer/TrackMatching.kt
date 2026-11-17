@@ -6,28 +6,42 @@ object TrackMatching {
     const val THRESHOLD = 0.72
 
     fun query(track: ImportTrack): String {
-        val artist = track.artist.split(',').firstOrNull().orEmpty().trim()
+        val artist =
+            track.artist
+                .split(',')
+                .firstOrNull()
+                .orEmpty()
+                .trim()
         return "${cleanTitle(track.title)} $artist".trim().take(120)
     }
 
-    fun score(wanted: ImportTrack, title: String, artist: String, durationMs: Long): Double {
+    fun score(
+        wanted: ImportTrack,
+        title: String,
+        artist: String,
+        durationMs: Long,
+    ): Double {
         val wantedTitle = tokens(wanted.title)
         val foundTitle = tokens(title)
         if (wantedTitle.isEmpty() || foundTitle.isEmpty()) return 0.0
 
         val titleScore = jaccard(wantedTitle, foundTitle)
         val artistScore = artistScore(wanted.artist, artist)
-        val durationScore = when {
-            wanted.durationMs == null || durationMs <= 0 -> 0.5
-            else -> {
-                val diff = kotlin.math.abs(wanted.durationMs - durationMs)
-                when {
-                    diff <= 3_000 -> 1.0
-                    diff <= 8_000 -> 0.5
-                    else -> 0.0
+        val durationScore =
+            when {
+                wanted.durationMs == null || durationMs <= 0 -> {
+                    0.5
+                }
+
+                else -> {
+                    val diff = kotlin.math.abs(wanted.durationMs - durationMs)
+                    when {
+                        diff <= 3_000 -> 1.0
+                        diff <= 8_000 -> 0.5
+                        else -> 0.0
+                    }
                 }
             }
-        }
         val unwanted = (foundTitle intersect TextMatch.DERIVATIVE) - wantedTitle
         val penalty = if (unwanted.isNotEmpty()) 0.4 else 0.0
 
@@ -40,13 +54,17 @@ object TrackMatching {
         title: (T) -> String,
         artist: (T) -> String,
         durationMs: (T) -> Long,
-    ): T? = candidates
-        .map { it to score(wanted, title(it), artist(it), durationMs(it)) }
-        .filter { it.second >= THRESHOLD }
-        .maxByOrNull { it.second }
-        ?.first
+    ): T? =
+        candidates
+            .map { it to score(wanted, title(it), artist(it), durationMs(it)) }
+            .filter { it.second >= THRESHOLD }
+            .maxByOrNull { it.second }
+            ?.first
 
-    private fun artistScore(wanted: String, found: String): Double {
+    private fun artistScore(
+        wanted: String,
+        found: String,
+    ): Double {
         val wantedFirst = TextMatch.primaryArtist(wanted.split(',').firstOrNull().orEmpty())
         val foundNorm = TextMatch.norm(found)
         if (wantedFirst.isEmpty()) return 0.5
@@ -58,12 +76,21 @@ object TrackMatching {
 
     private fun tokens(title: String): Set<String> = TextMatch.toks(cleanTitle(title))
 
-    private fun cleanTitle(title: String): String = title
-        .replace(Regex("""\s*[(\[]\s*(feat|ft|with)\b[^)\]]*[)\]]""", RegexOption.IGNORE_CASE), "")
-        .replace(Regex("""\s+-\s+(\d{4}\s+)?(remaster(ed)?|single version|radio edit|mono|stereo|deluxe|bonus track)\b.*$""", RegexOption.IGNORE_CASE), "")
-        .trim()
+    private fun cleanTitle(title: String): String =
+        title
+            .replace(Regex("""\s*[(\[]\s*(feat|ft|with)\b[^)\]]*[)\]]""", RegexOption.IGNORE_CASE), "")
+            .replace(
+                Regex(
+                    """\s+-\s+(\d{4}\s+)?(remaster(ed)?|single version|radio edit|mono|stereo|deluxe|bonus track)\b.*$""",
+                    RegexOption.IGNORE_CASE,
+                ),
+                "",
+            ).trim()
 
-    private fun jaccard(a: Set<String>, b: Set<String>): Double {
+    private fun jaccard(
+        a: Set<String>,
+        b: Set<String>,
+    ): Double {
         if (a.isEmpty() || b.isEmpty()) return 0.0
         val common = (a intersect b).size
         return common.toDouble() / (a.size + b.size - common)

@@ -7,9 +7,15 @@ data class ImportTrack(
     val durationMs: Long? = null,
 )
 
-data class ImportPlaylist(val name: String, val tracks: List<ImportTrack>)
+data class ImportPlaylist(
+    val name: String,
+    val tracks: List<ImportTrack>,
+)
 
-data class ImportLibrary(val playlists: List<ImportPlaylist>, val liked: List<ImportTrack>) {
+data class ImportLibrary(
+    val playlists: List<ImportPlaylist>,
+    val liked: List<ImportTrack>,
+) {
     val trackCount: Int get() = playlists.sumOf { it.tracks.size } + liked.size
     val isEmpty: Boolean get() = trackCount == 0
 }

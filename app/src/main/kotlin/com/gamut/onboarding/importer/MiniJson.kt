@@ -9,7 +9,9 @@ object MiniJson {
         return value
     }
 
-    private class Parser(private val s: String) {
+    private class Parser(
+        private val s: String,
+    ) {
         private var i = 0
 
         fun atEnd() = i >= s.length
@@ -33,7 +35,10 @@ object MiniJson {
             }
         }
 
-        private fun literal(word: String, result: Any?): Any? {
+        private fun literal(
+            word: String,
+            result: Any?,
+        ): Any? {
             require(s.startsWith(word, i)) { "Bad literal at $i" }
             i += word.length
             return result
@@ -57,12 +62,18 @@ object MiniJson {
                 map[key] = value(depth + 1)
                 skipWhitespace()
                 when (peek()) {
-                    ',' -> i++
+                    ',' -> {
+                        i++
+                    }
+
                     '}' -> {
                         i++
                         return map
                     }
-                    else -> throw IllegalArgumentException("Expected ',' or '}' at $i")
+
+                    else -> {
+                        throw IllegalArgumentException("Expected ',' or '}' at $i")
+                    }
                 }
             }
         }
@@ -79,12 +90,18 @@ object MiniJson {
                 list += value(depth + 1)
                 skipWhitespace()
                 when (peek()) {
-                    ',' -> i++
+                    ',' -> {
+                        i++
+                    }
+
                     ']' -> {
                         i++
                         return list
                     }
-                    else -> throw IllegalArgumentException("Expected ',' or ']' at $i")
+
+                    else -> {
+                        throw IllegalArgumentException("Expected ',' or ']' at $i")
+                    }
                 }
             }
         }
@@ -96,25 +113,52 @@ object MiniJson {
                 require(i < s.length) { "Unterminated string" }
                 val c = s[i++]
                 when (c) {
-                    '"' -> return sb.toString()
+                    '"' -> {
+                        return sb.toString()
+                    }
+
                     '\\' -> {
                         require(i < s.length) { "Bad escape" }
                         when (val e = s[i++]) {
-                            '"', '\\', '/' -> sb.append(e)
-                            'b' -> sb.append('\b')
-                            'f' -> sb.append('\u000C')
-                            'n' -> sb.append('\n')
-                            'r' -> sb.append('\r')
-                            't' -> sb.append('\t')
+                            '"', '\\', '/' -> {
+                                sb.append(e)
+                            }
+
+                            'b' -> {
+                                sb.append('\b')
+                            }
+
+                            'f' -> {
+                                sb.append('\u000C')
+                            }
+
+                            'n' -> {
+                                sb.append('\n')
+                            }
+
+                            'r' -> {
+                                sb.append('\r')
+                            }
+
+                            't' -> {
+                                sb.append('\t')
+                            }
+
                             'u' -> {
                                 require(i + 4 <= s.length) { "Bad unicode escape" }
                                 sb.append(s.substring(i, i + 4).toInt(16).toChar())
                                 i += 4
                             }
-                            else -> throw IllegalArgumentException("Bad escape \\$e")
+
+                            else -> {
+                                throw IllegalArgumentException("Bad escape \\$e")
+                            }
                         }
                     }
-                    else -> sb.append(c)
+
+                    else -> {
+                        sb.append(c)
+                    }
                 }
             }
         }

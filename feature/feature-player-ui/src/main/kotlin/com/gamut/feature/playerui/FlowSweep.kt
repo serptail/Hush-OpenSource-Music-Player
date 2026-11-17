@@ -47,13 +47,17 @@ internal fun isRtl(text: String): Boolean {
             -> rtlCount++
 
             Character.DIRECTIONALITY_LEFT_TO_RIGHT -> ltrCount++
+
             else -> Unit
         }
     }
     return rtlCount > ltrCount
 }
 
-internal fun flowVoiceStyle(base: TextStyle, text: String): TextStyle {
+internal fun flowVoiceStyle(
+    base: TextStyle,
+    text: String,
+): TextStyle {
     val rtl = isRtl(text)
     return base.copy(
         textAlign = if (rtl) TextAlign.Right else TextAlign.Left,
@@ -102,16 +106,17 @@ internal fun SweptFlowLine(
 
     val growth = remember { CharGrowth() }
 
-    val phase = remember(line, clock) {
-        derivedStateOf(structuralEqualityPolicy()) {
-            val now = clock.longValue
-            when {
-                now < line.animatesFromMs -> PHASE_BEFORE
-                now > line.animatesUntilMs -> PHASE_AFTER
-                else -> PHASE_MOVING
+    val phase =
+        remember(line, clock) {
+            derivedStateOf(structuralEqualityPolicy()) {
+                val now = clock.longValue
+                when {
+                    now < line.animatesFromMs -> PHASE_BEFORE
+                    now > line.animatesUntilMs -> PHASE_AFTER
+                    else -> PHASE_MOVING
+                }
             }
         }
-    }
     val drawnAt: () -> Long = {
         when (phase.value) {
             PHASE_MOVING -> clock.longValue
@@ -141,43 +146,53 @@ internal fun SweptFlowLine(
                             growth = growth,
                         )
                     }
-                }
-                .then(inner)
+                }.then(inner)
         }
     }
 
-    val sweep = Modifier.drawWithContent {
-        val position = drawnAt()
-        when {
-            position >= line.endMs -> drawContent()
-            position <= line.timeMs -> Unit
-            else -> layout?.let {
-                sweepTo(it, line.revealedChars(position), line.sweepSpans, feather)
-            }
-        }
-    }
-
-    val dimSweep = if (dimColor == color) {
-        Modifier
-    } else {
+    val sweep =
         Modifier.drawWithContent {
             val position = drawnAt()
             when {
-                position >= line.endMs -> Unit
-                position <= line.timeMs -> drawContent()
-                else -> layout?.let { unsungOnly(it, line.revealedChars(position), line.sweepSpans) } ?: drawContent()
+                position >= line.endMs -> {
+                    drawContent()
+                }
+
+                position <= line.timeMs -> {
+                    Unit
+                }
+
+                else -> {
+                    layout?.let {
+                        sweepTo(it, line.revealedChars(position), line.sweepSpans, feather)
+                    }
+                }
             }
         }
-    }
+
+    val dimSweep =
+        if (dimColor == color) {
+            Modifier
+        } else {
+            Modifier.drawWithContent {
+                val position = drawnAt()
+                when {
+                    position >= line.endMs -> Unit
+                    position <= line.timeMs -> drawContent()
+                    else -> layout?.let { unsungOnly(it, line.revealedChars(position), line.sweepSpans) } ?: drawContent()
+                }
+            }
+        }
 
     val right = isRtl(line.text)
     Box(
         modifier,
-        contentAlignment = when {
-            centered -> androidx.compose.ui.Alignment.TopCenter
-            right -> AbsoluteAlignment.TopRight
-            else -> AbsoluteAlignment.TopLeft
-        },
+        contentAlignment =
+            when {
+                centered -> androidx.compose.ui.Alignment.TopCenter
+                right -> AbsoluteAlignment.TopRight
+                else -> AbsoluteAlignment.TopLeft
+            },
     ) {
         Text(
             text = line.text,
@@ -195,22 +210,23 @@ internal fun SweptFlowLine(
                 color = color,
                 maxLines = maxLines,
                 overflow = overflow,
-                modifier = Modifier
-                    .graphicsLayer { alpha = glowAlpha }
-                    .blur(glowRadius, BlurredEdgeTreatment.Unbounded)
-                    .then(room)
-                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                    .drawWithContent {
-                        val measured = layout ?: return@drawWithContent
-                        glowGrown(
-                            layout = measured,
-                            line = line,
-                            positionMs = drawnAt(),
-                            inset = glowRoom.toPx(),
-                            peak = WORD_RISE.toPx(),
-                            growth = growth,
-                        )
-                    },
+                modifier =
+                    Modifier
+                        .graphicsLayer { alpha = glowAlpha }
+                        .blur(glowRadius, BlurredEdgeTreatment.Unbounded)
+                        .then(room)
+                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                        .drawWithContent {
+                            val measured = layout ?: return@drawWithContent
+                            glowGrown(
+                                layout = measured,
+                                line = line,
+                                positionMs = drawnAt(),
+                                inset = glowRoom.toPx(),
+                                peak = WORD_RISE.toPx(),
+                                growth = growth,
+                            )
+                        },
             )
         }
         Text(
@@ -219,14 +235,14 @@ internal fun SweptFlowLine(
             color = color,
             maxLines = maxLines,
             overflow = overflow,
-            modifier = riseAgainst(
-                Modifier
-                    .graphicsLayer {
-                        compositingStrategy = if (feather) CompositingStrategy.Offscreen else CompositingStrategy.Auto
-                    }
-                    .then(room)
-                    .then(sweep),
-            ),
+            modifier =
+                riseAgainst(
+                    Modifier
+                        .graphicsLayer {
+                            compositingStrategy = if (feather) CompositingStrategy.Offscreen else CompositingStrategy.Auto
+                        }.then(room)
+                        .then(sweep),
+                ),
         )
     }
 }
@@ -240,7 +256,9 @@ private fun ContentDrawScope.glowGrown(
     growth: CharGrowth,
 ) {
     if (!line.isGrowing(positionMs)) return
-    val em = layout.layoutInput.style.fontSize.toPx()
+    val em =
+        layout.layoutInput.style.fontSize
+            .toPx()
     val length = layout.layoutInput.text.length
     for (word in line.growingWords) {
         if (positionMs < word.startMs || positionMs > word.restsAtMs) continue
@@ -294,7 +312,9 @@ private fun ContentDrawScope.riseWith(
         drawContent()
         return
     }
-    val em = layout.layoutInput.style.fontSize.toPx()
+    val em =
+        layout.layoutInput.style.fontSize
+            .toPx()
     for (visualLine in 0 until layout.lineCount) {
         val lineStart = layout.getLineStart(visualLine)
         val lineEnd = layout.getLineEnd(visualLine, visibleEnd = true)
@@ -316,8 +336,19 @@ private fun ContentDrawScope.riseWith(
             if (start > at) sliceRisen(edge, top, from, bottom, 0f)
             if (held != null) {
                 growEach(
-                    layout, held, line, positionMs, visualLine,
-                    start, end, top, bottom, inset, peak, em, growth,
+                    layout,
+                    held,
+                    line,
+                    positionMs,
+                    visualLine,
+                    start,
+                    end,
+                    top,
+                    bottom,
+                    inset,
+                    peak,
+                    em,
+                    growth,
                 )
             } else {
                 sliceRisen(from, top - peak, to, bottom, -lift * peak)
@@ -375,24 +406,40 @@ private fun ContentDrawScope.growEach(
     }
 }
 
-private fun TextLayoutResult.xOn(offset: Int, visualLine: Int, inset: Float): Float {
+private fun TextLayoutResult.xOn(
+    offset: Int,
+    visualLine: Int,
+    inset: Float,
+): Float {
     val lineStart = getLineStart(visualLine)
     val lineEndVisible = getLineEnd(visualLine, visibleEnd = true)
     val lineLeft = getLineLeft(visualLine) + inset
     val lineRight = getLineRight(visualLine) + inset
 
-    val rtl = getParagraphDirection(lineStart.coerceIn(0, (layoutInput.text.length - 1).coerceAtLeast(0))) ==
-        ResolvedTextDirection.Rtl
+    val rtl =
+        getParagraphDirection(lineStart.coerceIn(0, (layoutInput.text.length - 1).coerceAtLeast(0))) ==
+            ResolvedTextDirection.Rtl
 
     return when {
-        offset <= lineStart -> if (rtl) lineRight else lineLeft
-        offset >= lineEndVisible -> if (rtl) lineLeft else lineRight
-        else -> (getHorizontalPosition(offset, usePrimaryDirection = true) + inset)
-            .coerceIn(lineLeft, lineRight)
+        offset <= lineStart -> {
+            if (rtl) lineRight else lineLeft
+        }
+
+        offset >= lineEndVisible -> {
+            if (rtl) lineLeft else lineRight
+        }
+
+        else -> {
+            (getHorizontalPosition(offset, usePrimaryDirection = true) + inset)
+                .coerceIn(lineLeft, lineRight)
+        }
     }
 }
 
-private fun TextLayoutResult.rowBottom(visualLine: Int, em: Float): Float =
+private fun TextLayoutResult.rowBottom(
+    visualLine: Int,
+    em: Float,
+): Float =
     if (visualLine < lineCount - 1) {
         getLineTop(visualLine + 1)
     } else {
@@ -412,18 +459,27 @@ private fun ContentDrawScope.unsungOnly(
     if (revealedChars >= textLen) return
     val offset = layout.getLineStart(0).coerceIn(0, (textLen - 1).coerceAtLeast(0))
     val rtl = layout.getParagraphDirection(offset) == ResolvedTextDirection.Rtl
-    val em = layout.layoutInput.style.fontSize.toPx()
+    val em =
+        layout.layoutInput.style.fontSize
+            .toPx()
     for (visualLine in 0 until layout.lineCount) {
         val lineStart = layout.getLineStart(visualLine)
         val lineEndAll = layout.getLineEnd(visualLine, visibleEnd = false)
         val top = layout.getLineTop(visualLine)
         val bottom = layout.rowBottom(visualLine, em)
         when {
-            revealedChars <= lineStart -> clipRect(top = top, bottom = bottom) { this@unsungOnly.drawContent() }
-            revealedChars >= lineEndAll -> Unit
+            revealedChars <= lineStart -> {
+                clipRect(top = top, bottom = bottom) { this@unsungOnly.drawContent() }
+            }
+
+            revealedChars >= lineEndAll -> {
+                Unit
+            }
+
             else -> {
-                val at = horizontalAt(layout, revealedChars, visualLine, spans)
-                    .coerceIn(layout.getLineLeft(visualLine), layout.getLineRight(visualLine))
+                val at =
+                    horizontalAt(layout, revealedChars, visualLine, spans)
+                        .coerceIn(layout.getLineLeft(visualLine), layout.getLineRight(visualLine))
                 if (rtl) {
                     clipRect(left = 0f, top = top, right = at, bottom = bottom) { this@unsungOnly.drawContent() }
                 } else {
@@ -481,18 +537,20 @@ private fun horizontalAt(
     val rawNext = index + 1
     val textLen = layout.layoutInput.text.length
     val spills = layout.getLineForOffset(rawNext.coerceIn(0, textLen)) != visualLine
-    val next: Float = if (spills) {
-        if (rawNext > lineEndVisible) {
-            val rtl = layout.getParagraphDirection(
-                visualLine.coerceAtMost(lineEndAll).coerceIn(0, (textLen - 1).coerceAtLeast(0)),
-            ) == ResolvedTextDirection.Rtl
-            if (rtl) layout.getLineLeft(visualLine) else layout.getLineRight(visualLine)
+    val next: Float =
+        if (spills) {
+            if (rawNext > lineEndVisible) {
+                val rtl =
+                    layout.getParagraphDirection(
+                        visualLine.coerceAtMost(lineEndAll).coerceIn(0, (textLen - 1).coerceAtLeast(0)),
+                    ) == ResolvedTextDirection.Rtl
+                if (rtl) layout.getLineLeft(visualLine) else layout.getLineRight(visualLine)
+            } else {
+                layout.xOn(rawNext.coerceAtMost(lineEndVisible), visualLine, 0f)
+            }
         } else {
-            layout.xOn(rawNext.coerceAtMost(lineEndVisible), visualLine, 0f)
+            layout.xOn(rawNext, visualLine, 0f)
         }
-    } else {
-        layout.xOn(rawNext, visualLine, 0f)
-    }
     return here + (next - here) * (chars - index)
 }
 
@@ -518,35 +576,43 @@ private fun ContentDrawScope.sweepTo(
         if (revealedChars <= lineStart) return
 
         val cut = revealedChars < lineEndAll
-        val charPos = if (cut) {
-            horizontalAt(layout, revealedChars, visualLine, spans)
-        } else {
-            if (rtl) layout.getLineLeft(visualLine) else layout.getLineRight(visualLine)
-        }
+        val charPos =
+            if (cut) {
+                horizontalAt(layout, revealedChars, visualLine, spans)
+            } else {
+                if (rtl) layout.getLineLeft(visualLine) else layout.getLineRight(visualLine)
+            }
 
         val lineLeft = layout.getLineLeft(visualLine)
         val lineRight = layout.getLineRight(visualLine)
         val safeCharPos = charPos.coerceIn(lineLeft, lineRight)
 
-        val featherPx = if (feather && cut) {
-            minOf(
-                WIPE_FEATHER.toPx(),
-                if (rtl) lineRight - safeCharPos else safeCharPos - lineLeft,
-            )
-        } else {
-            0f
-        }
-        val lead = if (rtl) {
-            (safeCharPos - featherPx).coerceAtLeast(lineLeft)
-        } else {
-            (safeCharPos + featherPx).coerceAtMost(lineRight)
-        }
+        val featherPx =
+            if (feather && cut) {
+                minOf(
+                    WIPE_FEATHER.toPx(),
+                    if (rtl) lineRight - safeCharPos else safeCharPos - lineLeft,
+                )
+            } else {
+                0f
+            }
+        val lead =
+            if (rtl) {
+                (safeCharPos - featherPx).coerceAtLeast(lineLeft)
+            } else {
+                (safeCharPos + featherPx).coerceAtMost(lineRight)
+            }
 
         val (clipLeft, clipRight) = if (rtl) lead to lineRight else lineLeft to lead
         if (clipLeft >= clipRight) continue
 
         val top = layout.getLineTop(visualLine)
-        val bottom = layout.rowBottom(visualLine, layout.layoutInput.style.fontSize.toPx())
+        val bottom =
+            layout.rowBottom(
+                visualLine,
+                layout.layoutInput.style.fontSize
+                    .toPx(),
+            )
         clipRect(left = clipLeft, top = top, right = clipRight, bottom = bottom) {
             this@sweepTo.drawContent()
         }
@@ -555,12 +621,13 @@ private fun ContentDrawScope.sweepTo(
 
         clipRect(top = top, bottom = bottom) {
             drawRect(
-                brush = Brush.horizontalGradient(
-                    0f to Color.White,
-                    1f to Color.Transparent,
-                    startX = safeCharPos,
-                    endX = if (rtl) safeCharPos - featherPx else safeCharPos + featherPx,
-                ),
+                brush =
+                    Brush.horizontalGradient(
+                        0f to Color.White,
+                        1f to Color.Transparent,
+                        startX = safeCharPos,
+                        endX = if (rtl) safeCharPos - featherPx else safeCharPos + featherPx,
+                    ),
                 blendMode = BlendMode.DstIn,
             )
         }

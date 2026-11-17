@@ -17,10 +17,17 @@ private val PageGlow: List<List<Color>> =
         listOf(Color(0xFFFF7A1A), Color(0xFFC4520A), Color(0xFFFFA45C)),
     )
 
-internal fun pageAccent(page: Int, tint: Color?): Color = tint ?: PageGlow[page.mod(PageGlow.size)][0]
+internal fun pageAccent(
+    page: Int,
+    tint: Color?,
+): Color = tint ?: PageGlow[page.mod(PageGlow.size)][0]
 
 @Composable
-internal fun GamutBackground(page: Int, tint: Color?, modifier: Modifier = Modifier) {
+internal fun GamutBackground(
+    page: Int,
+    tint: Color?,
+    modifier: Modifier = Modifier,
+) {
     val current = LocalCoverPalette.current
     val palette =
         remember(page, tint, current) {

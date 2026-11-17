@@ -10,7 +10,10 @@ data class LyricsSyllable(
     val endChar: Int,
 ) {
     companion object {
-        fun normalized(syllables: List<LyricsSyllable>, textLength: Int): List<LyricsSyllable> {
+        fun normalized(
+            syllables: List<LyricsSyllable>,
+            textLength: Int,
+        ): List<LyricsSyllable> {
             if (syllables.size < 2) return emptyList()
             return syllables.map {
                 val s = it.startChar.coerceIn(0, textLength)

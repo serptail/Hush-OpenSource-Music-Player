@@ -5,9 +5,19 @@ import com.gamut.onboarding.importer.ImportTrack
 import com.gamut.onboarding.importer.MiniJson
 
 object AppleMusicLinks {
-    enum class Kind(val path: String) { Playlist("playlist"), Album("album") }
+    enum class Kind(
+        val path: String,
+    ) {
+        Playlist("playlist"),
+        Album("album"),
+    }
 
-    data class Ref(val kind: Kind, val id: String, val storefront: String, val slug: String) {
+    data class Ref(
+        val kind: Kind,
+        val id: String,
+        val storefront: String,
+        val slug: String,
+    ) {
         val pageUrl: String get() = "https://music.apple.com/$storefront/${kind.path}/$slug/$id"
     }
 
@@ -30,16 +40,27 @@ object AppleMusicLinks {
         return found.values.toList()
     }
 
-    private class Found(val name: String?, val tracks: List<ImportTrack>)
+    private class Found(
+        val name: String?,
+        val tracks: List<ImportTrack>,
+    )
 
-    fun parsePage(html: String, kind: Kind, fallbackName: String? = null): ImportPlaylist? {
+    fun parsePage(
+        html: String,
+        kind: Kind,
+        fallbackName: String? = null,
+    ): ImportPlaylist? {
         val found = fromJsonLd(html) ?: fromServerData(html) ?: return null
         val default = fallbackName ?: if (kind == Kind.Album) "Apple Music album" else "Apple Music playlist"
         val name = found.name?.takeIf { it.isNotBlank() } ?: pageName(html)?.takeIf { it.isNotBlank() } ?: default
         return ImportPlaylist(name, found.tracks)
     }
 
-    private val LD_JSON = Regex("""<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+    private val LD_JSON =
+        Regex(
+            """<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>""",
+            setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE),
+        )
     private val SERVER_DATA = Regex("""<script[^>]*id="serialized-server-data"[^>]*>(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
 
     private fun fromJsonLd(html: String): Found? {
@@ -49,20 +70,22 @@ object AppleMusicLinks {
             val isAlbum = (entity["@type"] as? String)?.contains("Album", ignoreCase = true) == true
             val entityName = (entity["name"] as? String)?.trim()?.takeIf { it.isNotEmpty() }
             val entityArtist = artistNames(entity["byArtist"] ?: entity["author"])
-            val tracks = (entity["track"] as? List<*>).orEmpty().mapNotNull { row ->
-                val outer = row as? Map<*, *> ?: return@mapNotNull null
-                val track = outer["item"] as? Map<*, *> ?: outer
-                val title = (track["name"] as? String)?.trim().orEmpty()
-                if (title.isEmpty()) return@mapNotNull null
-                val album = ((track["inAlbum"] as? Map<*, *>)?.get("name") as? String)?.trim()?.takeIf { it.isNotEmpty() }
-                    ?: entityName.takeIf { isAlbum }
-                ImportTrack(
-                    title = title,
-                    artist = artistNames(track["byArtist"]).ifEmpty { entityArtist },
-                    album = album,
-                    durationMs = isoDurationMs(track["duration"] as? String),
-                )
-            }
+            val tracks =
+                (entity["track"] as? List<*>).orEmpty().mapNotNull { row ->
+                    val outer = row as? Map<*, *> ?: return@mapNotNull null
+                    val track = outer["item"] as? Map<*, *> ?: outer
+                    val title = (track["name"] as? String)?.trim().orEmpty()
+                    if (title.isEmpty()) return@mapNotNull null
+                    val album =
+                        ((track["inAlbum"] as? Map<*, *>)?.get("name") as? String)?.trim()?.takeIf { it.isNotEmpty() }
+                            ?: entityName.takeIf { isAlbum }
+                    ImportTrack(
+                        title = title,
+                        artist = artistNames(track["byArtist"]).ifEmpty { entityArtist },
+                        album = album,
+                        durationMs = isoDurationMs(track["duration"] as? String),
+                    )
+                }
             if (tracks.isNotEmpty()) return Found(entityName, tracks)
         }
         return null
@@ -72,7 +95,11 @@ object AppleMusicLinks {
         val root = parseJson(SERVER_DATA.find(html)?.groupValues?.get(1) ?: return null) ?: return null
         val out = ArrayList<ImportTrack>()
         val seen = HashSet<String>()
-        fun walk(node: Any?, depth: Int) {
+
+        fun walk(
+            node: Any?,
+            depth: Int,
+        ) {
             if (depth > 40) return
             when (node) {
                 is Map<*, *> -> {
@@ -80,8 +107,9 @@ object AppleMusicLinks {
                         val id = node["id"] as? String
                         if (id != null && !seen.add(id)) return
                         val title = (node["title"] as? String)?.trim().orEmpty()
-                        val artist = (node["artistName"] as? String)?.trim()
-                            ?: firstLinkTitle(node["subtitleLinks"]).orEmpty()
+                        val artist =
+                            (node["artistName"] as? String)?.trim()
+                                ?: firstLinkTitle(node["subtitleLinks"]).orEmpty()
                         val album = firstLinkTitle(node["tertiaryLinks"])
                         val duration = (node["duration"] as? Number)?.toLong()?.takeIf { it > 0 }
                         if (title.isNotEmpty()) out += ImportTrack(title, artist, album, duration)
@@ -89,7 +117,10 @@ object AppleMusicLinks {
                     }
                     node.values.forEach { walk(it, depth + 1) }
                 }
-                is List<*> -> node.forEach { walk(it, depth + 1) }
+
+                is List<*> -> {
+                    node.forEach { walk(it, depth + 1) }
+                }
             }
         }
         walk(root, 0)
@@ -104,14 +135,19 @@ object AppleMusicLinks {
     }
 
     private fun firstLinkTitle(node: Any?): String? =
-        ((node as? List<*>)?.firstOrNull() as? Map<*, *>)?.get("title")?.let { it as? String }?.trim()?.takeIf { it.isNotEmpty() }
+        ((node as? List<*>)?.firstOrNull() as? Map<*, *>)
+            ?.get("title")
+            ?.let { it as? String }
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
 
-    private fun artistNames(node: Any?): String = when (node) {
-        is String -> node.trim()
-        is Map<*, *> -> (node["name"] as? String).orEmpty().trim()
-        is List<*> -> node.map { artistNames(it) }.filter { it.isNotEmpty() }.joinToString(", ")
-        else -> ""
-    }
+    private fun artistNames(node: Any?): String =
+        when (node) {
+            is String -> node.trim()
+            is Map<*, *> -> (node["name"] as? String).orEmpty().trim()
+            is List<*> -> node.map { artistNames(it) }.filter { it.isNotEmpty() }.joinToString(", ")
+            else -> ""
+        }
 
     private fun isoDurationMs(text: String?): Long? {
         val m = ISO_DURATION.matchEntire(text?.trim().orEmpty()) ?: return null
@@ -130,34 +166,48 @@ object AppleMusicLinks {
     private fun pageName(html: String): String? {
         val raw = OG_TITLE.find(html)?.groupValues?.get(1) ?: TITLE_TAG.find(html)?.groupValues?.get(1) ?: return null
         return unescape(raw)
-            .replace("\u200E", "").replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u200F", "")
             .replace(Regex("""\s+on Apple Music\s*$""", RegexOption.IGNORE_CASE), "")
             .replace(Regex("""\s+[-\u2013\u2014]\s+(?:playlist|album|single|ep)\b.*$""", RegexOption.IGNORE_CASE), "")
             .trim()
             .takeIf { it.isNotEmpty() }
     }
 
-    private fun unescape(s: String) = s
-        .replace("&quot;", "\"").replace("&#39;", "'").replace("&#x27;", "'").replace("&#x2F;", "/")
-        .replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+    private fun unescape(s: String) =
+        s
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&#x27;", "'")
+            .replace("&#x2F;", "/")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&amp;", "&")
 
-    fun pageTitle(html: String, kind: Kind): String =
-        pageName(html) ?: if (kind == Kind.Album) "Apple Music album" else "Apple Music playlist"
+    fun pageTitle(
+        html: String,
+        kind: Kind,
+    ): String = pageName(html) ?: if (kind == Kind.Album) "Apple Music album" else "Apple Music playlist"
 
     private val META_TAG = Regex("""<meta\b[^>]*>""", RegexOption.IGNORE_CASE)
     private val META_SONG = Regex("""(?:property|name)\s*=\s*["']music:song["']""", RegexOption.IGNORE_CASE)
     private val META_CONTENT = Regex("""content\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
     private val SONG_ID = Regex("""/(\d+)(?:[?#].*)?$""")
 
-    fun songIds(html: String): List<String> = META_TAG.findAll(html).mapNotNull { tag ->
-        val text = tag.value
-        if (!META_SONG.containsMatchIn(text)) return@mapNotNull null
-        val url = META_CONTENT.find(text)?.groupValues?.get(1) ?: return@mapNotNull null
-        SONG_ID.find(unescape(url))?.groupValues?.get(1)
-    }.toList()
+    fun songIds(html: String): List<String> =
+        META_TAG
+            .findAll(html)
+            .mapNotNull { tag ->
+                val text = tag.value
+                if (!META_SONG.containsMatchIn(text)) return@mapNotNull null
+                val url = META_CONTENT.find(text)?.groupValues?.get(1) ?: return@mapNotNull null
+                SONG_ID.find(unescape(url))?.groupValues?.get(1)
+            }.toList()
 
-    fun lookupUrl(ids: List<String>, storefront: String): String =
-        "https://itunes.apple.com/lookup?id=${ids.joinToString(",")}&country=$storefront"
+    fun lookupUrl(
+        ids: List<String>,
+        storefront: String,
+    ): String = "https://itunes.apple.com/lookup?id=${ids.joinToString(",")}&country=$storefront"
 
     fun parseLookup(json: String): List<Pair<String, ImportTrack>> {
         val root = parseJson(json) as? Map<*, *> ?: return emptyList()
@@ -167,29 +217,37 @@ object AppleMusicLinks {
             val id = (item["trackId"] as? Number)?.toLong()?.toString() ?: return@mapNotNull null
             val title = (item["trackName"] as? String)?.trim().orEmpty()
             if (title.isEmpty()) return@mapNotNull null
-            id to ImportTrack(
-                title = title,
-                artist = (item["artistName"] as? String).orEmpty().trim(),
-                album = (item["collectionName"] as? String)?.trim()?.takeIf { it.isNotEmpty() },
-                durationMs = (item["trackTimeMillis"] as? Number)?.toLong()?.takeIf { it > 0 },
-            )
+            id to
+                ImportTrack(
+                    title = title,
+                    artist = (item["artistName"] as? String).orEmpty().trim(),
+                    album = (item["collectionName"] as? String)?.trim()?.takeIf { it.isNotEmpty() },
+                    durationMs = (item["trackTimeMillis"] as? Number)?.toLong()?.takeIf { it > 0 },
+                )
         }
     }
 
-    private fun parseJson(text: String): Any? = try {
-        MiniJson.parse(text)
-    } catch (_: Exception) {
-        null
-    }
+    private fun parseJson(text: String): Any? =
+        try {
+            MiniJson.parse(text)
+        } catch (_: Exception) {
+            null
+        }
 
-    private fun findEntity(node: Any?, depth: Int): Map<*, *>? {
+    private fun findEntity(
+        node: Any?,
+        depth: Int,
+    ): Map<*, *>? {
         if (depth > 24) return null
         when (node) {
             is Map<*, *> -> {
                 if (node["track"] is List<*>) return node
                 node.values.forEach { child -> findEntity(child, depth + 1)?.let { return it } }
             }
-            is List<*> -> node.forEach { child -> findEntity(child, depth + 1)?.let { return it } }
+
+            is List<*> -> {
+                node.forEach { child -> findEntity(child, depth + 1)?.let { return it } }
+            }
         }
         return null
     }

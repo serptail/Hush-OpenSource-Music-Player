@@ -65,21 +65,23 @@ private const val PAGE_PROBE = """
 })()
 """
 
-private val GOOGLE_ORIGINS = listOf(
-    "https://music.youtube.com",
-    "https://www.youtube.com",
-    "https://youtube.com",
-    "https://accounts.google.com",
-    "https://www.google.com",
-    "https://google.com",
-)
+private val GOOGLE_ORIGINS =
+    listOf(
+        "https://music.youtube.com",
+        "https://www.youtube.com",
+        "https://youtube.com",
+        "https://accounts.google.com",
+        "https://www.google.com",
+        "https://google.com",
+    )
 
 fun clearYouTubeLogin() {
-    val manager = try {
-        CookieManager.getInstance()
-    } catch (_: Exception) {
-        return
-    }
+    val manager =
+        try {
+            CookieManager.getInstance()
+        } catch (_: Exception) {
+            return
+        }
     try {
         GOOGLE_ORIGINS.forEach { origin ->
             val jar = manager.getCookie(origin) ?: return@forEach
@@ -105,7 +107,10 @@ fun clearYouTubeLogin() {
 @Suppress("DEPRECATION")
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun YtMusicLoginScreen(onCaptured: (YtSession) -> Unit, onClose: () -> Unit) {
+fun YtMusicLoginScreen(
+    onCaptured: (YtSession) -> Unit,
+    onClose: () -> Unit,
+) {
     val palette = LocalCoverPalette.current
     var webView by remember { mutableStateOf<WebView?>(null) }
     var pageReady by remember { mutableStateOf(false) }
@@ -114,7 +119,13 @@ fun YtMusicLoginScreen(onCaptured: (YtSession) -> Unit, onClose: () -> Unit) {
     BackHandler(onBack = onClose)
     DisposableEffect(Unit) { onDispose { webView?.destroy() } }
 
-    Column(Modifier.fillMaxSize().background(palette.base).statusBarsPadding().navigationBarsPadding()) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(palette.base)
+            .statusBarsPadding()
+            .navigationBarsPadding(),
+    ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "Sign in to YouTube Music",
@@ -141,12 +152,16 @@ fun YtMusicLoginScreen(onCaptured: (YtSession) -> Unit, onClose: () -> Unit) {
                     settings.domStorageEnabled = true
                     CookieManager.getInstance().setAcceptCookie(true)
                     CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-                    webViewClient = object : WebViewClient() {
-                        override fun onPageFinished(view: WebView?, url: String?) {
-                            pageReady = url?.startsWith(MUSIC_ORIGIN) == true
-                            if (pageReady) notReady = false
+                    webViewClient =
+                        object : WebViewClient() {
+                            override fun onPageFinished(
+                                view: WebView?,
+                                url: String?,
+                            ) {
+                                pageReady = url?.startsWith(MUSIC_ORIGIN) == true
+                                if (pageReady) notReady = false
+                            }
                         }
-                    }
                     webView = this
                     loadUrl(LOGIN_URL)
                 }
@@ -178,14 +193,25 @@ fun YtMusicLoginScreen(onCaptured: (YtSession) -> Unit, onClose: () -> Unit) {
                 Text(
                     "Import my library",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = if (pageReady) (if (palette.isLight) androidx.compose.ui.graphics.Color.White else androidx.compose.ui.graphics.Color.Black) else ink(0.5f),
+                    color =
+                        if (pageReady) {
+                            (if (palette.isLight) androidx.compose.ui.graphics.Color.White else androidx.compose.ui.graphics.Color.Black)
+                        } else {
+                            ink(
+                                0.5f,
+                            )
+                        },
                 )
             }
         }
     }
 }
 
-private fun capture(view: WebView, onCaptured: (YtSession) -> Unit, onUnavailable: () -> Unit) {
+private fun capture(
+    view: WebView,
+    onCaptured: (YtSession) -> Unit,
+    onUnavailable: () -> Unit,
+) {
     val cookies = CookieManager.getInstance().getCookie(MUSIC_ORIGIN)
     if (cookies == null || !YtSigning.hasApiSid(cookies)) {
         onUnavailable()
@@ -193,15 +219,17 @@ private fun capture(view: WebView, onCaptured: (YtSession) -> Unit, onUnavailabl
     }
     CookieManager.getInstance().flush()
     view.evaluateJavascript(PAGE_PROBE) { raw ->
-        val config = try {
-            MiniJson.parse(raw ?: "null") as? Map<*, *>
-        } catch (_: Exception) {
-            null
-        }
+        val config =
+            try {
+                MiniJson.parse(raw ?: "null") as? Map<*, *>
+            } catch (_: Exception) {
+                null
+            }
         if (config == null || config["loggedIn"] != "true") {
             onUnavailable()
             return@evaluateJavascript
         }
+
         fun field(key: String) = (config[key] as? String)?.takeIf { it.isNotBlank() }
         val pageId = field("pageId")
         onCaptured(

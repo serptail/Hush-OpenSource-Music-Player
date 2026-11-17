@@ -8,7 +8,10 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.zip.ZipInputStream
 
-class ExportFile(val name: String, val bytes: ByteArray)
+class ExportFile(
+    val name: String,
+    val bytes: ByteArray,
+)
 
 object SpotifyExportParser {
     fun parse(files: List<ExportFile>): ImportLibrary {
@@ -19,11 +22,18 @@ object SpotifyExportParser {
             liked.putIfAbsent(keyOf(track), track)
         }
 
-        fun handle(path: String, bytes: ByteArray, depth: Int) {
+        fun handle(
+            path: String,
+            bytes: ByteArray,
+            depth: Int,
+        ) {
             val base = path.substringAfterLast('/').substringAfterLast('\\')
             val lower = base.lowercase()
             when {
-                lower.endsWith(".zip") && depth < 2 -> unzip(bytes.inputStream()).forEach { handle(it.name, it.bytes, depth + 1) }
+                lower.endsWith(".zip") && depth < 2 -> {
+                    unzip(bytes.inputStream()).forEach { handle(it.name, it.bytes, depth + 1) }
+                }
+
                 lower.endsWith(".csv") -> {
                     val tracks = parseCsv(String(bytes, Charsets.UTF_8))
                     val title = base.substringBeforeLast('.').replace('_', ' ').trim()
@@ -33,12 +43,14 @@ object SpotifyExportParser {
                         else -> playlists += ImportPlaylist(title.ifBlank { DEFAULT_PLAYLIST }, tracks)
                     }
                 }
+
                 lower.endsWith(".json") && !IGNORED_JSON.containsMatchIn(lower) -> {
-                    val root = try {
-                        MiniJson.parse(String(bytes, Charsets.UTF_8))
-                    } catch (_: Exception) {
-                        return
-                    }
+                    val root =
+                        try {
+                            MiniJson.parse(String(bytes, Charsets.UTF_8))
+                        } catch (_: Exception) {
+                            return
+                        }
                     if (root is Map<*, *>) readJson(root, { playlists += it }, ::addLiked)
                 }
             }
@@ -48,16 +60,21 @@ object SpotifyExportParser {
         return ImportLibrary(playlists.filter { it.tracks.isNotEmpty() }, liked.values.toList())
     }
 
-    private fun readJson(root: Map<*, *>, onPlaylist: (ImportPlaylist) -> Unit, onLiked: (ImportTrack) -> Unit) {
+    private fun readJson(
+        root: Map<*, *>,
+        onPlaylist: (ImportPlaylist) -> Unit,
+        onLiked: (ImportTrack) -> Unit,
+    ) {
         (root["playlists"] as? List<*>)?.forEach { entry ->
             val playlist = entry as? Map<*, *> ?: return@forEach
             val name = (playlist["name"] as? String)?.takeIf { it.isNotBlank() } ?: DEFAULT_PLAYLIST
-            val tracks = (playlist["items"] as? List<*>).orEmpty().mapNotNull { item ->
-                val track = (item as? Map<*, *>)?.get("track") as? Map<*, *> ?: return@mapNotNull null
-                val title = (track["trackName"] ?: track["name"]) as? String
-                val artist = (track["artistName"] ?: track["artist"]) as? String
-                makeTrack(title, artist, track["albumName"] as? String, null)
-            }
+            val tracks =
+                (playlist["items"] as? List<*>).orEmpty().mapNotNull { item ->
+                    val track = (item as? Map<*, *>)?.get("track") as? Map<*, *> ?: return@mapNotNull null
+                    val title = (track["trackName"] ?: track["name"]) as? String
+                    val artist = (track["artistName"] ?: track["artist"]) as? String
+                    makeTrack(title, artist, track["albumName"] as? String, null)
+                }
             onPlaylist(ImportPlaylist(name, tracks))
         }
         (root["tracks"] as? List<*>)?.forEach { entry ->
@@ -75,6 +92,7 @@ object SpotifyExportParser {
         val rows = csvRows(text.removePrefix("\uFEFF"))
         if (rows.size < 2) return emptyList()
         val header = rows[0].map { it.lowercase().replace(Regex("[^a-z0-9]"), "") }
+
         fun column(names: List<String>) = names.firstNotNullOfOrNull { n -> header.indexOf(n).takeIf { it >= 0 } }
         val title = column(TITLE_COLUMNS) ?: return emptyList()
         val artist = column(ARTIST_COLUMNS)
@@ -85,7 +103,14 @@ object SpotifyExportParser {
                 title = row.getOrNull(title),
                 artist = artist?.let { row.getOrNull(it) },
                 album = album?.let { row.getOrNull(it) },
-                durationMs = duration?.let { row.getOrNull(it)?.trim()?.toDoubleOrNull()?.toLong() },
+                durationMs =
+                    duration?.let {
+                        row
+                            .getOrNull(it)
+                            ?.trim()
+                            ?.toDoubleOrNull()
+                            ?.toLong()
+                    },
             )
         }
     }
@@ -103,11 +128,16 @@ object SpotifyExportParser {
                     field.append('"')
                     i++
                 }
-                c == '"' -> quoted = !quoted
+
+                c == '"' -> {
+                    quoted = !quoted
+                }
+
                 !quoted && c == ',' -> {
                     row += field.toString()
                     field.clear()
                 }
+
                 !quoted && (c == '\n' || c == '\r') -> {
                     if (c == '\r' && text.getOrNull(i + 1) == '\n') i++
                     row += field.toString()
@@ -115,7 +145,10 @@ object SpotifyExportParser {
                     if (row.any { it.isNotEmpty() }) rows += row
                     row = ArrayList()
                 }
-                else -> field.append(c)
+
+                else -> {
+                    field.append(c)
+                }
             }
             i++
         }
@@ -136,7 +169,11 @@ object SpotifyExportParser {
                     if (entry.isDirectory) continue
                     val name = entry.name
                     val lower = name.lowercase()
-                    if (!(lower.endsWith(".json") || lower.endsWith(".csv") || lower.endsWith(".zip")) || IGNORED_JSON.containsMatchIn(lower)) continue
+                    if (!(lower.endsWith(".json") || lower.endsWith(".csv") || lower.endsWith(".zip")) ||
+                        IGNORED_JSON.containsMatchIn(lower)
+                    ) {
+                        continue
+                    }
                     val buffer = ByteArrayOutputStream()
                     val chunk = ByteArray(16 * 1024)
                     while (true) {
@@ -154,12 +191,23 @@ object SpotifyExportParser {
         return out
     }
 
-    private fun makeTrack(title: String?, artist: String?, album: String?, durationMs: Long?): ImportTrack? {
+    private fun makeTrack(
+        title: String?,
+        artist: String?,
+        album: String?,
+        durationMs: Long?,
+    ): ImportTrack? {
         val t = title?.trim().orEmpty()
         if (t.isEmpty()) return null
         return ImportTrack(
             title = t,
-            artist = artist.orEmpty().split(';').map { it.trim() }.filter { it.isNotEmpty() }.joinToString(", "),
+            artist =
+                artist
+                    .orEmpty()
+                    .split(';')
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .joinToString(", "),
             album = album?.trim()?.takeIf { it.isNotEmpty() },
             durationMs = durationMs?.takeIf { it > 0 },
         )
@@ -168,7 +216,11 @@ object SpotifyExportParser {
     private fun keyOf(track: ImportTrack) = (track.title + "|" + track.artist).lowercase()
 
     private val LIKED_NAME = Regex("liked|saved songs|favou?rite", RegexOption.IGNORE_CASE)
-    private val IGNORED_JSON = Regex("streaming_?history|endsong|searchqueries|userdata|inferences|identity|payments|follow|marquee|wrapped|read_?me", RegexOption.IGNORE_CASE)
+    private val IGNORED_JSON =
+        Regex(
+            "streaming_?history|endsong|searchqueries|userdata|inferences|identity|payments|follow|marquee|wrapped|read_?me",
+            RegexOption.IGNORE_CASE,
+        )
     private const val DEFAULT_PLAYLIST = "Spotify playlist"
     private const val MAX_ENTRY_BYTES = 64 * 1024 * 1024
     private const val MAX_TOTAL_BYTES = 256L * 1024 * 1024

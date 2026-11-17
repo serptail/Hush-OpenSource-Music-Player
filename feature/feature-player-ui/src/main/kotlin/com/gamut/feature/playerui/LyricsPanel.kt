@@ -324,18 +324,20 @@ internal fun FullLyricsPanel(
                         }
                     }
 
-                    is LyricsState.Loaded -> if (flowLines != null) {
-                        FlowLyricsPanel(
-                            lines = flowLines,
-                            isSynced = lyricsState.isSynced,
-                            trackKey = trackKey,
-                            playhead = playhead,
-                            isPlaying = isPlaying,
-                            onSeekToLine = onSeekToMs,
-                            modifier = Modifier.fillMaxSize(),
-                            topPadding = 16.dp,
-                            gutter = 24.dp,
-                        )
+                    is LyricsState.Loaded -> {
+                        if (flowLines != null) {
+                            FlowLyricsPanel(
+                                lines = flowLines,
+                                isSynced = lyricsState.isSynced,
+                                trackKey = trackKey,
+                                playhead = playhead,
+                                isPlaying = isPlaying,
+                                onSeekToLine = onSeekToMs,
+                                modifier = Modifier.fillMaxSize(),
+                                topPadding = 16.dp,
+                                gutter = 24.dp,
+                            )
+                        }
                     }
 
                     is LyricsState.NotAvailable -> {

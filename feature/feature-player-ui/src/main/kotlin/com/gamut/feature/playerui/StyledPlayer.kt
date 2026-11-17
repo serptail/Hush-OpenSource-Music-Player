@@ -2,10 +2,14 @@ package com.gamut.feature.playerui
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -23,28 +27,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.spring
-import androidx.compose.runtime.MutableFloatState
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +54,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -82,7 +80,6 @@ import com.gamut.core.designsystem.AdaptiveLayout
 import com.gamut.core.designsystem.PlayerStyle
 import com.gamut.core.designsystem.adaptiveGutter
 import com.gamut.core.designsystem.squareArtUrl
-import com.gamut.core.model.RepeatMode as PlaybackRepeatMode
 import com.gamut.core.model.Track
 import com.gamut.feature.playerui.components.DepthIcon
 import com.gamut.feature.playerui.components.PlayerSpinner
@@ -92,7 +89,10 @@ import com.gamut.feature.playerui.components.bounceTap
 import com.gamut.feature.playerui.components.volumeHudAnchor
 import com.gamut.feature.playerui.components.volumeHudHeaderAnchor
 import com.gamut.feature.playerui.components.youtubeThumbCandidates
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import com.gamut.core.model.RepeatMode as PlaybackRepeatMode
 
 private const val COVER_FADE_FRACTION = 0.34f
 
@@ -188,7 +188,8 @@ internal fun StyledPlayerLayer(
         }
         if (lyricsBackdrop && blurArt != null) {
             Box(Modifier.fillMaxSize().graphicsLayer { alpha = lyricsT }) {
-                com.gamut.feature.playerui.PlayerBackdrop(blurArt, animateChanges = active)
+                com.gamut.feature.playerui
+                    .PlayerBackdrop(blurArt, animateChanges = active)
             }
         }
 
@@ -196,13 +197,14 @@ internal fun StyledPlayerLayer(
             CoverBanner(
                 url = rawArt,
                 height = bannerHeight,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .volumeHudAnchor(volumeHud)
-                    .graphicsLayer {
-                        alpha = 1f - lyricsT
-                        translationY = -lyricsT * 28.dp.toPx() - scroll.value
-                    },
+                modifier =
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .volumeHudAnchor(volumeHud)
+                        .graphicsLayer {
+                            alpha = 1f - lyricsT
+                            translationY = -lyricsT * 28.dp.toPx() - scroll.value
+                        },
             )
         }
 
@@ -211,74 +213,52 @@ internal fun StyledPlayerLayer(
                 .fillMaxSize()
                 .verticalScroll(scroll, enabled = !lyricsOpen),
         ) {
-        Column(Modifier.fillMaxWidth().height(height).statusBarsPadding().navigationBarsPadding()) {
-            Crossfade(targetState = lyricsOpen, animationSpec = tween(300), label = "styledTopBar") { open ->
-                if (open) {
-                    LyricsHeader(
-                        artUrl = blurArt,
-                        title = track?.title.orEmpty(),
-                        artist = track?.artist.orEmpty(),
-                        onClose = { onLyricsOpenChange(false) },
-                        onMore = onMore,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp + gutter).padding(top = 8.dp),
-                    )
-                } else {
-                    PullPill(pull = pull, onDismiss = onBack, modifier = Modifier.fillMaxWidth())
-                }
-            }
-
-            Crossfade(
-                targetState = lyricsOpen,
-                animationSpec = tween(420, easing = FastOutSlowInEasing),
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                label = "styledMiddle",
-            ) { open ->
-                if (open) {
-                    LyricsWindow(
-                        lyricsState = lyricsState,
-                        flowLines = flowLines,
-                        trackKey = trackKey,
-                        playhead = playhead,
-                        isPlaying = live,
-                        edge = edge,
-                        onSeekToMs = onSeekToMs,
-                        onRetry = onRetryLyrics,
-                        highlight = highlight,
-                    )
-                } else if (cover) {
-                    Column(
-                        Modifier.fillMaxSize().padding(horizontal = edge),
-                        verticalArrangement = Arrangement.Bottom,
-                    ) {
-                        Box(Modifier.volumeHudHeaderAnchor(volumeHud)) {
-                            TrackHeader(
-                                title = track?.title.orEmpty(),
-                                artist = track?.artist.orEmpty(),
-                                albumTitle = track?.album,
-                                onArtist = onArtist,
-                                isFavorite = isFavorite,
-                                onToggleFavorite = onToggleFavorite,
-                                onMore = onMore,
-                            )
-                        }
-                        Spacer(Modifier.height(12.dp))
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .height(height)
+                    .statusBarsPadding()
+                    .navigationBarsPadding(),
+            ) {
+                Crossfade(targetState = lyricsOpen, animationSpec = tween(300), label = "styledTopBar") { open ->
+                    if (open) {
+                        LyricsHeader(
+                            artUrl = blurArt,
+                            title = track?.title.orEmpty(),
+                            artist = track?.artist.orEmpty(),
+                            onClose = { onLyricsOpenChange(false) },
+                            onMore = onMore,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp + gutter).padding(top = 8.dp),
+                        )
+                    } else {
+                        PullPill(pull = pull, onDismiss = onBack, modifier = Modifier.fillMaxWidth())
                     }
-                } else {
-                    BoxWithConstraints(Modifier.fillMaxSize()) {
-                        val credits = 96.dp
-                        val side = minOf(maxWidth - edge * 2, MeshSleeveMaxWidth, maxHeight - credits).coerceAtLeast(120.dp)
+                }
+
+                Crossfade(
+                    targetState = lyricsOpen,
+                    animationSpec = tween(420, easing = FastOutSlowInEasing),
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    label = "styledMiddle",
+                ) { open ->
+                    if (open) {
+                        LyricsWindow(
+                            lyricsState = lyricsState,
+                            flowLines = flowLines,
+                            trackKey = trackKey,
+                            playhead = playhead,
+                            isPlaying = live,
+                            edge = edge,
+                            onSeekToMs = onSeekToMs,
+                            onRetry = onRetryLyrics,
+                            highlight = highlight,
+                        )
+                    } else if (cover) {
                         Column(
-                            Modifier.fillMaxSize(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
+                            Modifier.fillMaxSize().padding(horizontal = edge),
+                            verticalArrangement = Arrangement.Bottom,
                         ) {
-                            MeshSleeve(
-                                url = rawArt,
-                                isPlaying = isPlaying,
-                                modifier = Modifier.size(side).then(seam.onSleeve).volumeHudAnchor(volumeHud),
-                            )
-                            Spacer(Modifier.height(20.dp))
-                            Box(Modifier.padding(horizontal = edge).volumeHudHeaderAnchor(volumeHud)) {
+                            Box(Modifier.volumeHudHeaderAnchor(volumeHud)) {
                                 TrackHeader(
                                     title = track?.title.orEmpty(),
                                     artist = track?.artist.orEmpty(),
@@ -289,67 +269,141 @@ internal fun StyledPlayerLayer(
                                     onMore = onMore,
                                 )
                             }
+                            Spacer(Modifier.height(12.dp))
+                        }
+                    } else {
+                        BoxWithConstraints(Modifier.fillMaxSize()) {
+                            val credits = 96.dp
+                            val side = minOf(maxWidth - edge * 2, MeshSleeveMaxWidth, maxHeight - credits).coerceAtLeast(120.dp)
+                            Column(
+                                Modifier.fillMaxSize(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                            ) {
+                                MeshSleeve(
+                                    url = rawArt,
+                                    isPlaying = isPlaying,
+                                    modifier = Modifier.size(side).then(seam.onSleeve).volumeHudAnchor(volumeHud),
+                                )
+                                Spacer(Modifier.height(20.dp))
+                                Box(Modifier.padding(horizontal = edge).volumeHudHeaderAnchor(volumeHud)) {
+                                    TrackHeader(
+                                        title = track?.title.orEmpty(),
+                                        artist = track?.artist.orEmpty(),
+                                        albumTitle = track?.album,
+                                        onArtist = onArtist,
+                                        isFavorite = isFavorite,
+                                        onToggleFavorite = onToggleFavorite,
+                                        onMore = onMore,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Column(Modifier.fillMaxWidth().padding(horizontal = edge)) {
+                    Box(
+                        Modifier.fillMaxWidth().height(56.dp).graphicsLayer { alpha = 1f - lyricsT },
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        if (lyricsOn && !lyricsOpen) {
+                            when {
+                                flowLines != null && loaded?.isSynced == true -> {
+                                    FlowLyricStrip(
+                                        lines = flowLines,
+                                        trackKey = trackKey,
+                                        playhead = playhead,
+                                        isPlaying = live,
+                                        durationMs = durationMs,
+                                        onClick = { onLyricsOpenChange(true) },
+                                        maxLines = 2,
+                                        highlight = highlight,
+                                    )
+                                }
+
+                                flowLines != null -> {
+                                    Text(
+                                        text = "Lyrics",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = Color.White.copy(alpha = 0.8f),
+                                        modifier =
+                                            Modifier
+                                                .clip(
+                                                    RoundedCornerShape(8.dp),
+                                                ).clickable { onLyricsOpenChange(true) }
+                                                .padding(vertical = 4.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    MeshScrubber(progress = progress, onScrub = onScrub, onSeekFraction = onSeekFraction)
+                    Box(Modifier.padding(top = 2.dp)) { TimeRow(positionMs, durationMs) }
+                    MeshTransport(
+                        isPlaying = isPlaying,
+                        loading = loading,
+                        onPrevious = onPrevious,
+                        onTogglePlay = onTogglePlay,
+                        onNext = onNext,
+                        modifier = Modifier.padding(top = 4.dp),
+                        playModifier = Modifier.focusRequester(coverFocus),
+                    )
+                    val idle = Color.White.copy(alpha = 0.85f)
+                    Row(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Cell {
+                            DepthIcon(
+                                PhosphorIcons.Regular.Shuffle,
+                                if (shuffleOn) "Shuffle on" else "Shuffle off",
+                                Modifier.bounceTap(onClick = onShuffle).padding(8.dp),
+                                tint = if (shuffleOn) accent else idle,
+                            )
+                        }
+                        Cell {
+                            DepthIcon(
+                                PhosphorIcons.Regular.Queue,
+                                "Queue",
+                                Modifier.bounceTap(onClick = onQueue).padding(8.dp),
+                                tint = idle,
+                            )
+                        }
+                        Cell {
+                            DepthIcon(
+                                PhosphorIcons.Regular.ListPlus,
+                                "Add to playlist",
+                                Modifier.bounceTap(onClick = onAddToPlaylist).padding(8.dp),
+                                tint = idle,
+                            )
+                        }
+                        Cell {
+                            DepthIcon(
+                                if (repeatMode ==
+                                    PlaybackRepeatMode.ONE
+                                ) {
+                                    PhosphorIcons.Regular.RepeatOnce
+                                } else {
+                                    PhosphorIcons.Regular.Repeat
+                                },
+                                when (repeatMode) {
+                                    PlaybackRepeatMode.OFF -> "Repeat off"
+                                    PlaybackRepeatMode.ALL -> "Repeat all"
+                                    PlaybackRepeatMode.ONE -> "Repeat one"
+                                },
+                                Modifier.bounceTap(onClick = onRepeat).padding(8.dp),
+                                tint = if (repeatMode != PlaybackRepeatMode.OFF) accent else idle,
+                            )
+                        }
+                        Cell {
+                            DepthIcon(
+                                PhosphorIcons.Regular.Sparkle,
+                                if (modActive) "Mod on" else "Mod",
+                                Modifier.bounceTap(onClick = onMod).padding(8.dp),
+                                tint = if (modActive) accent else idle,
+                            )
                         }
                     }
                 }
             }
-
-            Column(Modifier.fillMaxWidth().padding(horizontal = edge)) {
-                Box(Modifier.fillMaxWidth().height(56.dp).graphicsLayer { alpha = 1f - lyricsT }, contentAlignment = Alignment.CenterStart) {
-                    if (lyricsOn && !lyricsOpen) {
-                        when {
-                            flowLines != null && loaded?.isSynced == true -> FlowLyricStrip(
-                                lines = flowLines,
-                                trackKey = trackKey,
-                                playhead = playhead,
-                                isPlaying = live,
-                                durationMs = durationMs,
-                                onClick = { onLyricsOpenChange(true) },
-                                maxLines = 2,
-                                highlight = highlight,
-                            )
-
-                            flowLines != null -> Text(
-                                text = "Lyrics",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = Color.White.copy(alpha = 0.8f),
-                                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onLyricsOpenChange(true) }.padding(vertical = 4.dp),
-                            )
-                        }
-                    }
-                }
-                MeshScrubber(progress = progress, onScrub = onScrub, onSeekFraction = onSeekFraction)
-                Box(Modifier.padding(top = 2.dp)) { TimeRow(positionMs, durationMs) }
-                MeshTransport(
-                    isPlaying = isPlaying,
-                    loading = loading,
-                    onPrevious = onPrevious,
-                    onTogglePlay = onTogglePlay,
-                    onNext = onNext,
-                    modifier = Modifier.padding(top = 4.dp),
-                    playModifier = Modifier.focusRequester(coverFocus),
-                )
-                val idle = Color.White.copy(alpha = 0.85f)
-                Row(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Cell { DepthIcon(PhosphorIcons.Regular.Shuffle, if (shuffleOn) "Shuffle on" else "Shuffle off", Modifier.bounceTap(onClick = onShuffle).padding(8.dp), tint = if (shuffleOn) accent else idle) }
-                    Cell { DepthIcon(PhosphorIcons.Regular.Queue, "Queue", Modifier.bounceTap(onClick = onQueue).padding(8.dp), tint = idle) }
-                    Cell { DepthIcon(PhosphorIcons.Regular.ListPlus, "Add to playlist", Modifier.bounceTap(onClick = onAddToPlaylist).padding(8.dp), tint = idle) }
-                    Cell {
-                        DepthIcon(
-                            if (repeatMode == PlaybackRepeatMode.ONE) PhosphorIcons.Regular.RepeatOnce else PhosphorIcons.Regular.Repeat,
-                            when (repeatMode) {
-                                PlaybackRepeatMode.OFF -> "Repeat off"
-                                PlaybackRepeatMode.ALL -> "Repeat all"
-                                PlaybackRepeatMode.ONE -> "Repeat one"
-                            },
-                            Modifier.bounceTap(onClick = onRepeat).padding(8.dp),
-                            tint = if (repeatMode != PlaybackRepeatMode.OFF) accent else idle,
-                        )
-                    }
-                    Cell { DepthIcon(PhosphorIcons.Regular.Sparkle, if (modActive) "Mod on" else "Mod", Modifier.bounceTap(onClick = onMod).padding(8.dp), tint = if (modActive) accent else idle) }
-                }
-            }
-        }
             Column(Modifier.fillMaxWidth().padding(horizontal = edge)) {
                 Spacer(Modifier.height(8.dp))
                 extras()
@@ -360,22 +414,28 @@ internal fun StyledPlayerLayer(
 }
 
 @Composable
-private fun PullPill(pull: MutableFloatState, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+private fun PullPill(
+    pull: MutableFloatState,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val dismiss by rememberUpdatedState(onDismiss)
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val threshold = with(density) { 96.dp.toPx() }
     val limit = with(density) { 260.dp.toPx() }
     var settle by remember { mutableStateOf<Job?>(null) }
+
     fun release(fast: Boolean) {
         settle?.cancel()
-        settle = scope.launch {
-            animate(
-                initialValue = pull.floatValue,
-                targetValue = 0f,
-                animationSpec = if (fast) tween(260) else spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessMediumLow),
-            ) { value, _ -> pull.floatValue = value }
-        }
+        settle =
+            scope.launch {
+                animate(
+                    initialValue = pull.floatValue,
+                    targetValue = 0f,
+                    animationSpec = if (fast) tween(260) else spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessMediumLow),
+                ) { value, _ -> pull.floatValue = value }
+            }
     }
     Box(
         modifier
@@ -395,8 +455,7 @@ private fun PullPill(pull: MutableFloatState, onDismiss: () -> Unit, modifier: M
                         pull.floatValue = (pull.floatValue + dy * resistance).coerceIn(0f, limit)
                     },
                 )
-            }
-            .clickable(onClick = { dismiss() }),
+            }.clickable(onClick = { dismiss() }),
         contentAlignment = Alignment.TopCenter,
     ) {
         Box(
@@ -406,8 +465,7 @@ private fun PullPill(pull: MutableFloatState, onDismiss: () -> Unit, modifier: M
                     val t = (pull.floatValue / threshold).coerceIn(0f, 1.2f)
                     scaleX = 1f + 0.5f * t
                     alpha = 0.75f + 0.25f * t.coerceAtMost(1f)
-                }
-                .size(width = 44.dp, height = 5.dp)
+                }.size(width = 44.dp, height = 5.dp)
                 .clip(CircleShape)
                 .background(Color.White),
         )
@@ -420,16 +478,22 @@ private fun RowScope.Cell(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun CoverBanner(url: String?, height: Dp, modifier: Modifier = Modifier) {
-    val model = remember(url) {
-        url?.let { youtubeThumbCandidates(it)?.firstOrNull() ?: squareArtUrl(it, 1200) ?: it }
-    }
-    val fade = remember {
-        Array(FADE_CURVE_STOPS + 1) { i ->
-            val t = i / FADE_CURVE_STOPS.toFloat()
-            t to Color.Black.copy(alpha = 1f - smootherStep(t))
+private fun CoverBanner(
+    url: String?,
+    height: Dp,
+    modifier: Modifier = Modifier,
+) {
+    val model =
+        remember(url) {
+            url?.let { youtubeThumbCandidates(it)?.firstOrNull() ?: squareArtUrl(it, 1200) ?: it }
         }
-    }
+    val fade =
+        remember {
+            Array(FADE_CURVE_STOPS + 1) { i ->
+                val t = i / FADE_CURVE_STOPS.toFloat()
+                t to Color.Black.copy(alpha = 1f - smootherStep(t))
+            }
+        }
     Box(
         modifier
             .fillMaxWidth()
@@ -438,11 +502,12 @@ private fun CoverBanner(url: String?, height: Dp, modifier: Modifier = Modifier)
             .drawWithContent {
                 drawContent()
                 drawRect(
-                    brush = Brush.verticalGradient(
-                        colorStops = fade,
-                        startY = size.height * (1f - COVER_FADE_FRACTION),
-                        endY = size.height,
-                    ),
+                    brush =
+                        Brush.verticalGradient(
+                            colorStops = fade,
+                            startY = size.height * (1f - COVER_FADE_FRACTION),
+                            endY = size.height,
+                        ),
                     blendMode = BlendMode.DstIn,
                 )
             },
@@ -483,8 +548,20 @@ private fun LyricsHeader(
         }
         Spacer(Modifier.size(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, color = Color.White, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(artist, color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                title,
+                color = Color.White,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                artist,
+                color = Color.White.copy(alpha = 0.7f),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         DepthIcon(PhosphorIcons.Bold.DotsThreeVertical, "More", Modifier.bounceTap(onClick = onMore).padding(8.dp))
     }
@@ -504,27 +581,36 @@ private fun LyricsWindow(
 ) {
     Box(Modifier.fillMaxSize()) {
         when (lyricsState) {
-            is LyricsState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                PlayerSpinner(Modifier.size(30.dp), Color.White.copy(alpha = 0.8f))
+            is LyricsState.Loading -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    PlayerSpinner(Modifier.size(30.dp), Color.White.copy(alpha = 0.8f))
+                }
             }
 
-            is LyricsState.Loaded -> if (flowLines != null) {
-                FlowLyricsPanel(
-                    lines = flowLines,
-                    isSynced = lyricsState.isSynced,
-                    trackKey = trackKey,
-                    playhead = playhead,
-                    isPlaying = isPlaying,
-                    onSeekToLine = onSeekToMs,
-                    modifier = Modifier.fillMaxSize(),
-                    topPadding = 24.dp,
-                    gutter = edge,
-                    highlight = highlight,
-                )
+            is LyricsState.Loaded -> {
+                if (flowLines != null) {
+                    FlowLyricsPanel(
+                        lines = flowLines,
+                        isSynced = lyricsState.isSynced,
+                        trackKey = trackKey,
+                        playhead = playhead,
+                        isPlaying = isPlaying,
+                        onSeekToLine = onSeekToMs,
+                        modifier = Modifier.fillMaxSize(),
+                        topPadding = 24.dp,
+                        gutter = edge,
+                        highlight = highlight,
+                    )
+                }
             }
 
-            is LyricsState.NotAvailable -> LyricsEmptyState("${lyricsState.reason}\nTap to retry", onRetry)
-            is LyricsState.Error -> LyricsEmptyState("${lyricsState.message}\nRetrying\u2026 tap to retry now", onRetry)
+            is LyricsState.NotAvailable -> {
+                LyricsEmptyState("${lyricsState.reason}\nTap to retry", onRetry)
+            }
+
+            is LyricsState.Error -> {
+                LyricsEmptyState("${lyricsState.message}\nRetrying\u2026 tap to retry now", onRetry)
+            }
         }
     }
 }

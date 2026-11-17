@@ -2,7 +2,9 @@ package com.gamut.feature.playerui
 
 import kotlin.math.abs
 
-internal class LyricClock(startMs: Long) {
+internal class LyricClock(
+    startMs: Long,
+) {
     var displayedMs: Double = startMs.toDouble()
         private set
 
@@ -41,29 +43,39 @@ internal class LyricClock(startMs: Long) {
         clearSuspect()
     }
 
-    fun hold(positionMs: Long, nowMs: Double) {
+    fun hold(
+        positionMs: Long,
+        nowMs: Double,
+    ) {
         restart()
         displayedMs = positionMs.toDouble()
         heldAtMs = nowMs
     }
 
-    fun frame(nowMs: Double, reportedMs: Long, sampledAtMs: Double, discontinuity: Long): Long {
+    fun frame(
+        nowMs: Double,
+        reportedMs: Long,
+        sampledAtMs: Double,
+        discontinuity: Long,
+    ): Long {
         val firstOfRun = lastNowMs.isNaN()
         if (discontinuity != lastDiscontinuity) {
             if (lastDiscontinuity != null && !firstOfRun) jumpPending = true
             lastDiscontinuity = discontinuity
         }
-        val isNew = reportedMs != lastReportMs ||
-            (!sampledAtMs.isNaN() && sampledAtMs != lastSampledAtMs)
+        val isNew =
+            reportedMs != lastReportMs ||
+                (!sampledAtMs.isNaN() && sampledAtMs != lastSampledAtMs)
         lastReportMs = reportedMs
         lastSampledAtMs = sampledAtMs
 
         if (firstOfRun) {
             lastNowMs = nowMs
-            val takenAt = when {
-                sampledAtMs.isNaN() || sampledAtMs <= heldAtMs -> nowMs
-                else -> minOf(sampledAtMs, nowMs)
-            }
+            val takenAt =
+                when {
+                    sampledAtMs.isNaN() || sampledAtMs <= heldAtMs -> nowMs
+                    else -> minOf(sampledAtMs, nowMs)
+                }
             anchor(takenAt, reportedMs)
             displayedMs = targetAt(nowMs)
             return displayedMs.toLong()
@@ -80,7 +92,11 @@ internal class LyricClock(startMs: Long) {
         return displayedMs.toLong()
     }
 
-    private fun take(nowMs: Double, takenAt: Double, reportedMs: Long) {
+    private fun take(
+        nowMs: Double,
+        takenAt: Double,
+        reportedMs: Long,
+    ) {
         if (jumpPending) {
             jumpPending = false
             clearSuspect()
@@ -95,8 +111,9 @@ internal class LyricClock(startMs: Long) {
             return
         }
         val sinceSuspect = takenAt - suspectAtMs
-        val agrees = !suspectAtMs.isNaN() && sinceSuspect >= 0 &&
-            abs(reportedMs - (suspectMs + sinceSuspect * rate)) <= tolerance(sinceSuspect)
+        val agrees =
+            !suspectAtMs.isNaN() && sinceSuspect >= 0 &&
+                abs(reportedMs - (suspectMs + sinceSuspect * rate)) <= tolerance(sinceSuspect)
         rejections++
         if (agrees) {
             val firstAt = suspectAtMs
@@ -113,10 +130,13 @@ internal class LyricClock(startMs: Long) {
         }
     }
 
-    private fun tolerance(elapsedMs: Double): Double =
-        OUTLIER_MS + abs(elapsedMs) * if (rateSettled) RATE_SLACK else UNSETTLED_RATE_SLACK
+    private fun tolerance(elapsedMs: Double): Double = OUTLIER_MS + abs(elapsedMs) * if (rateSettled) RATE_SLACK else UNSETTLED_RATE_SLACK
 
-    private fun anchor(atMs: Double, positionMs: Long, continues: Boolean = false) {
+    private fun anchor(
+        atMs: Double,
+        positionMs: Long,
+        continues: Boolean = false,
+    ) {
         anchorAtMs = atMs
         anchorMs = positionMs.toDouble()
         if (!continues) historySize = 0
@@ -144,8 +164,9 @@ internal class LyricClock(startMs: Long) {
         }
         val pairSpan = historyAt[newest] - historyAt[newest - 1]
         if (!rateSettled && pairSpan >= MIN_PAIR_SPAN_MS) {
-            val measured = ((historyMs[newest] - historyMs[newest - 1]) / pairSpan)
-                .coerceIn(MIN_RATE, MAX_RATE)
+            val measured =
+                ((historyMs[newest] - historyMs[newest - 1]) / pairSpan)
+                    .coerceIn(MIN_RATE, MAX_RATE)
             rate += (measured - rate) * PAIR_LEARNING
         }
     }
@@ -155,7 +176,10 @@ internal class LyricClock(startMs: Long) {
         rejections = 0
     }
 
-    private fun advance(nowMs: Double, dt: Double) {
+    private fun advance(
+        nowMs: Double,
+        dt: Double,
+    ) {
         val target = targetAt(nowMs)
         val step = dt * rate
         val error = target - (displayedMs + step)
@@ -169,11 +193,16 @@ internal class LyricClock(startMs: Long) {
                     displayedMs = target + glideOffsetMs * (1.0 - smoothstep(progress))
                 }
             }
-            error <= -LOST_MS || error >= LOST_MS -> displayedMs = target
+
+            error <= -LOST_MS || error >= LOST_MS -> {
+                displayedMs = target
+            }
+
             error >= GLIDE_FROM_MS -> {
                 startGlide(nowMs - dt, displayedMs - (target - step))
                 displayedMs = target + glideOffsetMs * (1.0 - smoothstep(dt / GLIDE_MS))
             }
+
             else -> {
                 val closing = error * (dt / (dt + CORRECTION_MS))
                 displayedMs += step + closing.coerceIn(-MAX_SLOW * step, MAX_SLEW * step)
@@ -191,7 +220,10 @@ internal class LyricClock(startMs: Long) {
         }
     }
 
-    private fun startGlide(startMs: Double, offsetMs: Double) {
+    private fun startGlide(
+        startMs: Double,
+        offsetMs: Double,
+    ) {
         glideStartMs = startMs
         glideOffsetMs = offsetMs
     }

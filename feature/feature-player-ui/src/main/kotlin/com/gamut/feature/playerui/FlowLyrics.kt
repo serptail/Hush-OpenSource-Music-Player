@@ -78,24 +78,28 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.gamut.feature.playerui.components.fadingEdges
-import kotlin.math.abs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlin.math.abs
 
 internal fun List<LyricsLine>.toFlowLines(isSynced: Boolean): List<FlowLine> {
-    val mapped = map { line ->
-        FlowLine(
-            timeMs = line.timestampMs,
-            text = line.text,
-            words = line.words.map { FlowWord(it.startMs, it.endMs, it.text, it.syllables) },
-            explicitEndMs = line.endMs,
-        )
-    }
+    val mapped =
+        map { line ->
+            FlowLine(
+                timeMs = line.timestampMs,
+                text = line.text,
+                words = line.words.map { FlowWord(it.startMs, it.endMs, it.text, it.syllables) },
+                explicitEndMs = line.endMs,
+            )
+        }
     return if (isSynced) mapped.withInstrumentalBreaks() else mapped
 }
 
 @Stable
-internal class FlowPlayhead(private val clock: PlayerClock, private val offsetMs: Long = LyricsSyncOffsetMs) {
+internal class FlowPlayhead(
+    private val clock: PlayerClock,
+    private val offsetMs: Long = LyricsSyncOffsetMs,
+) {
     val positionMs: Long get() = (clock.readingMs + offsetMs).coerceAtLeast(0L)
     val sampledAtNanos: Long get() = clock.readingAtNanos
     val discontinuity: Long get() = clock.seeks.toLong() shl 32
@@ -106,10 +110,15 @@ private fun nanosToMs(nanos: Long): Double = nanos / 1_000_000.0
 private const val SAME_CLOCK_NANOS = 250_000_000L
 
 @Composable
-internal fun rememberFlowClock(trackKey: Any, playhead: FlowPlayhead, isPlaying: Boolean): MutableLongState {
-    val clock = remember(trackKey) {
-        mutableLongStateOf(Snapshot.withoutReadObservation { playhead.positionMs })
-    }
+internal fun rememberFlowClock(
+    trackKey: Any,
+    playhead: FlowPlayhead,
+    isPlaying: Boolean,
+): MutableLongState {
+    val clock =
+        remember(trackKey) {
+            mutableLongStateOf(Snapshot.withoutReadObservation { playhead.positionMs })
+        }
     val engine = remember(trackKey) { LyricClock(clock.longValue) }
 
     if (!isPlaying) {
@@ -130,12 +139,13 @@ internal fun rememberFlowClock(trackKey: Any, playhead: FlowPlayhead, isPlaying:
                 val system = System.nanoTime()
                 val now = if (abs(system - frameNanos) < SAME_CLOCK_NANOS) frameNanos else system
                 val sampledAt = playhead.sampledAtNanos
-                clock.longValue = engine.frame(
-                    nowMs = nanosToMs(now),
-                    reportedMs = playhead.positionMs,
-                    sampledAtMs = if (sampledAt > 0L) nanosToMs(sampledAt) else Double.NaN,
-                    discontinuity = playhead.discontinuity,
-                )
+                clock.longValue =
+                    engine.frame(
+                        nowMs = nanosToMs(now),
+                        reportedMs = playhead.positionMs,
+                        sampledAtMs = if (sampledAt > 0L) nanosToMs(sampledAt) else Double.NaN,
+                        discontinuity = playhead.discontinuity,
+                    )
             }
         }
     }
@@ -149,9 +159,10 @@ private fun rememberIsForeground(): Boolean {
         mutableStateOf(owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
     }
     DisposableEffect(owner) {
-        val observer = LifecycleEventObserver { _, _ ->
-            foreground = owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-        }
+        val observer =
+            LifecycleEventObserver { _, _ ->
+                foreground = owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+            }
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
@@ -188,11 +199,18 @@ private const val LYRIC_SETTLE_MS = 400
 private const val STAGGER_STEPS = 3
 private const val STAGGER_FRACTION = 0.06f
 
-private class ScrollRun(val id: Int, val delta: Float, val durationMs: Int) {
+private class ScrollRun(
+    val id: Int,
+    val delta: Float,
+    val durationMs: Int,
+) {
     val spanMs: Float get() = durationMs * (1f + STAGGER_FRACTION * STAGGER_STEPS)
 }
 
-private fun scrollLead(lines: List<FlowLine>, positionMs: Long): Long {
+private fun scrollLead(
+    lines: List<FlowLine>,
+    positionMs: Long,
+): Long {
     val current = lines.indexOfLast { it.timeMs <= positionMs }
     if (current < 0) return SCROLL_LEAD_MIN_MS
     val next = lines.getOrNull(current + 1) ?: return SCROLL_LEAD_MIN_MS
@@ -305,6 +323,7 @@ internal fun FlowLyricsPanel(
                     }
                     placed = true
                 }
+
                 visible != null -> {
                     val span = scrollLead(lines, clock.longValue).toInt()
                     val distance = (visible.offset - focusOffset(visible.size)).toFloat()
@@ -314,6 +333,7 @@ internal fun FlowLyricsPanel(
                         animationSpec = tween(durationMillis = span, easing = LYRIC_EASING),
                     )
                 }
+
                 else -> {
                     listState.animateScrollToItem(focusLine, scrollOffset = -focusOffset(0))
                     if (centered) {
@@ -333,22 +353,25 @@ internal fun FlowLyricsPanel(
 
     val density = LocalDensity.current
     val viewportDp = with(density) { viewportHeight.toDp() }
-    val syncedStyle = remember(font) {
-        TextStyle(fontFamily = font, fontWeight = FontWeight.ExtraBold, fontSize = 34.sp, lineHeight = 41.sp, color = Color.White)
-    }
-    val plainStyle = remember(font) {
-        TextStyle(fontFamily = font, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp, lineHeight = 38.sp, color = Color.White)
-    }
+    val syncedStyle =
+        remember(font) {
+            TextStyle(fontFamily = font, fontWeight = FontWeight.ExtraBold, fontSize = 34.sp, lineHeight = 41.sp, color = Color.White)
+        }
+    val plainStyle =
+        remember(font) {
+            TextStyle(fontFamily = font, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp, lineHeight = 38.sp, color = Color.White)
+        }
 
     LazyColumn(
         state = listState,
         modifier = modifier.fadingEdges(0.08f),
-        contentPadding = PaddingValues(
-            top = if (centered) viewportDp * 0.5f else topPadding - GLOW_ROOM,
-            bottom = viewportDp * 0.8f,
-            start = gutter - GLOW_ROOM,
-            end = gutter - GLOW_ROOM,
-        ),
+        contentPadding =
+            PaddingValues(
+                top = if (centered) viewportDp * 0.5f else topPadding - GLOW_ROOM,
+                bottom = viewportDp * 0.8f,
+                start = gutter - GLOW_ROOM,
+                end = gutter - GLOW_ROOM,
+            ),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         itemsIndexed(lines) { index, line ->
@@ -358,20 +381,22 @@ internal fun FlowLyricsPanel(
             val falloff = if (centerFocus) LINE_FALLOFF_ALPHA else LINE_FALLOFF_ALPHA_PHONE
             val step = distance.coerceAtMost(falloff.lastIndex)
             val blur by animateDpAsState(
-                targetValue = when {
-                    !isSynced || !blurEnabled || browsing || isActive -> 0.dp
-                    else -> LINE_FALLOFF_BLUR[step.coerceAtMost(LINE_FALLOFF_BLUR.lastIndex)]
-                },
+                targetValue =
+                    when {
+                        !isSynced || !blurEnabled || browsing || isActive -> 0.dp
+                        else -> LINE_FALLOFF_BLUR[step.coerceAtMost(LINE_FALLOFF_BLUR.lastIndex)]
+                    },
                 animationSpec = tween(LYRIC_SETTLE_MS, easing = LYRIC_EASING),
                 label = "flowBlur",
             )
             val lineAlpha by animateFloatAsState(
-                targetValue = when {
-                    !isSynced -> 0.95f
-                    isActive -> 1f
-                    browsing -> BROWSING_ALPHA
-                    else -> falloff[step]
-                },
+                targetValue =
+                    when {
+                        !isSynced -> 0.95f
+                        isActive -> 1f
+                        browsing -> BROWSING_ALPHA
+                        else -> falloff[step]
+                    },
                 animationSpec = tween(LYRIC_SETTLE_MS, easing = LYRIC_EASING),
                 label = "flowAlpha",
             )
@@ -394,11 +419,12 @@ internal fun FlowLyricsPanel(
                 val interaction = remember { MutableInteractionSource() }
                 val pressed by interaction.collectIsPressedAsState()
                 val scale by animateFloatAsState(
-                    targetValue = when {
-                        pressed -> PRESSED_SCALE
-                        isActive -> 1f
-                        else -> INACTIVE_SCALE
-                    },
+                    targetValue =
+                        when {
+                            pressed -> PRESSED_SCALE
+                            isActive -> 1f
+                            else -> INACTIVE_SCALE
+                        },
                     animationSpec = tween(if (pressed) 120 else LYRIC_SETTLE_MS, easing = LYRIC_EASING),
                     label = "flowScale",
                 )
@@ -408,38 +434,50 @@ internal fun FlowLyricsPanel(
                     label = "flowGlow",
                 )
                 val rtl = isRtl(line.text)
-                val shape = Modifier
-                    .fillMaxWidth()
-                    .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                        transformOrigin = TransformOrigin(if (centered) 0.5f else if (rtl) 1f else 0f, 0.5f)
-                        alpha = lineAlpha
-                        translationY = if (staggerDelay <= 0f) {
-                            0f
-                        } else {
-                            val elapsed = since.floatValue
-                            run.delta * (
-                                LYRIC_EASING.transform((elapsed / run.durationMs).coerceIn(0f, 1f)) -
-                                    LYRIC_EASING.transform(((elapsed - staggerDelay) / run.durationMs).coerceIn(0f, 1f))
+                val shape =
+                    Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                            transformOrigin =
+                                TransformOrigin(
+                                    if (centered) {
+                                        0.5f
+                                    } else if (rtl) {
+                                        1f
+                                    } else {
+                                        0f
+                                    },
+                                    0.5f,
                                 )
-                        }
-                    }
-                    .blur(blur, BlurredEdgeTreatment.Unbounded)
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable(
-                        enabled = isSynced,
-                        interactionSource = interaction,
-                        indication = LocalIndication.current,
-                    ) { onSeekToLine(line.timeMs) }
+                            alpha = lineAlpha
+                            translationY =
+                                if (staggerDelay <= 0f) {
+                                    0f
+                                } else {
+                                    val elapsed = since.floatValue
+                                    run.delta * (
+                                        LYRIC_EASING.transform((elapsed / run.durationMs).coerceIn(0f, 1f)) -
+                                            LYRIC_EASING.transform(((elapsed - staggerDelay) / run.durationMs).coerceIn(0f, 1f))
+                                    )
+                                }
+                        }.blur(blur, BlurredEdgeTreatment.Unbounded)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(
+                            enabled = isSynced,
+                            interactionSource = interaction,
+                            indication = LocalIndication.current,
+                        ) { onSeekToLine(line.timeMs) }
 
                 Column(modifier = shape) {
                     FlowVoice(
                         line = line,
                         clock = clock,
-                        style = flowVoiceStyle(if (isSynced) syncedStyle else plainStyle, line.text).let {
-                            if (centered) it.copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center) else it
-                        },
+                        style =
+                            flowVoiceStyle(if (isSynced) syncedStyle else plainStyle, line.text).let {
+                                if (centered) it.copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center) else it
+                            },
                         highlight = highlight,
                         centered = centered,
                         isActive = isActive,
@@ -510,16 +548,17 @@ private fun FlowGapRow(
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    val gapFill = remember(line, until, clock) {
-        derivedStateOf(structuralEqualityPolicy()) {
-            val now = clock.longValue
-            when {
-                now <= line.timeMs -> 0f
-                now >= until -> 1f
-                else -> GAP_RUNNING
+    val gapFill =
+        remember(line, until, clock) {
+            derivedStateOf(structuralEqualityPolicy()) {
+                val now = clock.longValue
+                when {
+                    now <= line.timeMs -> 0f
+                    now >= until -> 1f
+                    else -> GAP_RUNNING
+                }
             }
         }
-    }
     val swell by animateFloatAsState(
         targetValue = if (isActive) 1f else 0f,
         animationSpec = tween(durationMillis = if (isActive) 400 else 350, easing = LYRIC_EASING),
@@ -530,35 +569,35 @@ private fun FlowGapRow(
         modifier = Modifier.height((GAP_ROW_HEIGHT + GAP_ROW_SPACING) * swell).clipToBounds(),
     ) {
         Box(
-            modifier = Modifier
-                .blur(blur, BlurredEdgeTreatment.Unbounded)
-                .clip(RoundedCornerShape(10.dp))
-                .clickable(enabled = enabled, onClick = onClick)
-                .padding(GLOW_ROOM)
-                .size(width = GAP_DOT_SIZE * 3 + GAP_DOT_GAP * 2, height = GAP_DOT_SIZE)
-                .graphicsLayer {
-                    val grow = GAP_REST_SCALE + (1f - GAP_REST_SCALE) * swell
-                    scaleX = grow
-                    scaleY = grow
-                    transformOrigin = TransformOrigin(0f, 0.5f)
-                    alpha = lineAlpha * swell
-                }
-                .drawBehind {
-                    val span = (until - line.timeMs).coerceAtLeast(1L)
-                    val through = gapFill.value.takeUnless { it == GAP_RUNNING }
-                        ?: ((clock.longValue - line.timeMs).toFloat() / span).coerceIn(0f, 1f)
-                    val radius = GAP_DOT_SIZE.toPx() / 2f
-                    val stride = (GAP_DOT_SIZE + GAP_DOT_GAP).toPx()
-                    repeat(GAP_DOTS) { dot ->
-                        val lit = (through * GAP_DOTS - dot).coerceIn(0f, 1f)
-                        drawCircle(
-                            color = Color.White.copy(alpha = GAP_DOT_REST + (1f - GAP_DOT_REST) * lit),
-                            radius = radius,
-                            center = Offset(radius + dot * stride, size.height / 2f),
-                        )
-                    }
-                }
-                .semantics { contentDescription = "Instrumental break" },
+            modifier =
+                Modifier
+                    .blur(blur, BlurredEdgeTreatment.Unbounded)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(enabled = enabled, onClick = onClick)
+                    .padding(GLOW_ROOM)
+                    .size(width = GAP_DOT_SIZE * 3 + GAP_DOT_GAP * 2, height = GAP_DOT_SIZE)
+                    .graphicsLayer {
+                        val grow = GAP_REST_SCALE + (1f - GAP_REST_SCALE) * swell
+                        scaleX = grow
+                        scaleY = grow
+                        transformOrigin = TransformOrigin(0f, 0.5f)
+                        alpha = lineAlpha * swell
+                    }.drawBehind {
+                        val span = (until - line.timeMs).coerceAtLeast(1L)
+                        val through =
+                            gapFill.value.takeUnless { it == GAP_RUNNING }
+                                ?: ((clock.longValue - line.timeMs).toFloat() / span).coerceIn(0f, 1f)
+                        val radius = GAP_DOT_SIZE.toPx() / 2f
+                        val stride = (GAP_DOT_SIZE + GAP_DOT_GAP).toPx()
+                        repeat(GAP_DOTS) { dot ->
+                            val lit = (through * GAP_DOTS - dot).coerceIn(0f, 1f)
+                            drawCircle(
+                                color = Color.White.copy(alpha = GAP_DOT_REST + (1f - GAP_DOT_REST) * lit),
+                                radius = radius,
+                                center = Offset(radius + dot * stride, size.height / 2f),
+                            )
+                        }
+                    }.semantics { contentDescription = "Instrumental break" },
         )
     }
 }
@@ -588,12 +627,13 @@ internal fun FlowLyricStrip(
     val current = lines.getOrNull(index)
     val instrumental = current == null || current.isGap
     val font = rememberLyricsFont()
-    val stripStyle = MaterialTheme.typography.titleMedium.copy(
-        fontFamily = font,
-        lineHeight = STRIP_LINE_HEIGHT,
-        lineHeightStyle = LineHeightStyle(alignment = LineHeightStyle.Alignment.Center, trim = LineHeightStyle.Trim.None),
-        color = Color.White,
-    )
+    val stripStyle =
+        MaterialTheme.typography.titleMedium.copy(
+            fontFamily = font,
+            lineHeight = STRIP_LINE_HEIGHT,
+            lineHeightStyle = LineHeightStyle(alignment = LineHeightStyle.Alignment.Center, trim = LineHeightStyle.Trim.None),
+            color = Color.White,
+        )
     Box(
         modifier
             .fillMaxWidth()
@@ -611,29 +651,31 @@ internal fun FlowLyricStrip(
                     .togetherWith(
                         fadeOut(tween(duration, easing = FastOutSlowInEasing)) +
                             slideOutVertically(tween(duration, easing = FastOutSlowInEasing)) { -(it * 0.35f).toInt() },
-                    )
-                    .using(SizeTransform(clip = false) { _, _ -> tween(duration, easing = FastOutSlowInEasing) })
+                    ).using(SizeTransform(clip = false) { _, _ -> tween(duration, easing = FastOutSlowInEasing) })
             },
             label = "flowStripTransition",
         ) { (itemIndex, item) ->
             val itemInstrumental = item == null || item.isGap
-            val fading = Modifier.graphicsLayer {
-                if (itemInstrumental) return@graphicsLayer
-                val start = lines.getOrNull(itemIndex)?.timeMs ?: 0L
-                val end = lines.getOrNull(itemIndex + 1)?.timeMs
-                    ?: durationMs.takeIf { it > start }
-                    ?: (start + 4_000L)
-                val fade = ((end - start) * LYRIC_FADE_FRACTION).coerceIn(LYRIC_FADE_MIN_MS, LYRIC_FADE_MAX_MS)
-                val remaining = (end - clock.longValue).toFloat()
-                alpha = 0.78f * (remaining / fade).coerceIn(0f, 1f)
-            }
+            val fading =
+                Modifier.graphicsLayer {
+                    if (itemInstrumental) return@graphicsLayer
+                    val start = lines.getOrNull(itemIndex)?.timeMs ?: 0L
+                    val end =
+                        lines.getOrNull(itemIndex + 1)?.timeMs
+                            ?: durationMs.takeIf { it > start }
+                            ?: (start + 4_000L)
+                    val fade = ((end - start) * LYRIC_FADE_FRACTION).coerceIn(LYRIC_FADE_MIN_MS, LYRIC_FADE_MAX_MS)
+                    val remaining = (end - clock.longValue).toFloat()
+                    alpha = 0.78f * (remaining / fade).coerceIn(0f, 1f)
+                }
             if (item != null && !itemInstrumental && item.isWordSynced) {
                 SweptFlowLine(
                     line = item,
                     clock = clock,
-                    style = flowVoiceStyle(stripStyle, item.text).let {
-                        if (centered) it.copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center) else it
-                    },
+                    style =
+                        flowVoiceStyle(stripStyle, item.text).let {
+                            if (centered) it.copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center) else it
+                        },
                     dimAlpha = UNSUNG_ALPHA_STRIP,
                     color = highlight,
                     dimColor = Color.White,

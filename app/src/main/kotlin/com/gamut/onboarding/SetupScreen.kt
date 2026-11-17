@@ -32,8 +32,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -91,7 +91,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
@@ -99,6 +98,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -200,11 +200,12 @@ fun SetupScreen(vm: SetupViewModel = hiltViewModel()) {
         }
     }
 
-    val tint: Color? = if (appearance.adaptive) {
-        null
-    } else {
-        AppColorPresets.byId(appearance.preset).let { if (light) it.light else it.dark }.accent
-    }
+    val tint: Color? =
+        if (appearance.adaptive) {
+            null
+        } else {
+            AppColorPresets.byId(appearance.preset).let { if (light) it.light else it.dark }.accent
+        }
 
     val handle = ink()
     val selection = remember(handle) { TextSelectionColors(handleColor = handle, backgroundColor = handle.copy(alpha = 0.25f)) }
@@ -232,16 +233,30 @@ fun SetupScreen(vm: SetupViewModel = hiltViewModel()) {
                             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 28.dp)) {
                                 Spacer(Modifier.height(top))
                                 when (page) {
-                                    PAGE_NAME -> NamePage(name, onNameChange = { name = it.take(NAME_LIMIT) })
-                                    PAGE_LOOK -> LookPage(vm)
-                                    PAGE_FOLDER -> FolderPage(vm)
-                                    PAGE_IMPORT -> ImportPage(
-                                        vm,
-                                        onYouTube = { showYouTubeLogin = true },
-                                        onSpotify = { spotifyOpen = true },
-                                        onAppleMusic = { appleOpen = true },
-                                    )
-                                    else -> AccountPage(vm)
+                                    PAGE_NAME -> {
+                                        NamePage(name, onNameChange = { name = it.take(NAME_LIMIT) })
+                                    }
+
+                                    PAGE_LOOK -> {
+                                        LookPage(vm)
+                                    }
+
+                                    PAGE_FOLDER -> {
+                                        FolderPage(vm)
+                                    }
+
+                                    PAGE_IMPORT -> {
+                                        ImportPage(
+                                            vm,
+                                            onYouTube = { showYouTubeLogin = true },
+                                            onSpotify = { spotifyOpen = true },
+                                            onAppleMusic = { appleOpen = true },
+                                        )
+                                    }
+
+                                    else -> {
+                                        AccountPage(vm)
+                                    }
                                 }
                                 Spacer(Modifier.height(24.dp))
                             }
@@ -258,12 +273,13 @@ fun SetupScreen(vm: SetupViewModel = hiltViewModel()) {
                         val nothingImported = page == PAGE_IMPORT && (importState is ImportState.Idle || importState is ImportState.Failed)
                         NavBar(
                             showBack = page > 0,
-                            label = when {
-                                isLast && nothingImported -> "Skip and finish"
-                                isLast -> "Finish setup"
-                                nothingImported -> "Skip for now"
-                                else -> "Continue"
-                            },
+                            label =
+                                when {
+                                    isLast && nothingImported -> "Skip and finish"
+                                    isLast -> "Finish setup"
+                                    nothingImported -> "Skip for now"
+                                    else -> "Continue"
+                                },
                             onBack = { goTo(page - 1) },
                             onNext = { if (isLast) vm.finish() else goTo(page + 1) },
                         )
@@ -318,7 +334,10 @@ private tailrec fun Context.findActivity(): Activity? =
     }
 
 @Composable
-private fun NamePage(name: String, onNameChange: (String) -> Unit) {
+private fun NamePage(
+    name: String,
+    onNameChange: (String) -> Unit,
+) {
     PageTitle("Hey. What should we call you?")
     Spacer(Modifier.height(14.dp))
     PageBody("A first name or a nickname is perfect. It shows on your profile, and you can change it any time in Settings.")
@@ -338,25 +357,33 @@ private fun LookPage(vm: SetupViewModel) {
     Sheet {
         SheetLabel("THEME")
         Spacer(Modifier.height(10.dp))
-        val modes = buildList {
-            if (appearance.adaptive) add(AppThemeMode.Auto to "Auto")
-            add(AppThemeMode.System to "System")
-            add(AppThemeMode.Light to "Light")
-            add(AppThemeMode.Dark to "Dark")
-        }
+        val modes =
+            buildList {
+                if (appearance.adaptive) add(AppThemeMode.Auto to "Auto")
+                add(AppThemeMode.System to "System")
+                add(AppThemeMode.Light to "Light")
+                add(AppThemeMode.Dark to "Dark")
+            }
         Segmented(modes.map { it.second }, selected = modes.indexOfFirst { it.first == appearance.mode }) { vm.setMode(modes[it].first) }
 
         Spacer(Modifier.height(24.dp))
         SheetLabel("COLOR")
         Spacer(Modifier.height(12.dp))
-        val tiles: List<@Composable (Modifier) -> Unit> = buildList {
-            add { modifier -> AdaptiveTile(modifier, selected = appearance.adaptive, onClick = vm::useAdaptive) }
-            AppColorPresets.all.forEach { preset ->
-                add { modifier ->
-                    PresetTile(modifier, preset, dark, selected = !appearance.adaptive && appearance.preset == preset.id, onClick = { vm.usePreset(preset.id) })
+        val tiles: List<@Composable (Modifier) -> Unit> =
+            buildList {
+                add { modifier -> AdaptiveTile(modifier, selected = appearance.adaptive, onClick = vm::useAdaptive) }
+                AppColorPresets.all.forEach { preset ->
+                    add { modifier ->
+                        PresetTile(
+                            modifier,
+                            preset,
+                            dark,
+                            selected = !appearance.adaptive && appearance.preset == preset.id,
+                            onClick = { vm.usePreset(preset.id) },
+                        )
+                    }
                 }
             }
-        }
         tiles.chunked(5).forEachIndexed { rowIndex, rowTiles ->
             if (rowIndex > 0) Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
@@ -373,12 +400,15 @@ private fun LookPage(vm: SetupViewModel) {
 private fun FolderPage(vm: SetupViewModel) {
     val folder by vm.folder.collectAsState()
     var rejected by remember { mutableStateOf(false) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree: Uri? ->
-        if (tree != null) rejected = !vm.chooseFolder(tree)
-    }
+    val picker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree: Uri? ->
+            if (tree != null) rejected = !vm.chooseFolder(tree)
+        }
     PageTitle("Where should music live?")
     Spacer(Modifier.height(14.dp))
-    PageBody("Downloads go to the place you pick, with cover, artist info and lyrics saved inside each file, so other apps can play them too.")
+    PageBody(
+        "Downloads go to the place you pick, with cover, artist info and lyrics saved inside each file, so other apps can play them too.",
+    )
     Spacer(Modifier.height(28.dp))
 
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
@@ -412,7 +442,10 @@ private fun FolderPage(vm: SetupViewModel) {
         Column {
             Spacer(Modifier.height(12.dp))
             Panel(Modifier.fillMaxWidth(), cornerRadius = 20.dp) {
-                Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 18.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(
                         folder.orEmpty(),
                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
@@ -429,19 +462,30 @@ private fun FolderPage(vm: SetupViewModel) {
     }
     if (rejected) {
         Spacer(Modifier.height(10.dp))
-        Text("Pick a folder on your phone or SD card.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+        Text(
+            "Pick a folder on your phone or SD card.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+        )
     }
 }
 
 @Composable
-private fun ImportPage(vm: SetupViewModel, onYouTube: () -> Unit, onSpotify: () -> Unit, onAppleMusic: () -> Unit) {
+private fun ImportPage(
+    vm: SetupViewModel,
+    onYouTube: () -> Unit,
+    onSpotify: () -> Unit,
+    onAppleMusic: () -> Unit,
+) {
     val state by vm.importState.collectAsState()
     val busy = state is ImportState.Reading || state is ImportState.Matching
     val light = LocalCoverPalette.current.isLight
 
     PageTitle("Bring your music along")
     Spacer(Modifier.height(14.dp))
-    PageBody("Import your playlists and liked songs. Gamut finds each song in its own catalog, so nothing is copied from the other service.")
+    PageBody(
+        "Import your playlists and liked songs. Gamut finds each song in its own catalog, so nothing is copied from the other service.",
+    )
     Spacer(Modifier.height(28.dp))
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
@@ -494,7 +538,12 @@ private fun ImportPage(vm: SetupViewModel, onYouTube: () -> Unit, onSpotify: () 
 @Composable
 private fun AppleMusicLogo(modifier: Modifier = Modifier) {
     Box(modifier.height(30.dp), contentAlignment = Alignment.CenterStart) {
-        Icon(painterResource(R.drawable.ic_applemusic_full), contentDescription = "Apple Music", tint = ink(0.9f), modifier = Modifier.height(18.dp))
+        Icon(
+            painterResource(R.drawable.ic_applemusic_full),
+            contentDescription = "Apple Music",
+            tint = ink(0.9f),
+            modifier = Modifier.height(18.dp),
+        )
     }
 }
 
@@ -503,7 +552,9 @@ private fun AccountPage(vm: SetupViewModel) {
     val account by vm.account.collectAsState()
     PageTitle("Keep it all in sync")
     Spacer(Modifier.height(14.dp))
-    PageBody("Sign in with Google to back up your library and settings and have them on all your devices. Or keep everything on this device, with a daily backup.")
+    PageBody(
+        "Sign in with Google to back up your library and settings and have them on all your devices. Or keep everything on this device, with a daily backup.",
+    )
     account.error?.let {
         Spacer(Modifier.height(20.dp))
         Sheet { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
@@ -525,15 +576,15 @@ private fun SourceTile(
     val scale by animateFloatAsState(if (pressed) 0.96f else 1f, spring(stiffness = 900f), label = "tileScale")
     val appear = rememberAppear(appearDelay)
     Panel(
-        modifier = modifier
-            .heightIn(min = 96.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                alpha = appear.value * (if (enabled) 1f else 0.5f)
-                translationY = (1f - appear.value) * 40f
-            }
-            .clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick),
+        modifier =
+            modifier
+                .heightIn(min = 96.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    alpha = appear.value * (if (enabled) 1f else 0.5f)
+                    translationY = (1f - appear.value) * 40f
+                }.clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick),
         cornerRadius = 26.dp,
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -549,7 +600,11 @@ private fun SourceTile(
 }
 
 @Composable
-private fun Panel(modifier: Modifier = Modifier, cornerRadius: Dp = 24.dp, content: @Composable BoxScope.() -> Unit) {
+private fun Panel(
+    modifier: Modifier = Modifier,
+    cornerRadius: Dp = 24.dp,
+    content: @Composable BoxScope.() -> Unit,
+) {
     val shape = RoundedCornerShape(cornerRadius)
     Box(modifier.clip(shape).background(ink(0.09f)).border(1.dp, ink(0.08f), shape), content = content)
 }
@@ -565,22 +620,30 @@ private fun rememberAppear(delayMs: Int): State<Float> {
 }
 
 @Composable
-private fun Pill(label: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
+private fun Pill(
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
     Text(
         label,
         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
         color = ink(0.9f),
         maxLines = 1,
-        modifier = modifier
-            .clip(CircleShape)
-            .background(ink(0.12f))
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 18.dp, vertical = 9.dp),
+        modifier =
+            modifier
+                .clip(CircleShape)
+                .background(ink(0.12f))
+                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+                .padding(horizontal = 18.dp, vertical = 9.dp),
     )
 }
 
 @Composable
-private fun ImportStatus(state: ImportState, onCancel: () -> Unit) {
+private fun ImportStatus(
+    state: ImportState,
+    onCancel: () -> Unit,
+) {
     AnimatedVisibility(
         visible = state !is ImportState.Idle,
         enter = fadeIn(tween(250)) + expandVertically(tween(300)),
@@ -591,17 +654,31 @@ private fun ImportStatus(state: ImportState, onCancel: () -> Unit) {
             Panel(Modifier.fillMaxWidth(), cornerRadius = 24.dp) {
                 Column(Modifier.fillMaxWidth().padding(18.dp).animateContentSize()) {
                     when (state) {
-                        ImportState.Idle -> Unit
-                        is ImportState.Reading -> Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.5.dp, color = ink())
-                            Spacer(Modifier.width(12.dp))
-                            Text("Reading ${state.what}\u2026", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = ink())
+                        ImportState.Idle -> {
+                            Unit
                         }
+
+                        is ImportState.Reading -> {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.5.dp, color = ink())
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    "Reading ${state.what}\u2026",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = ink(),
+                                )
+                            }
+                        }
+
                         is ImportState.Matching -> {
                             val fraction = (state.done.toFloat() / state.total.coerceAtLeast(1)).coerceIn(0f, 1f)
                             val bar by animateFloatAsState(fraction, tween(300), label = "importBar")
                             Row(verticalAlignment = Alignment.Bottom) {
-                                Text("${state.done}", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold), color = ink())
+                                Text(
+                                    "${state.done}",
+                                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold),
+                                    color = ink(),
+                                )
                                 Text(
                                     " / ${state.total}",
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
@@ -611,12 +688,24 @@ private fun ImportStatus(state: ImportState, onCancel: () -> Unit) {
                                 Pill("Cancel", onClick = onCancel)
                             }
                             Spacer(Modifier.height(12.dp))
-                            Box(Modifier.fillMaxWidth().height(6.dp).clip(CircleShape).background(ink(0.12f))) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(CircleShape)
+                                    .background(ink(0.12f)),
+                            ) {
                                 Box(Modifier.fillMaxWidth(bar.coerceAtLeast(0.02f)).fillMaxHeight().background(ink(0.95f), CircleShape))
                             }
                             state.current?.let {
                                 Spacer(Modifier.height(10.dp))
-                                Text(it, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    it,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = ink(0.6f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                             }
                             Spacer(Modifier.height(8.dp))
                             Text(
@@ -625,29 +714,45 @@ private fun ImportStatus(state: ImportState, onCancel: () -> Unit) {
                                 color = ink(0.5f),
                             )
                         }
-                        is ImportState.Done -> Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (state.songs > 0) {
-                                CheckBadge()
-                                Spacer(Modifier.width(14.dp))
-                            }
-                            Column {
-                                Text(
-                                    when {
-                                        state.songs == 0 -> "Nothing could be matched"
-                                        state.cancelled -> "Stopped after ${state.songs} songs"
-                                        else -> "Imported ${state.songs} songs" + if (state.playlists > 0) " into ${state.playlists} playlists" else ""
-                                    },
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = ink(),
-                                )
-                                val detail = buildList {
-                                    if (state.missed > 0) add("${state.missed} not found")
-                                    if (state.unreadable > 0) add("${state.unreadable} unreadable")
-                                }.joinToString(" \u00B7 ")
-                                if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f))
+
+                        is ImportState.Done -> {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (state.songs > 0) {
+                                    CheckBadge()
+                                    Spacer(Modifier.width(14.dp))
+                                }
+                                Column {
+                                    Text(
+                                        when {
+                                            state.songs == 0 -> {
+                                                "Nothing could be matched"
+                                            }
+
+                                            state.cancelled -> {
+                                                "Stopped after ${state.songs} songs"
+                                            }
+
+                                            else -> {
+                                                "Imported ${state.songs} songs" +
+                                                    if (state.playlists > 0) " into ${state.playlists} playlists" else ""
+                                            }
+                                        },
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = ink(),
+                                    )
+                                    val detail =
+                                        buildList {
+                                            if (state.missed > 0) add("${state.missed} not found")
+                                            if (state.unreadable > 0) add("${state.unreadable} unreadable")
+                                        }.joinToString(" \u00B7 ")
+                                    if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f))
+                                }
                             }
                         }
-                        is ImportState.Failed -> Text(state.message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+
+                        is ImportState.Failed -> {
+                            Text(state.message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                        }
                     }
                 }
             }
@@ -664,12 +769,17 @@ private fun CheckBadge() {
     Canvas(Modifier.size(34.dp)) {
         val p = progress.value.coerceIn(0f, 1.2f)
         drawCircle(fill, radius = size.minDimension / 2 * p)
-        val path = Path().apply {
-            moveTo(size.width * 0.28f, size.height * 0.52f)
-            lineTo(size.width * 0.44f, size.height * 0.67f)
-            lineTo(size.width * 0.73f, size.height * 0.35f)
-        }
-        drawPath(path, tick.copy(alpha = progress.value.coerceIn(0f, 1f)), style = Stroke(size.width * 0.09f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+        val path =
+            Path().apply {
+                moveTo(size.width * 0.28f, size.height * 0.52f)
+                lineTo(size.width * 0.44f, size.height * 0.67f)
+                lineTo(size.width * 0.73f, size.height * 0.35f)
+            }
+        drawPath(
+            path,
+            tick.copy(alpha = progress.value.coerceIn(0f, 1f)),
+            style = Stroke(size.width * 0.09f, cap = StrokeCap.Round, join = StrokeJoin.Round),
+        )
     }
 }
 
@@ -683,9 +793,10 @@ private fun SpotifySheet(
     onClose: () -> Unit,
 ) {
     val links = LocalUriHandler.current
-    val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) onFiles(uris)
-    }
+    val files =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            if (uris.isNotEmpty()) onFiles(uris)
+        }
     LinkSheet(
         visible = visible,
         text = text,
@@ -773,7 +884,14 @@ private fun LinkSheet(
             exit = slideOutVertically(tween(180)) { it } + fadeOut(tween(140)),
         ) {
             val shape = RoundedCornerShape(30.dp)
-            Box(Modifier.navigationBarsPadding().imePadding().padding(12.dp).widthIn(max = 536.dp).fillMaxWidth()) {
+            Box(
+                Modifier
+                    .navigationBarsPadding()
+                    .imePadding()
+                    .padding(12.dp)
+                    .widthIn(max = 536.dp)
+                    .fillMaxWidth(),
+            ) {
                 Column(
                     Modifier
                         .fillMaxWidth()
@@ -804,13 +922,16 @@ private fun LinkSheet(
                             },
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                             color = ink(if (count > 0) 0.95f else 0.5f),
-                            modifier = Modifier
-                                .weight(1f)
-                                .graphicsLayer {
-                                    scaleX = pop.value
-                                    scaleY = pop.value
-                                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
-                                },
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .graphicsLayer {
+                                        scaleX = pop.value
+                                        scaleY = pop.value
+                                        transformOrigin =
+                                            androidx.compose.ui.graphics
+                                                .TransformOrigin(0f, 0.5f)
+                                    },
                         )
                         Pill("Paste", onClick = { clipboard.getText()?.text?.let { onText(if (text.isBlank()) it else text + "\n" + it) } })
                     }
@@ -832,7 +953,11 @@ private fun LinkSheet(
 }
 
 @Composable
-private fun LinkField(value: String, onChange: (String) -> Unit, placeholder: String) {
+private fun LinkField(
+    value: String,
+    onChange: (String) -> Unit,
+    placeholder: String,
+) {
     val shape = RoundedCornerShape(18.dp)
     Box(
         Modifier
@@ -875,13 +1000,13 @@ private fun OptionCard(
     val glyphColor = ink(if (selected) 0.95f else 0.6f)
     val tick = if (LocalCoverPalette.current.isLight) Color.White else Color.Black
     Panel(
-        modifier = modifier
-            .height(170.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+        modifier =
+            modifier
+                .height(170.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }.clickable(interactionSource = interaction, indication = null, onClick = onClick),
         cornerRadius = 26.dp,
     ) {
         Column(Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -899,17 +1024,17 @@ private fun OptionCard(
                     scaleX = badge
                     scaleY = badge
                     alpha = badge.coerceIn(0f, 1f)
-                }
-                .clip(CircleShape)
+                }.clip(CircleShape)
                 .background(ink(0.95f)),
             contentAlignment = Alignment.Center,
         ) {
             Canvas(Modifier.size(12.dp)) {
-                val path = Path().apply {
-                    moveTo(size.width * 0.1f, size.height * 0.55f)
-                    lineTo(size.width * 0.38f, size.height * 0.82f)
-                    lineTo(size.width * 0.92f, size.height * 0.18f)
-                }
+                val path =
+                    Path().apply {
+                        moveTo(size.width * 0.1f, size.height * 0.55f)
+                        lineTo(size.width * 0.38f, size.height * 0.82f)
+                        lineTo(size.width * 0.92f, size.height * 0.18f)
+                    }
                 drawPath(path, tick, style = Stroke(size.width * 0.16f, cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
         }
@@ -917,16 +1042,33 @@ private fun OptionCard(
 }
 
 @Composable
-private fun PhosphorGlyph(icon: ImageVector, color: Color) {
+private fun PhosphorGlyph(
+    icon: ImageVector,
+    color: Color,
+) {
     Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(60.dp))
 }
 
 @Composable
-private fun ProgressDots(current: Int, count: Int, onSelect: (Int) -> Unit) {
+private fun ProgressDots(
+    current: Int,
+    count: Int,
+    onSelect: (Int) -> Unit,
+) {
     Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             repeat(count) { index ->
-                val width by animateDpAsState(if (index == current) 26.dp else 8.dp, spring(dampingRatio = 0.8f, stiffness = 500f), label = "dotWidth$index")
+                val width by animateDpAsState(
+                    if (index ==
+                        current
+                    ) {
+                        26.dp
+                    } else {
+                        8.dp
+                    },
+                    spring(dampingRatio = 0.8f, stiffness = 500f),
+                    label = "dotWidth$index",
+                )
                 val color by animateColorAsState(if (index <= current) ink(1f) else ink(0.22f), tween(300), label = "dotColor$index")
                 Box(
                     Modifier
@@ -935,7 +1077,13 @@ private fun ProgressDots(current: Int, count: Int, onSelect: (Int) -> Unit) {
                         .padding(horizontal = 7.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Box(Modifier.width(width).height(8.dp).clip(CircleShape).background(color))
+                    Box(
+                        Modifier
+                            .width(width)
+                            .height(8.dp)
+                            .clip(CircleShape)
+                            .background(color),
+                    )
                 }
             }
         }
@@ -953,7 +1101,12 @@ private fun BarFrame(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-private fun BarRow(showBack: Boolean, onBack: () -> Unit, backEnabled: Boolean = true, main: @Composable (Modifier) -> Unit) {
+private fun BarRow(
+    showBack: Boolean,
+    onBack: () -> Unit,
+    backEnabled: Boolean = true,
+    main: @Composable (Modifier) -> Unit,
+) {
     val backWeight by animateFloatAsState(if (showBack) 1f else 0f, tween(260), label = "backWeight")
     Row(Modifier.fillMaxWidth()) {
         if (backWeight > 0.01f) {
@@ -965,14 +1118,22 @@ private fun BarRow(showBack: Boolean, onBack: () -> Unit, backEnabled: Boolean =
 }
 
 @Composable
-private fun NavBar(showBack: Boolean, label: String, onBack: () -> Unit, onNext: () -> Unit) {
+private fun NavBar(
+    showBack: Boolean,
+    label: String,
+    onBack: () -> Unit,
+    onNext: () -> Unit,
+) {
     BarFrame {
         BarRow(showBack, onBack) { modifier -> PrimaryButton(label, onNext, modifier) }
     }
 }
 
 @Composable
-private fun AccountActions(vm: SetupViewModel, onBack: () -> Unit) {
+private fun AccountActions(
+    vm: SetupViewModel,
+    onBack: () -> Unit,
+) {
     val account by vm.account.collectAsState()
     val context = LocalContext.current
     BarFrame {
@@ -988,13 +1149,14 @@ private fun AccountActions(vm: SetupViewModel, onBack: () -> Unit) {
 private fun PageTitle(text: String) {
     Text(
         text,
-        style = MaterialTheme.typography.displaySmall.copy(
-            fontFamily = GamutDisplayFont,
-            fontSize = 40.sp,
-            lineHeight = 42.sp,
-            letterSpacing = (-1.4).sp,
-            fontWeight = FontWeight.ExtraBold,
-        ),
+        style =
+            MaterialTheme.typography.displaySmall.copy(
+                fontFamily = GamutDisplayFont,
+                fontSize = 40.sp,
+                lineHeight = 42.sp,
+                letterSpacing = (-1.4).sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
         color = ink(),
     )
 }
@@ -1017,7 +1179,10 @@ private fun Sheet(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-private fun SetupLink(label: String, onClick: () -> Unit) {
+private fun SetupLink(
+    label: String,
+    onClick: () -> Unit,
+) {
     Text(
         label,
         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
@@ -1028,18 +1193,22 @@ private fun SetupLink(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun NameField(value: String, onValueChange: (String) -> Unit) {
+private fun NameField(
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
     var focused by remember { mutableStateOf(false) }
     val focus = LocalFocusManager.current
     val line by animateColorAsState(if (focused) ink(0.95f) else ink(0.25f), tween(220), label = "nameLine")
-    val style = MaterialTheme.typography.displaySmall.copy(
-        fontFamily = GamutDisplayFont,
-        fontSize = 34.sp,
-        lineHeight = 38.sp,
-        letterSpacing = (-0.8).sp,
-        fontWeight = FontWeight.ExtraBold,
-        color = ink(),
-    )
+    val style =
+        MaterialTheme.typography.displaySmall.copy(
+            fontFamily = GamutDisplayFont,
+            fontSize = 34.sp,
+            lineHeight = 38.sp,
+            letterSpacing = (-0.8).sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = ink(),
+        )
     Box(Modifier.fillMaxWidth()) {
         if (value.isEmpty()) Text("Your name", style = style, color = ink(0.28f), maxLines = 1)
         BasicTextField(
@@ -1054,7 +1223,13 @@ private fun NameField(value: String, onValueChange: (String) -> Unit) {
         )
     }
     Spacer(Modifier.height(10.dp))
-    Box(Modifier.fillMaxWidth().height(3.dp).clip(CircleShape).background(line))
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(3.dp)
+            .clip(CircleShape)
+            .background(line),
+    )
 }
 
 @Composable
@@ -1062,7 +1237,10 @@ private fun Modifier.chrome(shape: Shape): Modifier {
     val light = LocalCoverPalette.current.isLight
     val top = if (light) Color(0xFF494B54) else Color.White
     val bottom = if (light) Color(0xFF0E0E10) else Color(0xFFD3D6DF)
-    val rim = Brush.linearGradient(listOf(Color.White.copy(alpha = 0.55f), Color.White.copy(alpha = 0.05f), Color.White.copy(alpha = 0.25f)))
+    val rim =
+        Brush.linearGradient(
+            listOf(Color.White.copy(alpha = 0.55f), Color.White.copy(alpha = 0.05f), Color.White.copy(alpha = 0.25f)),
+        )
     return this
         .clip(shape)
         .background(Brush.verticalGradient(listOf(top, bottom)))
@@ -1070,7 +1248,12 @@ private fun Modifier.chrome(shape: Shape): Modifier {
 }
 
 @Composable
-private fun PrimaryButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+private fun PrimaryButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.97f else 1f, spring(stiffness = 900f), label = "primaryScale")
@@ -1081,18 +1264,27 @@ private fun PrimaryButton(label: String, onClick: () -> Unit, modifier: Modifier
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-            }
-            .focusRing(CircleShape)
+            }.focusRing(CircleShape)
             .then(if (enabled) Modifier.chrome(CircleShape) else Modifier.clip(CircleShape).background(ink(0.12f)))
             .clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold), color = if (enabled) onPrimary else ink(0.4f), maxLines = 1)
+        Text(
+            label,
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold),
+            color = if (enabled) onPrimary else ink(0.4f),
+            maxLines = 1,
+        )
     }
 }
 
 @Composable
-private fun GhostButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+private fun GhostButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.97f else 1f, spring(stiffness = 900f), label = "ghostScale")
@@ -1103,22 +1295,37 @@ private fun GhostButton(label: String, onClick: () -> Unit, modifier: Modifier =
                 scaleX = scale
                 scaleY = scale
                 alpha *= if (enabled) 1f else 0.4f
-            }
-            .focusRing(CircleShape)
+            }.focusRing(CircleShape)
             .clip(CircleShape)
             .background(ink(0.12f))
             .clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold), color = ink(0.92f), maxLines = 1)
+        Text(
+            label,
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold),
+            color = ink(0.92f),
+            maxLines = 1,
+        )
     }
 }
 
 @Composable
-private fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+private fun Segmented(
+    options: List<String>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+) {
     val onPrimary = if (LocalCoverPalette.current.isLight) Color.White else Color.Black
     val shape = RoundedCornerShape(16.dp)
-    Row(Modifier.fillMaxWidth().clip(shape).background(ink(0.08f)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(ink(0.08f))
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
         options.forEachIndexed { index, label ->
             val chosen = index == selected
             val background by animateColorAsState(if (chosen) ink(0.95f) else Color.Transparent, tween(200), label = "seg$index")
@@ -1143,7 +1350,13 @@ private fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> U
 }
 
 @Composable
-private fun TileFrame(modifier: Modifier, label: String, selected: Boolean, onClick: () -> Unit, fill: @Composable () -> Unit) {
+private fun TileFrame(
+    modifier: Modifier,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    fill: @Composable () -> Unit,
+) {
     val ring by animateColorAsState(if (selected) ink(0.95f) else Color.Transparent, tween(200), label = "tileRing")
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
@@ -1161,28 +1374,56 @@ private fun TileFrame(modifier: Modifier, label: String, selected: Boolean, onCl
 }
 
 @Composable
-private fun AdaptiveTile(modifier: Modifier, selected: Boolean, onClick: () -> Unit) {
+private fun AdaptiveTile(
+    modifier: Modifier,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
     TileFrame(modifier, "Adaptive", selected, onClick) {
         Box(
             Modifier.fillMaxSize().background(
-                Brush.sweepGradient(listOf(Color(0xFFFA2D48), Color(0xFFFFB300), Color(0xFF00C853), Color(0xFF1E88E5), Color(0xFFD500F9), Color(0xFFFA2D48))),
+                Brush.sweepGradient(
+                    listOf(
+                        Color(0xFFFA2D48),
+                        Color(0xFFFFB300),
+                        Color(0xFF00C853),
+                        Color(0xFF1E88E5),
+                        Color(0xFFD500F9),
+                        Color(0xFFFA2D48),
+                    ),
+                ),
             ),
         )
     }
 }
 
 @Composable
-private fun PresetTile(modifier: Modifier, preset: AppColorPreset, dark: Boolean, selected: Boolean, onClick: () -> Unit) {
+private fun PresetTile(
+    modifier: Modifier,
+    preset: AppColorPreset,
+    dark: Boolean,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
     val palette = if (dark) preset.dark else preset.light
     TileFrame(modifier, preset.name, selected, onClick) {
         Box(Modifier.fillMaxSize().background(palette.base)) {
-            Box(Modifier.align(Alignment.Center).fillMaxSize(0.5f).clip(CircleShape).background(palette.accent))
+            Box(
+                Modifier
+                    .align(Alignment.Center)
+                    .fillMaxSize(0.5f)
+                    .clip(CircleShape)
+                    .background(palette.accent),
+            )
         }
     }
 }
 
 @Composable
-private fun GoogleButton(busy: Boolean, onClick: () -> Unit) {
+private fun GoogleButton(
+    busy: Boolean,
+    onClick: () -> Unit,
+) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.97f else 1f, spring(stiffness = 900f), label = "googleButtonScale")
@@ -1194,8 +1435,7 @@ private fun GoogleButton(busy: Boolean, onClick: () -> Unit) {
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-            }
-            .focusRing(CircleShape)
+            }.focusRing(CircleShape)
             .chrome(CircleShape)
             .clickable(interactionSource = interaction, indication = null, enabled = !busy, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
@@ -1209,6 +1449,11 @@ private fun GoogleButton(busy: Boolean, onClick: () -> Unit) {
             }
         }
         Spacer(Modifier.size(12.dp))
-        Text("Continue with Google", style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold), color = onPrimary, maxLines = 1)
+        Text(
+            "Continue with Google",
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold),
+            color = onPrimary,
+            maxLines = 1,
+        )
     }
 }
