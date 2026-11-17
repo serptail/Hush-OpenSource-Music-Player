@@ -55,6 +55,7 @@ class SoundSettings private constructor(
         val dither: Boolean = true,
         val crossfeed: Crossfeed = Crossfeed.OFF,
         val widthPercent: Int = 100,
+        val spatial: SpatialMode = SpatialMode.OFF,
     )
 
     private val prefs = context.applicationContext.getSharedPreferences("sound_engine", Context.MODE_PRIVATE)
@@ -103,6 +104,8 @@ class SoundSettings private constructor(
 
     fun setCrossfeed(level: Crossfeed) = edit { it.copy(crossfeed = level) }
 
+    fun setSpatial(mode: SpatialMode) = edit { it.copy(spatial = mode) }
+
     fun setWidth(percent: Int) = edit { it.copy(widthPercent = percent.coerceIn(0, 200)) }
 
     fun resetEqualizer() = edit { it.copy(preset = FLAT, bands = defaultBands(), widthPercent = 100) }
@@ -128,6 +131,7 @@ class SoundSettings private constructor(
             .putBoolean(K_DITHER, s.dither)
             .putString(K_XFEED, s.crossfeed.name)
             .putInt(K_WIDTH, s.widthPercent)
+            .putString(K_SPATIAL, s.spatial.name)
             .apply()
     }
 
@@ -147,6 +151,7 @@ class SoundSettings private constructor(
             dither = prefs.getBoolean(K_DITHER, true),
             crossfeed = Crossfeed.entries.firstOrNull { it.name == prefs.getString(K_XFEED, null) } ?: Crossfeed.OFF,
             widthPercent = prefs.getInt(K_WIDTH, 100).coerceIn(0, 200),
+            spatial = SpatialMode.entries.firstOrNull { it.name == prefs.getString(K_SPATIAL, null) } ?: SpatialMode.OFF,
         )
     }
 
@@ -170,6 +175,7 @@ class SoundSettings private constructor(
         private const val K_DITHER = "dither"
         private const val K_XFEED = "crossfeed"
         private const val K_WIDTH = "width"
+        private const val K_SPATIAL = "spatial"
 
         private val PRESETS: Map<String, FloatArray> =
             linkedMapOf(
@@ -206,4 +212,5 @@ fun SoundSettings.State.toParams() =
         dither = dither,
         crossfeed = crossfeed.amount,
         width = widthPercent / 100f,
+        spatial = spatial.amount,
     )

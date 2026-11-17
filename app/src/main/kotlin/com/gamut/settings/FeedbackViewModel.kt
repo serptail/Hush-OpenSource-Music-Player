@@ -110,6 +110,8 @@ class FeedbackViewModel
                 "dither" to n.dither.toString(),
                 "crossfeed" to n.crossfeed.label,
                 "stereo_width" to "${n.widthPercent}%",
+                "spatial" to n.spatial.label,
+                "bit_perfect" to s.bitPerfect.toString(),
             )
         }
 

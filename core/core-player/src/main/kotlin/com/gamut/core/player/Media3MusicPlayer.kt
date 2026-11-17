@@ -11,6 +11,7 @@ import android.os.PowerManager
 import android.os.SystemClock
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -28,11 +29,14 @@ import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.CacheWriter
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
+import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.TeeAudioProcessor
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.gamut.core.model.LocalCovers
 import com.gamut.core.model.PlaybackState
@@ -82,6 +86,9 @@ class Media3MusicPlayer
         }
 
         private val sound = SoundSettings.get(context)
+        private val router = AudioOutputRouter(context)
+        private var bitPerfect = settings.state.value.bitPerfect
+        private var dacId = -1
 
         private val musicAttributes =
             AudioAttributes
@@ -115,6 +122,7 @@ class Media3MusicPlayer
         private fun newSlot(handleFocus: Boolean): Slot {
             val mod = ModAudioProcessor()
             val engine = SoundEngineProcessor()
+            val tee = TeeAudioProcessor(AudioAnalyzer.newSink { activeSlot?.engine === engine })
             val renderers =
                 object : DefaultRenderersFactory(context) {
                     override fun buildAudioSink(
@@ -126,7 +134,7 @@ class Media3MusicPlayer
                             .Builder(context)
                             .setEnableFloatOutput(enableFloatOutput)
                             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                            .setAudioProcessors(arrayOf<AudioProcessor>(mod, engine))
+                            .setAudioProcessors(arrayOf<AudioProcessor>(mod, engine, tee))
                             .build()
                 }
             val exo =
@@ -157,8 +165,24 @@ class Media3MusicPlayer
                                 .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
                                 .build()
                     }
+            engine.onFormat = { rate, channels, encoding ->
+                if (activeSlot == null || activeSlot?.engine === engine) {
+                    router.onSinkConfigure(bitPerfect, rate, channels, encoding)
+                }
+            }
             return Slot(mod, engine, exo).also { slot ->
                 attachPlayerListener(slot)
+                exo.addAnalyticsListener(
+                    object : AnalyticsListener {
+                        override fun onAudioInputFormatChanged(
+                            eventTime: AnalyticsListener.EventTime,
+                            format: Format,
+                            decoderReuseEvaluation: DecoderReuseEvaluation?,
+                        ) {
+                            if (slot === activeSlot) AudioPipelineInfo.onSource(format)
+                        }
+                    },
+                )
                 applyMod(slot, ModController.state.value.settings)
                 applyPlaybackSettings(slot, settings.state.value)
                 engine.params = sound.state.value.toParams()
@@ -167,9 +191,16 @@ class Media3MusicPlayer
 
         private fun startSettingsObservers() {
             scope.launch { ModController.state.collect { st -> allSlots().forEach { applyMod(it, st.settings) } } }
+            router.start { onOutputDevicesChanged() }
             scope.launch {
                 settings.state.collect { st ->
+                    val toggled = st.bitPerfect != bitPerfect
+                    bitPerfect = st.bitPerfect
                     allSlots().forEach { applyPlaybackSettings(it, st) }
+                    if (toggled) {
+                        allSlots().forEach { applyMod(it, ModController.state.value.settings) }
+                        reopenOutput()
+                    }
                     onCrossfadeChanged()
                 }
             }
@@ -178,6 +209,28 @@ class Media3MusicPlayer
                     val params = st.toParams()
                     allSlots().forEach { it.engine.params = params }
                 }
+            }
+        }
+
+        private fun onOutputDevicesChanged() {
+            router.publishRoute()
+            val id = router.usbDac()?.id ?: -1
+            val changed = id != dacId
+            dacId = id
+            allSlots().forEach { router.applyDevice(it.exo, bitPerfect) }
+            if (changed && bitPerfect) reopenOutput()
+        }
+
+        /**
+         * The output only opens when a stream's format is configured, so changing bit-perfect or the DAC
+         * mid-track restarts the current stream in place. Position and play state are kept.
+         */
+        private fun reopenOutput() {
+            val exo = activeSlot?.exo ?: return
+            if (exo.playbackState == Player.STATE_IDLE || exo.mediaItemCount == 0) return
+            runCatching {
+                exo.stop()
+                exo.prepare()
             }
         }
 
@@ -484,8 +537,10 @@ class Media3MusicPlayer
             s: ModSettings,
         ) {
             val exo = slot.exo
-            exo.playbackParameters = PlaybackParameters(s.speed, s.pitchRatio)
-            slot.engine.pitchRatio = s.pitchRatio
+            // Speed and pitch resample the stream, so bit-perfect output holds them at 1.0.
+            val exact = settings.state.value.bitPerfect
+            exo.playbackParameters = if (exact) PlaybackParameters.DEFAULT else PlaybackParameters(s.speed, s.pitchRatio)
+            slot.engine.pitchRatio = if (exact) 1f else s.pitchRatio
             slot.mod.apply {
                 reverbMix = s.reverbMix
                 reverbDecaySec = s.reverbDecaySec * s.speed
@@ -505,8 +560,12 @@ class Media3MusicPlayer
             slot: Slot,
             s: PlaybackSettings.State,
         ) {
-            fadeMs = s.fadeMs
-            crossfadeMs = s.crossfadeMs
+            // Fades and crossfades scale or mix samples, which bit-perfect output must not do.
+            fadeMs = if (s.bitPerfect) 0 else s.fadeMs
+            crossfadeMs = if (s.bitPerfect) 0 else s.crossfadeMs
+            slot.mod.bypass = s.bitPerfect
+            slot.engine.bypass = s.bitPerfect
+            router.applyDevice(slot.exo, s.bitPerfect)
             slot.exo.setSkipSilenceEnabled(s.skipSilence)
             slot.exo.setHandleAudioBecomingNoisy(s.pauseOnUnplug)
             slot.mod.mono = s.mono
@@ -1020,6 +1079,7 @@ class Media3MusicPlayer
             outgoingSlot?.let { retire(it) }
             outgoingSlot = outgoing
             activeSlot = incoming
+            incoming.exo.audioFormat?.let(AudioPipelineInfo::onSource)
 
             outgoing.exo.setAudioAttributes(musicAttributes, false)
             incoming.exo.setAudioAttributes(musicAttributes, true)
@@ -1073,7 +1133,12 @@ class Media3MusicPlayer
                 slot.exo.clearMediaItems()
                 slot.exo.volume = 1f
             }
-            if (standbySlot == null) standbySlot = slot else runCatching { slot.exo.release() }
+            if (standbySlot == null) {
+                standbySlot = slot
+            } else {
+                router.forget(slot.exo)
+                runCatching { slot.exo.release() }
+            }
         }
 
         private fun schedulePrefetch(delayMs: Long) {

@@ -34,6 +34,9 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
 
     @Volatile var balance = 0f
 
+    /** Bit-perfect output: leave the stream completely untouched. Takes effect when the output next opens. */
+    @Volatile var bypass = false
+
     private var channels = 2
     private var rate = 44100
     private var dirty = false
@@ -68,6 +71,7 @@ internal class ModAudioProcessor : BaseAudioProcessor() {
     private var seed = 0x2F6E2B1
 
     override fun onConfigure(inputAudioFormat: AudioFormat): AudioFormat {
+        if (bypass) return AudioFormat.NOT_SET
         if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT || inputAudioFormat.channelCount !in 1..2) {
             return AudioFormat.NOT_SET
         }

@@ -8,6 +8,7 @@ plugins {
 android {
     namespace = "com.gamut.core.player"
     compileSdk = 35
+    defaultConfig { minSdk = 26 }
 }
 
 dependencies {

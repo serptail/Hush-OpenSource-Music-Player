@@ -35,6 +35,7 @@ class PlaybackSettings
             val pauseOnUnplug: Boolean = true,
             val mono: Boolean = false,
             val balance: Float = 0f,
+            val bitPerfect: Boolean = false,
         )
 
         private val prefs = context.applicationContext.getSharedPreferences("playback_settings", Context.MODE_PRIVATE)
@@ -80,6 +81,7 @@ class PlaybackSettings
                 pauseOnUnplug = prefs.getBoolean(K_UNPLUG, true),
                 mono = prefs.getBoolean(K_MONO, false),
                 balance = prefs.getFloat(K_BALANCE, 0f),
+                bitPerfect = prefs.getBoolean(K_BIT_PERFECT, false),
             )
 
         private fun save(s: State) {
@@ -94,6 +96,7 @@ class PlaybackSettings
                 .putBoolean(K_UNPLUG, s.pauseOnUnplug)
                 .putBoolean(K_MONO, s.mono)
                 .putFloat(K_BALANCE, s.balance)
+                .putBoolean(K_BIT_PERFECT, s.bitPerfect)
                 .apply()
         }
 
@@ -107,5 +110,6 @@ class PlaybackSettings
             const val K_UNPLUG = "pause_on_unplug"
             const val K_MONO = "mono"
             const val K_BALANCE = "balance"
+            const val K_BIT_PERFECT = "bit_perfect"
         }
     }

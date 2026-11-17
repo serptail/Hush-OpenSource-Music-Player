@@ -25,6 +25,7 @@ class SoundParams(
     val dither: Boolean = true,
     val crossfeed: Float = 0f,
     val width: Float = 1f,
+    val spatial: Float = 0f,
 )
 
 @UnstableApi
@@ -32,6 +33,12 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
     @Volatile var params: SoundParams = SoundParams()
 
     @Volatile var pitchRatio = 1f
+
+    /** Bit-perfect output: the processor leaves the stream completely untouched, at the decoder's own format. */
+    @Volatile var bypass = false
+
+    /** Told about every stream format before the output opens, so the DAC mixer can be matched to it. */
+    @Volatile var onFormat: ((sampleRate: Int, channels: Int, encoding: Int) -> Unit)? = null
 
     private var channels = 2
     private var rate = 44100
@@ -60,6 +67,9 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
     private var widthOn = false
     private var width = 1.0
 
+    private val spatial = SpatialVirtualizer()
+    private var spatialOn = false
+
     private var xfOn = false
     private var xfB = 0.0
     private var xfA = 1.0
@@ -87,6 +97,8 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
 
     override fun onConfigure(inputAudioFormat: AudioFormat): AudioFormat {
         val encoding = inputAudioFormat.encoding
+        onFormat?.invoke(inputAudioFormat.sampleRate, inputAudioFormat.channelCount, encoding)
+        if (bypass) return AudioFormat.NOT_SET
         if ((encoding != C.ENCODING_PCM_16BIT && encoding != C.ENCODING_PCM_FLOAT) || inputAudioFormat.channelCount !in 1..2) {
             return AudioFormat.NOT_SET
         }
@@ -190,6 +202,12 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
             val s = (l - r) * 0.5 * width
             l = m + s
             r = m - s
+        }
+
+        if (spatialOn) {
+            spatial.process(l, r)
+            l = spatial.outL
+            r = spatial.outR
         }
 
         if (xfOn) {
@@ -299,11 +317,20 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
 
         xfB = p.crossfeed.toDouble().coerceIn(0.0, 0.45)
         xfA = 1.0 - xfB
-        xfOn = channels == 2 && xfB > 0.001
+        val spatialAmount = p.spatial.toDouble().coerceIn(0.0, 1.0)
+        val wantSpatial = channels == 2 && spatialAmount > 0.001
+        if (wantSpatial) {
+            if (!spatialOn) spatial.clear()
+            spatial.prepare(rate, spatialAmount)
+        }
+        spatialOn = wantSpatial
+
+        // The spatial stage already builds its own cross-ear path, so crossfeed would stack on top of it.
+        xfOn = channels == 2 && xfB > 0.001 && !spatialOn
         xfAlpha = 1.0 - exp(-2.0 * PI * XF_FC * scale / rate)
 
         limiterOn = p.limiter
-        val modifies = eqBands > 0 || widthOn || xfOn || pre != 1.0
+        val modifies = eqBands > 0 || widthOn || xfOn || spatialOn || pre != 1.0
         ditherOn = p.dither && modifies
         neutral = !modifies && !limiterOn && !floatInput
 
@@ -422,6 +449,7 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
         gain = 1.0
         lpL = 0.0
         lpR = 0.0
+        spatial.clear()
     }
 
     private fun flushDenormals() {
@@ -433,6 +461,7 @@ internal class SoundEngineProcessor : BaseAudioProcessor() {
         }
         if (abs(lpL) < TINY) lpL = 0.0
         if (abs(lpR) < TINY) lpR = 0.0
+        if (spatialOn) spatial.flushDenormals()
     }
 
     private companion object {

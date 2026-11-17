@@ -96,7 +96,7 @@ fun SoftDivider() {
 }
 
 @Composable
-private fun RowText(
+internal fun RowText(
     title: String,
     subtitle: String?,
     modifier: Modifier = Modifier,

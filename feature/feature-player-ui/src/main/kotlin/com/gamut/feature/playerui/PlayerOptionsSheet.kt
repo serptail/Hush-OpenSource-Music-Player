@@ -26,6 +26,7 @@ import com.adamglin.phosphoricons.bold.Equalizer
 import com.adamglin.phosphoricons.bold.Heart
 import com.adamglin.phosphoricons.bold.ListPlus
 import com.adamglin.phosphoricons.bold.MicrophoneStage
+import com.adamglin.phosphoricons.bold.Palette
 import com.adamglin.phosphoricons.bold.ShareNetwork
 import com.adamglin.phosphoricons.bold.Timer
 import com.adamglin.phosphoricons.bold.UserCircle
@@ -46,6 +47,7 @@ internal fun PlayerOptionsSheet(
     onGoToArtist: () -> Unit,
     onEqualizer: () -> Unit,
     onSleepTimer: () -> Unit,
+    onVisualizer: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     GamutSheet(onDismiss = onDismiss) {
@@ -74,6 +76,7 @@ internal fun PlayerOptionsSheet(
             OptionRow(PhosphorIcons.Bold.UserCircle, "Go to artist", null, onGoToArtist)
             OptionRow(PhosphorIcons.Bold.Timer, "Sleep timer", if (sleepActive) "On" else "Off", onSleepTimer)
             OptionRow(PhosphorIcons.Bold.Equalizer, "Equalizer", if (eqActive) "On" else "Off", onEqualizer)
+            OptionRow(PhosphorIcons.Bold.Palette, "Visualizer", null, onVisualizer)
         }
     }
 }

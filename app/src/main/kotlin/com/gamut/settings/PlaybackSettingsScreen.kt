@@ -4,11 +4,13 @@ import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -29,11 +31,14 @@ import androidx.lifecycle.ViewModel
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.softResize
+import com.gamut.core.player.AudioPipelineInfo
 import com.gamut.core.player.BandType
+import com.gamut.core.player.BitPerfectStatus
 import com.gamut.core.player.Crossfeed
 import com.gamut.core.player.EqBand
 import com.gamut.core.player.PlaybackSettings
 import com.gamut.core.player.SoundSettings
+import com.gamut.core.player.SpatialMode
 import com.gamut.core.player.StreamQuality
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -111,6 +116,22 @@ private fun BandEditorDialog(
     }
 }
 
+@Composable
+private fun InfoRow(
+    title: String,
+    value: String,
+    subtitle: String?,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 15.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RowText(title, subtitle, Modifier.weight(1f))
+        Spacer(Modifier.width(12.dp))
+        Text(value, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), maxLines = 1)
+    }
+}
+
 private fun balanceLabel(b: Float): String {
     val pct = (abs(b) * 100).roundToInt()
     return when {
@@ -128,6 +149,7 @@ fun PlaybackSettingsScreen(
 ) {
     val s by vm.settings.state.collectAsState()
     val snd by vm.sound.state.collectAsState()
+    val path by AudioPipelineInfo.state.collectAsState()
     var dialog by remember { mutableStateOf<PlaybackDialog?>(null) }
     var activeBand by remember { mutableStateOf<Int?>(null) }
     val settings = vm.settings
@@ -285,6 +307,26 @@ fun PlaybackSettingsScreen(
                 }
             }
             SoftDivider()
+            Column(Modifier.softResize().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text("Spatial audio", style = MaterialTheme.typography.titleMedium, color = ink())
+                Text(
+                    "A simulated surround stage for headphones. It is not Dolby Atmos decoding.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink(0.55f),
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+                Spacer(Modifier.height(12.dp))
+                SegmentedControl(SpatialMode.entries.map { Choice(it, it.label, it.hint) }, snd.spatial, sound::setSpatial)
+                if (snd.spatial != SpatialMode.OFF) {
+                    Text(
+                        snd.spatial.hint + if (snd.crossfeed != Crossfeed.OFF) ". Replaces crossfeed while it is on." else "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ink(0.55f),
+                        modifier = Modifier.padding(top = 8.dp, start = 4.dp),
+                    )
+                }
+            }
+            SoftDivider()
             SoftSliderRow(
                 title = "Stereo width",
                 valueLabel = "${snd.widthPercent}%",
@@ -294,6 +336,35 @@ fun PlaybackSettingsScreen(
                 subtitle = "0% is mono, 100% is the recording as it is.",
                 centered = true,
             )
+        }
+
+        SoftHeader("Hi-Fi output")
+        SoftCard {
+            SoftSwitchRow(
+                "Bit-perfect output",
+                checked = s.bitPerfect,
+                onChange = { v -> settings.update { it.copy(bitPerfect = v) } },
+                subtitle =
+                    "Sends the track untouched. Equalizer, spatial audio, speed, crossfade and fades are bypassed. " +
+                        "Plug in a USB DAC on Android 14 or newer to skip the system mixer as well.",
+            )
+            if (s.bitPerfect && path.bitPerfectNote.isNotEmpty()) {
+                Text(
+                    when (path.bitPerfect) {
+                        BitPerfectStatus.ACTIVE -> "Bit-perfect  ·  ${path.bitPerfectNote}"
+                        else -> path.bitPerfectNote
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink(0.6f),
+                    modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 14.dp),
+                )
+            }
+            if (path.known) {
+                SoftDivider()
+                InfoRow("Now playing", path.tierLabel, path.summary)
+                SoftDivider()
+                InfoRow("Output", path.routeKind.label, path.routeName.ifEmpty { null })
+            }
         }
 
         SoftHeader("Output")
