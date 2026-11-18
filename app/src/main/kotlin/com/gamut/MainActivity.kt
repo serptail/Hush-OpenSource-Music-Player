@@ -133,6 +133,7 @@ import com.gamut.feature.playerui.TrackActionsSheet
 import com.gamut.feature.playerui.rememberOutputDevices
 import com.gamut.feature.resolver.AudioSourceRepository
 import com.gamut.feature.resolver.NewPipeYoutubeSource
+import com.gamut.feature.resolver.VideoStreamRepository
 import com.gamut.feature.resolver.ResolveFailure
 import com.gamut.feature.resolver.ResolveTrackSourceUseCase
 import com.gamut.feature.resolver.TrackDownloadManager
@@ -189,6 +190,8 @@ class MainActivity : FragmentActivity() {
 
     @Inject lateinit var newPipe: NewPipeYoutubeSource
 
+    @Inject lateinit var videoStreams: VideoStreamRepository
+
     @Inject lateinit var downloadIndex: DownloadIndex
 
     @Inject lateinit var downloadManager: TrackDownloadManager
@@ -236,6 +239,7 @@ class MainActivity : FragmentActivity() {
                             appearance,
                             telemetry,
                             discoverRepository,
+                            videoStreams,
                         )
                     }
                 }
@@ -255,6 +259,7 @@ private fun GamutApp(
     appearance: AppearanceSettings,
     telemetry: TelemetryCollector,
     discoverRepository: DiscoverRepository,
+    videoStreams: VideoStreamRepository,
 ) {
     val nav = rememberNavController()
     val notifier = rememberNotifier()
@@ -1016,6 +1021,7 @@ private fun GamutApp(
                                         closePlayer()
                                         nav.navigate("artist-name/${Uri.encode(t.artist)}")
                                     },
+                                    videoProvider = videoStreams,
                                 )
                             }
                             BackHandler(enabled = !homeShowing && !playerOpen && !layerOpen && !createOpen) { nav.popBackStack() }

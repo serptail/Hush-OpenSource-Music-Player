@@ -8,9 +8,17 @@ plugins {
     alias(libs.plugins.baselineprofile)
 }
 
+configurations.configureEach {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "org.jetbrains.kotlin" && requested.name == "kotlin-metadata-jvm") {
+            useVersion("2.4.10")
+        }
+    }
+}
+
 android {
     namespace = "com.gamut"
-    compileSdk = 35
+    compileSdk = 37
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true

@@ -108,6 +108,7 @@ import com.gamut.core.player.EqualizerController
 import com.gamut.core.player.ModController
 import com.gamut.core.player.ModPreset
 import com.gamut.core.player.MusicPlayer
+import com.gamut.core.player.VideoStreamProvider
 import com.gamut.feature.playerui.components.ArtworkWithRing
 import com.gamut.feature.playerui.components.BouncingText
 import com.gamut.feature.playerui.components.DepthIcon
@@ -134,6 +135,11 @@ import com.gamut.core.model.RepeatMode as PlaybackRepeatMode
 private val FavoriteColor = Color(0xFFFF4D6D)
 private const val PrefsName = "player_ui"
 private const val PrefLyricsOn = "lyrics_on"
+private const val PrefVideoOn = "video_on"
+
+/** How far the content below the hero slides up over the video's faded bottom edge. */
+/** Clear space above the title when the music video is the backdrop. */
+private val VideoTopSpace = 200.dp
 
 @Composable
 fun PlayerScreen(
@@ -147,6 +153,7 @@ fun PlayerScreen(
     onRemoveFromPlaylist: (Track, String) -> Unit = { _, _ -> },
     onGoToArtist: (Track) -> Unit = {},
     active: Boolean = true,
+    videoProvider: VideoStreamProvider? = null,
 ) {
     val state by player.playbackState.collectAsState()
     val liveTrack by remember { derivedStateOf { (state as? PlaybackState.Playing)?.track ?: (state as? PlaybackState.Paused)?.track } }
@@ -209,6 +216,7 @@ fun PlayerScreen(
     val prefs = remember { context.getSharedPreferences(PrefsName, Context.MODE_PRIVATE) }
     var lyricsOn by remember { mutableStateOf(prefs.getBoolean(PrefLyricsOn, true)) }
     var lyricsPanelOpen by remember { mutableStateOf(false) }
+    var videoOn by remember { mutableStateOf(prefs.getBoolean(PrefVideoOn, true)) }
 
     val leave: () -> Unit = { if (active) onBack() }
     BackHandler(enabled = active && !lyricsPanelOpen) { leave() }
@@ -346,7 +354,12 @@ fun PlayerScreen(
 
     val gutter = adaptiveGutter(AdaptiveLayout.PlayerMaxWidth)
 
-    val meshStyle = LocalAppearance.current.playerStyle == PlayerStyle.Mesh
+    // Music video takes over the first page; it brings its own layout, so it overrides the cover/mesh styles.
+    val videoSource = rememberVideoSource(track, videoProvider, enabled = videoOn, active = active)
+    val heroStream = videoSource.stream.value
+    val videoMode = heroStream != null
+
+    val meshStyle = LocalAppearance.current.playerStyle == PlayerStyle.Mesh && !videoMode
     val artworkMesh = if (meshStyle) rememberArtworkMesh(artUrl) else null
     val meshSeam = remember { MeshSeam() }
     val meshSeamLift = animateFloatAsState(if (lyricsPanelOpen) 0f else 1f, tween(400), label = "mesh-seam-lift")
@@ -359,7 +372,7 @@ fun PlayerScreen(
                 .then(if (meshStyle) meshSeam.onHost else Modifier)
                 .then(if (lyricsPanelOpen) Modifier else Modifier.swipeVolumeGesture(volumeHud)),
         ) {
-            val coverStyle = LocalAppearance.current.playerStyle == PlayerStyle.Cover
+            val coverStyle = LocalAppearance.current.playerStyle == PlayerStyle.Cover && !videoMode
             val exactLyrics = (shownLyrics as? LyricsState.Loaded)?.lines?.any { it.exact } == true
             val playhead = remember(clock, exactLyrics) { FlowPlayhead(clock, if (exactLyrics) 0L else LyricsSyncOffsetMs) }
             val lyricsLoaded = shownLyrics as? LyricsState.Loaded
@@ -447,6 +460,19 @@ fun PlayerScreen(
                     PlayerBackdrop(artUrl, animateChanges = active)
                 }
 
+                // The music video is the page's backdrop: full screen, behind everything below.
+                if (heroStream != null) {
+                    VideoHero(
+                        stream = heroStream,
+                        player = player,
+                        // The lyrics panel covers the page; no point decoding behind it.
+                        active = active && !lyricsPanelOpen,
+                        speed = modState.settings.speed,
+                        onFailed = videoSource.refresh,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+
                 val wide = isWideLayout()
                 val edge = if (wide) 0.dp else gutter
 
@@ -490,20 +516,25 @@ fun PlayerScreen(
                 val seekStep = if (duration > 0) (10_000f / duration).coerceIn(0.005f, 0.1f) else 0.04f
 
                 val playerContent: @Composable (Dp) -> Unit = { coverMax ->
-                    if (meshStyle) {
-                        Spacer(Modifier.height(10.dp))
-                        Box(Modifier.fillMaxWidth().volumeHudAnchor(volumeHud), contentAlignment = Alignment.Center) {
-                            MeshSleeve(
-                                url = rawArt,
-                                isPlaying = shownPlaying,
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .widthIn(max = minOf(coverMax, MeshSleeveMaxWidth))
-                                        .then(meshSeam.onSleeve),
-                            )
+                    if (heroStream != null || meshStyle) {
+                        if (heroStream != null) {
+                            // The picture is the backdrop; leave it room at the top before the title.
+                            Spacer(Modifier.height(VideoTopSpace).volumeHudAnchor(volumeHud))
+                        } else {
+                            Spacer(Modifier.height(10.dp))
+                            Box(Modifier.fillMaxWidth().volumeHudAnchor(volumeHud), contentAlignment = Alignment.Center) {
+                                MeshSleeve(
+                                    url = rawArt,
+                                    isPlaying = shownPlaying,
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .widthIn(max = minOf(coverMax, MeshSleeveMaxWidth))
+                                            .then(meshSeam.onSleeve),
+                                )
+                            }
+                            Spacer(Modifier.height(28.dp))
                         }
-                        Spacer(Modifier.height(28.dp))
                         trackHeader()
                         Spacer(Modifier.height(6.dp))
                         LyricStripBlock(
@@ -712,6 +743,12 @@ fun PlayerScreen(
                 lyricsOn = !lyricsOn
                 prefs.edit().putBoolean(PrefLyricsOn, lyricsOn).apply()
                 if (!lyricsOn) lyricsPanelOpen = false
+            },
+            videoSupported = videoProvider != null,
+            videoOn = videoOn,
+            onToggleVideo = {
+                videoOn = !videoOn
+                prefs.edit().putBoolean(PrefVideoOn, videoOn).apply()
             },
             onToggleFavorite = { track?.let(onToggleFavorite) },
             onAddToPlaylist = {

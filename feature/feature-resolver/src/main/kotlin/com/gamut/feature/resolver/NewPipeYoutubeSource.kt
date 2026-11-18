@@ -15,12 +15,24 @@ import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.search.SearchInfo
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
 import org.schabi.newpipe.extractor.stream.AudioStream
+import org.schabi.newpipe.extractor.stream.DeliveryMethod
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
+import org.schabi.newpipe.extractor.stream.VideoStream as NewPipeVideoStream
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
 import okhttp3.Request as OkHttpRequest
+
+/** One video-only rendition as the extractor reports it. */
+data class VideoOption(
+    val url: String,
+    val width: Int,
+    val height: Int,
+    val fps: Int,
+    val codec: String,
+    val bitrate: Int,
+)
 
 @Singleton
 class NewPipeYoutubeSource
@@ -115,6 +127,89 @@ class NewPipeYoutubeSource
                     emptyList()
                 }
             }
+
+
+        /** Official music-video candidates (YouTube Music's "Videos" filter). */
+        suspend fun searchMusicVideos(query: String): List<YoutubeCandidate> =
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    ensureInitialized()
+                    val service = NewPipe.getService("YouTube")
+                    val handler =
+                        service.getSearchQHFactory().fromQuery(
+                            query,
+                            listOf(YoutubeSearchQueryHandlerFactory.MUSIC_VIDEOS),
+                            "",
+                        )
+                    SearchInfo
+                        .getInfo(service, handler)
+                        .relatedItems
+                        .filterIsInstance<StreamInfoItem>()
+                        .mapNotNull { it.toCandidate()?.copy(category = "videos", isMusicCatalog = false) }
+                        .take(15)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            }
+
+        /** Plain YouTube video search (not the Music catalogue): official uploads the Music filter misses. */
+        suspend fun searchVideos(query: String): List<YoutubeCandidate> =
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    ensureInitialized()
+                    val service = NewPipe.getService("YouTube")
+                    val handler =
+                        service.getSearchQHFactory().fromQuery(
+                            query,
+                            listOf(YoutubeSearchQueryHandlerFactory.VIDEOS),
+                            "",
+                        )
+                    SearchInfo
+                        .getInfo(service, handler)
+                        .relatedItems
+                        .filterIsInstance<StreamInfoItem>()
+                        .mapNotNull { it.toCandidate()?.copy(category = "videos", isMusicCatalog = false) }
+                        .take(15)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            }
+
+        /** Every direct (progressive) video-only rendition of [videoId], unfiltered by device capability. */
+        suspend fun videoOnlyStreams(videoId: String): Result<List<VideoOption>> =
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    ensureInitialized()
+                    Result.success(
+                        StreamInfo
+                            .getInfo("https://www.youtube.com/watch?v=$videoId")
+                            .videoOnlyStreams
+                            .asSequence()
+                            .filter { it.isUrl && it.content.isNotBlank() }
+                            .filter { it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP }
+                            .map { it.toOption() }
+                            .toList(),
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
+            }
+
+        private fun NewPipeVideoStream.toOption() =
+            VideoOption(
+                url = content,
+                width = width,
+                height = height,
+                fps = fps,
+                codec = codec.orEmpty(),
+                bitrate = bitrate,
+            )
 
         override suspend fun searchBroad(query: String): List<YoutubeCandidate> = emptyList()
 

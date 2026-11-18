@@ -25,6 +25,7 @@ import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.bold.Equalizer
 import com.adamglin.phosphoricons.bold.Heart
 import com.adamglin.phosphoricons.bold.Info
+import com.adamglin.phosphoricons.bold.VideoCamera
 import com.adamglin.phosphoricons.bold.ListPlus
 import com.adamglin.phosphoricons.bold.MicrophoneStage
 import com.adamglin.phosphoricons.bold.ShareNetwork
@@ -49,6 +50,9 @@ internal fun PlayerOptionsSheet(
     onSleepTimer: () -> Unit,
     onStats: () -> Unit,
     onDismiss: () -> Unit,
+    videoSupported: Boolean = false,
+    videoOn: Boolean = false,
+    onToggleVideo: () -> Unit = {},
 ) {
     GamutSheet(onDismiss = onDismiss) {
         Column(
@@ -66,6 +70,9 @@ internal fun PlayerOptionsSheet(
             )
             OptionRow(PhosphorIcons.Bold.ShareNetwork, "Share", null, onShare)
             OptionRow(PhosphorIcons.Bold.MicrophoneStage, "Lyrics", if (lyricsOn) "On" else "Off", onToggleLyrics)
+            if (videoSupported) {
+                OptionRow(PhosphorIcons.Bold.VideoCamera, "Music video", if (videoOn) "On" else "Off", onToggleVideo)
+            }
             OptionRow(
                 PhosphorIcons.Bold.Heart,
                 if (isFavorite) "Remove from favorites" else "Add to favorites",

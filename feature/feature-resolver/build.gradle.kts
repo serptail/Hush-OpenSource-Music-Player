@@ -7,7 +7,8 @@ plugins {
 }
 android {
     namespace = "com.gamut.feature.resolver"
-    compileSdk = 35
+    // InnerTubeX's AAR requires compiling against 37; targetSdk (runtime behaviour) is unaffected.
+    compileSdk = 37
     compileOptions { isCoreLibraryDesugaringEnabled = true }
     defaultConfig { multiDexEnabled = true }
 }
@@ -26,4 +27,12 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+
+    // YouTube stream extraction (video): InnerTubeX, plus the Ktor client and QuickJS it runs on.
+    implementation(libs.innertubex)
+    implementation(libs.quickjs)
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.client.serialization.json)
 }
