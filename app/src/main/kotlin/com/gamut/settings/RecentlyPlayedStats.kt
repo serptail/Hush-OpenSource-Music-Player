@@ -1,6 +1,5 @@
 package com.gamut.settings
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -21,9 +20,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,19 +36,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.adamglin.PhosphorIcons
+import com.adamglin.phosphoricons.Regular
+import com.adamglin.phosphoricons.regular.CaretDown
+import com.adamglin.phosphoricons.regular.MusicNotes
+import com.adamglin.phosphoricons.regular.Trash
 import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.LocalArtistPhotoResolver
 import com.gamut.core.designsystem.ink
@@ -95,6 +93,18 @@ class StatsViewModel
 private const val COLLAPSED_SONGS = 5
 private const val COLLAPSED_ARTISTS = 4
 
+private val ArtistArt = 44.dp
+private val SongArt = 44.dp
+private val RankWidth = 24.dp
+private val RankGap = 12.dp
+
+/** Where the text starts in each kind of row, so the dividers tuck in under it. */
+private val ArtistTextInset = GroupedRowInset + ArtistArt + GroupedIconGap
+private val SongTextInset = GroupedRowInset + RankWidth + SongArt + RankGap
+
+private fun playsLabel(plays: Int): String =
+    if (plays == 1) "1 play" else "${NumberFormat.getIntegerInstance().format(plays)} plays"
+
 @Composable
 internal fun StatsTab(vm: StatsViewModel) {
     val summary by vm.summary.collectAsState()
@@ -102,88 +112,33 @@ internal fun StatsTab(vm: StatsViewModel) {
     var showAllSongs by rememberSaveable { mutableStateOf(false) }
     var showAllArtists by rememberSaveable { mutableStateOf(false) }
     var confirmReset by rememberSaveable { mutableStateOf(false) }
+    val periods = remember { StatsPeriod.values().map { it to it.label } }
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 20.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 24.dp)) {
         item(key = "periods", contentType = "periods") {
-            PeriodSwitch(period, vm::select, Modifier.padding(top = 4.dp))
+            GroupedSegmented(options = periods, selected = period, onSelect = vm::select, modifier = Modifier.padding(top = 2.dp))
         }
         if (summary.totalPlays == 0) {
             item(key = "empty", contentType = "empty") {
-                Text(
+                EmptyNote(
+                    PhosphorIcons.Regular.MusicNotes,
                     if (period == StatsPeriod.ALL) {
                         "Play a few songs and your listening stats will show up here."
                     } else {
                         "Nothing played in this period yet."
                     },
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = ink(0.5f),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 64.dp),
+                    Modifier.padding(vertical = 64.dp),
                 )
             }
         } else {
-            item(key = "summary", contentType = "summary") { SummaryStrip(summary) }
-
-            if (summary.topArtists.isNotEmpty()) {
-                item(key = "artists-title", contentType = "heading") { SectionTitle("Top artists") }
-                item(key = "artists-grid", contentType = "artists-grid") {
-                    ArtistGrid(summary.topArtists, showAllArtists) { showAllArtists = !showAllArtists }
-                }
-            }
-
-            if (summary.topSongs.isNotEmpty()) {
-                item(key = "songs-title", contentType = "heading") { SectionTitle("Top songs") }
-                val maxSong =
-                    summary.topSongs
-                        .first()
-                        .plays
-                        .coerceAtLeast(1)
-                val songs = if (showAllSongs) summary.topSongs else summary.topSongs.take(COLLAPSED_SONGS)
-                itemsIndexed(
-                    songs,
-                    key = { _, s -> "song-${s.song.isrc}" },
-                    contentType = { _, _ -> "song" },
-                ) { index, s ->
-                    RankRow(
-                        rank = index + 1,
-                        title = s.song.title,
-                        subtitle = s.song.artist,
-                        plays = s.plays,
-                        fraction = s.plays / maxSong.toFloat(),
-                        leading = {
-                            ArtImage(
-                                url = remember(s.song.artUrl) { squareArtUrl(s.song.artUrl, 200) },
-                                modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).thumbnailBorder(RoundedCornerShape(8.dp)),
-                            )
-                        },
-                    )
-                }
-                if (summary.topSongs.size > COLLAPSED_SONGS) {
-                    item(key = "songs-more", contentType = "more") {
-                        Text(
-                            if (showAllSongs) "Show less" else "Show more",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier =
-                                Modifier
-                                    .padding(top = 4.dp)
-                                    .pressScale(onClick = { showAllSongs = !showAllSongs }, scaleDown = 0.96f)
-                                    .padding(vertical = 8.dp),
-                        )
-                    }
-                }
-            }
-
-            item(key = "reset", contentType = "reset") {
-                Text(
-                    "Reset statistics",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = ink(0.4f),
-                    modifier =
-                        Modifier
-                            .padding(top = 28.dp)
-                            .pressScale(onClick = { confirmReset = true }, scaleDown = 0.96f)
-                            .padding(vertical = 8.dp),
+            item(key = "stats", contentType = "stats") {
+                StatsBlock(
+                    summary = summary,
+                    showAllArtists = showAllArtists,
+                    showAllSongs = showAllSongs,
+                    onToggleArtists = { showAllArtists = !showAllArtists },
+                    onToggleSongs = { showAllSongs = !showAllSongs },
+                    onReset = { confirmReset = true },
                 )
             }
         }
@@ -208,50 +163,58 @@ internal fun StatsTab(vm: StatsViewModel) {
 }
 
 @Composable
-private fun PeriodSwitch(
-    selected: StatsPeriod,
-    onSelect: (StatsPeriod) -> Unit,
-    modifier: Modifier = Modifier,
+private fun StatsBlock(
+    summary: StatsSummary,
+    showAllArtists: Boolean,
+    showAllSongs: Boolean,
+    onToggleArtists: () -> Unit,
+    onToggleSongs: () -> Unit,
+    onReset: () -> Unit,
 ) {
-    val accent = MaterialTheme.colorScheme.primary
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-        StatsPeriod.values().forEach { p ->
-            val on = p == selected
-            val color by animateColorAsState(if (on) ink() else ink(0.4f), tween(250), label = "stats-period")
-            val line by animateColorAsState(if (on) accent else Color.Transparent, tween(250), label = "stats-period-line")
-            Column(
-                Modifier.pressScale(onClick = { onSelect(p) }, scaleDown = 0.96f).padding(vertical = 6.dp),
-                horizontalAlignment = Alignment.Start,
-            ) {
-                Text(p.label, style = MaterialTheme.typography.titleMedium, color = color, maxLines = 1)
-                Box(
-                    Modifier
-                        .padding(top = 6.dp)
-                        .width(22.dp)
-                        .height(2.dp)
-                        .clip(CircleShape)
-                        .background(line),
-                )
+    SettingsBlock(Modifier.animateContentSize()) {
+        SummaryStrip(summary)
+
+        if (summary.topArtists.isNotEmpty()) {
+            GroupedHeader("Top artists")
+            val artists = if (showAllArtists) summary.topArtists else summary.topArtists.take(COLLAPSED_ARTISTS)
+            artists.forEachIndexed { i, a ->
+                if (i > 0) GroupedDivider(start = ArtistTextInset)
+                ArtistRow(a)
+            }
+            if (summary.topArtists.size > COLLAPSED_ARTISTS) {
+                GroupedDivider(start = GroupedRowInset)
+                ToggleRow(showAllArtists, onToggleArtists)
             }
         }
+
+        if (summary.topSongs.isNotEmpty()) {
+            GroupedHeader("Top songs")
+            val maxSong = summary.topSongs.first().plays.coerceAtLeast(1)
+            val songs = if (showAllSongs) summary.topSongs else summary.topSongs.take(COLLAPSED_SONGS)
+            songs.forEachIndexed { i, s ->
+                if (i > 0) GroupedDivider(start = SongTextInset)
+                TopSongRow(rank = i + 1, song = s, fraction = s.plays / maxSong.toFloat())
+            }
+            if (summary.topSongs.size > COLLAPSED_SONGS) {
+                GroupedDivider(start = GroupedRowInset)
+                ToggleRow(showAllSongs, onToggleSongs)
+            }
+        }
+
+        GroupedHeader("Data")
+        GroupedRow("Reset statistics", PhosphorIcons.Regular.Trash, destructive = true, onClick = onReset)
+        GroupedFooter("Clears your play counts. Favorites, playlists and the Recent list are not affected.")
+        Spacer(Modifier.height(8.dp))
     }
 }
 
 @Composable
 private fun SummaryStrip(summary: StatsSummary) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(top = 18.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(ink(0.05f))
-            .padding(vertical = 18.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
         Figure(summary.totalPlays, if (summary.totalPlays == 1) "Play" else "Plays", Modifier.weight(1f))
-        Box(Modifier.width(1.dp).height(30.dp).background(ink(0.1f)))
+        Box(Modifier.width(0.5.dp).height(30.dp).background(ink(0.12f)))
         Figure(summary.uniqueSongs, if (summary.uniqueSongs == 1) "Song" else "Songs", Modifier.weight(1f))
-        Box(Modifier.width(1.dp).height(30.dp).background(ink(0.1f)))
+        Box(Modifier.width(0.5.dp).height(30.dp).background(ink(0.12f)))
         Figure(summary.uniqueArtists, if (summary.uniqueArtists == 1) "Artist" else "Artists", Modifier.weight(1f))
     }
 }
@@ -277,52 +240,88 @@ private fun Figure(
 }
 
 @Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleMedium,
-        color = ink(0.55f),
-        modifier = Modifier.padding(top = 30.dp, bottom = 4.dp),
-    )
+private fun ArtistRow(artist: RankedArtist) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = GroupedRowInset, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ArtistCircle(artist, ArtistArt)
+        Text(
+            artist.name,
+            style = MaterialTheme.typography.bodyLarge,
+            color = ink(),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(start = GroupedIconGap),
+        )
+        Text(
+            playsLabel(artist.plays),
+            style = MaterialTheme.typography.bodyLarge.copy(fontFeatureSettings = "tnum"),
+            color = ink(0.5f),
+            maxLines = 1,
+            modifier = Modifier.padding(start = 12.dp),
+        )
+    }
 }
 
 @Composable
-private fun RankRow(
+private fun TopSongRow(
     rank: Int,
-    title: String,
-    subtitle: String?,
-    plays: Int,
+    song: RankedSong,
     fraction: Float,
-    leading: @Composable () -> Unit,
 ) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = GroupedRowInset, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(
             rank.toString(),
             style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
             color = if (rank == 1) MaterialTheme.colorScheme.primary else ink(0.4f),
             maxLines = 1,
-            modifier = Modifier.width(22.dp),
+            modifier = Modifier.width(RankWidth),
         )
-        leading()
-        Column(Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (subtitle != null) {
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = ink(0.6f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+        ArtImage(
+            url = remember(song.song.artUrl) { squareArtUrl(song.song.artUrl, 200) },
+            modifier = Modifier.size(SongArt).clip(RoundedCornerShape(10.dp)).thumbnailBorder(RoundedCornerShape(10.dp)),
+        )
+        Column(Modifier.weight(1f).padding(start = RankGap)) {
+            Text(song.song.title, style = MaterialTheme.typography.bodyLarge, color = ink(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                song.song.artist,
+                style = MaterialTheme.typography.bodyMedium,
+                color = ink(0.55f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             ShareBar(fraction, Modifier.padding(top = 7.dp))
         }
         Text(
-            NumberFormat.getIntegerInstance().format(plays),
-            style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
-            color = ink(0.85f),
+            playsLabel(song.plays),
+            style = MaterialTheme.typography.bodyLarge.copy(fontFeatureSettings = "tnum"),
+            color = ink(0.5f),
             maxLines = 1,
-            modifier = Modifier.padding(start = 14.dp),
+            modifier = Modifier.padding(start = 12.dp),
+        )
+    }
+}
+
+@Composable
+private fun ToggleRow(
+    expanded: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().pressScale(onClick = onClick, scaleDown = 0.985f).padding(vertical = 13.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(if (expanded) "Show less" else "Show more", style = MaterialTheme.typography.bodyLarge, color = ink(0.6f))
+        Icon(
+            PhosphorIcons.Regular.CaretDown,
+            null,
+            tint = ink(0.6f),
+            modifier = Modifier.padding(start = 6.dp).size(14.dp).graphicsLayer { rotationZ = if (expanded) 180f else 0f },
         )
     }
 }
@@ -353,84 +352,6 @@ private fun ShareBar(
         )
     }
 }
-
-@Composable
-private fun ArtistGrid(
-    artists: List<RankedArtist>,
-    expanded: Boolean,
-    onToggle: () -> Unit,
-) {
-    val hasMore = artists.size > COLLAPSED_ARTISTS
-    val shown = if (expanded || !hasMore) artists else artists.take(COLLAPSED_ARTISTS)
-    Column(Modifier.fillMaxWidth().animateContentSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        shown.chunked(2).forEach { ArtistPairRow(it) }
-        if (hasMore && !expanded) {
-            Box(Modifier.fillMaxWidth()) {
-                Box(Modifier.fillMaxWidth().fadeOutBottom()) {
-                    ArtistPairRow(artists.drop(COLLAPSED_ARTISTS).take(2), Modifier.padding(bottom = 44.dp))
-                }
-                MoreToggle("Show more", onToggle, Modifier.align(Alignment.BottomCenter))
-            }
-        } else if (hasMore) {
-            MoreToggle("Show less", onToggle, Modifier.align(Alignment.CenterHorizontally))
-        }
-    }
-}
-
-@Composable
-private fun MoreToggle(
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Text(
-        label,
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = modifier.pressScale(onClick = onClick, scaleDown = 0.96f).padding(horizontal = 16.dp, vertical = 8.dp),
-    )
-}
-
-@Composable
-private fun ArtistPairRow(
-    pair: List<RankedArtist>,
-    modifier: Modifier = Modifier,
-) {
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        pair.forEach { ArtistCell(it, Modifier.weight(1f)) }
-        if (pair.size < 2) Spacer(Modifier.weight(1f))
-    }
-}
-
-@Composable
-private fun ArtistCell(
-    artist: RankedArtist,
-    modifier: Modifier = Modifier,
-) {
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        ArtistCircle(artist, 52.dp)
-        Column(Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(artist.name, style = MaterialTheme.typography.bodyLarge, color = ink(), maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(
-                if (artist.plays == 1) "1 play" else "${NumberFormat.getIntegerInstance().format(artist.plays)} plays",
-                style = MaterialTheme.typography.bodyMedium,
-                color = ink(0.55f),
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-    }
-}
-
-private fun Modifier.fadeOutBottom(): Modifier =
-    this
-        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-        .drawWithContent {
-            drawContent()
-            drawRect(
-                Brush.verticalGradient(colorStops = arrayOf(0f to Color.Black, 1f to Color.Transparent)),
-                blendMode = BlendMode.DstIn,
-            )
-        }
 
 @Composable
 private fun ArtistCircle(

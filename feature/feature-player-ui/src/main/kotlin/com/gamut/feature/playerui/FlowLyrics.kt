@@ -102,7 +102,7 @@ internal class FlowPlayhead(
 ) {
     val positionMs: Long get() = (clock.readingMs + offsetMs).coerceAtLeast(0L)
     val sampledAtNanos: Long get() = clock.readingAtNanos
-    val discontinuity: Long get() = clock.seeks.toLong() shl 32
+    val discontinuity: Long get() = (clock.seeks.toLong() shl 32) or (offsetMs and 0xFFFF_FFFFL)
 }
 
 private fun nanosToMs(nanos: Long): Double = nanos / 1_000_000.0

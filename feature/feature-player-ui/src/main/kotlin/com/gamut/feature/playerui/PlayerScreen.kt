@@ -41,6 +41,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -963,11 +964,11 @@ internal class PlayerClock {
     var positionMs by mutableFloatStateOf(0f)
         private set
 
-    var readingMs = 0L
+    var readingMs by mutableLongStateOf(0L)
         private set
-    var readingAtNanos = 0L
+    var readingAtNanos by mutableLongStateOf(0L)
         private set
-    var seeks = 0
+    var seeks by mutableIntStateOf(0)
         private set
 
     private fun reading(ms: Long) {

@@ -26,12 +26,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -45,7 +45,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -54,8 +53,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -65,20 +62,20 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.bold.ArrowSquareDown
-import com.adamglin.phosphoricons.bold.ArrowSquareUp
-import com.adamglin.phosphoricons.bold.ArrowsClockwise
-import com.adamglin.phosphoricons.bold.CalendarCheck
-import com.adamglin.phosphoricons.bold.Camera
-import com.adamglin.phosphoricons.bold.ClockClockwise
-import com.adamglin.phosphoricons.bold.CloudCheck
-import com.adamglin.phosphoricons.bold.CloudSlash
-import com.adamglin.phosphoricons.bold.FloppyDisk
-import com.adamglin.phosphoricons.bold.PencilSimple
-import com.adamglin.phosphoricons.bold.Plugs
-import com.adamglin.phosphoricons.bold.Trash
-import com.adamglin.phosphoricons.bold.User
+import com.adamglin.phosphoricons.Regular
+import com.adamglin.phosphoricons.regular.ArrowSquareDown
+import com.adamglin.phosphoricons.regular.ArrowSquareUp
+import com.adamglin.phosphoricons.regular.ArrowsClockwise
+import com.adamglin.phosphoricons.regular.CalendarCheck
+import com.adamglin.phosphoricons.regular.Camera
+import com.adamglin.phosphoricons.regular.ClockClockwise
+import com.adamglin.phosphoricons.regular.CloudCheck
+import com.adamglin.phosphoricons.regular.CloudSlash
+import com.adamglin.phosphoricons.regular.FloppyDisk
+import com.adamglin.phosphoricons.regular.PencilSimple
+import com.adamglin.phosphoricons.regular.Plugs
+import com.adamglin.phosphoricons.regular.Trash
+import com.adamglin.phosphoricons.regular.User
 import com.gamut.R
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.ProfileAvatar
@@ -93,9 +90,15 @@ import com.gamut.settings.GamutDialog
 import com.gamut.settings.GamutField
 import com.gamut.settings.GamutHeading
 import com.gamut.settings.GamutPage
+import com.gamut.settings.GroupedDivider
+import com.gamut.settings.GroupedFooter
+import com.gamut.settings.GroupedHeader
+import com.gamut.settings.GroupedIconGap
+import com.gamut.settings.GroupedIconSize
+import com.gamut.settings.GroupedRow
+import com.gamut.settings.GroupedRowInset
 import com.gamut.settings.PillSwitch
-import com.gamut.settings.SoftCard
-import com.gamut.settings.SoftHeader
+import com.gamut.settings.SettingsBlock
 import kotlinx.coroutines.delay
 import kotlin.math.ceil
 
@@ -177,7 +180,7 @@ fun ProfileScreen(
                     name = name,
                     seed = userId,
                     size = 92.dp,
-                    guestIcon = PhosphorIcons.Bold.User,
+                    guestIcon = PhosphorIcons.Regular.User,
                     image = avatar,
                     shape = CircleShape,
                 )
@@ -200,72 +203,60 @@ fun ProfileScreen(
                     modifier = Modifier.padding(top = 2.dp),
                 )
                 Row(
-                    Modifier
-                        .padding(
-                            top = 10.dp,
-                        ).clip(RoundedCornerShape(50))
-                        .background(ink(0.08f))
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    Modifier.padding(top = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
-                        if (userId != null) PhosphorIcons.Bold.CloudCheck else PhosphorIcons.Bold.CloudSlash,
+                        if (userId != null) PhosphorIcons.Regular.CloudCheck else PhosphorIcons.Regular.CloudSlash,
                         null,
-                        tint = ink(0.7f),
-                        modifier = Modifier.size(15.dp),
+                        tint = ink(0.6f),
+                        modifier = Modifier.size(16.dp),
                     )
                     Text(
                         if (userId != null) "Signed in" else "Local only",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = ink(0.7f),
+                        color = ink(0.6f),
                         maxLines = 1,
                         modifier = Modifier.padding(start = 6.dp),
                     )
                 }
             }
         }
-        Row(
-            Modifier.fillMaxWidth().padding(top = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconPill(PhosphorIcons.Bold.PencilSimple, "Edit name", openEditName, Modifier.weight(1f))
-            IconPill(PhosphorIcons.Bold.Camera, if (avatar != null) "Change photo" else "Add photo", pickPhoto, Modifier.weight(1f))
+        SettingsBlock {
+            GroupedRow("Name", PhosphorIcons.Regular.PencilSimple, value = name, chevron = false, onClick = openEditName)
+            GroupedDivider()
+            GroupedRow(
+                if (avatar != null) "Change photo" else "Add photo",
+                PhosphorIcons.Regular.Camera,
+                chevron = false,
+                onClick = pickPhoto,
+            )
             if (avatar != null) {
-                Box(
-                    Modifier
-                        .size(44.dp)
-                        .pressScale(onClick = { vm.removeAvatar() })
-                        .clip(CircleShape)
-                        .background(ink(0.1f)),
-                    contentAlignment = Alignment.Center,
-                ) { Icon(PhosphorIcons.Bold.Trash, "Remove photo", tint = ink(0.85f), modifier = Modifier.size(20.dp)) }
+                GroupedDivider()
+                GroupedRow("Remove photo", PhosphorIcons.Regular.Trash, destructive = true, onClick = { vm.removeAvatar() })
             }
-        }
 
-        if (SyncConfig.enabled) {
-            SoftHeader("Sync")
-            SoftCard {
+            if (SyncConfig.enabled) {
+                GroupedHeader("Sync")
                 if (userId == null) {
-                    IconRow(
+                    GroupedRow(
+                        "Continue with Google",
                         icon = null,
                         painter = painterResource(R.drawable.ic_google),
-                        title = "Continue with Google",
-                        subtitle = "Sync and back up your library across devices.",
+                        chevron = false,
                         onClick = { vm.signIn(context) },
                     )
                 } else {
                     SyncRow(status = status, lastSynced = lastSynced, pending = pending, onClick = vm::syncNow)
                 }
+                if (userId == null) GroupedFooter("Sync and back up your library across devices.")
             }
-        }
 
-        SoftHeader("Backup")
-        SoftCard {
-            IconRow(
-                PhosphorIcons.Bold.ArrowSquareDown,
+            GroupedHeader("Backup")
+            GroupedRow(
                 "Export",
-                subtitle = "Save to a file",
+                PhosphorIcons.Regular.ArrowSquareDown,
+                chevron = false,
                 onClick = {
                     exportPassword = ""
                     exportConfirm = ""
@@ -273,67 +264,67 @@ fun ProfileScreen(
                     exportDialog = true
                 },
             )
-            IconDivider()
-            IconRow(
-                PhosphorIcons.Bold.ArrowSquareUp,
+            GroupedDivider()
+            GroupedRow(
                 "Import",
-                subtitle = "Merge or replace",
+                PhosphorIcons.Regular.ArrowSquareUp,
+                chevron = false,
                 onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
             )
-            IconDivider()
-            IconRow(PhosphorIcons.Bold.FloppyDisk, "Back up now", subtitle = "On this device", onClick = vm::backupNow)
-            IconDivider()
-            IconRow(
-                PhosphorIcons.Bold.CalendarCheck,
+            GroupedDivider()
+            GroupedRow("Back up now", PhosphorIcons.Regular.FloppyDisk, chevron = false, onClick = vm::backupNow)
+            GroupedDivider()
+            GroupedRow(
                 "Daily backup",
-                subtitle = "Last 10 days, offline",
+                PhosphorIcons.Regular.CalendarCheck,
                 onClick = { vm.setAutoBackup(!autoBackup) },
                 trailing = { PillSwitch(autoBackup) },
             )
-        }
+            GroupedFooter("Export saves your library to a file. Daily backups stay on this device and keep the last 10 days.")
 
-        if (backups.isNotEmpty()) {
-            SoftHeader("Restore")
-            SoftCard {
+            if (backups.isNotEmpty()) {
+                GroupedHeader("Restore")
                 backups.forEachIndexed { i, b ->
-                    if (i > 0) IconDivider()
-                    IconRow(
-                        PhosphorIcons.Bold.ClockClockwise,
+                    if (i > 0) GroupedDivider()
+                    GroupedRow(
                         DateUtils.formatDateTime(
                             context,
                             b.modifiedMs,
                             DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_ABBREV_MONTH,
                         ),
-                        subtitle = "Tap to restore",
+                        PhosphorIcons.Regular.ClockClockwise,
+                        chevron = false,
                         onClick = { vm.requestRestore(b) },
                     )
                 }
+                GroupedFooter("Restoring only adds what is missing. Nothing you have now is removed.")
             }
-        }
 
-        if (SyncConfig.enabled && userId != null) {
-            SoftHeader("Account")
-            SoftCard {
-                IconRow(
-                    PhosphorIcons.Bold.Plugs,
+            if (SyncConfig.enabled && userId != null) {
+                GroupedHeader("Account")
+                GroupedRow(
                     "Disconnect Google",
+                    PhosphorIcons.Regular.Plugs,
+                    chevron = false,
                     onClick = {
                         allDevices = false
                         clearLocal = false
                         disconnect = true
                     },
                 )
-                IconDivider()
-                IconRow(
-                    PhosphorIcons.Bold.Trash,
+                GroupedDivider()
+                GroupedRow(
                     "Delete account",
+                    PhosphorIcons.Regular.Trash,
                     destructive = true,
                     onClick = {
                         clearLocal = false
                         delete = true
                     },
                 )
+                GroupedFooter("Disconnecting keeps your library on this device. Deleting removes your cloud library for good.")
             }
+            Spacer(Modifier.height(8.dp))
         }
     }
 
@@ -500,88 +491,6 @@ fun ProfileScreen(
         ) {
             GamutCheck(clearLocal, "Also clear data on this device", { clearLocal = it }, warn = true)
         }
-    }
-}
-
-@Composable
-private fun IconRow(
-    icon: ImageVector?,
-    title: String,
-    onClick: () -> Unit,
-    painter: Painter? = null,
-    subtitle: String? = null,
-    destructive: Boolean = false,
-    subtitleColor: Color? = null,
-    trailing: (@Composable () -> Unit)? = null,
-) {
-    val tone = if (destructive) GamutDestructive else ink()
-    Row(
-        Modifier.fillMaxWidth().pressScale(onClick = onClick, scaleDown = 0.99f).padding(horizontal = 20.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
-            when {
-                painter != null -> Icon(painter, null, tint = Color.Unspecified, modifier = Modifier.size(24.dp))
-                icon != null -> Icon(icon, null, tint = if (destructive) GamutDestructive else ink(0.85f), modifier = Modifier.size(24.dp))
-            }
-        }
-        Spacer(Modifier.width(16.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = tone, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (subtitle != null) {
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = subtitleColor ?: ink(0.55f),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-        }
-        if (trailing != null) {
-            Spacer(Modifier.width(12.dp))
-            trailing()
-        }
-    }
-}
-
-@Composable
-private fun IconDivider() {
-    Box(
-        Modifier
-            .padding(start = 76.dp)
-            .fillMaxWidth()
-            .height(1.dp)
-            .background(ink(0.06f)),
-    )
-}
-
-@Composable
-private fun IconPill(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier
-            .pressScale(onClick = onClick)
-            .clip(RoundedCornerShape(50))
-            .background(ink(0.1f))
-            .padding(horizontal = 14.dp, vertical = 11.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, null, tint = ink(0.85f), modifier = Modifier.size(18.dp))
-        Text(
-            label,
-            style = MaterialTheme.typography.titleMedium,
-            color = ink(),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 8.dp),
-        )
     }
 }
 
@@ -757,9 +666,12 @@ private fun SyncRow(
             }, scaleDown = 0.99f),
     ) {
         if (syncing) SyncShimmer(Modifier.matchParentSize())
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(26.dp).graphicsLayer { translationX = shake.value }, contentAlignment = Alignment.Center) {
-                Canvas(Modifier.requiredSize(38.dp)) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = GroupedRowInset, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(GroupedIconSize).graphicsLayer { translationX = shake.value }, contentAlignment = Alignment.Center) {
+                Canvas(Modifier.requiredSize(34.dp)) {
                     val stroke = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
                     val inset = stroke.width / 2
                     val box = Size(size.width - stroke.width, size.height - stroke.width)
@@ -782,14 +694,14 @@ private fun SyncRow(
                 Crossfade(targetState = justSynced, label = "icon") { checked ->
                     Icon(
                         when {
-                            checked -> PhosphorIcons.Bold.CloudCheck
-                            offline -> PhosphorIcons.Bold.CloudSlash
-                            else -> PhosphorIcons.Bold.ArrowsClockwise
+                            checked -> PhosphorIcons.Regular.CloudCheck
+                            offline -> PhosphorIcons.Regular.CloudSlash
+                            else -> PhosphorIcons.Regular.ArrowsClockwise
                         },
                         null,
                         tint = if (failed) GamutDestructive else ink(if (offline) 0.5f else 0.85f),
                         modifier =
-                            Modifier.size(24.dp).graphicsLayer {
+                            Modifier.size(GroupedIconSize).graphicsLayer {
                                 rotationZ = if (checked) 0f else spin.value
                                 scaleX = if (checked) pop else 1f
                                 scaleY = if (checked) pop else 1f
@@ -806,12 +718,12 @@ private fun SyncRow(
                     )
                 }
             }
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(GroupedIconGap))
             Column(Modifier.weight(1f)) {
                 Crossfade(targetState = title, label = "title") {
                     Text(
                         it,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.bodyLarge,
                         color = if (failed) GamutDestructive else ink(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -823,7 +735,7 @@ private fun SyncRow(
                     color = if (failed) GamutDestructive else ink(0.55f),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 2.dp),
+                    modifier = Modifier.padding(top = 1.dp),
                 )
             }
         }

@@ -62,7 +62,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogWindowProvider
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.bold.CaretLeft
+import com.adamglin.phosphoricons.Regular
+import com.adamglin.phosphoricons.regular.CaretLeft
 import com.adamglin.phosphoricons.bold.CaretRight
 import com.adamglin.phosphoricons.bold.Check
 import com.gamut.core.designsystem.CoverTheme
@@ -94,7 +95,7 @@ fun GamutPage(
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 24.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(44.dp).pressScale(onClick = onBack), contentAlignment = Alignment.Center) {
-                    Icon(PhosphorIcons.Bold.CaretLeft, "Back", tint = ink(0.85f), modifier = Modifier.size(24.dp))
+                    Icon(PhosphorIcons.Regular.CaretLeft, "Back", tint = ink(0.85f), modifier = Modifier.size(24.dp))
                 }
                 if (title.isNotEmpty()) {
                     Text(

@@ -47,12 +47,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -96,6 +98,10 @@ import kotlinx.coroutines.launch
 import com.gamut.core.model.RepeatMode as PlaybackRepeatMode
 
 private const val COVER_FADE_FRACTION = 0.34f
+
+// Auris's playerInkGlow over white ink: a soft dark halo behind chrome text so it keeps an edge
+// where it crosses a bright patch of the backdrop.
+private val HeaderInkShadow = Shadow(color = Color.Black.copy(alpha = 0.30f), blurRadius = 9f)
 
 private fun smootherStep(t: Float): Float {
     val x = t.coerceIn(0f, 1f)
@@ -151,6 +157,7 @@ internal fun StyledPlayerLayer(
     highlight: Color,
 ) {
     val mesh = rememberArtworkMesh(blurArt)
+    val lyricsBackdropImage = rememberFullArtworkBlurImage(blurArt, prepare = active)
     val seam = remember { MeshSeam() }
     val density = LocalDensity.current
     val gutter = adaptiveGutter(AdaptiveLayout.PlayerMaxWidth)
@@ -189,8 +196,7 @@ internal fun StyledPlayerLayer(
         }
         if (lyricsBackdrop && blurArt != null) {
             Box(Modifier.fillMaxSize().graphicsLayer { alpha = lyricsT }) {
-                com.gamut.feature.playerui
-                    .PlayerBackdrop(blurArt, animateChanges = active)
+                FullArtworkBlurBackdrop(image = lyricsBackdropImage)
             }
         }
 
@@ -544,7 +550,14 @@ private fun LyricsHeader(
     Row(modifier.height(56.dp), verticalAlignment = Alignment.CenterVertically) {
         DepthIcon(PhosphorIcons.Bold.CaretDown, "Close lyrics", Modifier.bounceTap(onClick = onClose).padding(8.dp))
         Spacer(Modifier.size(8.dp))
-        Box(Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.12f)).thumbnailBorder(RoundedCornerShape(8.dp))) {
+        Box(
+            Modifier
+                .size(44.dp)
+                .then(if (artUrl != null) Modifier.shadow(10.dp, RoundedCornerShape(8.dp), clip = false) else Modifier)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.White.copy(alpha = 0.12f))
+                .thumbnailBorder(RoundedCornerShape(8.dp)),
+        ) {
             if (artUrl != null) {
                 AsyncImage(model = artUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             }
@@ -554,14 +567,14 @@ private fun LyricsHeader(
             Text(
                 title,
                 color = Color.White,
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, shadow = HeaderInkShadow),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 artist,
                 color = Color.White.copy(alpha = 0.7f),
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodySmall.copy(shadow = HeaderInkShadow),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

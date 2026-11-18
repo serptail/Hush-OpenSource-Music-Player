@@ -25,7 +25,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.bold.CaretLeft
+import com.adamglin.phosphoricons.Regular
+import com.adamglin.phosphoricons.regular.CaretLeft
 import com.adamglin.phosphoricons.bold.CaretRight
 import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.LocalCoverPalette
@@ -46,7 +47,7 @@ fun SettingsScaffold(
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(44.dp).pressScale(onClick = onBack), contentAlignment = Alignment.Center) {
-                    Icon(PhosphorIcons.Bold.CaretLeft, "Back", tint = ink(0.85f), modifier = Modifier.size(24.dp))
+                    Icon(PhosphorIcons.Regular.CaretLeft, "Back", tint = ink(0.85f), modifier = Modifier.size(24.dp))
                 }
                 if (title.isNotEmpty()) {
                     Text(title, style = MaterialTheme.typography.headlineMedium, color = ink(), modifier = Modifier.padding(start = 4.dp))
