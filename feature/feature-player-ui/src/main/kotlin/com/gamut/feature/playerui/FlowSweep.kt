@@ -80,6 +80,10 @@ private val WORD_RISE = 2.dp
 
 private const val GROW_HEADROOM = 3f
 
+private const val ASCENT_REACH = 0.82f
+private const val DESCENT_FLOOR = 0.32f
+private const val LAST_LINE_DESCENT = 0.45f
+
 private const val PHASE_BEFORE = 0
 private const val PHASE_MOVING = 1
 private const val PHASE_AFTER = 2
@@ -275,12 +279,14 @@ private fun ContentDrawScope.glowGrown(
             val dy = -growth.rise * peak * fall
             val rowTop = layout.getLineTop(visualLine) + inset
             val bottom = layout.getLineBottom(visualLine) + inset
+            val bandTop = layout.bandTop(visualLine, em) + inset
+            val bandBottom = layout.bandBottom(visualLine, em) + inset
             val overhang = (to - from) * (growth.scale - 1f) / 2f
             clipRect(
                 left = from - overhang + dx,
-                top = rowTop - peak * GROW_HEADROOM,
+                top = minOf(rowTop, bandTop) - peak * GROW_HEADROOM,
                 right = to + overhang + dx,
-                bottom = bottom,
+                bottom = maxOf(bottom, bandBottom),
             ) {
                 translate(left = dx, top = dy) {
                     scale(
@@ -320,6 +326,8 @@ private fun ContentDrawScope.riseWith(
         val lineEnd = layout.getLineEnd(visualLine, visibleEnd = true)
         val top = layout.getLineTop(visualLine) + inset
         val bottom = layout.rowBottom(visualLine, em) + inset
+        val bandTop = layout.bandTop(visualLine, em) + inset
+        val bandBottom = layout.bandBottom(visualLine, em) + inset
         var at = lineStart
         var edge = layout.getLineLeft(visualLine) + inset
         for (index in line.words.indices) {
@@ -333,7 +341,7 @@ private fun ContentDrawScope.riseWith(
             val from = layout.xOn(start, visualLine, inset)
             val to = layout.xOn(end, visualLine, inset)
             if (to <= from) continue
-            if (start > at) sliceRisen(edge, top, from, bottom, 0f)
+            if (start > at) sliceRisen(edge, bandTop, from, bandBottom, 0f)
             if (held != null) {
                 growEach(
                     layout,
@@ -345,19 +353,21 @@ private fun ContentDrawScope.riseWith(
                     end,
                     top,
                     bottom,
+                    bandTop,
+                    bandBottom,
                     inset,
                     peak,
                     em,
                     growth,
                 )
             } else {
-                sliceRisen(from, top - peak, to, bottom, -lift * peak)
+                sliceRisen(from, bandTop - peak, to, bandBottom, -lift * peak)
             }
             at = end
             edge = to
         }
         if (at < lineEnd) {
-            sliceRisen(edge, top, layout.getLineRight(visualLine) + inset, bottom, 0f)
+            sliceRisen(edge, bandTop, layout.getLineRight(visualLine) + inset, bandBottom, 0f)
         }
     }
 }
@@ -373,6 +383,8 @@ private fun ContentDrawScope.growEach(
     end: Int,
     top: Float,
     bottom: Float,
+    bandTop: Float,
+    bandBottom: Float,
     inset: Float,
     peak: Float,
     em: Float,
@@ -380,7 +392,7 @@ private fun ContentDrawScope.growEach(
 ) {
     val fall = line.wordFall(word.index, positionMs)
     val first = line.wordSpans[word.index].first
-    val ceiling = top - peak * GROW_HEADROOM
+    val ceiling = minOf(top, bandTop) - peak * GROW_HEADROOM
     val middle = (top + bottom) / 2f
     for (char in start until end) {
         word.sampleInto(char - first, positionMs, growth)
@@ -394,7 +406,7 @@ private fun ContentDrawScope.growEach(
             left = from - overhang + dx,
             top = ceiling,
             right = to + overhang + dx,
-            bottom = bottom,
+            bottom = maxOf(bottom, bandBottom),
             dy = dy,
         ) {
             translate(left = dx) {
@@ -446,6 +458,35 @@ private fun TextLayoutResult.rowBottom(
         maxOf(getLineBottom(visualLine), getLineBaseline(visualLine) + em * 0.3f)
     }
 
+private fun TextLayoutResult.bandTop(
+    visualLine: Int,
+    em: Float,
+): Float =
+    if (visualLine == 0) {
+        minOf(getLineTop(0), getLineBaseline(0) - em)
+    } else {
+        seam(visualLine - 1, em)
+    }
+
+private fun TextLayoutResult.bandBottom(
+    visualLine: Int,
+    em: Float,
+): Float =
+    if (visualLine < lineCount - 1) {
+        seam(visualLine, em)
+    } else {
+        maxOf(getLineBottom(visualLine), getLineBaseline(visualLine) + em * LAST_LINE_DESCENT)
+    }
+
+private fun TextLayoutResult.seam(
+    visualLine: Int,
+    em: Float,
+): Float {
+    val baseline = getLineBaseline(visualLine)
+    val nextAscender = getLineBaseline(visualLine + 1) - em * ASCENT_REACH
+    return maxOf(baseline + em * DESCENT_FLOOR, nextAscender)
+}
+
 private fun ContentDrawScope.unsungOnly(
     layout: TextLayoutResult,
     revealedChars: Float,
@@ -465,8 +506,8 @@ private fun ContentDrawScope.unsungOnly(
     for (visualLine in 0 until layout.lineCount) {
         val lineStart = layout.getLineStart(visualLine)
         val lineEndAll = layout.getLineEnd(visualLine, visibleEnd = false)
-        val top = layout.getLineTop(visualLine)
-        val bottom = layout.rowBottom(visualLine, em)
+        val top = layout.bandTop(visualLine, em)
+        val bottom = layout.bandBottom(visualLine, em)
         when {
             revealedChars <= lineStart -> {
                 clipRect(top = top, bottom = bottom) { this@unsungOnly.drawContent() }
@@ -606,13 +647,11 @@ private fun ContentDrawScope.sweepTo(
         val (clipLeft, clipRight) = if (rtl) lead to lineRight else lineLeft to lead
         if (clipLeft >= clipRight) continue
 
-        val top = layout.getLineTop(visualLine)
-        val bottom =
-            layout.rowBottom(
-                visualLine,
-                layout.layoutInput.style.fontSize
-                    .toPx(),
-            )
+        val em =
+            layout.layoutInput.style.fontSize
+                .toPx()
+        val top = layout.bandTop(visualLine, em)
+        val bottom = layout.bandBottom(visualLine, em)
         clipRect(left = clipLeft, top = top, right = clipRight, bottom = bottom) {
             this@sweepTo.drawContent()
         }

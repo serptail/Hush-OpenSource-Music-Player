@@ -59,7 +59,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -97,7 +99,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.gamut.core.model.RepeatMode as PlaybackRepeatMode
 
-private const val COVER_FADE_FRACTION = 0.34f
+// The cover art dissolves over this much height, ending where the title starts.
+private val COVER_FADE = 64.dp
 
 // Auris's playerInkGlow over white ink: a soft dark halo behind chrome text so it keeps an edge
 // where it crosses a bright patch of the backdrop.
@@ -109,6 +112,9 @@ private fun smootherStep(t: Float): Float {
 }
 
 private const val FADE_CURVE_STOPS = 16
+
+private val StyledTitleStyle: TextStyle
+    @Composable get() = MaterialTheme.typography.titleLarge.copy(letterSpacing = (-0.2).sp)
 
 private val LyricsMotion = tween<Float>(420, easing = FastOutSlowInEasing)
 
@@ -167,6 +173,8 @@ internal fun StyledPlayerLayer(
 
     val scroll = rememberScrollState()
     val pull = remember { mutableFloatStateOf(0f) }
+    var layerTop by remember { mutableFloatStateOf(0f) }
+    var titleTop by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(lyricsOpen) { if (lyricsOpen) scroll.animateScrollTo(0) }
 
     var lyricsBackdrop by remember { mutableStateOf(lyricsOpen) }
@@ -183,13 +191,25 @@ internal fun StyledPlayerLayer(
     val loaded = lyricsState as? LyricsState.Loaded
     val flowLines = remember(loaded) { loaded?.lines?.toFlowLines(loaded.isSynced) }
 
-    BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer { translationY = pull.floatValue }.then(seam.onHost)) {
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { layerTop = it.positionInRoot().y }
+            .graphicsLayer { translationY = pull.floatValue }
+            .then(seam.onHost),
+    ) {
         val width = maxWidth
         val height = maxHeight
         val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-        val bannerHeight = (width + statusTop + 40.dp).coerceAtMost(height * 0.55f)
-        val bannerPx = with(density) { bannerHeight.toPx() }
         val cover = style == PlayerStyle.Cover
+        val fallbackBanner = (width + statusTop + 40.dp).coerceAtMost(height * 0.55f)
+        val bannerHeight =
+            if (cover && titleTop > 0f) {
+                with(density) { titleTop.toDp() }.coerceIn(120.dp, height * 0.7f)
+            } else {
+                fallbackBanner
+            }
+        val bannerPx = with(density) { bannerHeight.toPx() }
 
         Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - lyricsT }) {
             ArtworkMeshBackdrop(mesh = mesh, seam = if (cover) ({ bannerPx - scroll.value }) else ({ seam.px - scroll.value }))
@@ -204,6 +224,7 @@ internal fun StyledPlayerLayer(
             CoverBanner(
                 url = rawArt,
                 height = bannerHeight,
+                fade = COVER_FADE.coerceAtMost(bannerHeight / 2),
                 modifier =
                     Modifier
                         .align(Alignment.TopCenter)
@@ -265,7 +286,13 @@ internal fun StyledPlayerLayer(
                             Modifier.fillMaxSize().padding(horizontal = edge),
                             verticalArrangement = Arrangement.Bottom,
                         ) {
-                            Box(Modifier.volumeHudHeaderAnchor(volumeHud)) {
+                            Box(
+                                Modifier
+                                    .volumeHudHeaderAnchor(volumeHud)
+                                    .onGloballyPositioned {
+                                        titleTop = it.positionInRoot().y - layerTop - pull.floatValue + scroll.value
+                                    },
+                            ) {
                                 TrackHeader(
                                     title = track?.title.orEmpty(),
                                     artist = track?.artist.orEmpty(),
@@ -275,6 +302,7 @@ internal fun StyledPlayerLayer(
                                     isFavorite = isFavorite,
                                     onToggleFavorite = onToggleFavorite,
                                     onMore = onMore,
+                                    titleStyle = StyledTitleStyle,
                                 )
                             }
                             Spacer(Modifier.height(12.dp))
@@ -304,6 +332,7 @@ internal fun StyledPlayerLayer(
                                         isFavorite = isFavorite,
                                         onToggleFavorite = onToggleFavorite,
                                         onMore = onMore,
+                                        titleStyle = StyledTitleStyle,
                                     )
                                 }
                             }
@@ -490,13 +519,14 @@ private fun RowScope.Cell(content: @Composable () -> Unit) {
 private fun CoverBanner(
     url: String?,
     height: Dp,
+    fade: Dp,
     modifier: Modifier = Modifier,
 ) {
     val model =
         remember(url) {
             url?.let { youtubeThumbCandidates(it)?.firstOrNull() ?: squareArtUrl(it, 1200) ?: it }
         }
-    val fade =
+    val curve =
         remember {
             Array(FADE_CURVE_STOPS + 1) { i ->
                 val t = i / FADE_CURVE_STOPS.toFloat()
@@ -513,8 +543,8 @@ private fun CoverBanner(
                 drawRect(
                     brush =
                         Brush.verticalGradient(
-                            colorStops = fade,
-                            startY = size.height * (1f - COVER_FADE_FRACTION),
+                            colorStops = curve,
+                            startY = size.height - fade.toPx(),
                             endY = size.height,
                         ),
                     blendMode = BlendMode.DstIn,

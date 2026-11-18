@@ -62,6 +62,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -815,6 +816,7 @@ internal fun TrackHeader(
     onToggleFavorite: () -> Unit,
     onMore: (() -> Unit)? = null,
     explicit: Boolean? = null,
+    titleStyle: TextStyle = MaterialTheme.typography.headlineLarge.copy(letterSpacing = (-0.3).sp),
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f)) {
@@ -822,7 +824,7 @@ internal fun TrackHeader(
                 ExplicitMark(explicit, Color.White.copy(alpha = 0.65f), size = 18.dp)
                 BouncingText(
                     text = title,
-                    style = MaterialTheme.typography.headlineLarge.copy(letterSpacing = (-0.3).sp),
+                    style = titleStyle,
                     color = Color.White,
                     modifier = Modifier.weight(1f),
                 )
