@@ -68,6 +68,8 @@ import com.adamglin.phosphoricons.regular.Pause
 import com.adamglin.phosphoricons.regular.Play
 import com.gamut.core.designsystem.ArtPlaceholder
 import com.gamut.core.designsystem.LocalFocusLive
+import com.gamut.core.designsystem.dockArtHide
+import com.gamut.core.designsystem.dockArtReport
 import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.thumbnailBorder
 import kotlinx.coroutines.delay
@@ -109,6 +111,7 @@ internal fun ArtworkWithRing(
     onScrub: (Float?) -> Unit,
     onSeekFraction: (Float) -> Unit,
     seekStep: Float = 0.04f,
+    dockEnabled: Boolean = true,
 ) {
     val live = LocalFocusLive.current
     val shapedWaveform = remember(waveform) { shapeWaveform(waveform) }
@@ -169,9 +172,11 @@ internal fun ArtworkWithRing(
                 Modifier
                     .padding(RingInset)
                     .fillMaxSize()
+                    .dockArtHide(dockEnabled && !isThumb)
                     .shadow(elevation = 14.dp, shape = CoverShape, ambientColor = Color.Black, spotColor = Color.Black, clip = false)
                     .clip(CoverShape)
-                    .thumbnailBorder(CoverShape),
+                    .thumbnailBorder(CoverShape)
+                    .dockArtReport(model = shownUrl, corner = CoverCornerRadius, enabled = dockEnabled && !isThumb),
                 contentAlignment = Alignment.Center,
             ) {
                 if (enabled) {

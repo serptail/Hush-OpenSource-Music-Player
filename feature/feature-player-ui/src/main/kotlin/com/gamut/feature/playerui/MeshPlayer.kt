@@ -81,6 +81,8 @@ import com.adamglin.phosphoricons.regular.Play
 import com.adamglin.phosphoricons.regular.SkipBack
 import com.adamglin.phosphoricons.regular.SkipForward
 import com.gamut.core.designsystem.acrylicSource
+import com.gamut.core.designsystem.dockArtHide
+import com.gamut.core.designsystem.dockArtReport
 import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.feature.playerui.components.ArtworkPlaceholder
@@ -443,6 +445,7 @@ internal fun MeshSleeve(
     url: String?,
     isPlaying: Boolean,
     modifier: Modifier = Modifier,
+    dockEnabled: Boolean = true,
 ) {
     val scale by animateFloatAsState(
         targetValue = if (isPlaying) 1f else PausedSleeveScale,
@@ -458,6 +461,7 @@ internal fun MeshSleeve(
     Box(
         modifier
             .aspectRatio(1f)
+            .dockArtHide(dockEnabled && !isThumb)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -468,7 +472,8 @@ internal fun MeshSleeve(
                     Modifier
                 },
             ).clip(SleeveShape)
-            .thumbnailBorder(SleeveShape),
+            .thumbnailBorder(SleeveShape)
+            .dockArtReport(model = shownUrl, corner = 8.dp, enabled = dockEnabled && !isThumb),
     ) {
         if (shownUrl == null) {
             ArtworkPlaceholder()

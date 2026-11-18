@@ -1,8 +1,16 @@
 package com.gamut.feature.library
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -10,8 +18,13 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -27,6 +40,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -45,6 +60,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -55,20 +71,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -104,6 +132,7 @@ import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNavSettled
 import com.gamut.core.designsystem.NowPlayingBars
+import com.gamut.core.designsystem.PlaylistStyle
 import com.gamut.core.designsystem.ShareSheet
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.focusRing
@@ -116,6 +145,7 @@ import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.Track
 import com.gamut.feature.resolver.DownloadState
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 private val HeaderCoverShape = RoundedCornerShape(20.dp)
 private val PillShape = RoundedCornerShape(50)
@@ -148,6 +178,7 @@ fun PlaylistScreen(
     viewModel: PlaylistViewModel = viewModel(),
     downloads: PlaylistDownloadsViewModel = viewModel(),
     nowPlaying: @Composable () -> Unit = {},
+    style: PlaylistStyle = PlaylistStyle.Classic,
 ) {
     val storedSongs by viewModel.tracks.collectAsStateWithLifecycle()
     val songs = remember(storedSongs, existingLocalIsrcs) { storedSongs.withoutMissingLocal(existingLocalIsrcs) }
@@ -160,7 +191,11 @@ fun PlaylistScreen(
     val haptic = LocalHapticFeedback.current
     val focus = LocalFocusManager.current
     val scope = rememberCoroutineScope()
-    TransparentStatusBar(darkIcons = palette.isLight)
+    val immersive = style == PlaylistStyle.Immersive
+    val listState = rememberLazyListState()
+    // Light status icons while the Immersive cover is behind them.
+    val coverBehindStatusBar = immersive && songs.isNotEmpty() && listState.firstVisibleItemIndex == 0
+    TransparentStatusBar(darkIcons = palette.isLight && !coverBehindStatusBar)
     val settled = LocalNavSettled.current
 
     val name = playlist?.name ?: title
@@ -176,6 +211,8 @@ fun PlaylistScreen(
     var artistPickTrack by remember { mutableStateOf<Track?>(null) }
     var query by remember { mutableStateOf("") }
     var searchFocused by remember { mutableStateOf(false) }
+    var searchOpen by remember { mutableStateOf(false) }
+    val searchFocus = remember { FocusRequester() }
     val searching = query.isNotBlank()
 
     val streamed = remember(songs) { songs.filter { !it.isLocal } }
@@ -203,6 +240,12 @@ fun PlaylistScreen(
 
     val customCover = playlist?.coverUri
     val coverUrl = customCover ?: songs.lastOrNull()?.albumArtUrl
+    // Vinyl and Immersive show the art of the song playing from this playlist; fall back to the normal cover otherwise.
+    val playingCover =
+        remember(songs, nowPlayingIsrc) {
+            nowPlayingIsrc?.let { id -> songs.firstOrNull { it.isrc == id }?.albumArtUrl?.takeIf { it.isNotBlank() } }
+        }
+    val vinylCoverUrl = playingCover ?: coverUrl
 
     val pickDraftCover = rememberCoverPicker { draftCover = it }
     val pickQuickCover = rememberCoverPicker { uri -> playlist?.let { viewModel.save(it.name, it.tags, uri, null) } }
@@ -239,52 +282,115 @@ fun PlaylistScreen(
         }
     }
 
-    BackHandler(enabled = searching) {
+    BackHandler(enabled = searchOpen || searching) {
         query = ""
+        searchOpen = false
         focus.clearFocus()
+    }
+    LaunchedEffect(searchOpen) {
+        if (searchOpen) runCatching { searchFocus.requestFocus() }
     }
 
     CoverTheme(palette) {
         val accent = MaterialTheme.colorScheme.primary
         val wide = isWideLayout()
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+        val artHeight = maxWidth
+        val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + TopBarHeight
+        val showArt = immersive && !wide && songs.isNotEmpty() && !vinylCoverUrl.isNullOrBlank()
+        if (showArt && !searching) ImmersiveBackdrop(vinylCoverUrl.orEmpty(), artHeight, listState)
         Column(Modifier.fillMaxSize().statusBarsPadding().then(if (searchFocused) Modifier.imePadding() else Modifier)) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                TopIcon(PhosphorIcons.Bold.ArrowLeft, "Back", onClick = onBack)
+                TopIcon(PhosphorIcons.Bold.ArrowLeft, "Back", onArt = showArt, onClick = onBack)
+                if (searchOpen) {
+                    SearchField(
+                        query = query,
+                        onChange = { query = it },
+                        onFocus = { searchFocused = it },
+                        onDone = { focus.clearFocus() },
+                        focusRequester = searchFocus,
+                        onArt = showArt,
+                        modifier = Modifier.weight(1f).padding(start = 4.dp, end = 4.dp),
+                    )
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                if (songs.isNotEmpty() || searchOpen) {
+                    if (searchOpen) {
+                        TopIcon(PhosphorIcons.Bold.X, "Close search", onArt = showArt) {
+                            query = ""
+                            searchOpen = false
+                            focus.clearFocus()
+                        }
+                    } else {
+                        TopIcon(PhosphorIcons.Bold.MagnifyingGlass, "Search", onArt = showArt) { searchOpen = true }
+                    }
+                }
             }
-            if (settled && songs.isNotEmpty() && !wide) {
-                SearchField(
-                    query = query,
-                    onChange = { query = it },
-                    onFocus = { searchFocused = it },
-                    onDone = { focus.clearFocus() },
-                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 4.dp),
-                )
-            }
+            val vinyl = style == PlaylistStyle.Vinyl
+            val headerStatus =
+                when (downloadUi.status) {
+                    PlaylistDownloadStatus.Active -> "Downloading ${minOf(
+                        downloadUi.done + 1,
+                        downloadUi.total,
+                    )} of ${downloadUi.total}"
+
+                    PlaylistDownloadStatus.Done -> null
+
+                    PlaylistDownloadStatus.Idle -> if (downloadedCount > 0) "$downloadedCount of ${isrcs.size} downloaded" else null
+                }
+            val artistCount = songs.flatMap { splitArtists(it.artist) }.distinctBy { it.lowercase() }.size
             val headerSlot: @Composable () -> Unit = {
-                PlaylistHeader(
-                    title = name,
-                    coverUrl = coverUrl,
-                    tags = playlist?.tags.orEmpty(),
-                    songCount = songs.size,
-                    artistCount = songs.flatMap { splitArtists(it.artist) }.distinctBy { it.lowercase() }.size,
-                    statusLine =
-                        when (downloadUi.status) {
-                            PlaylistDownloadStatus.Active -> "Downloading ${minOf(
-                                downloadUi.done + 1,
-                                downloadUi.total,
-                            )} of ${downloadUi.total}"
-
-                            PlaylistDownloadStatus.Done -> null
-
-                            PlaylistDownloadStatus.Idle -> if (downloadedCount > 0) "$downloadedCount of ${isrcs.size} downloaded" else null
-                        },
-                    downloadUi = downloadUi,
-                    offline = downloadUi.status == PlaylistDownloadStatus.Done,
-                    onDownload = onDownloadClick,
-                    onMore = if (playlist != null) ({ sheet = PlaylistSheet.Options }) else null,
-                    onPlay = { onPlay(songs) },
-                    onShuffle = { onShuffle(songs) },
-                )
+                if (vinyl) {
+                    VinylHeader(
+                        title = name,
+                        coverUrl = vinylCoverUrl,
+                        tags = playlist?.tags.orEmpty(),
+                        songCount = songs.size,
+                        artistCount = artistCount,
+                        totalMs = songs.sumOf { it.durationMs.toLong() },
+                        statusLine = headerStatus,
+                        downloadUi = downloadUi,
+                        offline = downloadUi.status == PlaylistDownloadStatus.Done,
+                        spinning = nowPlayingIsrc != null && songs.any { it.isrc == nowPlayingIsrc },
+                        onDownload = onDownloadClick,
+                        onMore = if (playlist != null) ({ sheet = PlaylistSheet.Options }) else null,
+                        onPlay = { onPlay(songs) },
+                        onShuffle = { onShuffle(songs) },
+                    )
+                } else if (immersive && !wide) {
+                    ImmersiveHeader(
+                        title = name,
+                        hasArt = showArt,
+                        artSpace = (artHeight - topInset - ImmersiveOverlap).coerceAtLeast(0.dp),
+                        tags = playlist?.tags.orEmpty(),
+                        songCount = songs.size,
+                        artistCount = artistCount,
+                        totalMs = songs.sumOf { it.durationMs.toLong() },
+                        statusLine = headerStatus,
+                        downloadUi = downloadUi,
+                        offline = downloadUi.status == PlaylistDownloadStatus.Done,
+                        onDownload = onDownloadClick,
+                        onMore = if (playlist != null) ({ sheet = PlaylistSheet.Options }) else null,
+                        onPlay = { onPlay(songs) },
+                        onShuffle = { onShuffle(songs) },
+                    )
+                } else {
+                    PlaylistHeader(
+                        title = name,
+                        coverUrl = coverUrl,
+                        tags = playlist?.tags.orEmpty(),
+                        songCount = songs.size,
+                        artistCount = artistCount,
+                        statusLine = headerStatus,
+                        downloadUi = downloadUi,
+                        offline = downloadUi.status == PlaylistDownloadStatus.Done,
+                        onDownload = onDownloadClick,
+                        onMore = if (playlist != null) ({ sheet = PlaylistSheet.Options }) else null,
+                        onPlay = { onPlay(songs) },
+                        onShuffle = { onShuffle(songs) },
+                    )
+                }
             }
             val listBody: LazyListScope.(Boolean) -> Unit = { showHeader ->
                 if (showHeader && !searching) {
@@ -311,23 +417,71 @@ fun PlaylistScreen(
                         )
                     }
                 }
-                itemsIndexed(visible, key = { _, item -> "${item.value.isrc}-${item.index}" }) { _, item ->
-                    val song = item.value
-                    PlaylistTrackRow(
-                        track = song,
-                        isPlaying = song.isrc == nowPlayingIsrc,
-                        accent = accent,
-                        downloadState = states[song.isrc],
-                        onDownload = { downloads.download(listOf(song)) },
-                        onCancelDownload = { downloads.cancel(listOf(song.isrc)) },
-                        onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
-                        onClick = { onTrackSelected(song) },
-                        onLongClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            menuIndex = item.index
-                        },
-                        onMore = { menuIndex = item.index },
-                    )
+                if (vinyl) {
+                    visible.forEachIndexed { pos, item ->
+                        val song = item.value
+                        item(key = "${song.isrc}-${item.index}") {
+                            VinylTrackRow(
+                                label = (item.index + 1).toString(),
+                                first = pos == 0,
+                                last = pos == visible.lastIndex,
+                                track = song,
+                                isPlaying = song.isrc == nowPlayingIsrc,
+                                accent = accent,
+                                downloadState = states[song.isrc],
+                                onDownload = { downloads.download(listOf(song)) },
+                                onCancelDownload = { downloads.cancel(listOf(song.isrc)) },
+                                onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
+                                onClick = { onTrackSelected(song) },
+                                onLongClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    menuIndex = item.index
+                                },
+                                onMore = { menuIndex = item.index },
+                            )
+                        }
+                    }
+                } else if (immersive) {
+                    visible.forEachIndexed { pos, item ->
+                        val song = item.value
+                        item(key = "${song.isrc}-${item.index}") {
+                            ImmersiveTrackRow(
+                                last = pos == visible.lastIndex,
+                                track = song,
+                                isPlaying = song.isrc == nowPlayingIsrc,
+                                accent = accent,
+                                downloadState = states[song.isrc],
+                                onDownload = { downloads.download(listOf(song)) },
+                                onCancelDownload = { downloads.cancel(listOf(song.isrc)) },
+                                onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
+                                onClick = { onTrackSelected(song) },
+                                onLongClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    menuIndex = item.index
+                                },
+                                onMore = { menuIndex = item.index },
+                            )
+                        }
+                    }
+                } else {
+                    itemsIndexed(visible, key = { _, item -> "${item.value.isrc}-${item.index}" }) { _, item ->
+                        val song = item.value
+                        PlaylistTrackRow(
+                            track = song,
+                            isPlaying = song.isrc == nowPlayingIsrc,
+                            accent = accent,
+                            downloadState = states[song.isrc],
+                            onDownload = { downloads.download(listOf(song)) },
+                            onCancelDownload = { downloads.cancel(listOf(song.isrc)) },
+                            onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
+                            onClick = { onTrackSelected(song) },
+                            onLongClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                menuIndex = item.index
+                            },
+                            onMore = { menuIndex = item.index },
+                        )
+                    }
                 }
                 item(key = "nav-space") { Box(Modifier.navigationBarsPadding()) }
             }
@@ -335,24 +489,16 @@ fun PlaylistScreen(
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     Column(Modifier.weight(0.4f).fillMaxHeight().verticalScroll(rememberScrollState())) { headerSlot() }
                     Column(Modifier.weight(0.6f).fillMaxHeight()) {
-                        if (songs.isNotEmpty()) {
-                            SearchField(
-                                query = query,
-                                onChange = { query = it },
-                                onFocus = { searchFocused = it },
-                                onDone = { focus.clearFocus() },
-                                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 4.dp),
-                            )
-                        }
                         LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 24.dp)) { listBody(false) }
                     }
                 }
             } else if (settled) {
-                LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 24.dp)) { listBody(true) }
+                LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState, contentPadding = PaddingValues(bottom = 24.dp)) { listBody(true) }
             } else {
                 Spacer(Modifier.weight(1f))
             }
             nowPlaying()
+        }
         }
 
         val menuTrack = menuIndex?.let { songs.getOrNull(it) }
@@ -616,13 +762,15 @@ private fun TopIcon(
     icon: ImageVector,
     description: String,
     enabled: Boolean = true,
+    onArt: Boolean = false,
     onClick: () -> Unit,
 ) {
     Box(
         Modifier.size(44.dp).then(if (enabled) Modifier.pressScale(onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, description, tint = ink(if (enabled) 0.85f else 0.3f), modifier = Modifier.size(20.dp))
+        if (onArt) Box(Modifier.size(36.dp).background(Color.Black.copy(alpha = 0.35f), CircleShape))
+        Icon(icon, description, tint = if (onArt) Color.White else ink(if (enabled) 0.85f else 0.3f), modifier = Modifier.size(20.dp))
     }
 }
 
@@ -633,34 +781,44 @@ private fun SearchField(
     onFocus: (Boolean) -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
+    onArt: Boolean = false,
 ) {
     val textStyle = MaterialTheme.typography.bodyLarge
+    val fieldBg = if (onArt) Color.Black.copy(alpha = 0.35f) else ink(0.08f)
+    val iconTint = if (onArt) Color.White.copy(alpha = 0.8f) else ink(0.6f)
+    val hintTint = if (onArt) Color.White.copy(alpha = 0.6f) else ink(0.4f)
+    val textTint = if (onArt) Color.White else ink()
     Row(
         modifier
             .fillMaxWidth()
             .height(42.dp)
             .clip(PillShape)
-            .background(ink(0.08f))
+            .background(fieldBg)
             .padding(start = 14.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(PhosphorIcons.Bold.MagnifyingGlass, null, tint = ink(0.6f), modifier = Modifier.size(18.dp))
+        Icon(PhosphorIcons.Bold.MagnifyingGlass, null, tint = iconTint, modifier = Modifier.size(18.dp))
         Box(Modifier.weight(1f).padding(horizontal = 10.dp), contentAlignment = Alignment.CenterStart) {
-            if (query.isEmpty()) Text("Search in playlist", style = textStyle, color = ink(0.4f), maxLines = 1)
+            if (query.isEmpty()) Text("Search in playlist", style = textStyle, color = hintTint, maxLines = 1)
             BasicTextField(
                 value = query,
                 onValueChange = onChange,
                 singleLine = true,
-                textStyle = textStyle.copy(color = ink()),
-                cursorBrush = SolidColor(ink()),
+                textStyle = textStyle.copy(color = textTint),
+                cursorBrush = SolidColor(textTint),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { onDone() }),
-                modifier = Modifier.fillMaxWidth().onFocusChanged { onFocus(it.isFocused) },
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                        .onFocusChanged { onFocus(it.isFocused) },
             )
         }
         if (query.isNotEmpty()) {
             Box(Modifier.size(30.dp).pressScale(onClick = { onChange("") }), contentAlignment = Alignment.Center) {
-                Icon(PhosphorIcons.Bold.X, "Clear search", tint = ink(0.7f), modifier = Modifier.size(16.dp))
+                Icon(PhosphorIcons.Bold.X, "Clear search", tint = iconTint, modifier = Modifier.size(16.dp))
             }
         }
     }
@@ -682,25 +840,27 @@ private fun PlaylistHeader(
     onShuffle: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.fillMaxWidth(0.62f).aspectRatio(1f)) {
-            if (coverUrl.isNullOrBlank()) {
-                Box(Modifier.fillMaxSize().clip(HeaderCoverShape).background(ink(0.07f)), contentAlignment = Alignment.Center) {
-                    Icon(PhosphorIcons.Bold.VinylRecord, null, tint = ink(0.6f), modifier = Modifier.size(56.dp))
+        if (songCount > 0 || !coverUrl.isNullOrBlank()) {
+            Box(Modifier.fillMaxWidth(0.62f).aspectRatio(1f)) {
+                if (coverUrl.isNullOrBlank()) {
+                    Box(Modifier.fillMaxSize().clip(HeaderCoverShape).background(ink(0.07f)), contentAlignment = Alignment.Center) {
+                        Icon(PhosphorIcons.Bold.VinylRecord, null, tint = ink(0.6f), modifier = Modifier.size(56.dp))
+                    }
+                } else {
+                    CoverImage(
+                        remember(coverUrl) { resolveCoverUrl(coverUrl, 600) },
+                        Modifier
+                            .fillMaxSize()
+                            .shadow(
+                                22.dp,
+                                HeaderCoverShape,
+                                clip = false,
+                                ambientColor = Color.Black.copy(alpha = 0.35f),
+                                spotColor = Color.Black.copy(alpha = 0.35f),
+                            ).clip(HeaderCoverShape)
+                            .thumbnailBorder(HeaderCoverShape),
+                    )
                 }
-            } else {
-                CoverImage(
-                    remember(coverUrl) { resolveCoverUrl(coverUrl, 600) },
-                    Modifier
-                        .fillMaxSize()
-                        .shadow(
-                            22.dp,
-                            HeaderCoverShape,
-                            clip = false,
-                            ambientColor = Color.Black.copy(alpha = 0.35f),
-                            spotColor = Color.Black.copy(alpha = 0.35f),
-                        ).clip(HeaderCoverShape)
-                        .thumbnailBorder(HeaderCoverShape),
-                )
             }
         }
         Text(
@@ -842,6 +1002,517 @@ private fun PlaylistTrackRow(
         Box(Modifier.size(40.dp).pressScale(onClick = onMore), contentAlignment = Alignment.Center) {
             Icon(PhosphorIcons.Bold.DotsThreeVertical, "More options", tint = ink(0.7f), modifier = Modifier.size(20.dp))
         }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Vinyl style: the cover is a record sleeve, a record slides out of it and spins while this
+// playlist is loaded in the player, and the songs are listed as a numbered table.
+// ---------------------------------------------------------------------------------------------
+
+private val VinylSleeveShape = RoundedCornerShape(4.dp)
+private val VinylBlack = Color(0xFF121212)
+
+private fun vinylLength(ms: Long): String {
+    val minutes = (ms / 60_000L).toInt()
+    return when {
+        minutes >= 60 -> "${minutes / 60} hr ${minutes % 60} min"
+        minutes >= 1 -> "$minutes min"
+        else -> "${(ms / 1000L).toInt()} sec"
+    }
+}
+
+@Composable
+private fun VinylHeader(
+    title: String,
+    coverUrl: String?,
+    tags: List<String>,
+    songCount: Int,
+    artistCount: Int,
+    totalMs: Long,
+    statusLine: String?,
+    downloadUi: PlaylistDownloadUi,
+    offline: Boolean,
+    spinning: Boolean,
+    onDownload: () -> Unit,
+    onMore: (() -> Unit)?,
+    onPlay: () -> Unit,
+    onShuffle: () -> Unit,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    val angle: State<Float>? =
+        if (spinning) {
+            rememberInfiniteTransition(label = "vinyl-spin").animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(tween(5200, easing = LinearEasing), RepeatMode.Restart),
+                label = "vinyl-angle",
+            )
+        } else {
+            null
+        }
+    val summary =
+        if (songCount == 0) {
+            "Empty"
+        } else {
+            buildString {
+                append(plural(songCount, "song"))
+                append(" \u00B7 ")
+                append(plural(artistCount, "artist"))
+                if (totalMs > 0) append(" \u00B7 ${vinylLength(totalMs)}")
+            }
+        }
+
+    Column(
+        Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (songCount > 0) {
+            BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+                val sleeve = (maxWidth / 1.5f * 0.94f).coerceAtMost(260.dp)
+                val disc = sleeve * 0.96f
+                Box(Modifier.width(sleeve * 1.5f).height(sleeve).align(Alignment.Center)) {
+                    // The record, drawn first so the sleeve covers its left half.
+                    Box(Modifier.size(disc).align(Alignment.CenterEnd)) {
+                        Box(Modifier.fillMaxSize().graphicsLayer { rotationZ = angle?.value ?: 0f }) {
+                            VinylDisc(coverUrl, accent)
+                        }
+                        // Sheen stays still while the record turns, like light on a real one.
+                        Canvas(Modifier.fillMaxSize()) {
+                            drawCircle(
+                                Brush.sweepGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        Color.White.copy(alpha = 0.10f),
+                                        Color.Transparent,
+                                        Color.Transparent,
+                                        Color.White.copy(alpha = 0.08f),
+                                        Color.Transparent,
+                                    ),
+                                ),
+                            )
+                        }
+                    }
+                    Box(Modifier.size(sleeve).align(Alignment.CenterStart)) {
+                        if (coverUrl.isNullOrBlank()) {
+                            Box(
+                                Modifier.fillMaxSize().clip(VinylSleeveShape).background(ink(0.07f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(PhosphorIcons.Bold.VinylRecord, null, tint = ink(0.6f), modifier = Modifier.size(56.dp))
+                            }
+                        } else {
+                            CoverImage(
+                                remember(coverUrl) { resolveCoverUrl(coverUrl, 600) },
+                                Modifier
+                                    .fillMaxSize()
+                                    .shadow(
+                                        18.dp,
+                                        VinylSleeveShape,
+                                        clip = false,
+                                        ambientColor = Color.Black.copy(alpha = 0.35f),
+                                        spotColor = Color.Black.copy(alpha = 0.45f),
+                                    ).clip(VinylSleeveShape)
+                                    .thumbnailBorder(VinylSleeveShape),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Text(
+            title,
+            style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
+            color = ink(),
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 24.dp).padding(top = 22.dp),
+        )
+        Text(
+            summary,
+            style = MaterialTheme.typography.bodyMedium,
+            color = ink(0.6f),
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        if (statusLine != null) {
+            Text(statusLine, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), modifier = Modifier.padding(top = 2.dp))
+        }
+        if (tags.isNotEmpty()) TagsRow(tags, Modifier.padding(horizontal = 24.dp).padding(top = 14.dp))
+        if (offline) AvailableOfflineLine(Modifier.padding(top = if (tags.isNotEmpty()) 10.dp else 8.dp))
+        if (songCount > 0 || onMore != null) {
+            Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, top = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (songCount > 0) {
+                    ActionPill("Play", PhosphorIcons.Fill.Play, filled = true, onClick = onPlay)
+                    Spacer(Modifier.width(10.dp))
+                    ActionPill("Shuffle", PhosphorIcons.Bold.Shuffle, filled = false, onClick = onShuffle)
+                }
+                Spacer(Modifier.weight(1f))
+                if (songCount > 0) {
+                    DownloadButton(
+                        downloadUi,
+                        onDownload,
+                        size = 40.dp,
+                        glyphSize = 22.dp,
+                        idleIcon = PhosphorIcons.Bold.BoxArrowDown,
+                        doneIcon = PhosphorIcons.Fill.Archive,
+                    )
+                }
+                if (onMore != null) {
+                    Box(Modifier.size(40.dp).pressScale(onClick = onMore), contentAlignment = Alignment.Center) {
+                        Icon(PhosphorIcons.Bold.DotsThreeVertical, "Playlist options", tint = ink(0.85f), modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The record itself: black body, fine grooves, and the playlist cover as the centre label. */
+@Composable
+private fun VinylDisc(
+    coverUrl: String?,
+    accent: Color,
+) {
+    val hole = LocalCoverPalette.current.base
+    Box(Modifier.fillMaxSize().clip(CircleShape).background(VinylBlack), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val r = size.minDimension / 2f
+            val groove = 3.dp.toPx()
+            var radius = r * 0.40f
+            while (radius < r * 0.96f) {
+                drawCircle(Color.White.copy(alpha = 0.05f), radius = radius, style = Stroke(width = 1.dp.toPx()))
+                radius += groove
+            }
+            // A few wider bands, like the gaps between tracks.
+            drawCircle(Color.White.copy(alpha = 0.10f), radius = r * 0.62f, style = Stroke(width = 2.dp.toPx()))
+            drawCircle(Color.White.copy(alpha = 0.10f), radius = r * 0.80f, style = Stroke(width = 2.dp.toPx()))
+            drawCircle(Color.White.copy(alpha = 0.14f), radius = r * 0.985f, style = Stroke(width = 1.5.dp.toPx()))
+        }
+        BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            val label = maxWidth * 0.36f
+            Box(Modifier.size(label).clip(CircleShape).background(accent.copy(alpha = 0.85f)), contentAlignment = Alignment.Center) {
+                if (!coverUrl.isNullOrBlank()) {
+                    CoverImage(remember(coverUrl) { resolveCoverUrl(coverUrl, 240) }, Modifier.fillMaxSize())
+                }
+                Box(Modifier.size(7.dp).clip(CircleShape).background(hole))
+            }
+        }
+    }
+}
+
+private val TableInset = 20.dp
+private val TableBlockRadius = 22.dp
+
+private fun songLength(ms: Long): String {
+    val seconds = ms / 1000L
+    return "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
+}
+
+/**
+ * One song in the Vinyl style: a table row like the album screen's Soft style. Rows are joined blocks with
+ * only the first and last rounded, and each has a number, the song's cover, title, artist and length.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun VinylTrackRow(
+    label: String,
+    first: Boolean,
+    last: Boolean,
+    track: Track,
+    isPlaying: Boolean,
+    accent: Color,
+    downloadState: DownloadState?,
+    onDownload: () -> Unit,
+    onCancelDownload: () -> Unit,
+    onArtist: (String) -> Unit,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onMore: () -> Unit,
+) {
+    val top = if (first) TableBlockRadius else 0.dp
+    val bottom = if (last) TableBlockRadius else 0.dp
+    val shape = RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom)
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val fill by animateColorAsState(
+        targetValue = if (isPlaying) accent.copy(alpha = 0.14f) else ink(if (pressed) 0.12f else 0.07f),
+        animationSpec = tween(140),
+        label = "table-row-fill",
+    )
+    Column(Modifier.fillMaxWidth().padding(horizontal = TableInset)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(fill)
+                .focusRing(shape)
+                .combinedClickable(interactionSource = source, indication = null, onClick = onClick, onLongClick = onLongClick)
+                .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.width(28.dp), contentAlignment = Alignment.CenterStart) {
+                if (isPlaying) {
+                    NowPlayingBars(color = accent)
+                } else {
+                    Text(label, style = MaterialTheme.typography.bodyMedium, color = ink(0.4f))
+                }
+            }
+            BadgedCover(local = track.isLocal) {
+                CoverImage(remember(track.albumArtUrl) { resolveCoverUrl(track.albumArtUrl, 160) }, Modifier.size(46.dp).softCover())
+            }
+            Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
+                Text(
+                    track.title,
+                    style =
+                        MaterialTheme.typography.bodyLarge.copy(
+                            fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium,
+                        ),
+                    color = if (isPlaying) accent else ink(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                ArtistLine(track.artist, track.album, onArtist, stackSize = 16.dp, modifier = Modifier.padding(top = 2.dp)) { m ->
+                    Text(
+                        track.artist,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ink(0.55f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = m,
+                    )
+                }
+                Box(Modifier.padding(top = 4.dp).height(2.dp)) { DownloadProgressLine(downloadState) }
+            }
+            if (track.durationMs > 0) {
+                Text(
+                    songLength(track.durationMs.toLong()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ink(0.4f),
+                    modifier = Modifier.padding(start = 4.dp),
+                )
+            }
+            TrackDownloadButton(downloadState, onDownload = onDownload, onCancel = onCancelDownload, onDone = onMore, glyph = 20.dp)
+            Box(Modifier.size(40.dp).pressScale(onClick = onMore), contentAlignment = Alignment.Center) {
+                Icon(PhosphorIcons.Bold.DotsThreeVertical, "More options", tint = ink(0.5f), modifier = Modifier.size(20.dp))
+            }
+        }
+        if (!last) Spacer(Modifier.height(1.dp))
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Immersive style (after Auris' Apple Music-style detail page): the cover runs edge to edge behind
+// the status bar and fades into the page colour, the title sits over that fade, round action
+// buttons follow, and the songs are plain rows separated by thin inset lines.
+// ---------------------------------------------------------------------------------------------
+
+private val TopBarHeight = 58.dp
+private val ImmersiveOverlap = 110.dp
+
+/** The full-bleed cover. It is not in the list; it just follows the list's scroll while the header is on screen. */
+@Composable
+private fun ImmersiveBackdrop(
+    coverUrl: String,
+    artHeight: Dp,
+    listState: LazyListState,
+) {
+    val artPx = with(LocalDensity.current) { artHeight.toPx() }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(artHeight)
+            .offset {
+                val y = if (listState.firstVisibleItemIndex == 0) -listState.firstVisibleItemScrollOffset else -(artPx * 2f).roundToInt()
+                IntOffset(0, y)
+            }
+            // Offscreen so the mask below fades the picture itself to transparent. The page behind it
+            // (including the moving background) shows through, so there is never a seam.
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                drawRect(
+                    Brush.verticalGradient(
+                        0.40f to Color.Black,
+                        0.60f to Color.Black.copy(alpha = 0.80f),
+                        0.78f to Color.Black.copy(alpha = 0.40f),
+                        0.92f to Color.Black.copy(alpha = 0.10f),
+                        1f to Color.Transparent,
+                    ),
+                    blendMode = BlendMode.DstIn,
+                )
+            },
+    ) {
+        // Changes with the song that is playing from this playlist.
+        Crossfade(targetState = coverUrl, animationSpec = tween(400), label = "immersive-cover") { url ->
+            CoverImage(remember(url) { resolveCoverUrl(url, 900) }, Modifier.fillMaxSize())
+        }
+        // Keeps the back and search buttons readable over bright covers.
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.30f), 0.28f to Color.Transparent),
+            ),
+        )
+    }
+}
+
+@Composable
+private fun ImmersiveHeader(
+    title: String,
+    hasArt: Boolean,
+    artSpace: Dp,
+    tags: List<String>,
+    songCount: Int,
+    artistCount: Int,
+    totalMs: Long,
+    statusLine: String?,
+    downloadUi: PlaylistDownloadUi,
+    offline: Boolean,
+    onDownload: () -> Unit,
+    onMore: (() -> Unit)?,
+    onPlay: () -> Unit,
+    onShuffle: () -> Unit,
+) {
+    val summary =
+        if (songCount == 0) {
+            "Empty"
+        } else {
+            buildString {
+                append(plural(songCount, "song"))
+                append(" \u00B7 ")
+                append(plural(artistCount, "artist"))
+                if (totalMs > 0) append(" \u00B7 ${vinylLength(totalMs)}")
+            }
+        }
+    Column(
+        Modifier.fillMaxWidth().padding(top = if (hasArt) 0.dp else 8.dp, bottom = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // Leaves the cover showing; the title starts over the foot of it.
+        if (hasArt) Spacer(Modifier.height(artSpace))
+        Text(
+            title,
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+            color = ink(),
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 28.dp),
+        )
+        Text(
+            summary,
+            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.7.sp),
+            color = ink(0.6f),
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        if (statusLine != null) {
+            Text(statusLine, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.7.sp), color = ink(0.6f), modifier = Modifier.padding(top = 2.dp))
+        }
+        if (tags.isNotEmpty()) TagsRow(tags, Modifier.padding(horizontal = 24.dp).padding(top = 14.dp))
+        if (offline) AvailableOfflineLine(Modifier.padding(top = if (tags.isNotEmpty()) 10.dp else 8.dp))
+        if (songCount > 0 || onMore != null) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (songCount > 0) {
+                    ActionCircle(PhosphorIcons.Bold.Shuffle, "Shuffle", 46.dp, filled = false, onClick = onShuffle)
+                    ActionCircle(PhosphorIcons.Fill.Play, "Play", 58.dp, filled = true, onClick = onPlay)
+                    DownloadButton(
+                        downloadUi,
+                        onDownload,
+                        size = 46.dp,
+                        glyphSize = 22.dp,
+                        idleIcon = PhosphorIcons.Bold.BoxArrowDown,
+                        doneIcon = PhosphorIcons.Fill.Archive,
+                    )
+                }
+                if (onMore != null) {
+                    ActionCircle(PhosphorIcons.Bold.DotsThreeVertical, "Playlist options", 46.dp, filled = false, onClick = onMore)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActionCircle(
+    icon: ImageVector,
+    description: String,
+    size: Dp,
+    filled: Boolean,
+    onClick: () -> Unit,
+) {
+    val isLight = LocalCoverPalette.current.isLight
+    val tint = if (filled) (if (isLight) Color.White else Color.Black) else ink()
+    Box(
+        Modifier
+            .size(size)
+            .pressScale(onClick = onClick)
+            .background(if (filled) ink() else ink(0.12f), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, description, tint = tint, modifier = Modifier.size(size * 0.42f))
+    }
+}
+
+/** One song in the Immersive style: cover, title, artist, and a thin line inset past the cover. */
+@Composable
+private fun ImmersiveTrackRow(
+    last: Boolean,
+    track: Track,
+    isPlaying: Boolean,
+    accent: Color,
+    downloadState: DownloadState?,
+    onDownload: () -> Unit,
+    onCancelDownload: () -> Unit,
+    onArtist: (String) -> Unit,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onMore: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .rowPress(onClick = onClick, onLongClick = onLongClick)
+                .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BadgedCover(local = track.isLocal) {
+                CoverImage(remember(track.albumArtUrl) { resolveCoverUrl(track.albumArtUrl, 160) }, Modifier.size(48.dp).softCover())
+            }
+            Column(Modifier.weight(1f).padding(start = 14.dp, end = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isPlaying) NowPlayingBars(color = accent, modifier = Modifier.padding(end = 8.dp))
+                    Text(
+                        track.title,
+                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium),
+                        color = if (isPlaying) accent else ink(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
+                ArtistLine(track.artist, track.album, onArtist, stackSize = 16.dp, modifier = Modifier.padding(top = 2.dp)) { m ->
+                    Text(
+                        track.artist,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ink(0.55f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = m,
+                    )
+                }
+                Box(Modifier.padding(top = 4.dp).height(2.dp)) { DownloadProgressLine(downloadState) }
+            }
+            TrackDownloadButton(downloadState, onDownload = onDownload, onCancel = onCancelDownload, onDone = onMore, glyph = 20.dp)
+            Box(Modifier.size(40.dp).pressScale(onClick = onMore), contentAlignment = Alignment.Center) {
+                Icon(PhosphorIcons.Bold.DotsThreeVertical, "More options", tint = ink(0.5f), modifier = Modifier.size(20.dp))
+            }
+        }
+        if (!last) Box(Modifier.fillMaxWidth().padding(start = 82.dp, end = 20.dp).height(1.dp).background(ink(0.07f)))
     }
 }
 

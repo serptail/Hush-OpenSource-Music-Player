@@ -2,14 +2,10 @@ package com.gamut.feature.playerui
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -28,20 +24,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,7 +48,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -83,6 +74,8 @@ import com.adamglin.phosphoricons.regular.Sparkle
 import com.gamut.core.designsystem.AdaptiveLayout
 import com.gamut.core.designsystem.PlayerStyle
 import com.gamut.core.designsystem.adaptiveGutter
+import com.gamut.core.designsystem.dockArtHide
+import com.gamut.core.designsystem.dockArtReport
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.Track
@@ -94,13 +87,11 @@ import com.gamut.feature.playerui.components.bounceTap
 import com.gamut.feature.playerui.components.volumeHudAnchor
 import com.gamut.feature.playerui.components.volumeHudHeaderAnchor
 import com.gamut.feature.playerui.components.youtubeThumbCandidates
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import com.gamut.core.model.RepeatMode as PlaybackRepeatMode
 
 // The cover art dissolves over this much height, ending where the title starts.
-private val COVER_FADE = 64.dp
+private val COVER_FADE = 40.dp
 
 // Auris's playerInkGlow over white ink: a soft dark halo behind chrome text so it keeps an edge
 // where it crosses a bright patch of the backdrop.
@@ -172,7 +163,6 @@ internal fun StyledPlayerLayer(
     val lyricsT by animateFloatAsState(if (lyricsOpen) 1f else 0f, LyricsMotion, label = "styledLyricsT")
 
     val scroll = rememberScrollState()
-    val pull = remember { mutableFloatStateOf(0f) }
     var layerTop by remember { mutableFloatStateOf(0f) }
     var titleTop by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(lyricsOpen) { if (lyricsOpen) scroll.animateScrollTo(0) }
@@ -195,7 +185,6 @@ internal fun StyledPlayerLayer(
         Modifier
             .fillMaxSize()
             .onGloballyPositioned { layerTop = it.positionInRoot().y }
-            .graphicsLayer { translationY = pull.floatValue }
             .then(seam.onHost),
     ) {
         val width = maxWidth
@@ -225,6 +214,7 @@ internal fun StyledPlayerLayer(
                 url = rawArt,
                 height = bannerHeight,
                 fade = COVER_FADE.coerceAtMost(bannerHeight / 2),
+                dockEnabled = !lyricsOpen,
                 modifier =
                     Modifier
                         .align(Alignment.TopCenter)
@@ -259,7 +249,7 @@ internal fun StyledPlayerLayer(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp + gutter).padding(top = 8.dp),
                         )
                     } else {
-                        PullPill(pull = pull, onDismiss = onBack, modifier = Modifier.fillMaxWidth())
+                        PlayerPill(onDismiss = onBack, modifier = Modifier.fillMaxWidth())
                     }
                 }
 
@@ -290,7 +280,7 @@ internal fun StyledPlayerLayer(
                                 Modifier
                                     .volumeHudHeaderAnchor(volumeHud)
                                     .onGloballyPositioned {
-                                        titleTop = it.positionInRoot().y - layerTop - pull.floatValue + scroll.value
+                                        titleTop = it.positionInRoot().y - layerTop + scroll.value
                                     },
                             ) {
                                 TrackHeader(
@@ -452,65 +442,6 @@ internal fun StyledPlayerLayer(
 }
 
 @Composable
-private fun PullPill(
-    pull: MutableFloatState,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val dismiss by rememberUpdatedState(onDismiss)
-    val scope = rememberCoroutineScope()
-    val density = LocalDensity.current
-    val threshold = with(density) { 96.dp.toPx() }
-    val limit = with(density) { 260.dp.toPx() }
-    var settle by remember { mutableStateOf<Job?>(null) }
-
-    fun release(fast: Boolean) {
-        settle?.cancel()
-        settle =
-            scope.launch {
-                animate(
-                    initialValue = pull.floatValue,
-                    targetValue = 0f,
-                    animationSpec = if (fast) tween(260) else spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessMediumLow),
-                ) { value, _ -> pull.floatValue = value }
-            }
-    }
-    Box(
-        modifier
-            .height(84.dp)
-            .pointerInput(Unit) {
-                detectVerticalDragGestures(
-                    onDragStart = { settle?.cancel() },
-                    onDragEnd = {
-                        val leave = pull.floatValue >= threshold
-                        if (leave) dismiss()
-                        release(fast = leave)
-                    },
-                    onDragCancel = { release(fast = false) },
-                    onVerticalDrag = { change, dy ->
-                        change.consume()
-                        val resistance = 1f - 0.65f * (pull.floatValue / limit).coerceIn(0f, 1f)
-                        pull.floatValue = (pull.floatValue + dy * resistance).coerceIn(0f, limit)
-                    },
-                )
-            }.clickable(onClick = { dismiss() }),
-        contentAlignment = Alignment.TopCenter,
-    ) {
-        Box(
-            Modifier
-                .padding(top = 14.dp)
-                .graphicsLayer {
-                    val t = (pull.floatValue / threshold).coerceIn(0f, 1.2f)
-                    scaleX = 1f + 0.5f * t
-                    alpha = 0.75f + 0.25f * t.coerceAtMost(1f)
-                }.size(width = 44.dp, height = 5.dp)
-                .clip(CircleShape)
-                .background(Color.White),
-        )
-    }
-}
-
-@Composable
 private fun RowScope.Cell(content: @Composable () -> Unit) {
     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { content() }
 }
@@ -521,6 +452,7 @@ private fun CoverBanner(
     height: Dp,
     fade: Dp,
     modifier: Modifier = Modifier,
+    dockEnabled: Boolean = true,
 ) {
     val model =
         remember(url) {
@@ -537,6 +469,8 @@ private fun CoverBanner(
         modifier
             .fillMaxWidth()
             .height(height)
+            .dockArtHide(dockEnabled)
+            .dockArtReport(model = model, corner = 0.dp, enabled = dockEnabled, fadeFraction = (fade / height).coerceIn(0f, 1f), scrim = true)
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
             .drawWithContent {
                 drawContent()
@@ -562,7 +496,7 @@ private fun CoverBanner(
                 Modifier
                     .fillMaxWidth()
                     .height(120.dp)
-                    .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.38f), Color.Transparent))),
+                    .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.26f), Color.Transparent))),
             )
         }
     }

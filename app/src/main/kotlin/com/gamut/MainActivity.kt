@@ -35,6 +35,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -53,12 +54,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -99,13 +102,20 @@ import com.gamut.core.designsystem.LocalArtistPhotoResolver
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNavSettled
 import com.gamut.core.designsystem.LocalNotifier
+import com.gamut.core.designsystem.LocalPlayerDock
+import com.gamut.core.designsystem.LocalPlayerMotion
 import com.gamut.core.designsystem.MiniPlayerStrip
 import com.gamut.core.designsystem.NoticeHost
+import com.gamut.core.designsystem.PlayerArtFlight
+import com.gamut.core.designsystem.PlayerDock
+import com.gamut.core.designsystem.PlayerMotion
 import com.gamut.core.designsystem.ProfileAvatar
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.acrylicSource
 import com.gamut.core.designsystem.appNeutralPalette
+import com.gamut.core.designsystem.contentFade
 import com.gamut.core.designsystem.focusLayer
+import com.gamut.core.designsystem.irisLayer
 import com.gamut.core.designsystem.rememberAppPalette
 import com.gamut.core.designsystem.rememberNotifier
 import com.gamut.core.designsystem.squareArtUrl
@@ -155,6 +165,7 @@ import com.gamut.onboarding.importer.YouTubeMusicImportSheet
 import com.gamut.settings.AboutScreen
 import com.gamut.settings.AppearanceScreen
 import com.gamut.settings.AppearanceStore
+import com.gamut.settings.AppearanceViewModel
 import com.gamut.settings.FeedbackScreen
 import com.gamut.settings.LocalPageActive
 import com.gamut.settings.LocalSupportNudge
@@ -381,10 +392,21 @@ private fun GamutApp(
         layerOpen = false
         scope.launch { layerPos.animateTo(0f, tween(GamutMotion.TAB_MS, easing = GamutMotion.Standard)) }
     }
-    val playerPos = remember { Animatable(0f) }
     var playerOpen by remember { mutableStateOf(false) }
     var playerComposed by remember { mutableStateOf(false) }
     var playerCovering by remember { mutableStateOf(false) }
+    val playerDock = remember { PlayerDock() }
+    val landHaptics = LocalHapticFeedback.current
+    val playerMotion =
+        remember {
+            PlayerMotion(
+                scope = scope,
+                travel = { playerDock.travelPx() },
+                onTarget = { playerOpen = it },
+                onCovering = { playerCovering = it },
+                onLand = { landHaptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
+            )
+        }
     LaunchedEffect(showLoading) {
         if (!showLoading) {
             delay(4400)
@@ -400,16 +422,11 @@ private fun GamutApp(
                     withFrameNanos { }
                     withFrameNanos { }
                 }
-                playerPos.animateTo(1f, tween(GamutMotion.PLAYER_LAYER_IN_MS, easing = GamutMotion.EmphasizedDecelerate))
-                playerCovering = true
+                playerMotion.open()
             }
         }
     }
-    val closePlayer: () -> Unit = {
-        playerOpen = false
-        playerCovering = false
-        scope.launch { playerPos.animateTo(0f, tween(GamutMotion.PLAYER_LAYER_OUT_MS, easing = GamutMotion.PlayerClose)) }
-    }
+    val closePlayer: () -> Unit = { playerMotion.close() }
     val createPos = remember { Animatable(0f) }
     var createOpen by remember { mutableStateOf(false) }
     var createComposed by remember { mutableStateOf(false) }
@@ -547,7 +564,8 @@ private fun GamutApp(
     val appDark = !palette.isLight
     var backgroundVisible by remember { mutableStateOf(true) }
     LaunchedEffect(playerCovering, createCovering) {
-        backgroundVisible = !(playerCovering || createCovering)
+        // DIAGNOSTIC: player no longer hides the background, so nothing re-enables on close.
+        backgroundVisible = !createCovering
     }
     val bgAlpha by animateFloatAsState(
         targetValue = if (backgroundVisible) 1f else 0f,
@@ -591,6 +609,8 @@ private fun GamutApp(
                             LocalNotifier provides notifier,
                             LocalArtistPhotoResolver provides photoResolver,
                             LocalPlaylistRemove provides removeFromPlaylist,
+                            LocalPlayerDock provides playerDock,
+                            LocalPlayerMotion provides playerMotion,
                         ) {
                             val openArtist: (String) -> Unit = { artist -> nav.navigate("artist-name/${Uri.encode(artist)}") }
                             val openConnect = { showConnect = true }
@@ -849,6 +869,7 @@ private fun GamutApp(
                                         composable("favorites") {
                                             val favorites by appLibraryVm.favorites.collectAsState()
                                             val downloadsVm = hiltViewModel<PlaylistDownloadsViewModel>()
+                                            val favoritesStyle by hiltViewModel<AppearanceViewModel>().favoritesStyle.collectAsState()
                                             Settled {
                                                 FavoritesScreen(
                                                     tracks = favorites,
@@ -863,6 +884,7 @@ private fun GamutApp(
                                                     onTrackArtist = { t -> openArtist(t.artist) },
                                                     nowPlayingIsrc = loadedTrack?.isrc,
                                                     downloads = downloadsVm,
+                                                    style = favoritesStyle,
                                                     nowPlaying = nowPlayingDocked,
                                                 )
                                             }
@@ -880,9 +902,11 @@ private fun GamutApp(
                                             val allPlaylists by appLibraryVm.playlists.collectAsState()
                                             val favoriteIsrcs by appLibraryVm.favoriteIsrcs.collectAsState()
                                             val id = entry.arguments?.getString("id").orEmpty()
+                                            val playlistStyle by hiltViewModel<AppearanceViewModel>().playlistStyle.collectAsState()
                                             Settled {
                                                 PlaylistScreen(
                                                     playlistId = id,
+                                                    style = playlistStyle,
                                                     title = allPlaylists.firstOrNull { it.id.toString() == id }?.name ?: "Playlist",
                                                     onBack = { nav.popBackStack() },
                                                     onPlay = { list ->
@@ -966,6 +990,10 @@ private fun GamutApp(
                                                     onOpenArtist = openArtist,
                                                     onBack = { nav.popBackStack() },
                                                     onTrackSelected = playTrackWithQueue,
+                                                    onShuffle = { list ->
+                                                        player.setShuffle(true)
+                                                        list.randomOrNull()?.let { playTrackWithQueue(it, list) }
+                                                    },
                                                     nowPlayingIsrc = loadedTrack?.isrc,
                                                     nowPlaying = nowPlayingDocked,
                                                 )
@@ -974,7 +1002,7 @@ private fun GamutApp(
                                     }
                                 }
                             }
-                            PlayerLayer(composed = playerComposed, open = playerOpen, position = playerPos) { active ->
+                            PlayerLayer(composed = playerComposed, open = playerOpen, motion = playerMotion, dock = playerDock) { active ->
                                 val libraryVm = appLibraryVm
                                 val favoriteIsrcs by libraryVm.favoriteIsrcs.collectAsState()
                                 val playlists by libraryVm.playlists.collectAsState()
@@ -1024,6 +1052,7 @@ private fun GamutApp(
                                     videoProvider = videoStreams,
                                 )
                             }
+                            PlayerArtFlight(dock = playerDock, motion = playerMotion)
                             BackHandler(enabled = !homeShowing && !playerOpen && !layerOpen && !createOpen) { nav.popBackStack() }
                             BackHandler(enabled = layerOpen && currentRoute == "settings" && !playerOpen) { closeLayer() }
                             BackHandler(enabled = createOpen && !playerOpen) { closeCreate() }
@@ -1517,18 +1546,18 @@ private fun SlideLayer(
 private fun PlayerLayer(
     composed: Boolean,
     open: Boolean,
-    position: Animatable<Float, AnimationVector1D>,
+    motion: PlayerMotion,
+    dock: PlayerDock,
     content: @Composable (active: Boolean) -> Unit,
 ) {
     if (!composed) return
     Box(
         Modifier
             .fillMaxSize()
-            .graphicsLayer {
-                val rel = 1f - position.value
-                translationY = rel * size.height
-                if (rel >= 1f) alpha = 0f
-            }.focusLayer(open)
+            // An iris, not a slide: see PlayerDock. The layer itself never moves,
+            // which keeps the artwork's measured place the same at every frame.
+            .graphicsLayer { irisLayer(dock, motion.fraction) }
+            .focusLayer(open)
             .then(
                 if (open) {
                     Modifier.pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
@@ -1536,7 +1565,12 @@ private fun PlayerLayer(
                     Modifier.clearAndSetSemantics {}
                 },
             ),
-    ) { FocusLive(open) { content(open) } }
+    ) {
+        Box(Modifier.fillMaxSize().background(CoverPalette.Neutral.base))
+        Box(Modifier.fillMaxSize().graphicsLayer { alpha = contentFade(motion.fraction) }) {
+            FocusLive(open) { content(open) }
+        }
+    }
 }
 
 @Composable
@@ -1594,7 +1628,9 @@ private fun ArtistRoute(
         }
     val followVm = hiltViewModel<com.gamut.core.sync.FollowViewModel>()
     val followedKeys by followVm.followedKeys.collectAsState()
+    val artistStyle by hiltViewModel<AppearanceViewModel>().artistStyle.collectAsState()
     DiscoverArtistScreen(
+        style = artistStyle,
         followedKeys = followedKeys,
         onToggleFollow = followVm::toggle,
         viewModel = viewModel,
@@ -1620,10 +1656,12 @@ private fun AlbumRoute(
     libraryVm: LibraryViewModel,
     onBack: () -> Unit,
     onTrackSelected: (Track, List<Track>) -> Unit,
+    onShuffle: (List<Track>) -> Unit,
     onOpenArtist: (String) -> Unit,
     nowPlayingIsrc: String?,
     nowPlaying: @Composable () -> Unit,
 ) {
+    val albumStyle by hiltViewModel<AppearanceViewModel>().albumStyle.collectAsState()
     val favoriteIsrcs by libraryVm.favoriteIsrcs.collectAsState()
     val libraryPlaylists by libraryVm.playlists.collectAsState()
     val playlistInfo by libraryVm.playlistInfo.collectAsState()
@@ -1644,6 +1682,8 @@ private fun AlbumRoute(
         viewModel = viewModel,
         onBack = onBack,
         onTrackSelected = onTrackSelected,
+        onShuffle = onShuffle,
+        style = albumStyle,
         onTrackArtist = { t -> onOpenArtist(t.artist) },
         favoriteIsrcs = favoriteIsrcs,
         onToggleFavorite = libraryVm::toggleFavorite,

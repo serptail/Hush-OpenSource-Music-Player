@@ -73,7 +73,6 @@ import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Regular
-import com.adamglin.phosphoricons.bold.CaretDown
 import com.adamglin.phosphoricons.bold.DotsThreeVertical
 import com.adamglin.phosphoricons.regular.Heart
 import com.adamglin.phosphoricons.regular.ListPlus
@@ -223,7 +222,8 @@ fun PlayerScreen(
     BackHandler(enabled = active && lyricsPanelOpen) { lyricsPanelOpen = false }
     LaunchedEffect(active) {
         if (!active) {
-            delay(GamutMotion.PLAYER_LAYER_OUT_MS + 120L)
+            // Past the whole spring: flipping this mid-flight would switch the artwork's flight on halfway.
+            delay(850L)
             lyricsPanelOpen = false
         }
     }
@@ -269,7 +269,7 @@ fun PlayerScreen(
     val inputMode = LocalInputModeManager.current
     LaunchedEffect(active) {
         if (active && inputMode.inputMode == InputMode.Keyboard) {
-            delay(GamutMotion.PLAYER_LAYER_IN_MS + 60L)
+            delay(420L)
             runCatching { coverFocus.requestFocus() }
         }
     }
@@ -457,7 +457,13 @@ fun PlayerScreen(
                 if (meshStyle) {
                     ArtworkMeshBackdrop(artworkMesh, animate = active, seam = { meshSeam.px * meshSeamLift.value })
                 } else if (artUrl != null) {
-                    PlayerBackdrop(artUrl, animateChanges = active)
+                    // Same pre-blurred backdrop the styled player uses behind its lyrics.
+                    val classicBackdrop = rememberFullArtworkBlurImage(artUrl, prepare = active)
+                    // Hold the last picture while the next cover prepares, so a track change
+                    // does not dip to the dark floor.
+                    var heldBackdrop by remember { mutableStateOf(classicBackdrop) }
+                    LaunchedEffect(classicBackdrop) { if (classicBackdrop != null) heldBackdrop = classicBackdrop }
+                    FullArtworkBlurBackdrop(image = classicBackdrop ?: heldBackdrop)
                 }
 
                 // The music video is the page's backdrop: full screen, behind everything below.
@@ -531,6 +537,7 @@ fun PlayerScreen(
                                             .fillMaxWidth()
                                             .widthIn(max = minOf(coverMax, MeshSleeveMaxWidth))
                                             .then(meshSeam.onSleeve),
+                                    dockEnabled = !lyricsPanelOpen,
                                 )
                             }
                             Spacer(Modifier.height(28.dp))
@@ -602,6 +609,7 @@ fun PlayerScreen(
                                     onTogglePlay = togglePlay,
                                     onSeekFraction = seekToFraction,
                                     seekStep = seekStep,
+                                    dockEnabled = !lyricsPanelOpen,
                                 )
                             }
                             DepthIcon(
@@ -643,7 +651,6 @@ fun PlayerScreen(
                                     start = 24.dp + edge,
                                     end =
                                         24.dp + edge,
-                                    top = 14.dp,
                                 ),
                         )
 
@@ -836,10 +843,15 @@ internal fun PlayerTopBar(
     onMore: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        DepthIcon(PhosphorIcons.Bold.CaretDown, "Collapse", Modifier.tapTarget(onClick = onBack).padding(8.dp))
-        Spacer(Modifier.weight(1f))
-        DepthIcon(PhosphorIcons.Bold.DotsThreeVertical, "More", Modifier.tapTarget(onClick = onMore).padding(8.dp))
+    // The same pill as the Cover style, in the same place; "More" sits over its
+    // drag zone, not under it.
+    Box(modifier.height(54.dp)) {
+        PlayerPill(onDismiss = onBack, modifier = Modifier.fillMaxWidth(), height = 54.dp)
+        DepthIcon(
+            PhosphorIcons.Bold.DotsThreeVertical,
+            "More",
+            Modifier.align(Alignment.TopEnd).tapTarget(onClick = onMore).padding(8.dp),
+        )
     }
 }
 

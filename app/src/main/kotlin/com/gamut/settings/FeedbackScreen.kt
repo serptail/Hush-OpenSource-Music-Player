@@ -1,10 +1,19 @@
 package com.gamut.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,12 +26,14 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,20 +48,31 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.adamglin.PhosphorIcons
+import com.adamglin.phosphoricons.Regular
+import com.adamglin.phosphoricons.regular.Bug
+import com.adamglin.phosphoricons.regular.ChatCircleText
+import com.adamglin.phosphoricons.regular.Lightbulb
 import com.gamut.account.AccountViewModel
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.ink
@@ -61,6 +83,40 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 private val StarLabels = listOf("Poor", "Not great", "It\u2019s okay", "Good", "Love it")
+
+private val FieldShape = RoundedCornerShape(20.dp)
+
+private class TypeCopy(
+    val icon: ImageVector,
+    val title: String,
+    val subtitle: String,
+    val placeholder: String,
+)
+
+private fun FeedbackType.copy(): TypeCopy =
+    when (this) {
+        FeedbackType.BUG ->
+            TypeCopy(
+                PhosphorIcons.Regular.Bug,
+                "Report a bug",
+                "Tell us what broke so we can fix it.",
+                "What did you do, what happened, and what did you expect?",
+            )
+        FeedbackType.IDEA ->
+            TypeCopy(
+                PhosphorIcons.Regular.Lightbulb,
+                "Suggest an idea",
+                "Missing something? We read every suggestion.",
+                "Describe the feature and how you\u2019d use it.",
+            )
+        FeedbackType.FEEDBACK ->
+            TypeCopy(
+                PhosphorIcons.Regular.ChatCircleText,
+                "Share feedback",
+                "What\u2019s working, and what could be better.",
+                "Anything you love, or want us to improve.",
+            )
+    }
 
 @Composable
 fun FeedbackScreen(
@@ -88,6 +144,7 @@ fun FeedbackScreen(
 
     val sending = ui.status == FeedbackStatus.SENDING
     val canSend = !sending && ui.message.isNotBlank()
+    val sendAlpha by animateFloatAsState(if (canSend) 1f else 0.45f, label = "send-alpha")
 
     GamutPage(title = "Help & Feedback", onBack = onBack, nowPlaying = nowPlaying) {
         SegmentedControl(
@@ -96,25 +153,29 @@ fun FeedbackScreen(
             onSelect = vm::setType,
         )
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(28.dp))
+        TypeHeader(ui.type)
+
+        Spacer(Modifier.height(16.dp))
         MessageField(
             value = ui.message,
             onChange = vm::setMessage,
-            placeholder =
-                when (ui.type) {
-                    FeedbackType.BUG -> "What did you do, what happened, and what did you expect?"
-                    FeedbackType.IDEA -> "Describe the feature and how you\u2019d use it."
-                    FeedbackType.FEEDBACK -> "Anything you love, or want us to improve."
-                },
+            placeholder = ui.type.copy().placeholder,
             words = ui.words,
         )
 
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(36.dp))
         StarRating(rating = ui.rating, onChange = vm::setRating)
 
-        Spacer(Modifier.height(28.dp))
-        GamutField(ui.email, vm::setEmail, "Email for a reply (optional)")
-        if (ui.emailError) {
+        Spacer(Modifier.height(36.dp))
+        SectionTitle("Want a reply?", "Leave an email and we\u2019ll get back to you. Optional.")
+        Spacer(Modifier.height(12.dp))
+        GamutField(ui.email, vm::setEmail, "Email address")
+        AnimatedVisibility(
+            visible = ui.emailError,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
             Text(
                 "That email address doesn\u2019t look right.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -123,14 +184,18 @@ fun FeedbackScreen(
             )
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(28.dp))
         SwitchCell(
             title = "Attach diagnostics",
             checked = ui.attachDiagnostics,
             onChange = vm::setAttachDiagnostics,
             subtitle = "App and device info. No account, email or song names.",
         )
-        if (ui.attachDiagnostics) {
+        AnimatedVisibility(
+            visible = ui.attachDiagnostics,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
             Cell("Preview what\u2019s sent", subtitle = null, onClick = { showDiagnostics = true })
         }
 
@@ -145,7 +210,7 @@ fun FeedbackScreen(
                 )
             }
         }
-        Spacer(Modifier.height(if (ui.error != null) 12.dp else 24.dp))
+        Spacer(Modifier.height(if (ui.error != null) 12.dp else 28.dp))
         GamutButton(
             label = if (sending) "Sending\u2026" else "Send",
             onClick = {
@@ -154,8 +219,9 @@ fun FeedbackScreen(
                     vm.send { activity.solveHCaptcha() }
                 }
             },
-            modifier = Modifier.fillMaxWidth().alpha(if (canSend) 1f else 0.45f),
+            modifier = Modifier.fillMaxWidth().alpha(sendAlpha),
         )
+        Spacer(Modifier.height(16.dp))
         Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.ime))
     }
 
@@ -172,39 +238,91 @@ private fun Hint(
 }
 
 @Composable
+private fun SectionTitle(
+    title: String,
+    subtitle: String,
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+        Text(title, style = MaterialTheme.typography.titleMedium, color = ink(0.92f))
+        Hint(subtitle, Modifier.padding(top = 2.dp))
+    }
+}
+
+/** Icon, title and one-line prompt that change with the selected type. */
+@Composable
+private fun TypeHeader(type: FeedbackType) {
+    Crossfade(type, animationSpec = tween(220), label = "type-header") { t ->
+        val c = t.copy()
+        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(ink(0.08f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(c.icon, null, tint = ink(0.9f), modifier = Modifier.size(22.dp))
+            }
+            Spacer(Modifier.width(14.dp))
+            Column {
+                Text(c.title, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold), color = ink(0.95f))
+                Hint(c.subtitle, Modifier.padding(top = 2.dp))
+            }
+        }
+    }
+}
+
+@Composable
 private fun MessageField(
     value: String,
     onChange: (String) -> Unit,
     placeholder: String,
     words: Int,
 ) {
-    val nearLimit = words >= FeedbackRules.MAX_WORDS - 20
-    Box(
+    val max = FeedbackRules.MAX_WORDS
+    val nearLimit = words >= max - 20
+    var focused by remember { mutableStateOf(false) }
+
+    val borderAlpha by animateFloatAsState(if (focused) 0.28f else 0f, tween(180), label = "field-border")
+    val progress by animateFloatAsState((words.toFloat() / max).coerceIn(0f, 1f), tween(200), label = "field-progress")
+    val barColor by animateColorAsState(if (nearLimit) GamutDestructive else ink(0.55f), label = "field-bar")
+
+    Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(FieldShape)
             .background(ink(0.07f))
-            .padding(horizontal = 16.dp, vertical = 14.dp)
-            .heightIn(min = 140.dp),
+            .border(1.dp, ink(borderAlpha), FieldShape),
     ) {
-        if (value.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = ink(0.4f))
-        BasicTextField(
-            value = value,
-            onValueChange = onChange,
-            textStyle = MaterialTheme.typography.bodyLarge.copy(color = ink()),
-            cursorBrush = SolidColor(ink()),
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-            modifier = Modifier.fillMaxWidth(),
-        )
+        Box(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp).heightIn(min = 150.dp)) {
+            if (value.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = ink(0.4f))
+            BasicTextField(
+                value = value,
+                onValueChange = onChange,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = ink(), lineHeight = 24.sp),
+                cursorBrush = SolidColor(ink()),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
+            )
+        }
+        // Hairline that fills as the message approaches the word limit.
+        Box(Modifier.fillMaxWidth().height(2.dp).background(ink(0.06f))) {
+            Box(Modifier.fillMaxWidth(progress).height(2.dp).background(barColor))
+        }
     }
-    if (words > 0) {
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp, start = 4.dp, end = 4.dp)) {
+        val short = words in 1 until FeedbackRules.MIN_WORDS
         Text(
-            "$words / ${FeedbackRules.MAX_WORDS}",
+            if (short) "A few more words, please" else "",
             style = MaterialTheme.typography.bodyMedium,
-            color = if (nearLimit) GamutDestructive else ink(0.55f),
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, end = 4.dp),
-            textAlign = TextAlign.End,
+            color = ink(0.55f),
+            modifier = Modifier.weight(1f),
         )
+        if (words > 0) {
+            Text(
+                "$words / $max",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (nearLimit) GamutDestructive else ink(0.55f),
+                textAlign = TextAlign.End,
+            )
+        }
     }
 }
 
@@ -213,17 +331,30 @@ private fun StarRating(
     rating: Int,
     onChange: (Int) -> Unit,
 ) {
+    val haptic = LocalHapticFeedback.current
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("Rate Gamut", style = MaterialTheme.typography.titleMedium, color = ink(0.9f))
-        Spacer(Modifier.height(8.dp))
+        Text("How do you like Gamut?", style = MaterialTheme.typography.titleMedium, color = ink(0.92f))
+        Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            for (i in 1..5) Star(filled = i <= rating, onClick = { onChange(i) }, description = "$i star${if (i == 1) "" else "s"}")
+            for (i in 1..5) {
+                Star(
+                    filled = i <= rating,
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        // Tapping the current rating again clears it.
+                        onChange(if (i == rating) 0 else i)
+                    },
+                    description = "$i star${if (i == 1) "" else "s"}",
+                )
+            }
         }
-        Hint(
-            if (rating in 1..5) StarLabels[rating - 1] else "Optional",
-            Modifier.fillMaxWidth().padding(top = 6.dp),
-            TextAlign.Center,
-        )
+        Crossfade(rating, animationSpec = tween(160), label = "star-label") { r ->
+            Hint(
+                if (r in 1..5) StarLabels[r - 1] else "Optional. Tap a star to rate.",
+                Modifier.fillMaxWidth().padding(top = 6.dp),
+                TextAlign.Center,
+            )
+        }
     }
 }
 
@@ -241,7 +372,11 @@ private fun Star(
     val line = ink(0.35f)
     val solid = ink(0.95f)
     Box(
-        Modifier.size(48.dp).pressScale(onClick = onClick, scaleDown = 0.88f).scale(0.88f + 0.12f * fill),
+        Modifier
+            .size(48.dp)
+            .pressScale(onClick = onClick, scaleDown = 0.85f)
+            .scale(0.88f + 0.16f * fill)
+            .rotate(-12f * (1f - fill)),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(34.dp)) {
@@ -257,10 +392,11 @@ private fun Star(
                 if (k == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
             path.close()
-            drawPath(path, solid.copy(alpha = solid.alpha * fill.coerceIn(0f, 1f)))
+            val t = fill.coerceIn(0f, 1f)
+            drawPath(path, solid.copy(alpha = solid.alpha * t))
             drawPath(
                 path,
-                line.copy(alpha = line.alpha * (1f - fill.coerceIn(0f, 1f))),
+                line.copy(alpha = line.alpha * (1f - t)),
                 style = Stroke(width = 2.4f * density, join = StrokeJoin.Round),
             )
         }

@@ -1,18 +1,12 @@
 package com.gamut.settings
 
 import android.content.Context
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -22,15 +16,35 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import com.adamglin.PhosphorIcons
+import com.adamglin.phosphoricons.Regular
+import com.adamglin.phosphoricons.regular.ArrowCounterClockwise
+import com.adamglin.phosphoricons.regular.ArrowLineDown
+import com.adamglin.phosphoricons.regular.ArrowsOutLineHorizontal
+import com.adamglin.phosphoricons.regular.CloudArrowDown
+import com.adamglin.phosphoricons.regular.Cube
+import com.adamglin.phosphoricons.regular.Disc
+import com.adamglin.phosphoricons.regular.DotsNine
+import com.adamglin.phosphoricons.regular.Ear
+import com.adamglin.phosphoricons.regular.Equalizer
+import com.adamglin.phosphoricons.regular.Headphones
+import com.adamglin.phosphoricons.regular.Intersect
+import com.adamglin.phosphoricons.regular.MusicNotes
+import com.adamglin.phosphoricons.regular.Plugs
+import com.adamglin.phosphoricons.regular.Scales
+import com.adamglin.phosphoricons.regular.ShieldCheck
+import com.adamglin.phosphoricons.regular.SlidersHorizontal
+import com.adamglin.phosphoricons.regular.SpeakerHigh
+import com.adamglin.phosphoricons.regular.SpeakerSimpleSlash
+import com.adamglin.phosphoricons.regular.Timer
+import com.adamglin.phosphoricons.regular.WaveSine
+import com.adamglin.phosphoricons.regular.Waveform
+import com.adamglin.phosphoricons.regular.WifiHigh
 import com.gamut.core.designsystem.ink
-import com.gamut.core.designsystem.pressScale
-import com.gamut.core.designsystem.softResize
 import com.gamut.core.player.AudioPipelineInfo
 import com.gamut.core.player.BandType
 import com.gamut.core.player.BitPerfectStatus
@@ -116,22 +130,6 @@ private fun BandEditorDialog(
     }
 }
 
-@Composable
-private fun InfoRow(
-    title: String,
-    value: String,
-    subtitle: String?,
-) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 15.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RowText(title, subtitle, Modifier.weight(1f))
-        Spacer(Modifier.width(12.dp))
-        Text(value, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), maxLines = 1)
-    }
-}
-
 private fun balanceLabel(b: Float): String {
     val pct = (abs(b) * 100).roundToInt()
     return when {
@@ -154,91 +152,93 @@ fun PlaybackSettingsScreen(
     var activeBand by remember { mutableStateOf<Int?>(null) }
     val settings = vm.settings
     val sound = vm.sound
+    val icons = PhosphorIcons.Regular
 
-    GamutPage(title = "Playback & Audio", onBack = onBack, nowPlaying = nowPlaying) {
-        SoftHeader("Streaming")
-        SoftCard {
-            SoftValueRow(
+    GamutPage(title = "", onBack = onBack, nowPlaying = nowPlaying) {
+        Text(
+            "Playback & Audio",
+            style = MaterialTheme.typography.headlineLarge,
+            color = ink(),
+            modifier = Modifier.padding(top = 4.dp, start = 4.dp),
+        )
+
+        SettingsBlock {
+            GroupedHeader("Streaming")
+            GroupedRow(
                 "Streaming quality",
+                icons.Waveform,
                 value = s.streamQuality.label,
                 subtitle = s.streamQuality.hint,
                 onClick = { dialog = PlaybackDialog.QUALITY },
             )
-            SoftDivider()
-            SoftSwitchRow(
+            GroupedDivider()
+            GroupedSwitchRow(
                 "Preload next track",
+                icons.CloudArrowDown,
                 checked = s.preload,
                 onChange = { v -> settings.update { it.copy(preload = v) } },
-                subtitle = "Gapless transitions and instant skips. Uses a little extra data.",
+                subtitle = "Gapless transitions and instant skips",
             )
-            SoftDivider()
-            SoftSwitchRow(
+            GroupedDivider()
+            GroupedSwitchRow(
                 "Preload on Wi-Fi only",
+                icons.WifiHigh,
                 checked = s.preloadUnmeteredOnly,
                 enabled = s.preload,
                 onChange = { v -> settings.update { it.copy(preloadUnmeteredOnly = v) } },
-                subtitle = "On mobile data the next track loads when you get to it.",
+                subtitle = "On mobile data, load it when needed",
             )
-        }
+            GroupedFooter("Preloading uses a little extra data.")
 
-        SoftHeader("Playback")
-        SoftCard {
-            SoftSliderRow(
+            GroupedHeader("Playback")
+            GroupedSliderRow(
                 title = "Crossfade",
+                icon = icons.Intersect,
                 valueLabel = if (s.crossfadeMs == 0) "Off" else "${s.crossfadeMs / 1000} s",
                 value = s.crossfadeMs / 1000f,
                 range = 0f..12f,
                 steps = 11,
                 onChange = { v -> settings.update { it.copy(crossfadeMs = v.roundToInt() * 1000) } },
-                subtitle = "Songs overlap as one ends and the next begins. Off keeps them gapless.",
             )
-            SoftDivider()
-            Column(Modifier.softResize().padding(horizontal = 20.dp, vertical = 16.dp)) {
-                Text("Fade on pause and resume", style = MaterialTheme.typography.titleMedium, color = ink())
-                Spacer(Modifier.height(12.dp))
-                SegmentedControl(
-                    options = FadeChoices,
-                    selected = s.fadeMs,
-                    onSelect = { ms -> settings.update { it.copy(fadeMs = ms) } },
-                )
-                FadeChoices.firstOrNull { it.value == s.fadeMs }?.hint?.let {
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ink(0.55f),
-                        modifier = Modifier.padding(top = 8.dp, start = 4.dp),
-                    )
-                }
-            }
-            SoftDivider()
-            SoftSwitchRow(
+            GroupedDivider()
+            GroupedSegmentedRow(
+                title = "Fade on pause and resume",
+                icon = icons.Timer,
+                options = FadeChoices,
+                selected = s.fadeMs,
+                onSelect = { ms -> settings.update { it.copy(fadeMs = ms) } },
+                hint = FadeChoices.firstOrNull { it.value == s.fadeMs }?.hint,
+            )
+            GroupedDivider()
+            GroupedSwitchRow(
                 "Skip silence",
+                icons.SpeakerSimpleSlash,
                 checked = s.skipSilence,
                 onChange = { v -> settings.update { it.copy(skipSilence = v) } },
-                subtitle = "Cut long silent gaps inside tracks, like in live recordings.",
+                subtitle = "Trim long quiet gaps inside tracks",
             )
-            SoftDivider()
-            SoftSwitchRow(
-                "Pause when headphones disconnect",
+            GroupedDivider()
+            GroupedSwitchRow(
+                "Pause on unplug",
+                icons.Plugs,
                 checked = s.pauseOnUnplug,
                 onChange = { v -> settings.update { it.copy(pauseOnUnplug = v) } },
+                subtitle = "When headphones disconnect",
             )
-        }
+            GroupedFooter("With crossfade off, songs stay gapless.")
 
-        SoftHeader("Equalizer")
-        SoftCard {
-            SoftSwitchRow(
-                "10-band parametric EQ",
+            GroupedHeader("Equalizer")
+            GroupedSwitchRow(
+                "10-band EQ",
+                icons.Equalizer,
                 checked = snd.eqEnabled,
                 onChange = sound::setEqEnabled,
-                subtitle = "64-bit filters, tuned band by band.",
+                subtitle = "64-bit parametric filters",
             )
-            Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp)) {
+            Column(Modifier.padding(horizontal = GroupedRowInset).padding(top = 2.dp, bottom = 10.dp)) {
                 val band = activeBand?.let { snd.bands.getOrNull(it) }
                 Text(
-                    if (band !=
-                        null
-                    ) {
+                    if (band != null) {
                         "${hzLabel(band.freqHz.roundToInt())}  ·  ${dbLabel((band.gainDb * 100).roundToInt())}"
                     } else {
                         snd.preset
@@ -258,145 +258,148 @@ fun PlaybackSettingsScreen(
                     onActive = { activeBand = it },
                 )
             }
-            SoftDivider()
-            SoftValueRow("Preset", value = snd.preset, onClick = { dialog = PlaybackDialog.PRESET })
-            SoftDivider()
-            SoftValueRow("Frequency and Q", subtitle = "Move and reshape each band", onClick = { dialog = PlaybackDialog.BANDS })
-        }
+            GroupedDivider(start = GroupedRowInset)
+            GroupedRow("Preset", icons.SlidersHorizontal, value = snd.preset, onClick = { dialog = PlaybackDialog.PRESET })
+            GroupedDivider()
+            GroupedRow(
+                "Frequency and Q",
+                icons.WaveSine,
+                subtitle = "Move and reshape each band",
+                onClick = { dialog = PlaybackDialog.BANDS },
+            )
 
-        SoftHeader("Sound quality")
-        SoftCard {
-            SoftSwitchRow(
+            GroupedHeader("Sound quality")
+            GroupedSwitchRow(
                 "Automatic headroom",
+                icons.ArrowLineDown,
                 checked = snd.autoHeadroom,
                 onChange = sound::setAutoHeadroom,
-                subtitle = "Lowers the level by exactly the EQ's biggest boost, so boosted bands cannot clip.",
+                subtitle = "Lowers level by the EQ\u2019s biggest boost",
             )
-            SoftDivider()
-            SoftSwitchRow(
+            GroupedDivider()
+            GroupedSwitchRow(
                 "Soft limiter",
+                icons.ShieldCheck,
                 checked = snd.limiter,
                 onChange = sound::setLimiter,
-                subtitle = "Catches peaks just below full scale before they distort.",
+                subtitle = "Catches peaks before they distort",
             )
-            SoftDivider()
-            SoftSwitchRow(
+            GroupedDivider()
+            GroupedSwitchRow(
                 "Dither",
+                icons.DotsNine,
                 checked = snd.dither,
                 onChange = sound::setDither,
-                subtitle = "Adds a whisper of triangular noise when the sound is processed, so quiet detail is not rounded away.",
+                subtitle = "Keeps quiet detail from rounding away",
             )
-            SoftDivider()
-            Column(Modifier.softResize().padding(horizontal = 20.dp, vertical = 16.dp)) {
-                Text("Headphone crossfeed", style = MaterialTheme.typography.titleMedium, color = ink())
-                Text(
-                    "Lets a little of the lows cross over between ears, like speakers do.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = ink(0.55f),
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-                Spacer(Modifier.height(12.dp))
-                SegmentedControl(Crossfeed.entries.map { Choice(it, it.label, it.hint) }, snd.crossfeed, sound::setCrossfeed)
-                if (snd.crossfeed != Crossfeed.OFF) {
-                    Text(
-                        snd.crossfeed.hint,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ink(0.55f),
-                        modifier = Modifier.padding(top = 8.dp, start = 4.dp),
-                    )
-                }
-            }
-            SoftDivider()
-            Column(Modifier.softResize().padding(horizontal = 20.dp, vertical = 16.dp)) {
-                Text("Spatial audio", style = MaterialTheme.typography.titleMedium, color = ink())
-                Text(
-                    "A simulated surround stage for headphones. It is not Dolby Atmos decoding.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = ink(0.55f),
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-                Spacer(Modifier.height(12.dp))
-                SegmentedControl(SpatialMode.entries.map { Choice(it, it.label, it.hint) }, snd.spatial, sound::setSpatial)
-                if (snd.spatial != SpatialMode.OFF) {
-                    Text(
-                        snd.spatial.hint + if (snd.crossfeed != Crossfeed.OFF) ". Replaces crossfeed while it is on." else "",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ink(0.55f),
-                        modifier = Modifier.padding(top = 8.dp, start = 4.dp),
-                    )
-                }
-            }
-            SoftDivider()
-            SoftSliderRow(
+            GroupedDivider()
+            GroupedSegmentedRow(
+                title = "Headphone crossfeed",
+                icon = icons.Headphones,
+                options = Crossfeed.entries.map { Choice(it, it.label, it.hint) },
+                selected = snd.crossfeed,
+                onSelect = sound::setCrossfeed,
+                subtitle = "Lets some lows cross between ears",
+                hint = snd.crossfeed.hint.takeIf { snd.crossfeed != Crossfeed.OFF },
+            )
+            GroupedDivider()
+            GroupedSegmentedRow(
+                title = "Spatial audio",
+                icon = icons.Cube,
+                options = SpatialMode.entries.map { Choice(it, it.label, it.hint) },
+                selected = snd.spatial,
+                onSelect = sound::setSpatial,
+                subtitle = "Simulated surround. Not Dolby Atmos.",
+                hint =
+                    if (snd.spatial != SpatialMode.OFF) {
+                        snd.spatial.hint + if (snd.crossfeed != Crossfeed.OFF) ". Replaces crossfeed while it is on." else ""
+                    } else {
+                        null
+                    },
+            )
+            GroupedDivider()
+            GroupedSliderRow(
                 title = "Stereo width",
+                icon = icons.ArrowsOutLineHorizontal,
                 valueLabel = "${snd.widthPercent}%",
                 value = snd.widthPercent.toFloat(),
                 range = 0f..200f,
                 onChange = { v -> sound.setWidth(if (abs(v - 100f) < 4f) 100 else v.roundToInt()) },
-                subtitle = "0% is mono, 100% is the recording as it is.",
+                subtitle = "0% is mono, 100% is as recorded",
                 centered = true,
             )
-        }
+            GroupedFooter(
+                "Headroom keeps boosted bands from clipping. Dither adds a whisper of noise when sound is processed.",
+            )
 
-        SoftHeader("Hi-Fi output")
-        SoftCard {
-            SoftSwitchRow(
+            GroupedHeader("Hi-Fi output")
+            GroupedSwitchRow(
                 "Bit-perfect output",
+                icons.Disc,
                 checked = s.bitPerfect,
                 onChange = { v -> settings.update { it.copy(bitPerfect = v) } },
-                subtitle =
-                    "Sends the track untouched. Equalizer, spatial audio, speed, crossfade and fades are bypassed. " +
-                        "Plug in a USB DAC on Android 14 or newer to skip the system mixer as well.",
+                subtitle = "Sends the track untouched",
             )
             if (s.bitPerfect && path.bitPerfectNote.isNotEmpty()) {
-                Text(
+                GroupedNote(
                     when (path.bitPerfect) {
                         BitPerfectStatus.ACTIVE -> "Bit-perfect  ·  ${path.bitPerfectNote}"
                         else -> path.bitPerfectNote
                     },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = ink(0.6f),
-                    modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 14.dp),
                 )
             }
             if (path.known) {
-                SoftDivider()
-                InfoRow("Now playing", path.tierLabel, path.summary)
-                SoftDivider()
-                InfoRow("Output", path.routeKind.label, path.routeName.ifEmpty { null })
+                GroupedDivider()
+                GroupedRow(
+                    "Now playing",
+                    icons.MusicNotes,
+                    subtitle = path.summary,
+                    value = path.tierLabel,
+                    chevron = false,
+                )
+                GroupedDivider()
+                GroupedRow(
+                    "Output",
+                    icons.SpeakerHigh,
+                    subtitle = path.routeName.ifEmpty { null },
+                    value = path.routeKind.label,
+                    chevron = false,
+                )
             }
-        }
+            GroupedFooter(
+                "Bit-perfect bypasses the equalizer, spatial audio, speed, crossfade and fades. " +
+                    "Plug in a USB DAC on Android 14 or newer to skip the system mixer too.",
+            )
 
-        SoftHeader("Output")
-        SoftCard {
-            SoftSwitchRow(
+            GroupedHeader("Output")
+            GroupedSwitchRow(
                 "Mono audio",
+                icons.Ear,
                 checked = s.mono,
                 onChange = { v -> settings.update { it.copy(mono = v) } },
-                subtitle = "Play both channels as one. Helps with a single earbud or hearing differences.",
+                subtitle = "Play both channels as one",
             )
-            SoftDivider()
-            SoftSliderRow(
+            GroupedDivider()
+            GroupedSliderRow(
                 title = "Balance",
+                icon = icons.Scales,
                 valueLabel = balanceLabel(s.balance),
                 value = s.balance,
                 range = -1f..1f,
                 onChange = { v -> settings.update { it.copy(balance = if (abs(v) < 0.04f) 0f else v) } },
                 centered = true,
             )
-        }
+            GroupedFooter("Mono helps with a single earbud or hearing differences.")
 
-        Spacer(Modifier.height(24.dp))
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .pressScale(onClick = { dialog = PlaybackDialog.RESET })
-                .clip(RoundedCornerShape(20.dp))
-                .background(GamutDestructive.copy(alpha = 0.12f))
-                .padding(vertical = 16.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("Reset audio settings", style = MaterialTheme.typography.titleMedium, color = GamutDestructive)
+            GroupedHeader("Reset")
+            GroupedRow(
+                "Reset audio settings",
+                icons.ArrowCounterClockwise,
+                destructive = true,
+                onClick = { dialog = PlaybackDialog.RESET },
+            )
+            GroupedFooter("Puts every option on this page back to its default and sets the equalizer to Flat.")
+            Spacer(Modifier.height(8.dp))
         }
     }
 

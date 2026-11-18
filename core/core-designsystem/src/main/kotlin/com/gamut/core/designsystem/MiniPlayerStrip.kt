@@ -72,6 +72,7 @@ fun MiniPlayerStrip(
     Column(
         modifier
             .fillMaxWidth()
+            .dockStrip()
             .then(if (dockedToEdge) Modifier.background(ink(0.05f)).padding(bottom = bottomInset) else acrylicFillStrip)
             .pressScale(onClick = onOpen, scaleDown = 0.99f),
     ) {
@@ -85,7 +86,7 @@ fun MiniPlayerStrip(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val artShape = RoundedCornerShape(8.dp)
-            Box(Modifier.size(42.dp).clip(artShape).background(ink(0.08f)).thumbnailBorder(artShape)) {
+            Box(Modifier.size(42.dp).dockCover(8.dp).clip(artShape).background(ink(0.08f)).thumbnailBorder(artShape)) {
                 if (artUrl != null) {
                     AsyncImage(
                         model = artUrl,

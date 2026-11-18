@@ -55,11 +55,20 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.bold.CaretRight
+import com.adamglin.phosphoricons.Regular
 import com.adamglin.phosphoricons.bold.Check
 import com.adamglin.phosphoricons.bold.DownloadSimple
 import com.adamglin.phosphoricons.bold.MusicNote
 import com.adamglin.phosphoricons.bold.Trash
+import com.adamglin.phosphoricons.regular.Broom
+import com.adamglin.phosphoricons.regular.Database
+import com.adamglin.phosphoricons.regular.FolderOpen
+import com.adamglin.phosphoricons.regular.Gauge
+import com.adamglin.phosphoricons.regular.Image
+import com.adamglin.phosphoricons.regular.MagnifyingGlass
+import com.adamglin.phosphoricons.regular.Tag
+import com.adamglin.phosphoricons.regular.Trash
+import com.adamglin.phosphoricons.regular.WifiHigh
 import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.GamutMotion
 import com.gamut.core.designsystem.LocalCoverPalette
@@ -144,6 +153,7 @@ fun StorageSettingsScreen(
     val musicFolder by vm.musicFolder.collectAsState()
     val folderOk by vm.folderAvailable.collectAsState()
     val migration by vm.migration.collectAsState()
+    val icons = PhosphorIcons.Regular
     val fmt: (Long) -> String = remember(context) { { b: Long -> Formatter.formatShortFileSize(context, b) } }
 
     var sort by rememberSaveable { mutableStateOf(SongSort.RECENT) }
@@ -230,147 +240,137 @@ fun StorageSettingsScreen(
         }
     }
 
-    GamutPage(title = "Storage & Downloads", onBack = onBack, nowPlaying = nowPlaying) {
-        SoftHeader("Used by Gamut")
-        UsageHero(snap, fmt)
-
-        MigrationCard(migration, onCancel = vm::cancelMigration)
-
-        QueueCard(
-            manager = vm.downloads,
-            onCancelAll = vm.downloads::cancelAll,
-            onRetry = vm.downloads::retryFailed,
-            onClearFailed = vm.downloads::clearFailed,
-            onAllowMobile = { vm.settings.update { it.copy(wifiOnly = false) } },
+    GamutPage(title = "", onBack = onBack, nowPlaying = nowPlaying) {
+        Text(
+            "Storage",
+            style = MaterialTheme.typography.headlineLarge,
+            color = ink(),
+            modifier = Modifier.padding(top = 4.dp, start = 4.dp),
         )
 
-        SoftHeader("Your downloads")
-        SoftCard {
-            Column(Modifier.softResize()) {
-                if (songs.isNotEmpty()) {
-                    Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                if (songs.size == 1) "1 song" else "${songs.size} songs",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = ink(),
-                                modifier = Modifier.weight(1f),
-                            )
-                            if (songs.isNotEmpty()) {
-                                TextAction(if (selecting) "Done" else "Select") {
-                                    selecting = !selecting
-                                    selected = emptySet()
-                                }
-                            }
-                        }
-                        if (songs.size > 1) {
-                            Spacer(Modifier.height(12.dp))
-                            SegmentedControl(options = SortChoices, selected = sort, onSelect = { sort = it })
-                        }
+        SettingsBlock(Modifier.softResize()) {
+            GroupedHeader("Used by Gamut")
+            UsageHero(snap, fmt)
+
+            MigrationCard(migration, onCancel = vm::cancelMigration)
+
+            QueueCard(
+                manager = vm.downloads,
+                onCancelAll = vm.downloads::cancelAll,
+                onRetry = vm.downloads::retryFailed,
+                onClearFailed = vm.downloads::clearFailed,
+                onAllowMobile = { vm.settings.update { it.copy(wifiOnly = false) } },
+            )
+
+            // ---------- Downloads ----------
+            GroupedHeader("Downloads")
+            if (songs.isEmpty()) {
+                EmptyDownloads()
+            } else {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = GroupedRowInset, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            if (songs.size == 1) "1 song" else "${songs.size} songs",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = ink(),
+                        )
+                        Text(
+                            listOfNotNull(fmt(stats.bytes), playtimeLabel(stats.playtimeMs)).joinToString(" \u00B7 "),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ink(0.55f),
+                            modifier = Modifier.padding(top = 1.dp),
+                        )
+                    }
+                    TextAction(if (selecting) "Done" else "Select") {
+                        selecting = !selecting
+                        selected = emptySet()
                     }
                 }
-                if (songs.isEmpty()) {
-                    EmptyDownloads()
-                } else {
-                    SoftDivider()
-                    AnimatedVisibility(
-                        visible = selecting,
-                        enter = expandVertically(tween(220)) + fadeIn(tween(180)),
-                        exit = shrinkVertically(tween(180)) + fadeOut(tween(120)),
+                if (songs.size > 1) {
+                    Box(Modifier.padding(horizontal = GroupedRowInset).padding(top = 6.dp, bottom = 10.dp)) {
+                        SegmentedControl(options = SortChoices, selected = sort, onSelect = { sort = it })
+                    }
+                }
+                AnimatedVisibility(
+                    visible = selecting,
+                    enter = expandVertically(tween(220)) + fadeIn(tween(180)),
+                    exit = shrinkVertically(tween(180)) + fadeOut(tween(120)),
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = GroupedRowInset, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        val all = selected.size == songs.size
+                        GamutButton(if (all) "Select none" else "Select all", onClick = {
+                            selected = if (all) emptySet() else songs.map { it.isrc }.toSet()
+                        }, modifier = Modifier.weight(1f), filled = false)
+                        DestructiveButton(
+                            if (selected.isEmpty()) "Delete" else "Delete (${selected.size})",
+                            onClick = { confirm = Confirm.DeleteSelected(selected) },
+                            modifier = Modifier.weight(1f),
+                            enabled = selected.isNotEmpty(),
+                        )
+                    }
+                }
+                GroupedDivider(start = GroupedRowInset)
+                sorted.take(visible).forEach { song ->
+                    androidx.compose.runtime.key(song.isrc) {
+                        AnimatedVisibility(
+                            visible = song.isrc !in removing,
+                            enter = expandVertically(tween(220)) + fadeIn(tween(180)),
+                            exit = shrinkVertically(tween(240, easing = GamutMotion.Standard)) + fadeOut(tween(160)),
                         ) {
-                            val all = selected.size == songs.size
-                            GamutButton(if (all) "Select none" else "Select all", onClick = {
-                                selected = if (all) emptySet() else songs.map { it.isrc }.toSet()
-                            }, modifier = Modifier.weight(1f), filled = false)
-                            DestructiveButton(
-                                if (selected.isEmpty()) "Delete" else "Delete (${selected.size})",
-                                onClick = { confirm = Confirm.DeleteSelected(selected) },
-                                modifier = Modifier.weight(1f),
-                                enabled = selected.isNotEmpty(),
+                            SongRow(
+                                song = song,
+                                detail = fmt(song.bytes) + " \u00B7 " + song.format,
+                                selecting = selecting,
+                                checked = song.isrc in selected,
+                                onToggle = { selected = if (song.isrc in selected) selected - song.isrc else selected + song.isrc },
+                                onDelete = { confirm = Confirm.DeleteSong(song) },
                             )
                         }
                     }
-                    sorted.take(visible).forEach { song ->
-                        androidx.compose.runtime.key(song.isrc) {
-                            AnimatedVisibility(
-                                visible = song.isrc !in removing,
-                                enter = expandVertically(tween(220)) + fadeIn(tween(180)),
-                                exit = shrinkVertically(tween(240, easing = GamutMotion.Standard)) + fadeOut(tween(160)),
-                            ) {
-                                SongRow(
-                                    song = song,
-                                    detail = fmt(song.bytes) + " \u00B7 " + song.format,
-                                    selecting = selecting,
-                                    checked = song.isrc in selected,
-                                    onToggle = { selected = if (song.isrc in selected) selected - song.isrc else selected + song.isrc },
-                                    onDelete = { confirm = Confirm.DeleteSong(song) },
-                                )
-                            }
-                        }
-                    }
-                    if (sorted.size > visible) {
-                        SoftDivider()
-                        TextAction(
-                            "Show ${minOf(PAGE, sorted.size - visible)} more \u00B7 ${sorted.size - visible} hidden",
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            centered = true,
-                        ) { visible += PAGE }
-                    }
-                    SoftDivider()
-                    TextAction(
-                        "Delete all downloads",
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        centered = true,
-                        color = GamutDestructive,
-                    ) { confirm = Confirm.DeleteAll }
                 }
+                if (sorted.size > visible) {
+                    GroupedDivider(start = GroupedRowInset)
+                    TextAction(
+                        "Show ${minOf(PAGE, sorted.size - visible)} more \u00B7 ${sorted.size - visible} hidden",
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        centered = true,
+                    ) { visible += PAGE }
+                }
+                GroupedDivider(start = GroupedRowInset)
+                GroupedRow(
+                    "Delete all downloads",
+                    icons.Trash,
+                    destructive = true,
+                    onClick = { confirm = Confirm.DeleteAll },
+                )
             }
-        }
 
-        SoftHeader("Cache")
-        SoftCard {
-            Column(Modifier.softResize()) {
-                CacheRow(
-                    "Images & temporary files",
-                    fmt(snap?.imageCacheBytes ?: 0L),
-                    (snap?.imageCacheBytes ?: 0L) > 0,
-                ) { confirm = Confirm.ClearImages }
-                SoftDivider()
-                CacheRow(
-                    "Discover & search",
-                    fmt(snap?.discoverCacheBytes ?: 0L),
-                    (snap?.discoverCacheBytes ?: 0L) > 0,
-                ) { confirm = Confirm.ClearDiscover }
-                SoftDivider()
-                TextAction(
-                    "Clear all cache",
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    centered = true,
-                    color = GamutDestructive,
-                ) { confirm = Confirm.ClearAllCache }
-            }
-        }
-
-        SoftHeader("Settings")
-        SoftCard {
-            SoftSwitchRow(
+            // ---------- Download settings ----------
+            GroupedHeader("Download settings")
+            GroupedSwitchRow(
                 "Download on Wi-Fi only",
+                icons.WifiHigh,
                 checked = cfg.wifiOnly,
                 onChange = { v -> vm.settings.update { it.copy(wifiOnly = v) } },
+                subtitle = "Nothing downloads over mobile data",
             )
-            SoftDivider()
-            StorageValueRow(
+            GroupedDivider()
+            GroupedRow(
                 "Download quality",
+                icons.Gauge,
                 value = cfg.downloadQuality.label,
                 onClick = { dialog = StorageDialog.QUALITY },
             )
-            SoftDivider()
-            StorageValueRow(
+            GroupedDivider()
+            GroupedRow(
                 "Music folder",
+                icons.FolderOpen,
                 value = if (musicFolder == null) "App storage" else "Custom",
                 subtitle =
                     when {
@@ -382,33 +382,61 @@ fun StorageSettingsScreen(
             )
             val tagWaiting = remember(songs, migration) { vm.songsToTag() }
             if (tagWaiting > 0 && migration !is MigrationState.Running) {
-                SoftDivider()
-                StorageValueRow(
+                GroupedDivider()
+                GroupedRow(
                     "Add covers & info to older songs",
+                    icons.Tag,
                     value = tagWaiting.toString(),
                     subtitle = "Cover art, artist info and lyrics for songs downloaded earlier",
                     onClick = { confirm = Confirm.TagSongs(tagWaiting) },
                 )
             }
-            SoftDivider()
-            StorageValueRow(
+
+            // ---------- Cache ----------
+            GroupedHeader("Cache")
+            GroupedRow(
+                "Images & temporary files",
+                icons.Image,
+                subtitle = fmt(snap?.imageCacheBytes ?: 0L),
+                trailing = { ClearPill((snap?.imageCacheBytes ?: 0L) > 0) { confirm = Confirm.ClearImages } },
+            )
+            GroupedDivider()
+            GroupedRow(
+                "Discover & search",
+                icons.MagnifyingGlass,
+                subtitle = fmt(snap?.discoverCacheBytes ?: 0L),
+                trailing = { ClearPill((snap?.discoverCacheBytes ?: 0L) > 0) { confirm = Confirm.ClearDiscover } },
+            )
+            GroupedDivider()
+            GroupedRow(
                 "Cache limit",
+                icons.Database,
                 value = limitLabel(cfg.cacheLimitMb),
                 onClick = { dialog = StorageDialog.CACHE_LIMIT },
             )
-        }
+            GroupedDivider()
+            GroupedRow(
+                "Clear all cache",
+                icons.Broom,
+                destructive = true,
+                onClick = { confirm = Confirm.ClearAllCache },
+            )
+            GroupedFooter("When the cache reaches its limit, Gamut removes the oldest files first. Downloads are never touched.")
 
-        AnimatedVisibility((snap?.leftoverCount ?: 0) > 0, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
-            Column {
-                SoftHeader("Tidy up")
-                SoftCard {
-                    StorageValueRow(
+            // ---------- Tidy up ----------
+            AnimatedVisibility((snap?.leftoverCount ?: 0) > 0, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+                Column {
+                    GroupedHeader("Tidy up")
+                    GroupedRow(
                         "Leftover files",
+                        icons.Trash,
                         value = fmt(snap?.leftoverBytes ?: 0L),
+                        subtitle = "Partial or orphaned files from interrupted downloads",
                         onClick = { confirm = Confirm.CleanLeftovers },
                     )
                 }
             }
+            Spacer(Modifier.height(8.dp))
         }
     }
 
@@ -617,35 +645,42 @@ private fun UsageHero(
     val cacheTone = ink(0.55f)
     val otherTone = ink(0.22f)
 
-    SoftCard {
-        Column(Modifier.softResize().padding(horizontal = 20.dp, vertical = 18.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = GroupedRowInset).padding(top = 4.dp, bottom = 16.dp)) {
+        Text(
+            if (snap == null) "\u2026" else fmt(shownTotal.toLong()),
+            style = MaterialTheme.typography.headlineLarge,
+            color = ink(),
+        )
+        Spacer(Modifier.height(14.dp))
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(CircleShape)
+                .background(ink(0.08f)),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            val sum = downloads + cache + other
+            if (sum > 0f) {
+                if (downloads > 0f) Box(Modifier.weight(downloads / sum).fillMaxHeight().background(accent))
+                if (cache > 0f) Box(Modifier.weight(cache / sum).fillMaxHeight().background(cacheTone))
+                if (other > 0f) Box(Modifier.weight(other / sum).fillMaxHeight().background(otherTone))
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            LegendItem(accent, "Downloads", fmt(snap?.downloadsBytes ?: 0L))
+            LegendItem(cacheTone, "Cache", fmt(snap?.cacheBytes ?: 0L))
+            LegendItem(otherTone, "App data", fmt((snap?.appDataBytes ?: 0L) + (snap?.leftoverBytes ?: 0L)))
+        }
+        val deviceTotal = snap?.deviceTotalBytes ?: 0L
+        if (deviceTotal > 0L) {
             Text(
-                if (snap == null) "\u2026" else fmt(shownTotal.toLong()),
-                style = MaterialTheme.typography.headlineLarge,
-                color = ink(),
+                "${fmt(snap?.deviceFreeBytes ?: 0L)} free of ${fmt(deviceTotal)} on this device",
+                style = MaterialTheme.typography.bodyMedium,
+                color = ink(0.5f),
+                modifier = Modifier.padding(top = 12.dp),
             )
-            Spacer(Modifier.height(16.dp))
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(CircleShape)
-                    .background(ink(0.08f)),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                val sum = downloads + cache + other
-                if (sum > 0f) {
-                    if (downloads > 0f) Box(Modifier.weight(downloads / sum).fillMaxHeight().background(accent))
-                    if (cache > 0f) Box(Modifier.weight(cache / sum).fillMaxHeight().background(cacheTone))
-                    if (other > 0f) Box(Modifier.weight(other / sum).fillMaxHeight().background(otherTone))
-                }
-            }
-            Spacer(Modifier.height(14.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                LegendItem(accent, "Downloads", fmt(snap?.downloadsBytes ?: 0L))
-                LegendItem(cacheTone, "Cache", fmt(snap?.cacheBytes ?: 0L))
-                LegendItem(otherTone, "App data", fmt((snap?.appDataBytes ?: 0L) + (snap?.leftoverBytes ?: 0L)))
-            }
         }
     }
 }
@@ -664,6 +699,24 @@ private fun LegendItem(
             color = ink(0.7f),
             maxLines = 1,
             modifier = Modifier.padding(start = 6.dp),
+        )
+    }
+}
+
+@Composable
+private fun ProgressBar(fraction: Float) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(6.dp)
+            .clip(CircleShape)
+            .background(ink(0.08f)),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth(fraction.coerceAtLeast(0.02f))
+                .fillMaxHeight()
+                .background(MaterialTheme.colorScheme.primary, CircleShape),
         )
     }
 }
@@ -695,72 +748,52 @@ private fun QueueCard(
         exit = shrinkVertically(tween(220)) + fadeOut(tween(160)),
     ) {
         Column {
-            SoftHeader("Download queue")
-            SoftCard {
-                Column(Modifier.softResize().padding(20.dp)) {
-                    if (shownBatch.total > 0) {
-                        val fraction = ((shownBatch.done + progress) / shownBatch.total).coerceIn(0f, 1f)
-                        val bar by animateFloatAsState(fraction, tween(300), label = "queue-bar")
-                        Text(
-                            if (shownBatch.waitingForWifi) {
-                                "Waiting for Wi-Fi"
-                            } else {
-                                "Downloading ${minOf(
-                                    shownBatch.done + 1,
-                                    shownBatch.total,
-                                )} of ${shownBatch.total}"
-                            },
-                            style = MaterialTheme.typography.titleMedium,
-                            color = ink(),
-                        )
-                        Text(
-                            if (shownBatch.waitingForWifi) {
-                                "\u201CDownload on Wi-Fi only\u201D is on, so nothing downloads over mobile data."
-                            } else {
-                                shownBatch.current
-                                    .orEmpty()
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = ink(0.55f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = 2.dp),
-                        )
-                        Spacer(Modifier.height(14.dp))
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(CircleShape)
-                                .background(ink(0.08f)),
-                        ) {
-                            Box(
-                                Modifier
-                                    .fillMaxWidth(
-                                        bar.coerceAtLeast(0.02f),
-                                    ).fillMaxHeight()
-                                    .background(MaterialTheme.colorScheme.primary, CircleShape),
-                            )
-                        }
-                        Spacer(Modifier.height(14.dp))
+            GroupedHeader("Download queue")
+            Column(Modifier.fillMaxWidth().padding(horizontal = GroupedRowInset).padding(top = 2.dp, bottom = 14.dp)) {
+                if (shownBatch.total > 0) {
+                    val fraction = ((shownBatch.done + progress) / shownBatch.total).coerceIn(0f, 1f)
+                    val bar by animateFloatAsState(fraction, tween(300), label = "queue-bar")
+                    Text(
                         if (shownBatch.waitingForWifi) {
-                            GamutButton("Download on mobile data", onAllowMobile, Modifier.fillMaxWidth())
-                            Spacer(Modifier.height(10.dp))
-                        }
-                        GamutButton("Cancel all", onCancelAll, Modifier.fillMaxWidth(), filled = false)
+                            "Waiting for Wi-Fi"
+                        } else {
+                            "Downloading ${minOf(shownBatch.done + 1, shownBatch.total)} of ${shownBatch.total}"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = ink(),
+                    )
+                    Text(
+                        if (shownBatch.waitingForWifi) {
+                            "\u201CDownload on Wi-Fi only\u201D is on, so nothing downloads over mobile data."
+                        } else {
+                            shownBatch.current.orEmpty()
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ink(0.55f),
+                        maxLines = if (shownBatch.waitingForWifi) 3 else 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    ProgressBar(bar)
+                    Spacer(Modifier.height(14.dp))
+                    if (shownBatch.waitingForWifi) {
+                        GamutButton("Download on mobile data", onAllowMobile, Modifier.fillMaxWidth())
+                        Spacer(Modifier.height(10.dp))
                     }
-                    if (shownFailed > 0) {
-                        if (shownBatch.total > 0) Spacer(Modifier.height(18.dp))
-                        Text(
-                            if (shownFailed == 1) "1 download failed" else "$shownFailed downloads failed",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = GamutDestructive,
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            GamutButton("Retry", onRetry, Modifier.weight(1f))
-                            GamutButton("Dismiss", onClearFailed, Modifier.weight(1f), filled = false)
-                        }
+                    GamutButton("Cancel all", onCancelAll, Modifier.fillMaxWidth(), filled = false)
+                }
+                if (shownFailed > 0) {
+                    if (shownBatch.total > 0) Spacer(Modifier.height(18.dp))
+                    Text(
+                        if (shownFailed == 1) "1 download failed" else "$shownFailed downloads failed",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = GamutDestructive,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        GamutButton("Retry", onRetry, Modifier.weight(1f))
+                        GamutButton("Dismiss", onClearFailed, Modifier.weight(1f), filled = false)
                     }
                 }
             }
@@ -783,43 +816,27 @@ private fun MigrationCard(
     ) {
         val card = shown ?: return@AnimatedVisibility
         Column {
-            SoftHeader(if (card.moving) "Moving your songs" else "Updating your songs")
-            SoftCard {
-                Column(Modifier.softResize().padding(20.dp)) {
-                    val fraction = (card.done.toFloat() / card.total.coerceAtLeast(1)).coerceIn(0f, 1f)
-                    val bar by animateFloatAsState(fraction, tween(300), label = "migration-bar")
-                    Text(
-                        "${minOf(card.done + 1, card.total)} of ${card.total}",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = ink(),
-                    )
-                    Text(
-                        card.current.orEmpty(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ink(0.55f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(CircleShape)
-                            .background(ink(0.08f)),
-                    ) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth(
-                                    bar.coerceAtLeast(0.02f),
-                                ).fillMaxHeight()
-                                .background(MaterialTheme.colorScheme.primary, CircleShape),
-                        )
-                    }
-                    Spacer(Modifier.height(14.dp))
-                    GamutButton("Cancel", onCancel, Modifier.fillMaxWidth(), filled = false)
-                }
+            GroupedHeader(if (card.moving) "Moving your songs" else "Updating your songs")
+            Column(Modifier.fillMaxWidth().padding(horizontal = GroupedRowInset).padding(top = 2.dp, bottom = 14.dp)) {
+                val fraction = (card.done.toFloat() / card.total.coerceAtLeast(1)).coerceIn(0f, 1f)
+                val bar by animateFloatAsState(fraction, tween(300), label = "migration-bar")
+                Text(
+                    "${minOf(card.done + 1, card.total)} of ${card.total}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = ink(),
+                )
+                Text(
+                    card.current.orEmpty(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink(0.55f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+                Spacer(Modifier.height(14.dp))
+                ProgressBar(bar)
+                Spacer(Modifier.height(14.dp))
+                GamutButton("Cancel", onCancel, Modifier.fillMaxWidth(), filled = false)
             }
         }
     }
@@ -836,7 +853,7 @@ private fun SongRow(
 ) {
     val tap = if (selecting) Modifier.pressScale(onClick = onToggle, scaleDown = 0.985f) else Modifier
     Row(
-        Modifier.fillMaxWidth().then(tap).padding(horizontal = 20.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().then(tap).padding(horizontal = GroupedRowInset, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
@@ -906,64 +923,35 @@ private fun EmptyDownloads() {
     }
 }
 
-@Composable
-private fun StorageValueRow(
-    title: String,
-    value: String,
-    subtitle: String? = null,
-    onClick: () -> Unit,
-) {
-    Column(
-        Modifier
-            .softResize()
-            .fillMaxWidth()
-            .pressScale(onClick = onClick, scaleDown = 0.985f)
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = ink(), modifier = Modifier.weight(1f).padding(end = 12.dp))
-            Text(value, style = MaterialTheme.typography.bodyMedium, color = ink(0.6f), maxLines = 1)
-            Icon(PhosphorIcons.Bold.CaretRight, null, tint = ink(0.4f), modifier = Modifier.padding(start = 6.dp).size(14.dp))
-        }
-        if (subtitle != null) {
-            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = ink(0.55f), modifier = Modifier.padding(top = 4.dp))
-        }
+/** "about 6 h 20 min" style label for the total playtime; null when unknown. */
+private fun playtimeLabel(ms: Long): String? {
+    if (ms <= 0L) return null
+    val hours = ms / 3_600_000L
+    val minutes = (ms / 60_000L) % 60L
+    return when {
+        hours > 0 -> "about $hours h $minutes min of music"
+        minutes > 0 -> "about $minutes min of music"
+        else -> "under a minute of music"
     }
 }
 
 @Composable
-private fun CacheRow(
-    title: String,
-    size: String,
+private fun ClearPill(
     hasData: Boolean,
-    onClear: () -> Unit,
+    onClick: () -> Unit,
 ) {
-    Row(
-        Modifier.fillMaxWidth().padding(start = 20.dp, end = 14.dp, top = 12.dp, bottom = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f).padding(end = 12.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = ink())
-            Text(
-                size,
-                style = MaterialTheme.typography.bodyMedium,
-                color = ink(0.55f),
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-        Text(
-            "Clear",
-            style = MaterialTheme.typography.labelLarge,
-            color = ink(if (hasData) 0.85f else 0.35f),
-            modifier =
-                Modifier
-                    .alpha(if (hasData) 1f else 0.6f)
-                    .pressScale(onClick = { if (hasData) onClear() })
-                    .clip(CircleShape)
-                    .background(ink(0.08f))
-                    .padding(horizontal = 14.dp, vertical = 7.dp),
-        )
-    }
+    Text(
+        "Clear",
+        style = MaterialTheme.typography.labelLarge,
+        color = ink(if (hasData) 0.85f else 0.35f),
+        modifier =
+            Modifier
+                .alpha(if (hasData) 1f else 0.6f)
+                .pressScale(onClick = { if (hasData) onClick() })
+                .clip(CircleShape)
+                .background(ink(0.08f))
+                .padding(horizontal = 14.dp, vertical = 7.dp),
+    )
 }
 
 @Composable

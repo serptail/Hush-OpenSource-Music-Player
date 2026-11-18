@@ -1,6 +1,8 @@
 package com.gamut.settings
 
-import androidx.compose.foundation.background
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -52,9 +54,15 @@ private enum class RecentTab(
     STATS("Statistics"),
 }
 
-private val ArtSize = 48.dp
-private val RecentTextInset = GroupedRowInset + ArtSize + GroupedIconGap
+private val ArtSize = 52.dp
+private val RowGap = 14.dp
+private val RecentTextInset = ArtSize + RowGap
 
+/*
+ * Recently played is a history, so it is laid out like one: a plain list straight on the page, with no card
+ * behind it, and no single cover standing in for the whole. The two tabs are the title itself, two big words
+ * with the active one lit, rather than a control sitting under a heading.
+ */
 @Composable
 fun RecentlyPlayedScreen(
     tracks: List<Track>,
@@ -67,22 +75,25 @@ fun RecentlyPlayedScreen(
     val select by rememberUpdatedState(onTrackSelected)
     val pick = remember { { track: Track, list: List<Track> -> select(track, list) } }
     var tab by rememberSaveable { mutableStateOf(RecentTab.RECENT) }
-    val tabs = remember { RecentTab.values().map { it to it.label } }
 
     SettingsScaffold(title = "", onBack = onBack, nowPlaying = nowPlaying) {
         Column(Modifier.fillMaxSize()) {
-            Text(
-                "Recently played",
-                style = MaterialTheme.typography.headlineLarge,
-                color = ink(),
-                modifier = Modifier.padding(start = 28.dp, end = 24.dp, top = 4.dp),
-            )
-            GroupedSegmented(
-                options = tabs,
-                selected = tab,
-                onSelect = { tab = it },
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp),
-            )
+            Row(
+                Modifier.fillMaxWidth().padding(start = 28.dp, end = 24.dp, top = 4.dp, bottom = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(22.dp),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                RecentTab.values().forEach { t ->
+                    val color by animateColorAsState(if (t == tab) ink() else ink(0.3f), tween(220), label = "recent-tab")
+                    Text(
+                        t.label,
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = color,
+                        maxLines = 1,
+                        modifier = Modifier.pressScale(onClick = { tab = t }, scaleDown = 0.96f),
+                    )
+                }
+            }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (tab) {
                     RecentTab.RECENT -> RecentList(rows, pick)
@@ -121,22 +132,30 @@ private fun RecentList(
             EmptyNote(PhosphorIcons.Regular.ClockCounterClockwise, "Songs you play will show up here.")
         }
     } else {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 6.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 24.dp)) {
+            item(key = "count", contentType = "count") {
+                Row(Modifier.padding(start = 4.dp, top = 2.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(PhosphorIcons.Regular.ClockCounterClockwise, null, tint = ink(0.45f), modifier = Modifier.size(16.dp))
+                    Text(
+                        if (rows.size == 1) "1 song" else "${rows.size} songs",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ink(0.45f),
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
+                }
+            }
             itemsIndexed(
                 items = rows,
                 key = { _, t -> t.isrc },
                 contentType = { _, _ -> "recent-row" },
             ) { index, track ->
                 val onClick = remember(track, rows) { { onPick(track, rows) } }
-                // One background per row, rounded only at the ends, so the rows read as a single block.
                 Column(
-                    Modifier
-                        .animateItem(
-                            fadeInSpec = null,
-                            placementSpec = GamutMotion.itemPlacement,
-                            fadeOutSpec = null,
-                        ).clip(groupedItemShape(index, rows.size))
-                        .background(ink(0.06f)),
+                    Modifier.animateItem(
+                        fadeInSpec = null,
+                        placementSpec = GamutMotion.itemPlacement,
+                        fadeOutSpec = null,
+                    ),
                 ) {
                     RecentRow(track, onClick)
                     if (index < rows.lastIndex) GroupedDivider(start = RecentTextInset)
@@ -153,17 +172,14 @@ private fun RecentRow(
     onClick: () -> Unit,
 ) {
     Row(
-        Modifier
-            .fillMaxWidth()
-            .pressScale(onClick = onClick, scaleDown = 0.985f)
-            .padding(horizontal = GroupedRowInset, vertical = 10.dp),
+        Modifier.fillMaxWidth().pressScale(onClick = onClick, scaleDown = 0.985f).padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ArtImage(
             url = remember(track.albumArtUrl) { squareArtUrl(track.albumArtUrl, 200) },
             modifier = Modifier.size(ArtSize).clip(RoundedCornerShape(10.dp)).thumbnailBorder(RoundedCornerShape(10.dp)),
         )
-        Column(Modifier.weight(1f).padding(start = GroupedIconGap)) {
+        Column(Modifier.weight(1f).padding(start = RowGap)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ExplicitMark(track.isExplicit, ink(0.6f))
                 Text(

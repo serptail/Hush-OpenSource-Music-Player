@@ -12,6 +12,7 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,11 +22,13 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -46,11 +49,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -64,9 +69,11 @@ import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.ArrowLeft
 import com.adamglin.phosphoricons.bold.DotsThreeVertical
+import com.adamglin.phosphoricons.bold.Shuffle
 import com.adamglin.phosphoricons.fill.Play
 import com.gamut.core.designsystem.AcrylicCircleButton
 import com.gamut.core.designsystem.AcrylicHost
+import com.gamut.core.designsystem.AlbumStyle
 import com.gamut.core.designsystem.ArtPlaceholder
 import com.gamut.core.designsystem.ArtistLine
 import com.gamut.core.designsystem.ArtistPickerSheet
@@ -131,6 +138,8 @@ fun AlbumScreen(
     viewModel: AlbumViewModel,
     onBack: () -> Unit,
     onTrackSelected: (Track, List<Track>) -> Unit,
+    onShuffle: ((List<Track>) -> Unit)? = null,
+    style: AlbumStyle = AlbumStyle.Classic,
     onTrackArtist: (Track) -> Unit = {},
     favoriteIsrcs: Set<String> = emptySet(),
     onToggleFavorite: (Track) -> Unit = {},
@@ -151,31 +160,112 @@ fun AlbumScreen(
         var shareTrack by remember { mutableStateOf<Track?>(null) }
         var pickerTrack by remember { mutableStateOf<Track?>(null) }
         val accent = MaterialTheme.colorScheme.primary
+        val soft = style == AlbumStyle.Soft
         AcrylicHost(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize()) {
-                Box(Modifier.weight(1f).fillMaxWidth()) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .then(
+                            if (soft) {
+                                // A faint wash of the cover's own colour that fades out below the artwork.
+                                Modifier.drawBehind {
+                                    drawRect(
+                                        Brush.verticalGradient(
+                                            colors = listOf(accent.copy(alpha = 0.22f), Color.Transparent),
+                                            endY = size.height * 0.6f,
+                                        ),
+                                    )
+                                }
+                            } else {
+                                Modifier
+                            },
+                        ),
+                ) {
                     val value = album
                     when {
                         value != null && settled -> {
+                            val onPlayAlbum = { value.tracks.firstOrNull()?.let { onTrackSelected(it, value.tracks) }; Unit }
+                            val onArtistName = { name: String -> value.tracks.firstOrNull()?.let { onTrackArtist(it.copy(artist = name)) }; Unit }
                             val heroContent: @Composable () -> Unit = {
-                                AlbumHero(
-                                    album = value,
-                                    artistImageUrl = artistImage,
-                                    onPlay = { value.tracks.firstOrNull()?.let { onTrackSelected(it, value.tracks) } },
-                                    onArtist = { name -> value.tracks.firstOrNull()?.let { onTrackArtist(it.copy(artist = name)) } },
-                                )
+                                val shuffleAlbum = onShuffle?.let { shuffle -> { shuffle(value.tracks) } }
+                                when (style) {
+                                    AlbumStyle.Soft -> {
+                                        SoftAlbumHero(
+                                            album = value,
+                                            artistImageUrl = artistImage,
+                                            onPlay = onPlayAlbum,
+                                            onShuffle = shuffleAlbum,
+                                            onArtist = onArtistName,
+                                        )
+                                    }
+
+                                    AlbumStyle.Full -> {
+                                        FullAlbumHero(
+                                            album = value,
+                                            artistImageUrl = artistImage,
+                                            onPlay = onPlayAlbum,
+                                            onShuffle = shuffleAlbum,
+                                            onArtist = onArtistName,
+                                        )
+                                    }
+
+                                    AlbumStyle.Classic -> {
+                                        AlbumHero(
+                                            album = value,
+                                            artistImageUrl = artistImage,
+                                            onPlay = onPlayAlbum,
+                                            onArtist = onArtistName,
+                                        )
+                                    }
+                                }
                             }
                             val trackItems: LazyListScope.() -> Unit = {
                                 itemsIndexed(value.tracks, key = { i, t -> "${t.isrc}-$i" }) { index, track ->
-                                    AlbumTrackRow(
-                                        number = index + 1,
-                                        track = track,
-                                        showArtist = !track.artist.equals(value.artist, ignoreCase = true),
-                                        onArtist = { name -> onTrackArtist(track.copy(artist = name)) },
-                                        isPlaying = track.isrc == nowPlayingIsrc,
-                                        accent = accent,
-                                        onMore = { actionsTrack = it },
-                                    ) { picked -> onTrackSelected(picked, value.tracks) }
+                                    val showArtist = !track.artist.equals(value.artist, ignoreCase = true)
+                                    val onArtist = { name: String -> onTrackArtist(track.copy(artist = name)) }
+                                    val isPlaying = track.isrc == nowPlayingIsrc
+                                    when (style) {
+                                        AlbumStyle.Soft -> {
+                                            SoftTrackRow(
+                                                number = index + 1,
+                                                track = track,
+                                                showArtist = showArtist,
+                                                first = index == 0,
+                                                last = index == value.tracks.lastIndex,
+                                                onArtist = onArtist,
+                                                isPlaying = isPlaying,
+                                                accent = accent,
+                                                onMore = { actionsTrack = it },
+                                            ) { picked -> onTrackSelected(picked, value.tracks) }
+                                        }
+
+                                        AlbumStyle.Full -> {
+                                            FullTrackRow(
+                                                number = index + 1,
+                                                track = track,
+                                                showArtist = showArtist,
+                                                last = index == value.tracks.lastIndex,
+                                                onArtist = onArtist,
+                                                isPlaying = isPlaying,
+                                                accent = accent,
+                                                onMore = { actionsTrack = it },
+                                            ) { picked -> onTrackSelected(picked, value.tracks) }
+                                        }
+
+                                        AlbumStyle.Classic -> {
+                                            AlbumTrackRow(
+                                                number = index + 1,
+                                                track = track,
+                                                showArtist = showArtist,
+                                                onArtist = onArtist,
+                                                isPlaying = isPlaying,
+                                                accent = accent,
+                                                onMore = { actionsTrack = it },
+                                            ) { picked -> onTrackSelected(picked, value.tracks) }
+                                        }
+                                    }
                                 }
                                 item(key = "nav-space") { Box(Modifier.navigationBarsPadding()) }
                             }
@@ -348,6 +438,471 @@ private fun AlbumHero(
             }
             PlayFab(onClick = onPlay)
         }
+    }
+}
+
+// Soft style tokens. The block radius and the row fill match the Favorites list so the two pages
+// read as one family.
+private val SoftInset = 20.dp
+private val SoftBlockRadius = 22.dp
+private val SoftArtShape = RoundedCornerShape(24.dp)
+private val SoftPill = RoundedCornerShape(20.dp)
+
+private fun softBlockShape(
+    first: Boolean,
+    last: Boolean,
+): RoundedCornerShape {
+    val top = if (first) SoftBlockRadius else 0.dp
+    val bottom = if (last) SoftBlockRadius else 0.dp
+    return RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom)
+}
+
+private fun formatAlbumLength(ms: Long): String {
+    val minutes = (ms / 60_000L).toInt().coerceAtLeast(1)
+    return if (minutes >= 60) "${minutes / 60} hr ${minutes % 60} min" else "$minutes min"
+}
+
+private fun formatSongLength(ms: Long): String {
+    val seconds = ms / 1000L
+    return "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
+}
+
+/** Centered cover, title, artist, a one-line summary and the Play / Shuffle pills. */
+@Composable
+private fun SoftAlbumHero(
+    album: AlbumDetails,
+    artistImageUrl: String?,
+    onPlay: () -> Unit,
+    onShuffle: (() -> Unit)?,
+    onArtist: (String) -> Unit,
+) {
+    val palette = LocalCoverPalette.current
+    val totalMs = remember(album) { album.tracks.sumOf { it.durationMs.toLong() } }
+    val count = if (album.tracks.size == 1) "1 song" else "${album.tracks.size} songs"
+    val summary = if (totalMs > 0) "$count \u00B7 ${formatAlbumLength(totalMs)}" else count
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(top = 64.dp, bottom = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier
+                .padding(horizontal = 56.dp)
+                .widthIn(max = 280.dp)
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .shadow(
+                    elevation = 16.dp,
+                    shape = SoftArtShape,
+                    ambientColor = Color.Black.copy(alpha = 0.16f),
+                    spotColor = Color.Black.copy(alpha = 0.26f),
+                ).clip(SoftArtShape)
+                .background(artTileColor())
+                .thumbnailBorder(SoftArtShape),
+        ) {
+            SubcomposeAsyncImage(
+                model = album.imageUrl,
+                contentDescription = album.title,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+                loading = {},
+                error = { ArtPlaceholder() },
+            )
+        }
+
+        Text(
+            album.title,
+            style =
+                MaterialTheme.typography.headlineSmall.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = (-0.3).sp,
+                ),
+            color = ink(),
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 28.dp, end = 28.dp, top = 24.dp),
+        )
+        Spacer(Modifier.size(6.dp))
+        ArtistLine(
+            credit = album.artist,
+            albumTitle = album.title,
+            onArtist = onArtist,
+            stackSize = 22.dp,
+            showSingle = true,
+            singlePhoto = artistImageUrl,
+        ) { m ->
+            Text(
+                album.artist,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                color = ink(0.8f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = m,
+            )
+        }
+        Text(
+            summary,
+            style = MaterialTheme.typography.bodySmall,
+            color = ink(0.5f),
+            modifier = Modifier.padding(top = 4.dp),
+        )
+
+        Row(
+            Modifier.fillMaxWidth().padding(top = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Solid pill: the one bold action on the page.
+            Row(
+                Modifier
+                    .pressScale(onClick = onPlay)
+                    .clip(SoftPill)
+                    .background(ink(0.95f))
+                    .padding(horizontal = 26.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(PhosphorIcons.Fill.Play, null, tint = palette.base, modifier = Modifier.size(16.dp))
+                Text(
+                    "Play",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                    color = palette.base,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
+            if (onShuffle != null) {
+                Row(
+                    Modifier
+                        .pressScale(onClick = onShuffle)
+                        .glass(SoftPill)
+                        .padding(horizontal = 26.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(PhosphorIcons.Bold.Shuffle, null, tint = ink(), modifier = Modifier.size(16.dp))
+                    Text(
+                        "Shuffle",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                        color = ink(),
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One song in the Soft style. Rows are stacked edge to edge into a single rounded block with a thin
+ * gap between them; the song that is playing gets a faint wash of the accent.
+ */
+@Composable
+private fun SoftTrackRow(
+    number: Int,
+    track: Track,
+    showArtist: Boolean,
+    first: Boolean,
+    last: Boolean,
+    onArtist: (String) -> Unit,
+    isPlaying: Boolean,
+    accent: Color,
+    onMore: (Track) -> Unit,
+    onClick: (Track) -> Unit,
+) {
+    val shape = softBlockShape(first, last)
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val pressed by interaction.collectIsPressedAsState()
+    val active = hovered || pressed
+    val fill by animateColorAsState(
+        targetValue =
+            if (isPlaying) {
+                accent.copy(alpha = 0.14f)
+            } else {
+                ink(
+                    if (pressed) {
+                        0.12f
+                    } else if (hovered) {
+                        0.09f
+                    } else {
+                        0.07f
+                    },
+                )
+            },
+        animationSpec = tween(140),
+        label = "softRowFill",
+    )
+
+    Column(Modifier.fillMaxWidth().padding(horizontal = SoftInset)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(fill)
+                .focusRing(shape)
+                .hoverable(interaction)
+                .clickable(interactionSource = interaction, indication = null) { onClick(track) }
+                .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.width(28.dp), contentAlignment = Alignment.CenterStart) {
+                if (active) {
+                    Icon(PhosphorIcons.Fill.Play, null, tint = ink(), modifier = Modifier.size(14.dp))
+                } else if (isPlaying) {
+                    NowPlayingBars(color = accent)
+                } else {
+                    Text(
+                        number.toString(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ink(0.4f),
+                    )
+                }
+            }
+            Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ExplicitMark(track.isExplicit, ink(0.55f))
+                    Text(
+                        track.title,
+                        color = if (isPlaying) accent else ink(),
+                        style =
+                            MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium,
+                            ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
+                if (showArtist || splitArtists(track.artist).size > 1) {
+                    ArtistLine(track.artist, track.album, onArtist, stackSize = 16.dp, modifier = Modifier.padding(top = 2.dp)) { m ->
+                        Text(
+                            track.artist,
+                            color = ink(0.55f),
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = m,
+                        )
+                    }
+                }
+            }
+            if (track.durationMs > 0) {
+                Text(
+                    formatSongLength(track.durationMs.toLong()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ink(0.4f),
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
+            AlbumMoreButton { onMore(track) }
+        }
+        if (!last) Spacer(Modifier.height(1.dp))
+    }
+}
+
+/**
+ * Full style hero: the cover runs edge to edge behind the status bar, fades into the page colour at
+ * the bottom, and the title, artist and summary are written over that fade. Actions sit right below.
+ */
+@Composable
+private fun FullAlbumHero(
+    album: AlbumDetails,
+    artistImageUrl: String?,
+    onPlay: () -> Unit,
+    onShuffle: (() -> Unit)?,
+    onArtist: (String) -> Unit,
+) {
+    val palette = LocalCoverPalette.current
+    val totalMs = remember(album) { album.tracks.sumOf { it.durationMs.toLong() } }
+    val count = if (album.tracks.size == 1) "1 song" else "${album.tracks.size} songs"
+    val summary = if (totalMs > 0) "$count \u00B7 ${formatAlbumLength(totalMs)}" else count
+
+    Column(Modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth().aspectRatio(0.9f).background(artTileColor())) {
+            SubcomposeAsyncImage(
+                model = album.imageUrl,
+                contentDescription = album.title,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+                loading = {},
+                error = { ArtPlaceholder() },
+            )
+            // Soft dark scrim at the top keeps the back button readable on bright covers.
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.28f), 0.22f to Color.Transparent),
+                ),
+            )
+            // The melt: clear over the artwork, the page colour by the bottom edge.
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(0.5f to Color.Transparent, 0.92f to palette.base.copy(alpha = 0.92f), 1f to palette.base),
+                ),
+            )
+            Column(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .padding(start = 24.dp, end = 24.dp, bottom = 6.dp),
+            ) {
+                Text(
+                    album.title,
+                    style =
+                        MaterialTheme.typography.headlineMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = (-0.5).sp,
+                        ),
+                    color = ink(),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.size(6.dp))
+                ArtistLine(
+                    credit = album.artist,
+                    albumTitle = album.title,
+                    onArtist = onArtist,
+                    stackSize = 22.dp,
+                    showSingle = true,
+                    singlePhoto = artistImageUrl,
+                ) { m ->
+                    Text(
+                        album.artist,
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),
+                        color = ink(0.85f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = m,
+                    )
+                }
+                Text(
+                    summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ink(0.55f),
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+
+        Row(
+            Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                Modifier
+                    .pressScale(onClick = onPlay)
+                    .clip(CircleShape)
+                    .background(ink(0.95f))
+                    .padding(start = 20.dp, end = 26.dp, top = 13.dp, bottom = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(PhosphorIcons.Fill.Play, null, tint = palette.base, modifier = Modifier.size(18.dp))
+                Text(
+                    "Play",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                    color = palette.base,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
+            if (onShuffle != null) {
+                Box(
+                    Modifier
+                        .size(46.dp)
+                        .pressScale(onClick = onShuffle)
+                        .glass(CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(PhosphorIcons.Bold.Shuffle, "Shuffle", tint = ink(), modifier = Modifier.size(20.dp))
+                }
+            }
+        }
+    }
+}
+
+/** One song in the Full style: plain rows on the page with a thin inset line between them. */
+@Composable
+private fun FullTrackRow(
+    number: Int,
+    track: Track,
+    showArtist: Boolean,
+    last: Boolean,
+    onArtist: (String) -> Unit,
+    isPlaying: Boolean,
+    accent: Color,
+    onMore: (Track) -> Unit,
+    onClick: (Track) -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val pressed by interaction.collectIsPressedAsState()
+    val active = hovered || pressed
+    val tint by animateColorAsState(
+        targetValue = ink(if (pressed) 0.10f else if (hovered) 0.06f else 0f),
+        animationSpec = tween(140),
+        label = "fullRowTint",
+    )
+
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .drawBehind { drawRect(tint) }
+                .focusRing(RoundedCornerShape(0.dp))
+                .hoverable(interaction)
+                .clickable(interactionSource = interaction, indication = null) { onClick(track) }
+                .padding(start = 24.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.width(30.dp), contentAlignment = Alignment.CenterStart) {
+                if (active) {
+                    Icon(PhosphorIcons.Fill.Play, null, tint = ink(), modifier = Modifier.size(14.dp))
+                } else if (isPlaying) {
+                    NowPlayingBars(color = accent)
+                } else {
+                    Text(number.toString(), style = MaterialTheme.typography.bodyMedium, color = ink(0.4f))
+                }
+            }
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ExplicitMark(track.isExplicit, ink(0.55f))
+                    Text(
+                        track.title,
+                        color = if (isPlaying) accent else ink(),
+                        style =
+                            MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium,
+                            ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
+                if (showArtist || splitArtists(track.artist).size > 1) {
+                    ArtistLine(track.artist, track.album, onArtist, stackSize = 16.dp, modifier = Modifier.padding(top = 2.dp)) { m ->
+                        Text(
+                            track.artist,
+                            color = ink(0.55f),
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = m,
+                        )
+                    }
+                }
+            }
+            if (track.durationMs > 0) {
+                Text(
+                    formatSongLength(track.durationMs.toLong()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ink(0.4f),
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
+            AlbumMoreButton { onMore(track) }
+        }
+        if (!last) Box(Modifier.fillMaxWidth().padding(start = 54.dp, end = 24.dp).height(1.dp).background(ink(0.07f)))
     }
 }
 

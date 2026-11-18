@@ -2,7 +2,7 @@ package com.gamut.settings
 
 import android.content.Context
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -23,11 +24,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
@@ -42,6 +46,7 @@ import com.adamglin.phosphoricons.bold.User
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.ink
+import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.R as DesignR
 
 private const val REPO_URL = "https://github.com/serptail/gamut"
@@ -73,6 +78,7 @@ fun AboutScreen(
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val notifier = LocalNotifier.current
+    val clipboard = LocalClipboardManager.current
     val version = remember { versionLabel(context) }
     var showLibraries by remember { mutableStateOf(false) }
 
@@ -80,96 +86,82 @@ fun AboutScreen(
         runCatching { uriHandler.openUri(url) }.onFailure { notifier.info("No app can open this link") }
     }
     val external: @Composable () -> Unit = {
-        Icon(PhosphorIcons.Bold.ArrowUpRight, null, tint = ink(0.45f), modifier = Modifier.size(18.dp))
+        Icon(
+            PhosphorIcons.Bold.ArrowUpRight,
+            null,
+            tint = ink(0.35f),
+            modifier = Modifier.padding(start = 6.dp).size(14.dp),
+        )
     }
 
     GamutPage(title = "About", onBack = onBack, nowPlaying = nowPlaying) {
-        Column(
-            Modifier.fillMaxWidth().padding(top = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            val logo =
-                if (LocalCoverPalette.current.isLight) {
-                    DesignR.drawable.ic_gamut_stacked_color_darktext
-                } else {
-                    DesignR.drawable.ic_gamut_stacked_color_lighttext
-                }
-            Box {
-                Image(
-                    painter = painterResource(logo),
-                    contentDescription = null,
-                    colorFilter = ColorFilter.tint(Color.Black.copy(alpha = 0.22f)),
-                    modifier = Modifier.size(96.dp).offset(y = 1.dp).blur(1.5.dp, BlurredEdgeTreatment.Unbounded),
-                )
-                Image(
-                    painter = painterResource(logo),
-                    contentDescription = "Gamut logo",
-                    modifier = Modifier.size(96.dp),
-                )
-            }
-            Spacer(Modifier.height(3.dp))
+        Hero(
+            version = version,
+            onVersionClick = {
+                clipboard.setText(AnnotatedString("Gamut $version"))
+                notifier.info("Version copied")
+            },
+        )
 
-            if (version.isNotEmpty()) {
-                Text(version, style = MaterialTheme.typography.titleSmall, color = ink(0.85f), modifier = Modifier.padding(top = 4.dp))
-            }
-            Text(
-                "A free, open-source music player.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = ink(0.7f),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp),
+        GroupedHeader("Project")
+        SettingsBlock(Modifier.padding(top = 0.dp)) {
+            GroupedRow(
+                "Website",
+                PhosphorIcons.Bold.Globe,
+                subtitle = REPO_LABEL,
+                onClick = { open(REPO_URL) },
+                trailing = external,
+            )
+            GroupedDivider()
+            GroupedRow(
+                "Source code",
+                PhosphorIcons.Bold.GithubLogo,
+                subtitle = "Browse, fork and contribute on GitHub",
+                onClick = { open(REPO_URL) },
+                trailing = external,
             )
         }
 
-        GroupLabel("Project")
-        Cell(
-            "Website",
-            icon = PhosphorIcons.Bold.Globe,
-            subtitle = REPO_LABEL,
-            onClick = { open(REPO_URL) },
-            trailing = external,
-        )
-        Cell(
-            "Source code",
-            icon = PhosphorIcons.Bold.GithubLogo,
-            subtitle = "Browse, fork and contribute on GitHub",
-            onClick = { open(REPO_URL) },
-            trailing = external,
-        )
+        GroupedHeader("Credits")
+        SettingsBlock(Modifier.padding(top = 0.dp)) {
+            GroupedRow(
+                "Developer",
+                PhosphorIcons.Bold.User,
+                subtitle = AUTHOR_NAME,
+                onClick = { open(AUTHOR_URL) },
+                trailing = external,
+            )
+            GroupedDivider()
+            GroupedRow(
+                "Logo",
+                PhosphorIcons.Bold.PaintBrush,
+                subtitle = "Designed by $LOGO_AUTHOR_NAME",
+                onClick = { open(LOGO_AUTHOR_URL) },
+                trailing = external,
+            )
+        }
 
-        GroupLabel("Credits")
-        Cell(
-            "Developer",
-            icon = PhosphorIcons.Bold.User,
-            subtitle = AUTHOR_NAME,
-            onClick = { open(AUTHOR_URL) },
-            trailing = external,
-        )
-        Cell(
-            "Logo",
-            icon = PhosphorIcons.Bold.PaintBrush,
-            subtitle = "Designed by $LOGO_AUTHOR_NAME",
-            onClick = { open(LOGO_AUTHOR_URL) },
-            trailing = external,
-        )
+        GroupedHeader("Legal")
+        SettingsBlock(Modifier.padding(top = 0.dp)) {
+            GroupedRow(
+                "Open source license",
+                PhosphorIcons.Bold.Scales,
+                subtitle = "Read the license on GitHub",
+                onClick = { open(LICENSE_URL) },
+                trailing = external,
+            )
+            GroupedDivider()
+            GroupedRow(
+                "Open source libraries",
+                PhosphorIcons.Bold.Code,
+                subtitle = "What Gamut is built on",
+                onClick = { showLibraries = true },
+            )
+        }
 
-        GroupLabel("Legal")
-        Cell(
-            "Open source license",
-            icon = PhosphorIcons.Bold.Scales,
-            subtitle = "Read the license on GitHub",
-            onClick = { open(LICENSE_URL) },
-            trailing = external,
-        )
-        Cell(
-            "Open source libraries",
-            icon = PhosphorIcons.Bold.Code,
-            subtitle = "What Gamut is built on",
-            onClick = { showLibraries = true },
-        )
-
+        Spacer(Modifier.height(8.dp))
         SupportRow()
+        Spacer(Modifier.height(16.dp))
     }
 
     if (showLibraries) {
@@ -181,5 +173,59 @@ fun AboutScreen(
             onDismiss = { showLibraries = false },
             note = "Gamut stands on the work of these projects. Thank you.",
         )
+    }
+}
+
+@Composable
+private fun Hero(
+    version: String,
+    onVersionClick: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxWidth().padding(top = 28.dp, bottom = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        val logo =
+            if (LocalCoverPalette.current.isLight) {
+                DesignR.drawable.ic_gamut_stacked_color_darktext
+            } else {
+                DesignR.drawable.ic_gamut_stacked_color_lighttext
+            }
+        // A soft blurred copy under the logo gives it a little lift off the page.
+        Box {
+            Image(
+                painter = painterResource(logo),
+                contentDescription = null,
+                colorFilter = ColorFilter.tint(Color.Black.copy(alpha = 0.22f)),
+                modifier = Modifier.size(112.dp).offset(y = 2.dp).blur(2.dp, BlurredEdgeTreatment.Unbounded),
+            )
+            Image(
+                painter = painterResource(logo),
+                contentDescription = "Gamut logo",
+                modifier = Modifier.size(112.dp),
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "A free, open-source music player.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = ink(0.75f),
+            textAlign = TextAlign.Center,
+        )
+
+        if (version.isNotEmpty()) {
+            Spacer(Modifier.height(14.dp))
+            // Tap to copy, handy when filing a bug report.
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(ink(0.08f))
+                    .pressScale(onClick = onVersionClick, scaleDown = 0.95f)
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+            ) {
+                Text(version, style = MaterialTheme.typography.labelLarge, color = ink(0.8f))
+            }
+        }
     }
 }

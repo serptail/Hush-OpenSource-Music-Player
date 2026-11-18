@@ -14,23 +14,30 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Regular
 import com.adamglin.phosphoricons.regular.CaretRight
+import com.gamut.core.designsystem.CoverPalette
+import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import java.util.Locale
@@ -47,6 +54,12 @@ internal val GroupedIconSize = 22.dp
 internal val GroupedRowInset = 16.dp
 internal val GroupedIconGap = 14.dp
 
+private val OnLightFill = Color(0xFF111114)
+private val OnDarkFill = Color(0xFFF2F2F5)
+
+/** The soft gray used for the solid fill when no color is picked. */
+internal fun autoSurfaceColor(dark: Boolean): Color = if (dark) Color(0xFF27272C) else Color(0xFFE7E7EB)
+
 /** Where a row's text starts. Dividers are inset to match, so they never cut under the icon. */
 private val TextInset = GroupedRowInset + GroupedIconSize + GroupedIconGap
 
@@ -55,14 +68,60 @@ fun SettingsBlock(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(
-        modifier
-            .fillMaxWidth()
-            .padding(top = 20.dp)
-            .clip(BlockShape)
-            .background(ink(0.06f)),
-        content = content,
-    )
+    // Either the see-through tint ("Surface opacity") or, with "Solid surface" on, an opaque fill.
+    val vm = hiltViewModel<AppearanceViewModel>()
+    val opacity by vm.surfaceOpacity.collectAsState()
+    val solid by vm.surfaceSolid.collectAsState()
+    val picked by vm.surfaceColor.collectAsState()
+
+    // The app's light/dark comes from the resolved cover palette, not MaterialTheme.
+    val palette = LocalCoverPalette.current
+    val isDark = !palette.isLight
+    val solidFill: Color? =
+        when {
+            !solid -> null
+            picked == AppearanceStore.SURFACE_COLOR_AUTO -> autoSurfaceColor(isDark)
+            else -> Color(picked)
+        }
+
+    val shaped = modifier.fillMaxWidth().padding(top = 20.dp).clip(BlockShape)
+    if (solidFill == null) {
+        Column(shaped.background(ink(opacity)), content = content)
+    } else {
+        // ink() follows the palette's onBase, so give the block's content a palette whose text
+        // color reads on this fill. Only onBase / isLight change.
+        val fillIsLight = solidFill.luminance() > 0.5f
+        val onFillPalette =
+            CoverPalette(
+                primary = palette.primary,
+                secondary = palette.secondary,
+                tertiary = palette.tertiary,
+                accent = palette.accent,
+                base = palette.base,
+                onBase = if (fillIsLight) OnLightFill else OnDarkFill,
+                isLight = fillIsLight,
+                flows = palette.flows,
+            )
+        val onFill = if (fillIsLight) OnLightFill else OnDarkFill
+        // Cover every place text color can come from, so only this block flips and the rest of the
+        // app keeps its own light / dark: the cover palette, Material's color scheme, content color.
+        val scheme =
+            MaterialTheme.colorScheme.copy(
+                background = solidFill,
+                surface = solidFill,
+                onBackground = onFill,
+                onSurface = onFill,
+                onSurfaceVariant = onFill.copy(alpha = 0.7f),
+            )
+        MaterialTheme(colorScheme = scheme, typography = MaterialTheme.typography, shapes = MaterialTheme.shapes) {
+            CompositionLocalProvider(
+                LocalCoverPalette provides onFillPalette,
+                LocalContentColor provides onFill,
+            ) {
+                Column(shaped.background(solidFill), content = content)
+            }
+        }
+    }
 }
 
 @Composable
@@ -95,53 +154,6 @@ fun GroupedDivider(start: Dp = TextInset) {
             .height(0.5.dp)
             .background(ink(0.08f)),
     )
-}
-
-/** Rounds only the outer corners of a row inside a lazy list, so the rows read as one block. */
-fun groupedItemShape(
-    index: Int,
-    count: Int,
-): Shape {
-    val r = 22.dp
-    val top = if (index == 0) r else 0.dp
-    val bottom = if (index == count - 1) r else 0.dp
-    return RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom)
-}
-
-@Composable
-fun <T> GroupedSegmented(
-    options: List<Pair<T, String>>,
-    selected: T,
-    onSelect: (T) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(ink(0.06f))
-            .padding(3.dp),
-    ) {
-        options.forEach { (value, label) ->
-            val isSelected = value == selected
-            Box(
-                Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(if (isSelected) ink(0.12f) else Color.Transparent)
-                    .pressScale(onClick = { onSelect(value) }, scaleDown = 0.97f)
-                    .padding(vertical = 9.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = ink(if (isSelected) 1f else 0.55f),
-                    maxLines = 1,
-                )
-            }
-        }
-    }
 }
 
 @Composable
