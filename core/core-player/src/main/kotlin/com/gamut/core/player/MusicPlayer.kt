@@ -19,6 +19,14 @@ fun interface TrackSourceResolver {
     ): String?
 }
 
+/**
+ * Looks for a better stream of a track that is already playing. Returns its URL, or null to keep the current
+ * one. The player swaps it in at the current position.
+ */
+fun interface TrackUpgradeResolver {
+    suspend fun upgrade(track: Track): String?
+}
+
 interface MusicPlayer {
     val playbackState: StateFlow<PlaybackState>
     val shuffleEnabled: StateFlow<Boolean>
@@ -70,6 +78,9 @@ interface MusicPlayer {
     fun removeFromQueue(index: Int)
 
     fun setSourceResolver(resolver: TrackSourceResolver?)
+
+    /** Optional: a slower lookup run while a track plays, whose answer replaces the stream in place. */
+    fun setUpgradeResolver(resolver: TrackUpgradeResolver?) {}
 
     fun warmUp() {}
 }

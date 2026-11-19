@@ -1,0 +1,5 @@
+{
+    global:
+        Java_com_gamut_core_player_audio_bitperfect_*;
+    local: *;
+};

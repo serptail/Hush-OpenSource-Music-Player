@@ -69,6 +69,10 @@ object AudioPipelineInfo {
         _details.update { it.copy(origin = origin, qualitySetting = qualitySetting, qualityEffective = qualityEffective) }
     }
 
+    internal fun onUpgraded(from: String) {
+        _details.update { it.copy(upgradedFrom = from) }
+    }
+
     internal fun onDecoder(name: String) {
         _details.update { it.copy(decoder = name) }
     }

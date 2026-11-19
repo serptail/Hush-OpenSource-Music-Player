@@ -24,6 +24,8 @@ dependencies {
     implementation(libs.youtubedl.android)
     implementation(libs.newpipe.extractor)
     implementation(libs.okhttp.logging)
+    // Runs the user-supplied module scripts in a sandbox. Same artifact and version as BitChord.
+    implementation("io.github.dokar3:quickjs-kt-android:1.0.14")
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

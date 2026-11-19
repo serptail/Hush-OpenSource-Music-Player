@@ -888,6 +888,7 @@ internal fun TrackHeader(
                     )
                 }
             }
+            QualityTagRow(Modifier.padding(top = 6.dp))
         }
         DepthIcon(
             if (isFavorite) PhosphorIcons.Fill.HeartFilled else PhosphorIcons.Regular.Heart,

@@ -2,6 +2,9 @@ package com.gamut.core.player
 
 import android.content.Context
 import android.net.ConnectivityManager
+import com.gamut.core.player.audio.AudioConfig
+import com.gamut.core.player.audio.BitPerfectMode
+import com.gamut.core.player.audio.OutputPcmMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,12 +38,23 @@ class PlaybackSettings
             val pauseOnUnplug: Boolean = true,
             val mono: Boolean = false,
             val balance: Float = 0f,
-            val bitPerfect: Boolean = false,
-        )
+            val bitPerfectMode: BitPerfectMode = BitPerfectMode.OFF,
+            val convertForLimitedDac: Boolean = false,
+            val usbAllowFixedVolume: Boolean = false,
+            val dolbyAtmos: Boolean = true,
+            val outputPcmMode: OutputPcmMode = OutputPcmMode.FLOAT_32,
+        ) {
+            /** True when any exclusive output is selected. */
+            val bitPerfect: Boolean get() = bitPerfectMode != BitPerfectMode.OFF
+        }
 
         private val prefs = context.applicationContext.getSharedPreferences("playback_settings", Context.MODE_PRIVATE)
         private val _state = MutableStateFlow(load())
         val state: StateFlow<State> = _state.asStateFlow()
+
+        init {
+            publishConfig(_state.value)
+        }
 
         @Synchronized
         fun update(transform: (State) -> State) {
@@ -55,7 +69,11 @@ class PlaybackSettings
             if (next == _state.value) return
             _state.value = next
             save(next)
+            publishConfig(next)
         }
+
+        private fun publishConfig(s: State) =
+            AudioConfig.publish(s.bitPerfectMode, s.convertForLimitedDac, s.usbAllowFixedVolume, s.dolbyAtmos, s.outputPcmMode)
 
         fun reset() = update { State() }
 
@@ -81,8 +99,20 @@ class PlaybackSettings
                 pauseOnUnplug = prefs.getBoolean(K_UNPLUG, true),
                 mono = prefs.getBoolean(K_MONO, false),
                 balance = prefs.getFloat(K_BALANCE, 0f),
-                bitPerfect = prefs.getBoolean(K_BIT_PERFECT, false),
+                bitPerfectMode = loadMode(),
+                convertForLimitedDac = prefs.getBoolean(K_CONVERT_DAC, false),
+                usbAllowFixedVolume = prefs.getBoolean(K_USB_FIXED_VOLUME, false),
+                dolbyAtmos = prefs.getBoolean(K_DOLBY_ATMOS, true),
+                outputPcmMode = OutputPcmMode.entries.firstOrNull { it.name == prefs.getString(K_PCM_MODE, null) } ?: OutputPcmMode.FLOAT_32,
             )
+
+        /** The old on/off toggle drove Android 14's bit-perfect mixer, so an old "on" becomes that mode. */
+        private fun loadMode(): BitPerfectMode {
+            prefs.getString(K_BIT_PERFECT_MODE, null)?.let { name ->
+                return BitPerfectMode.entries.firstOrNull { it.name == name } ?: BitPerfectMode.OFF
+            }
+            return if (prefs.getBoolean(K_BIT_PERFECT, false)) BitPerfectMode.USB_ANDROID else BitPerfectMode.OFF
+        }
 
         private fun save(s: State) {
             prefs
@@ -97,6 +127,11 @@ class PlaybackSettings
                 .putBoolean(K_MONO, s.mono)
                 .putFloat(K_BALANCE, s.balance)
                 .putBoolean(K_BIT_PERFECT, s.bitPerfect)
+                .putString(K_BIT_PERFECT_MODE, s.bitPerfectMode.name)
+                .putBoolean(K_CONVERT_DAC, s.convertForLimitedDac)
+                .putBoolean(K_USB_FIXED_VOLUME, s.usbAllowFixedVolume)
+                .putBoolean(K_DOLBY_ATMOS, s.dolbyAtmos)
+                .putString(K_PCM_MODE, s.outputPcmMode.name)
                 .apply()
         }
 
@@ -111,5 +146,10 @@ class PlaybackSettings
             const val K_MONO = "mono"
             const val K_BALANCE = "balance"
             const val K_BIT_PERFECT = "bit_perfect"
+            const val K_BIT_PERFECT_MODE = "bit_perfect_mode"
+            const val K_CONVERT_DAC = "convert_for_limited_dac"
+            const val K_USB_FIXED_VOLUME = "usb_allow_fixed_volume"
+            const val K_DOLBY_ATMOS = "dolby_atmos"
+            const val K_PCM_MODE = "output_pcm_mode"
         }
     }

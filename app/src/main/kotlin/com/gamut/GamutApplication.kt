@@ -39,6 +39,8 @@ class GamutApplication :
 
     @Inject lateinit var downloadIndex: DownloadIndex
 
+    @Inject lateinit var losslessStreams: com.gamut.feature.resolver.lossless.LosslessStreamResolver
+
     @Inject lateinit var downloadStorage: DownloadStorage
 
     @Inject lateinit var syncManager: SyncManager
@@ -50,16 +52,21 @@ class GamutApplication :
     override fun onCreate() {
         super.onCreate()
         LyricsRepository.init(this)
+        com.gamut.core.player.audio.LosslessOutput.init(this)
         player.setSourceResolver { track, forceRefresh, onProgress ->
             if (!forceRefresh) {
                 downloadStorage.playableUri(downloadIndex.pathFor(track.isrc))?.let {
                     return@setSourceResolver it.toString()
                 }
             }
+            // A better stream from the fast sources (JioSaavn, or a remembered answer) starts the track at once.
+            // The slower sources are asked while it plays; see setUpgradeResolver below.
+            losslessStreams.urlFor(track, fastOnly = true)?.let { return@setSourceResolver it }
             val source = resolveTrackSource(track).getOrNull() ?: return@setSourceResolver null
             onProgress(0.5f)
             audioSources.audioUrl(source.youtubeVideoId, forceRefresh).getOrNull()
         }
+        player.setUpgradeResolver { track -> losslessStreams.urlFor(track) }
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             ytDlp.warmUp()
             YtDlpUpdateWorker.schedule(applicationContext)

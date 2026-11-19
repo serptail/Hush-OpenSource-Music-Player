@@ -43,6 +43,16 @@ import com.gamut.core.model.PlaybackState
 import com.gamut.core.model.QueueState
 import com.gamut.core.model.RepeatMode
 import com.gamut.core.model.Track
+import com.gamut.core.player.audio.AudioConfig
+import com.gamut.core.player.audio.BitPerfectMode
+import com.gamut.core.player.audio.OutputPcmMode
+import com.gamut.core.player.audio.bitperfect.BitPerfectAudioSink
+import com.gamut.core.player.audio.bitperfect.BitPerfectOutput
+import com.gamut.core.player.audio.bitperfect.BitPerfectRoutingSink
+import com.gamut.core.player.audio.bitperfect.usb.UsbDirectDevices
+import com.gamut.core.player.audio.spatial.SpatialAudioProcessor
+import com.gamut.core.player.audio.spatial.SpatialEngine
+import com.gamut.core.player.audio.spatial.SpatialEngineSettings
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -86,8 +96,11 @@ class Media3MusicPlayer
         }
 
         private val sound = SoundSettings.get(context)
+        private val spatialEngine = SpatialEngineSettings.get(context)
         private val router = AudioOutputRouter(context)
         private var bitPerfect = settings.state.value.bitPerfect
+        private var lastMode = settings.state.value.bitPerfectMode
+        private var mixerMode = settings.state.value.bitPerfectMode == BitPerfectMode.USB_ANDROID
         private var dacId = -1
 
         private val musicAttributes =
@@ -100,6 +113,7 @@ class Media3MusicPlayer
         private class Slot(
             val mod: ModAudioProcessor,
             val engine: SoundEngineProcessor,
+            val atmos: SpatialAudioProcessor,
             val exo: ExoPlayer,
             /** Rate, channel count and encoding the output last opened with for this slot. */
             val pcm: IntArray = IntArray(3),
@@ -125,6 +139,7 @@ class Media3MusicPlayer
         private fun newSlot(handleFocus: Boolean): Slot {
             val mod = ModAudioProcessor()
             val engine = SoundEngineProcessor()
+            val atmos = SpatialAudioProcessor()
             val pcm = IntArray(3)
             val renderers =
                 object : DefaultRenderersFactory(context) {
@@ -132,13 +147,21 @@ class Media3MusicPlayer
                         context: Context,
                         enableFloatOutput: Boolean,
                         enableAudioTrackPlaybackParams: Boolean,
-                    ): AudioSink =
-                        DefaultAudioSink
-                            .Builder(context)
-                            .setEnableFloatOutput(enableFloatOutput)
-                            .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                            .setAudioProcessors(arrayOf<AudioProcessor>(mod, engine))
-                            .build()
+                    ): AudioSink {
+                        // Float32 output keeps 24-bit and 32-bit sources intact up to the system mixer. The sound
+                        // engine still quantizes to 16-bit while it is active, and passes everything while bypassed.
+                        val floatOutput = enableFloatOutput || AudioConfig.outputPcmMode.value == OutputPcmMode.FLOAT_32
+                        val normal =
+                            DefaultAudioSink
+                                .Builder(context)
+                                .setEnableFloatOutput(floatOutput)
+                                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                                .setAudioProcessors(arrayOf<AudioProcessor>(mod, atmos, engine))
+                                .build()
+                        // Each stream is sent to the exclusive USB or built-in DAC output when one is selected and the
+                        // format fits, and to the normal sink otherwise.
+                        return BitPerfectRoutingSink(normal, BitPerfectAudioSink(BitPerfectOutput.forContext(context)))
+                    }
                 }
             val exo =
                 ExoPlayer
@@ -174,10 +197,10 @@ class Media3MusicPlayer
                 pcm[2] = encoding
                 if (activeSlot == null || activeSlot?.engine === engine) {
                     AudioPipelineInfo.onPcm(rate, channels, encoding)
-                    router.onSinkConfigure(bitPerfect, rate, channels, encoding)
+                    router.onSinkConfigure(mixerMode, rate, channels, encoding)
                 }
             }
-            return Slot(mod, engine, exo, pcm).also { slot ->
+            return Slot(mod, engine, atmos, exo, pcm).also { slot ->
                 attachPlayerListener(slot)
                 exo.addAnalyticsListener(
                     object : AnalyticsListener {
@@ -300,10 +323,26 @@ class Media3MusicPlayer
                 }
             }
             router.start { onOutputDevicesChanged() }
+            // Direct USB needs Android's permission to the DAC, asked for when the mode is chosen and whenever a
+            // DAC is attached. Every answer, attach or detach sends the playing track back to be re-routed.
+            UsbDirectDevices.init(context)
+            BitPerfectOutput.watch(context)
+            UsbDirectDevices.onChanged = {
+                BitPerfectOutput.refreshReady(context)
+                if (settings.state.value.bitPerfectMode == BitPerfectMode.USB_DIRECT) {
+                    UsbDirectDevices.requestPermission(context)
+                    scope.launch { reopenOutput() }
+                }
+            }
             scope.launch {
                 settings.state.collect { st ->
-                    val toggled = st.bitPerfect != bitPerfect
+                    val modeChanged = st.bitPerfectMode != lastMode
+                    lastMode = st.bitPerfectMode
+                    BitPerfectOutput.refreshReady(context)
+                    if (st.bitPerfectMode == BitPerfectMode.USB_DIRECT) UsbDirectDevices.requestPermission(context)
+                    val toggled = st.bitPerfect != bitPerfect || modeChanged
                     bitPerfect = st.bitPerfect
+                    mixerMode = st.bitPerfectMode == BitPerfectMode.USB_ANDROID
                     allSlots().forEach { applyPlaybackSettings(it, st) }
                     if (toggled) {
                         allSlots().forEach { applyMod(it, ModController.state.value.settings) }
@@ -315,10 +354,27 @@ class Media3MusicPlayer
             }
             scope.launch {
                 sound.state.collect { st ->
-                    val params = st.toParams()
-                    allSlots().forEach { it.engine.params = params }
+                    applySound(st)
                     publishDsp()
                 }
+            }
+            scope.launch {
+                spatialEngine.engine.collect {
+                    applySound(sound.state.value)
+                    publishDsp()
+                }
+            }
+        }
+
+        /** Runs Gamut's virtualizer or the Atmos-style widener, never both, and neither while bit-perfect. */
+        private fun applySound(st: SoundSettings.State) {
+            val base = st.toParams()
+            val sim = spatialEngine.engine.value == SpatialEngine.ATMOS_SIM && st.spatial != SpatialMode.OFF
+            val params =
+                if (sim) SoundParams(base.bands, base.autoHeadroom, base.limiter, base.dither, base.crossfeed, base.width, 0f) else base
+            allSlots().forEach {
+                it.engine.params = params
+                it.atmos.enabled = sim && !bitPerfect
             }
         }
 
@@ -327,7 +383,7 @@ class Media3MusicPlayer
             val id = router.usbDac()?.id ?: -1
             val changed = id != dacId
             dacId = id
-            allSlots().forEach { router.applyDevice(it.exo, bitPerfect) }
+            allSlots().forEach { router.applyDevice(it.exo, mixerMode) }
             if (changed && bitPerfect) reopenOutput()
         }
 
@@ -473,6 +529,9 @@ class Media3MusicPlayer
         private var positionJob: Job? = null
         private var loadJob: Job? = null
         private var resolver: TrackSourceResolver? = null
+        private var upgrader: TrackUpgradeResolver? = null
+        private var upgradeJob: Job? = null
+        private var upgradedIsrc: String? = null
 
         private var transitioning = false
             set(value) {
@@ -614,6 +673,9 @@ class Media3MusicPlayer
                             pos = newPos
                             currentTrack = track
                             loadedIsrc = track.isrc
+                            upgradedIsrc = null
+                            AudioPipelineInfo.onUpgraded("")
+                            scheduleUpgrade(track)
                             publishQueue()
                             state.value =
                                 if (player.isPlaying) {
@@ -675,7 +737,8 @@ class Media3MusicPlayer
             crossfadeMs = if (s.bitPerfect) 0 else s.crossfadeMs
             slot.mod.bypass = s.bitPerfect
             slot.engine.bypass = s.bitPerfect
-            router.applyDevice(slot.exo, s.bitPerfect)
+            slot.atmos.enabled = !s.bitPerfect && spatialEngine.engine.value == SpatialEngine.ATMOS_SIM && sound.state.value.spatial != SpatialMode.OFF
+            router.applyDevice(slot.exo, s.bitPerfectMode == BitPerfectMode.USB_ANDROID)
             slot.exo.setSkipSilenceEnabled(s.skipSilence)
             slot.exo.setHandleAudioBecomingNoisy(s.pauseOnUnplug)
             slot.mod.mono = s.mono
@@ -885,6 +948,47 @@ class Media3MusicPlayer
             this.resolver = resolver
         }
 
+        override fun setUpgradeResolver(resolver: TrackUpgradeResolver?) {
+            upgrader = resolver
+        }
+
+        /**
+         * Asks the upgrade resolver for a better stream of [track] while it plays, and swaps it in at the same
+         * position when one turns up. The track starts on the fast path first; this is the slow lookup.
+         */
+        private fun scheduleUpgrade(track: Track) {
+            val up = upgrader ?: return
+            if (upgradedIsrc == track.isrc) return
+            upgradeJob?.cancel()
+            upgradeJob =
+                scope.launch {
+                    val url =
+                        try {
+                            withContext(Dispatchers.Default) { up.upgrade(track) }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            null
+                        } ?: return@launch
+                    val item = player.currentMediaItem ?: return@launch
+                    if (currentTrack?.isrc != track.isrc || item.mediaId != track.isrc || transitioning) return@launch
+                    if (item.localConfiguration?.uri?.toString() == url) return@launch
+                    val duration = player.duration
+                    val position = player.currentPosition
+                    // Too close to the end for a swap to be worth the rebuffer.
+                    if (duration != C.TIME_UNSET && duration > 0 && duration - position < UPGRADE_MIN_REMAINING_MS) return@launch
+                    val from = AudioPipelineInfo.state.value.codec
+                    val wasPlaying = player.playWhenReady
+                    upgradedIsrc = track.isrc
+                    player.setMediaItem(buildMediaItem(track, url), position)
+                    player.prepare()
+                    player.playWhenReady = wasPlaying
+                    prefetchedFor = null
+                    AudioPipelineInfo.onUpgraded(from.ifBlank { "stream" })
+                    schedulePrefetch(PREFETCH_DELAY_MS)
+                }
+        }
+
         private fun trackAt(p: Int): Track? = order.getOrNull(p)?.let { items.getOrNull(it) }
 
         private fun queuedTrack(isrc: String): Track? = items.firstOrNull { it.isrc == isrc }
@@ -1027,6 +1131,9 @@ class Media3MusicPlayer
             player.play()
             trackBuffering()
             updateAwaiting()
+            upgradedIsrc = null
+            AudioPipelineInfo.onUpgraded("")
+            scheduleUpgrade(track)
         }
 
         private fun recover(
@@ -1472,6 +1579,7 @@ class Media3MusicPlayer
             const val WARM_BYTES = 256L * 1024
 
             const val PREFETCH_DELAY_MS = 2_000L
+            const val UPGRADE_MIN_REMAINING_MS = 12_000L
             const val QUEUE_EDIT_PREFETCH_DELAY_MS = 500L
 
             const val LOW_BATTERY_PERCENT = 15

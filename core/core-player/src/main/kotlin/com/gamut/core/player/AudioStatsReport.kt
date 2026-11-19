@@ -106,6 +106,8 @@ data class PipelineDetails(
     val bufferAheadMs: Long = -1,
     val underruns: Int = 0,
     val dsp: DspState = DspState(),
+    /** The codec of the first stream when a better one was swapped in during playback; empty otherwise. */
+    val upgradedFrom: String = "",
 )
 
 object AudioStatsReport {

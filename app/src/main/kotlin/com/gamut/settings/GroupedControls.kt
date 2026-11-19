@@ -1,5 +1,8 @@
 package com.gamut.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -7,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -14,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -154,4 +159,52 @@ fun GroupedNote(
         color = ink(0.55f),
         modifier = modifier.fillMaxWidth().padding(start = start, end = GroupedRowInset, top = 4.dp, bottom = bottom),
     )
+}
+
+
+/** One option of [GroupedChoiceRows]: its own icon, a name, and one line saying what it does. */
+data class ChoiceRow<T>(
+    val value: T,
+    val label: String,
+    val hint: String?,
+    val icon: ImageVector,
+)
+
+/**
+ * A pick-one list where every option is a full row with its own icon and description and a radio dot on
+ * the right. Used where the options are too long for a segmented control, such as the bit-perfect modes.
+ */
+@Composable
+fun <T> GroupedChoiceRows(
+    options: List<ChoiceRow<T>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+) {
+    options.forEachIndexed { i, option ->
+        if (i > 0) GroupedDivider()
+        GroupedRow(
+            title = option.label,
+            icon = option.icon,
+            subtitle = option.hint,
+            chevron = false,
+            onClick = { onSelect(option.value) },
+            trailing = {
+                Spacer(Modifier.width(12.dp))
+                RadioDot(option.value == selected)
+            },
+        )
+    }
+}
+
+@Composable
+private fun RadioDot(selected: Boolean) {
+    Box(
+        Modifier
+            .size(20.dp)
+            .clip(CircleShape)
+            .then(if (selected) Modifier.background(ink(0.9f)) else Modifier.border(1.5.dp, ink(0.35f), CircleShape)),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) Box(Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.background))
+    }
 }
