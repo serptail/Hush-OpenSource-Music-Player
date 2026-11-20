@@ -147,6 +147,9 @@ internal fun StyledPlayerLayer(
     onRepeat: () -> Unit,
     onMod: () -> Unit,
     onMore: () -> Unit,
+    videoSupported: Boolean,
+    videoOn: Boolean,
+    onToggleVideo: () -> Unit,
     onBack: () -> Unit,
     volumeHud: VolumeHud,
     coverFocus: FocusRequester,
@@ -293,6 +296,9 @@ internal fun StyledPlayerLayer(
                                     onToggleFavorite = onToggleFavorite,
                                     onMore = onMore,
                                     titleStyle = StyledTitleStyle,
+                                    videoSupported = videoSupported,
+                                    videoOn = videoOn,
+                                    onToggleVideo = onToggleVideo,
                                 )
                             }
                             Spacer(Modifier.height(12.dp))
@@ -323,6 +329,9 @@ internal fun StyledPlayerLayer(
                                         onToggleFavorite = onToggleFavorite,
                                         onMore = onMore,
                                         titleStyle = StyledTitleStyle,
+                                        videoSupported = videoSupported,
+                                        videoOn = videoOn,
+                                        onToggleVideo = onToggleVideo,
                                     )
                                 }
                             }

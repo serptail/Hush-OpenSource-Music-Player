@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -77,18 +78,19 @@ import coil.request.ImageRequest
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.Fill
+import com.adamglin.phosphoricons.Light
 import com.adamglin.phosphoricons.Regular
 import com.adamglin.phosphoricons.bold.DotsThreeVertical
 import com.adamglin.phosphoricons.regular.Heart
-import com.adamglin.phosphoricons.regular.ListPlus
-import com.adamglin.phosphoricons.regular.Queue
-import com.adamglin.phosphoricons.regular.Repeat
-import com.adamglin.phosphoricons.regular.RepeatOnce
-import com.adamglin.phosphoricons.regular.ShareNetwork
-import com.adamglin.phosphoricons.regular.Shuffle
-import com.adamglin.phosphoricons.regular.SkipBack
-import com.adamglin.phosphoricons.regular.SkipForward
-import com.adamglin.phosphoricons.regular.Sparkle
+import com.adamglin.phosphoricons.light.ListPlus
+import com.adamglin.phosphoricons.light.Queue
+import com.adamglin.phosphoricons.light.Repeat
+import com.adamglin.phosphoricons.light.RepeatOnce
+import com.adamglin.phosphoricons.light.ShareNetwork
+import com.adamglin.phosphoricons.light.Shuffle
+import com.adamglin.phosphoricons.light.SkipBack
+import com.adamglin.phosphoricons.light.SkipForward
+import com.adamglin.phosphoricons.light.Sparkle
 import com.gamut.core.designsystem.AcrylicHost
 import com.gamut.core.designsystem.AdaptiveLayout
 import com.gamut.core.designsystem.ArtistLine
@@ -247,7 +249,12 @@ fun PlayerScreen(
     val prefs = remember { context.getSharedPreferences(PrefsName, Context.MODE_PRIVATE) }
     var lyricsOn by remember { mutableStateOf(prefs.getBoolean(PrefLyricsOn, true)) }
     var lyricsPanelOpen by remember { mutableStateOf(false) }
-    var videoOn by remember { mutableStateOf(prefs.getBoolean(PrefVideoOn, true)) }
+    var videoOn by remember { mutableStateOf(prefs.getBoolean(PrefVideoOn, false)) }
+
+    val toggleVideo: () -> Unit = {
+        videoOn = !videoOn
+        prefs.edit().putBoolean(PrefVideoOn, videoOn).apply()
+    }
 
     val leave: () -> Unit = { if (active) onBack() }
     BackHandler(enabled = active && !lyricsPanelOpen) { leave() }
@@ -492,6 +499,9 @@ fun PlayerScreen(
                     },
                     onMod = { showMod = true },
                     onMore = { showMore = true },
+                    videoSupported = videoProvider != null,
+                    videoOn = videoOn,
+                    onToggleVideo = toggleVideo,
                     onBack = leave,
                     volumeHud = volumeHud,
                     coverFocus = coverFocus,
@@ -543,6 +553,9 @@ fun PlayerScreen(
                             isFavorite = track?.isrc?.let { it in favoriteIsrcs } == true,
                             onToggleFavorite = { track?.let(onToggleFavorite) },
                             showFavorite = !videoMode,
+                            videoSupported = videoProvider != null,
+                            videoOn = videoOn,
+                            onToggleVideo = toggleVideo,
                         )
                     }
                 }
@@ -648,7 +661,7 @@ fun PlayerScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             DepthIcon(
-                                PhosphorIcons.Regular.SkipBack,
+                                PhosphorIcons.Light.SkipBack,
                                 "Previous",
                                 Modifier.bounceTap(onClick = player::skipPrevious).padding(SideButtonPadding),
                                 size = SideButtonSize,
@@ -670,7 +683,7 @@ fun PlayerScreen(
                                 )
                             }
                             DepthIcon(
-                                PhosphorIcons.Regular.SkipForward,
+                                PhosphorIcons.Light.SkipForward,
                                 "Next",
                                 Modifier.bounceTap(onClick = player::skipNext).padding(SideButtonPadding),
                                 size = SideButtonSize,
@@ -882,10 +895,7 @@ fun PlayerScreen(
             },
             videoSupported = videoProvider != null,
             videoOn = videoOn,
-            onToggleVideo = {
-                videoOn = !videoOn
-                prefs.edit().putBoolean(PrefVideoOn, videoOn).apply()
-            },
+            onToggleVideo = toggleVideo,
             onToggleFavorite = { track?.let(onToggleFavorite) },
             onUpgradeQuality =
                 track?.let {
@@ -1024,6 +1034,10 @@ internal fun TrackHeader(
     titleStyle: TextStyle = MaterialTheme.typography.headlineLarge.copy(letterSpacing = (-0.3).sp),
     // Video mode moves the heart up next to "More" in the top bar.
     showFavorite: Boolean = true,
+    // Shown only when a music video can exist for the track; flips between audio-only and video.
+    videoSupported: Boolean = false,
+    videoOn: Boolean = false,
+    onToggleVideo: () -> Unit = {},
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f)) {
@@ -1047,6 +1061,9 @@ internal fun TrackHeader(
                 }
             }
             QualityTagRow(Modifier.padding(top = 6.dp))
+        }
+        if (videoSupported) {
+            VideoAudioToggle(videoOn = videoOn, onToggle = onToggleVideo)
         }
         if (showFavorite) {
             DepthIcon(
@@ -1076,73 +1093,69 @@ private fun ControlsGrid(
     onShare: () -> Unit,
     onMod: () -> Unit,
 ) {
-    val idle = Color.White.copy(alpha = 0.85f)
-    val iconSize = 24.dp
-    Column(Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            GridCell {
-                DepthIcon(
-                    PhosphorIcons.Regular.Shuffle,
-                    if (shuffleOn) "Shuffle on" else "Shuffle off",
-                    Modifier.bounceTap(onClick = onShuffle).padding(8.dp),
-                    tint = if (shuffleOn) accent else idle,
-                    size = iconSize,
-                )
-            }
-            GridCell {
-                DepthIcon(
-                    PhosphorIcons.Regular.Queue,
-                    "Queue",
-                    Modifier.bounceTap(onClick = onQueue).padding(8.dp),
-                    tint = idle,
-                    size = iconSize,
-                )
-            }
-            GridCell {
-                DepthIcon(
-                    PhosphorIcons.Regular.ListPlus,
-                    "Add to playlist",
-                    Modifier.bounceTap(onClick = onAddToPlaylist).padding(8.dp),
-                    tint = idle,
-                    size = iconSize,
-                )
-            }
-            GridCell {
-                DepthIcon(
-                    if (repeatMode == PlaybackRepeatMode.ONE) PhosphorIcons.Regular.RepeatOnce else PhosphorIcons.Regular.Repeat,
-                    when (repeatMode) {
-                        PlaybackRepeatMode.OFF -> "Repeat off"
-                        PlaybackRepeatMode.ALL -> "Repeat all"
-                        PlaybackRepeatMode.ONE -> "Repeat one"
-                    },
-                    Modifier.bounceTap(onClick = onRepeat).padding(8.dp),
-                    tint = if (repeatMode != PlaybackRepeatMode.OFF) accent else idle,
-                    size = iconSize,
-                )
-            }
+    val idle = Color.White.copy(alpha = 0.8f)
+    val iconSize = 26.dp
+    // One row, two groups: how it plays (shuffle / repeat / mod) on the left,
+    // what you do with the track (add / queue / share) on the right.
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        GridCell {
+            DepthIcon(
+                PhosphorIcons.Light.Shuffle,
+                if (shuffleOn) "Shuffle on" else "Shuffle off",
+                Modifier.bounceTap(onClick = onShuffle).padding(8.dp),
+                tint = if (shuffleOn) accent else idle,
+                size = iconSize,
+            )
         }
-        Spacer(Modifier.height(6.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            GridCell {}
-            GridCell {
-                DepthIcon(
-                    PhosphorIcons.Regular.ShareNetwork,
-                    "Share",
-                    Modifier.bounceTap(onClick = onShare).padding(8.dp),
-                    tint = idle,
-                    size = iconSize,
-                )
-            }
-            GridCell {
-                DepthIcon(
-                    PhosphorIcons.Regular.Sparkle,
-                    if (modActive) "Mod on" else "Mod",
-                    Modifier.bounceTap(onClick = onMod).padding(8.dp),
-                    tint = if (modActive) accent else idle,
-                    size = iconSize,
-                )
-            }
-            GridCell {}
+        GridCell {
+            DepthIcon(
+                if (repeatMode == PlaybackRepeatMode.ONE) PhosphorIcons.Light.RepeatOnce else PhosphorIcons.Light.Repeat,
+                when (repeatMode) {
+                    PlaybackRepeatMode.OFF -> "Repeat off"
+                    PlaybackRepeatMode.ALL -> "Repeat all"
+                    PlaybackRepeatMode.ONE -> "Repeat one"
+                },
+                Modifier.bounceTap(onClick = onRepeat).padding(8.dp),
+                tint = if (repeatMode != PlaybackRepeatMode.OFF) accent else idle,
+                size = iconSize,
+            )
+        }
+        GridCell {
+            DepthIcon(
+                PhosphorIcons.Light.Sparkle,
+                if (modActive) "Mod on" else "Mod",
+                Modifier.bounceTap(onClick = onMod).padding(8.dp),
+                tint = if (modActive) accent else idle,
+                size = iconSize,
+            )
+        }
+        Box(Modifier.width(1.dp).height(18.dp).background(Color.White.copy(alpha = 0.18f)))
+        GridCell {
+            DepthIcon(
+                PhosphorIcons.Light.ListPlus,
+                "Add to playlist",
+                Modifier.bounceTap(onClick = onAddToPlaylist).padding(8.dp),
+                tint = idle,
+                size = iconSize,
+            )
+        }
+        GridCell {
+            DepthIcon(
+                PhosphorIcons.Light.Queue,
+                "Queue",
+                Modifier.bounceTap(onClick = onQueue).padding(8.dp),
+                tint = idle,
+                size = iconSize,
+            )
+        }
+        GridCell {
+            DepthIcon(
+                PhosphorIcons.Light.ShareNetwork,
+                "Share",
+                Modifier.bounceTap(onClick = onShare).padding(8.dp),
+                tint = idle,
+                size = iconSize,
+            )
         }
     }
 }

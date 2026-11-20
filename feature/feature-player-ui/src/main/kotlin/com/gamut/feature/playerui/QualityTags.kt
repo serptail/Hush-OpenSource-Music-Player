@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Regular
-import com.adamglin.phosphoricons.regular.ArrowSquareUp
 import com.adamglin.phosphoricons.regular.Cube
 import com.adamglin.phosphoricons.regular.Disc
 import com.adamglin.phosphoricons.regular.Headphones
@@ -58,8 +57,7 @@ internal data class QualityTag(
 
 /**
  * The tags for what is playing right now, read from the live signal path: Dolby Atmos, Hi-Res Lossless /
- * Lossless, High quality, the codec and its rate, Bit-perfect, and Upgraded when a better stream replaced
- * the first one. Empty until a track has opened.
+ * Lossless, High quality, the codec and its rate, and Bit-perfect. Empty until a track has opened.
  */
 internal fun qualityTags(
     path: SignalPath,
@@ -90,9 +88,6 @@ internal fun qualityTags(
         tags += QualityTag(detail, TagTone.GRAY)
     }
     if (path.bitPerfect == BitPerfectStatus.ACTIVE) tags += QualityTag("Bit-perfect", TagTone.BLACK, PhosphorIcons.Regular.Disc)
-    if (details.upgradedFrom.isNotEmpty()) {
-        tags += QualityTag("Upgraded from ${details.upgradedFrom}", TagTone.BLACK, PhosphorIcons.Regular.ArrowSquareUp)
-    }
     return tags
 }
 
@@ -175,7 +170,7 @@ private fun SplitBadge(tag: QualityTag) {
     }
 }
 
-/** Everything else (High quality, Bit-perfect, Upgraded from …): a dark glass plate with a thin white outline. */
+/** Everything else (High quality, Bit-perfect): a dark glass plate with a thin white outline. */
 @Composable
 private fun OutlinedBadge(tag: QualityTag) {
     val dark = tag.tone == TagTone.BLACK
