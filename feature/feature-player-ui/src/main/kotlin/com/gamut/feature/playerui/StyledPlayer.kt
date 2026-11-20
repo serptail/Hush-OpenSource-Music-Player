@@ -59,18 +59,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.Regular
-import com.adamglin.phosphoricons.bold.CaretDown
-import com.adamglin.phosphoricons.bold.DotsThreeVertical
-import com.adamglin.phosphoricons.bold.MusicNote
-import com.adamglin.phosphoricons.regular.ListPlus
-import com.adamglin.phosphoricons.regular.Queue
-import com.adamglin.phosphoricons.regular.Repeat
-import com.adamglin.phosphoricons.regular.RepeatOnce
-import com.adamglin.phosphoricons.regular.Shuffle
-import com.adamglin.phosphoricons.regular.Sparkle
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.AdaptiveLayout
 import com.gamut.core.designsystem.PlayerStyle
 import com.gamut.core.designsystem.adaptiveGutter
@@ -95,6 +84,9 @@ private val COVER_FADE = 40.dp
 
 // Auris's playerInkGlow over white ink: a soft dark halo behind chrome text so it keeps an edge
 // where it crosses a bright patch of the backdrop.
+// 1f = original strength; lower = fainter / more transparent blurred background
+private const val BACKDROP_STRENGTH = 1f
+
 private val HeaderInkShadow = Shadow(color = Color.Black.copy(alpha = 0.30f), blurRadius = 9f)
 
 private fun smootherStep(t: Float): Float {
@@ -203,7 +195,7 @@ internal fun StyledPlayerLayer(
             }
         val bannerPx = with(density) { bannerHeight.toPx() }
 
-        Box(Modifier.fillMaxSize().graphicsLayer { alpha = 1f - lyricsT }) {
+        Box(Modifier.fillMaxSize().graphicsLayer { alpha = (1f - lyricsT) * BACKDROP_STRENGTH }) {
             ArtworkMeshBackdrop(mesh = mesh, seam = if (cover) ({ bannerPx - scroll.value }) else ({ seam.px - scroll.value }))
         }
         if (lyricsBackdrop && blurArt != null) {
@@ -390,26 +382,29 @@ internal fun StyledPlayerLayer(
                     Row(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Cell {
                             DepthIcon(
-                                PhosphorIcons.Regular.Shuffle,
+                                TablerIcons.Shuffle,
                                 if (shuffleOn) "Shuffle on" else "Shuffle off",
                                 Modifier.bounceTap(onClick = onShuffle).padding(8.dp),
                                 tint = if (shuffleOn) accent else idle,
+                                size = ControlIconSize,
                             )
                         }
                         Cell {
                             DepthIcon(
-                                PhosphorIcons.Regular.Queue,
+                                TablerIcons.Playlist,
                                 "Queue",
                                 Modifier.bounceTap(onClick = onQueue).padding(8.dp),
                                 tint = idle,
+                                size = ControlIconSize,
                             )
                         }
                         Cell {
                             DepthIcon(
-                                PhosphorIcons.Regular.ListPlus,
+                                TablerIcons.ListPlus,
                                 "Add to playlist",
                                 Modifier.bounceTap(onClick = onAddToPlaylist).padding(8.dp),
                                 tint = idle,
+                                size = ControlIconSize,
                             )
                         }
                         Cell {
@@ -417,9 +412,9 @@ internal fun StyledPlayerLayer(
                                 if (repeatMode ==
                                     PlaybackRepeatMode.ONE
                                 ) {
-                                    PhosphorIcons.Regular.RepeatOnce
+                                    TablerIcons.RepeatOne
                                 } else {
-                                    PhosphorIcons.Regular.Repeat
+                                    TablerIcons.Repeat
                                 },
                                 when (repeatMode) {
                                     PlaybackRepeatMode.OFF -> "Repeat off"
@@ -428,14 +423,16 @@ internal fun StyledPlayerLayer(
                                 },
                                 Modifier.bounceTap(onClick = onRepeat).padding(8.dp),
                                 tint = if (repeatMode != PlaybackRepeatMode.OFF) accent else idle,
+                                size = ControlIconSize,
                             )
                         }
                         Cell {
                             DepthIcon(
-                                PhosphorIcons.Regular.Sparkle,
+                                TablerIcons.MagicWand,
                                 if (modActive) "Mod on" else "Mod",
                                 Modifier.bounceTap(onClick = onMod).padding(8.dp),
                                 tint = if (modActive) accent else idle,
+                                size = ControlIconSize,
                             )
                         }
                     }
@@ -521,7 +518,7 @@ private fun LyricsHeader(
     modifier: Modifier = Modifier,
 ) {
     Row(modifier.height(56.dp), verticalAlignment = Alignment.CenterVertically) {
-        DepthIcon(PhosphorIcons.Bold.CaretDown, "Close lyrics", Modifier.bounceTap(onClick = onClose).padding(8.dp))
+        DepthIcon(TablerIcons.ChevronDown, "Close lyrics", Modifier.bounceTap(onClick = onClose).padding(8.dp))
         Spacer(Modifier.size(8.dp))
         Box(
             Modifier
@@ -552,7 +549,7 @@ private fun LyricsHeader(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        DepthIcon(PhosphorIcons.Bold.DotsThreeVertical, "More", Modifier.bounceTap(onClick = onMore).padding(8.dp))
+        DepthIcon(TablerIcons.MoreVertical, "More", Modifier.bounceTap(onClick = onMore).padding(8.dp))
     }
 }
 

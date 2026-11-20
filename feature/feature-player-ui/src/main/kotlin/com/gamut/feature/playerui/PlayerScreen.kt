@@ -75,23 +75,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.Light
-import com.adamglin.phosphoricons.Regular
-import com.adamglin.phosphoricons.bold.DotsThreeVertical
-import com.adamglin.phosphoricons.regular.Heart
-import com.adamglin.phosphoricons.light.ListPlus
-import com.adamglin.phosphoricons.light.Queue
-import com.adamglin.phosphoricons.light.Repeat
-import com.adamglin.phosphoricons.light.RepeatOnce
-import com.adamglin.phosphoricons.light.ShareNetwork
-import com.adamglin.phosphoricons.light.Shuffle
-import com.adamglin.phosphoricons.light.SkipBack
-import com.adamglin.phosphoricons.light.SkipForward
-import com.adamglin.phosphoricons.light.Sparkle
 import com.gamut.core.designsystem.AcrylicHost
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.AdaptiveLayout
 import com.gamut.core.designsystem.ArtistLine
 import com.gamut.core.designsystem.ArtistPickerSheet
@@ -137,7 +122,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import com.adamglin.phosphoricons.fill.Heart as HeartFilled
 import com.gamut.core.model.RepeatMode as PlaybackRepeatMode
 
 private val FavoriteColor = Color(0xFFFF4D6D)
@@ -661,7 +645,7 @@ fun PlayerScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             DepthIcon(
-                                PhosphorIcons.Light.SkipBack,
+                                TablerIcons.TrackPrev,
                                 "Previous",
                                 Modifier.bounceTap(onClick = player::skipPrevious).padding(SideButtonPadding),
                                 size = SideButtonSize,
@@ -683,7 +667,7 @@ fun PlayerScreen(
                                 )
                             }
                             DepthIcon(
-                                PhosphorIcons.Light.SkipForward,
+                                TablerIcons.TrackNext,
                                 "Next",
                                 Modifier.bounceTap(onClick = player::skipNext).padding(SideButtonPadding),
                                 size = SideButtonSize,
@@ -1006,14 +990,14 @@ internal fun PlayerTopBar(
         Row(Modifier.align(Alignment.TopEnd), verticalAlignment = Alignment.CenterVertically) {
             if (favorite != null) {
                 DepthIcon(
-                    if (favorite) PhosphorIcons.Fill.HeartFilled else PhosphorIcons.Regular.Heart,
+                    if (favorite) TablerIcons.HeartFilled else TablerIcons.Heart,
                     if (favorite) "Remove from favorites" else "Add to favorites",
                     Modifier.bounceTap(onClick = onToggleFavorite).padding(8.dp),
                     tint = if (favorite) FavoriteColor else Color.White,
                 )
             }
             DepthIcon(
-                PhosphorIcons.Bold.DotsThreeVertical,
+                TablerIcons.MoreVertical,
                 "More",
                 Modifier.tapTarget(onClick = onMore).padding(8.dp),
             )
@@ -1067,7 +1051,7 @@ internal fun TrackHeader(
         }
         if (showFavorite) {
             DepthIcon(
-                if (isFavorite) PhosphorIcons.Fill.HeartFilled else PhosphorIcons.Regular.Heart,
+                if (isFavorite) TablerIcons.HeartFilled else TablerIcons.Heart,
                 if (isFavorite) "Remove from favorites" else "Add to favorites",
                 Modifier.bounceTap(onClick = onToggleFavorite).padding(4.dp),
                 tint = if (isFavorite) FavoriteColor else Color.White,
@@ -1075,7 +1059,7 @@ internal fun TrackHeader(
             )
         }
         if (onMore != null) {
-            DepthIcon(PhosphorIcons.Bold.DotsThreeVertical, "More", Modifier.bounceTap(onClick = onMore).padding(4.dp), size = 26.dp)
+            DepthIcon(TablerIcons.MoreVertical, "More", Modifier.bounceTap(onClick = onMore).padding(4.dp), size = 26.dp)
         }
     }
 }
@@ -1094,13 +1078,13 @@ private fun ControlsGrid(
     onMod: () -> Unit,
 ) {
     val idle = Color.White.copy(alpha = 0.8f)
-    val iconSize = 26.dp
+    val iconSize = ControlIconSize
     // One row, two groups: how it plays (shuffle / repeat / mod) on the left,
     // what you do with the track (add / queue / share) on the right.
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         GridCell {
             DepthIcon(
-                PhosphorIcons.Light.Shuffle,
+                TablerIcons.Shuffle,
                 if (shuffleOn) "Shuffle on" else "Shuffle off",
                 Modifier.bounceTap(onClick = onShuffle).padding(8.dp),
                 tint = if (shuffleOn) accent else idle,
@@ -1109,7 +1093,7 @@ private fun ControlsGrid(
         }
         GridCell {
             DepthIcon(
-                if (repeatMode == PlaybackRepeatMode.ONE) PhosphorIcons.Light.RepeatOnce else PhosphorIcons.Light.Repeat,
+                if (repeatMode == PlaybackRepeatMode.ONE) TablerIcons.RepeatOne else TablerIcons.Repeat,
                 when (repeatMode) {
                     PlaybackRepeatMode.OFF -> "Repeat off"
                     PlaybackRepeatMode.ALL -> "Repeat all"
@@ -1122,17 +1106,17 @@ private fun ControlsGrid(
         }
         GridCell {
             DepthIcon(
-                PhosphorIcons.Light.Sparkle,
+                TablerIcons.MagicWand,
                 if (modActive) "Mod on" else "Mod",
                 Modifier.bounceTap(onClick = onMod).padding(8.dp),
                 tint = if (modActive) accent else idle,
                 size = iconSize,
             )
         }
-        Box(Modifier.width(1.dp).height(18.dp).background(Color.White.copy(alpha = 0.18f)))
+        Box(Modifier.width(1.dp).height(14.dp).background(Color.White.copy(alpha = 0.18f)))
         GridCell {
             DepthIcon(
-                PhosphorIcons.Light.ListPlus,
+                TablerIcons.ListPlus,
                 "Add to playlist",
                 Modifier.bounceTap(onClick = onAddToPlaylist).padding(8.dp),
                 tint = idle,
@@ -1141,7 +1125,7 @@ private fun ControlsGrid(
         }
         GridCell {
             DepthIcon(
-                PhosphorIcons.Light.Queue,
+                TablerIcons.Playlist,
                 "Queue",
                 Modifier.bounceTap(onClick = onQueue).padding(8.dp),
                 tint = idle,
@@ -1150,7 +1134,7 @@ private fun ControlsGrid(
         }
         GridCell {
             DepthIcon(
-                PhosphorIcons.Light.ShareNetwork,
+                TablerIcons.Share,
                 "Share",
                 Modifier.bounceTap(onClick = onShare).padding(8.dp),
                 tint = idle,
@@ -1169,7 +1153,10 @@ internal const val LyricsSyncOffsetMs = 250L
 
 private val ArtworkExtraWidth = 14.dp
 
-private val SideButtonSize = 30.dp
+/** One size for every icon in the shuffle / queue / add / repeat / mod row, in both player layouts. */
+internal val ControlIconSize = 18.dp
+
+private val SideButtonSize = 24.dp
 private val SideButtonPadding = 4.dp
 
 private const val RESYNC_THRESHOLD_MS = 400L

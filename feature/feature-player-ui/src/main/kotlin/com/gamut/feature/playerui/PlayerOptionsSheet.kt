@@ -20,18 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.bold.Equalizer
-import com.adamglin.phosphoricons.bold.Heart
-import com.adamglin.phosphoricons.bold.Info
-import com.adamglin.phosphoricons.bold.VideoCamera
-import com.adamglin.phosphoricons.bold.ListPlus
-import com.adamglin.phosphoricons.bold.MicrophoneStage
-import com.adamglin.phosphoricons.bold.ShareNetwork
-import com.adamglin.phosphoricons.bold.Timer
-import com.adamglin.phosphoricons.bold.UserCircle
 import com.gamut.core.designsystem.BrandIcons
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.ink
 
@@ -75,22 +65,22 @@ internal fun PlayerOptionsSheet(
             if (onUpgradeQuality != null) {
                 OptionRow(BrandIcons.JioSaavn, "Upgrade quality", upgradeStatus, onUpgradeQuality)
             }
-            OptionRow(PhosphorIcons.Bold.ShareNetwork, "Share", null, onShare)
-            OptionRow(PhosphorIcons.Bold.MicrophoneStage, "Lyrics", if (lyricsOn) "On" else "Off", onToggleLyrics)
+            OptionRow(TablerIcons.Share, "Share", null, onShare)
+            OptionRow(TablerIcons.Microphone, "Lyrics", if (lyricsOn) "On" else "Off", onToggleLyrics)
             if (videoSupported) {
-                OptionRow(PhosphorIcons.Bold.VideoCamera, "Music video", if (videoOn) "On" else "Off", onToggleVideo)
+                OptionRow(TablerIcons.Video, "Music video", if (videoOn) "On" else "Off", onToggleVideo)
             }
             OptionRow(
-                PhosphorIcons.Bold.Heart,
+                TablerIcons.Heart,
                 if (isFavorite) "Remove from favorites" else "Add to favorites",
                 null,
                 onToggleFavorite,
             )
-            OptionRow(PhosphorIcons.Bold.ListPlus, "Add to playlist", null, onAddToPlaylist)
-            OptionRow(PhosphorIcons.Bold.UserCircle, "Go to artist", null, onGoToArtist)
-            OptionRow(PhosphorIcons.Bold.Timer, "Sleep timer", if (sleepActive) "On" else "Off", onSleepTimer)
-            OptionRow(PhosphorIcons.Bold.Equalizer, "Equalizer", if (eqActive) "On" else "Off", onEqualizer)
-            OptionRow(PhosphorIcons.Bold.Info, "Stats for nerds", null, onStats)
+            OptionRow(TablerIcons.ListPlus, "Add to playlist", null, onAddToPlaylist)
+            OptionRow(TablerIcons.CircleUser, "Go to artist", null, onGoToArtist)
+            OptionRow(TablerIcons.Timer, "Sleep timer", if (sleepActive) "On" else "Off", onSleepTimer)
+            OptionRow(TablerIcons.Equalizer, "Equalizer", if (eqActive) "On" else "Off", onEqualizer)
+            OptionRow(TablerIcons.Info, "Stats for nerds", null, onStats)
         }
     }
 }

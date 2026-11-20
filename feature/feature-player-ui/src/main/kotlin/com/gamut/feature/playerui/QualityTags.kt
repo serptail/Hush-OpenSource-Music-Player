@@ -1,5 +1,6 @@
 package com.gamut.feature.playerui
 
+import com.gamut.core.designsystem.TablerIcons
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,12 +31,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Regular
-import com.adamglin.phosphoricons.regular.Cube
-import com.adamglin.phosphoricons.regular.Disc
-import com.adamglin.phosphoricons.regular.Headphones
-import com.adamglin.phosphoricons.regular.Waveform
 import com.gamut.core.player.AudioPipelineInfo
 import com.gamut.core.player.BitPerfectStatus
 import com.gamut.core.player.PipelineDetails
@@ -67,10 +62,10 @@ internal fun qualityTags(
     val tags = mutableListOf<QualityTag>()
     val hiRes = path.lossless && (path.bitDepth >= 24 || path.sampleRateHz > 48_000)
     when {
-        details.atmos -> tags += QualityTag("Dolby Atmos", TagTone.WHITE, PhosphorIcons.Regular.Cube)
-        hiRes -> tags += QualityTag("Hi-Res Lossless", TagTone.WHITE, PhosphorIcons.Regular.Waveform)
-        path.lossless -> tags += QualityTag("Lossless", TagTone.WHITE, PhosphorIcons.Regular.Waveform)
-        path.bitrateKbps >= 224 -> tags += QualityTag("High quality", TagTone.GRAY, PhosphorIcons.Regular.Headphones)
+        details.atmos -> tags += QualityTag("Dolby Atmos", TagTone.WHITE, TablerIcons.Box)
+        hiRes -> tags += QualityTag("Hi-Res Lossless", TagTone.WHITE, TablerIcons.Waveform)
+        path.lossless -> tags += QualityTag("Lossless", TagTone.WHITE, TablerIcons.Waveform)
+        path.bitrateKbps >= 224 -> tags += QualityTag("High quality", TagTone.GRAY, TablerIcons.Headphones)
     }
     val detail =
         if (path.lossless) {
@@ -87,7 +82,7 @@ internal fun qualityTags(
     } else if (detail.isNotEmpty()) {
         tags += QualityTag(detail, TagTone.GRAY)
     }
-    if (path.bitPerfect == BitPerfectStatus.ACTIVE) tags += QualityTag("Bit-perfect", TagTone.BLACK, PhosphorIcons.Regular.Disc)
+    if (path.bitPerfect == BitPerfectStatus.ACTIVE) tags += QualityTag("Bit-perfect", TagTone.BLACK, TablerIcons.Vinyl)
     return tags
 }
 

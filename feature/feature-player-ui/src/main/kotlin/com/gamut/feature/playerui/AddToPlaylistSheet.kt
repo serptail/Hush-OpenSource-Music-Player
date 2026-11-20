@@ -31,10 +31,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.bold.Check
-import com.adamglin.phosphoricons.bold.MusicNote
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.ink
@@ -89,7 +86,7 @@ internal fun AddToPlaylistSheet(
                         Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(ink(0.07f)).thumbnailBorder(RoundedCornerShape(8.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(PhosphorIcons.Bold.MusicNote, contentDescription = null, tint = ink(0.4f), modifier = Modifier.size(20.dp))
+                        Icon(TablerIcons.MusicNote, contentDescription = null, tint = ink(0.4f), modifier = Modifier.size(20.dp))
                         if (!playlist.coverUrl.isNullOrBlank()) {
                             AsyncImage(
                                 model = playlist.coverUrl,
@@ -118,7 +115,7 @@ internal fun AddToPlaylistSheet(
                     }
                     AnimatedVisibility(added, enter = fadeIn(tween(160)) + scaleIn(tween(220), initialScale = 0.5f)) {
                         Icon(
-                            PhosphorIcons.Bold.Check,
+                            TablerIcons.Check,
                             contentDescription = "In this playlist (tap to remove)",
                             tint = ink(0.85f),
                             modifier = Modifier.size(22.dp),

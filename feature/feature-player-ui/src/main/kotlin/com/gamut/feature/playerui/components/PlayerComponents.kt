@@ -83,9 +83,7 @@ import androidx.core.graphics.get
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.bold.MusicNote
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
@@ -108,7 +106,7 @@ internal fun ArtworkPlaceholder() {
         Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.12f)),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(PhosphorIcons.Bold.MusicNote, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(48.dp))
+        Icon(TablerIcons.MusicNote, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(48.dp))
     }
 }
 

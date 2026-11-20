@@ -74,12 +74,7 @@ import coil.compose.SubcomposeAsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Regular
-import com.adamglin.phosphoricons.regular.Pause
-import com.adamglin.phosphoricons.regular.Play
-import com.adamglin.phosphoricons.regular.SkipBack
-import com.adamglin.phosphoricons.regular.SkipForward
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.acrylicSource
 import com.gamut.core.designsystem.dockArtHide
 import com.gamut.core.designsystem.dockArtReport
@@ -631,10 +626,10 @@ internal fun MeshTransport(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         DepthIcon(
-            PhosphorIcons.Regular.SkipBack,
+            TablerIcons.TrackPrev,
             "Previous",
             Modifier.bounceTap(onClick = onPrevious).padding(8.dp),
-            size = 28.dp,
+            size = 22.dp,
         )
         Box(
             playModifier.bounceTap(onClick = onTogglePlay).padding(4.dp).size(56.dp),
@@ -645,18 +640,18 @@ internal fun MeshTransport(
             } else {
                 Crossfade(targetState = isPlaying, animationSpec = tween(150), label = "mesh-play-pause") { playing ->
                     DepthIcon(
-                        if (playing) PhosphorIcons.Regular.Pause else PhosphorIcons.Regular.Play,
+                        if (playing) TablerIcons.Pause else TablerIcons.Play,
                         if (playing) "Pause" else "Play",
-                        size = 48.dp,
+                        size = 40.dp,
                     )
                 }
             }
         }
         DepthIcon(
-            PhosphorIcons.Regular.SkipForward,
+            TablerIcons.TrackNext,
             "Next",
             Modifier.bounceTap(onClick = onNext).padding(8.dp),
-            size = 28.dp,
+            size = 22.dp,
         )
     }
 }

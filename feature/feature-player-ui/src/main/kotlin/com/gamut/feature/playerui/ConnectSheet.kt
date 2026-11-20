@@ -48,12 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.bold.Bluetooth
-import com.adamglin.phosphoricons.bold.BluetoothConnected
-import com.adamglin.phosphoricons.bold.BluetoothSlash
-import com.adamglin.phosphoricons.bold.Devices
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.ink
@@ -97,9 +92,9 @@ fun ConnectSheet(
             val tint = if (connectedBt != null) accent else ink(if (btOn) 0.9f else 0.5f)
             Icon(
                 when {
-                    !btOn -> PhosphorIcons.Bold.BluetoothSlash
-                    connectedBt != null -> PhosphorIcons.Bold.BluetoothConnected
-                    else -> PhosphorIcons.Bold.Bluetooth
+                    !btOn -> TablerIcons.BluetoothOff
+                    connectedBt != null -> TablerIcons.BluetoothConnected
+                    else -> TablerIcons.Bluetooth
                 },
                 null,
                 tint = tint,
@@ -139,7 +134,7 @@ fun ConnectSheet(
                 ) {
                     val tint = if (d.isActive) accent else ink(0.75f)
                     Icon(
-                        if (d.isBluetooth) PhosphorIcons.Bold.BluetoothConnected else PhosphorIcons.Bold.Devices,
+                        if (d.isBluetooth) TablerIcons.BluetoothConnected else TablerIcons.Devices,
                         null,
                         tint = tint,
                         modifier = Modifier.size(24.dp),
@@ -178,7 +173,7 @@ fun ConnectSheet(
             contentAlignment = Alignment.Center,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(PhosphorIcons.Bold.Bluetooth, null, tint = LocalCoverPalette.current.base, modifier = Modifier.size(20.dp))
+                Icon(TablerIcons.Bluetooth, null, tint = LocalCoverPalette.current.base, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(10.dp))
                 Text(
                     "Find Bluetooth devices",

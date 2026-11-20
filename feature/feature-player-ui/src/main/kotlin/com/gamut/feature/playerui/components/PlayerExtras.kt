@@ -1,5 +1,6 @@
 package com.gamut.feature.playerui.components
 
+import com.gamut.core.designsystem.TablerIcons
 import android.graphics.Bitmap
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -39,10 +40,6 @@ import androidx.core.graphics.get
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.bold.Pause
-import com.adamglin.phosphoricons.bold.Play
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.atan2
@@ -69,10 +66,10 @@ internal fun PlayPauseButton(
             PlayerSpinner(Modifier.size(size * 0.36f), Color.Black, 2.5.dp)
         } else {
             Icon(
-                if (isPlaying) PhosphorIcons.Bold.Pause else PhosphorIcons.Bold.Play,
+                if (isPlaying) TablerIcons.Pause else TablerIcons.Play,
                 contentDescription = if (isPlaying) "Pause" else "Play",
                 tint = Color.Black,
-                modifier = Modifier.size(size * 0.46f),
+                modifier = Modifier.size(size * 0.38f),
             )
         }
     }

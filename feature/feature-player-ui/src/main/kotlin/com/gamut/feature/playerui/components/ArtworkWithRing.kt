@@ -62,10 +62,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Regular
-import com.adamglin.phosphoricons.regular.Pause
-import com.adamglin.phosphoricons.regular.Play
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.ArtPlaceholder
 import com.gamut.core.designsystem.LocalFocusLive
 import com.gamut.core.designsystem.dockArtHide
@@ -235,9 +232,9 @@ internal fun ArtworkWithRing(
                             PlayerSpinner(Modifier.size(40.dp), Color.White, 3.dp)
                         } else {
                             DepthIcon(
-                                if (isPlaying) PhosphorIcons.Regular.Pause else PhosphorIcons.Regular.Play,
+                                if (isPlaying) TablerIcons.Pause else TablerIcons.Play,
                                 contentDescription = if (isPlaying) "Pause" else "Play",
-                                size = 44.dp,
+                                size = 36.dp,
                             )
                         }
                     }

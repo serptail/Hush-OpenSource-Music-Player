@@ -1,5 +1,6 @@
 package com.gamut.feature.playerui
 
+import com.gamut.core.designsystem.TablerIcons
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -60,13 +61,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.bold.CaretDown
-import com.adamglin.phosphoricons.bold.DotsThreeVertical
-import com.adamglin.phosphoricons.bold.ShareNetwork
-import com.adamglin.phosphoricons.bold.SkipBack
-import com.adamglin.phosphoricons.bold.SkipForward
 import com.gamut.feature.playerui.components.CoverTint
 import com.gamut.feature.playerui.components.DepthIcon
 import com.gamut.feature.playerui.components.PlayPauseButton
@@ -280,7 +274,7 @@ internal fun FullLyricsPanel(
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
             Box(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 12.dp)) {
                 DepthIcon(
-                    PhosphorIcons.Bold.CaretDown,
+                    TablerIcons.ChevronDown,
                     "Close lyrics",
                     Modifier.align(Alignment.CenterStart).tapTarget(onClose).padding(12.dp),
                 )
@@ -301,7 +295,7 @@ internal fun FullLyricsPanel(
                     )
                 }
                 DepthIcon(
-                    PhosphorIcons.Bold.DotsThreeVertical,
+                    TablerIcons.MoreVertical,
                     "More",
                     Modifier.align(Alignment.CenterEnd).tapTarget(onMore).padding(12.dp),
                 )

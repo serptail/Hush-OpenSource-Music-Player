@@ -1,5 +1,6 @@
 package com.gamut.feature.playerui.components
 
+import com.gamut.core.designsystem.TablerIcons
 import android.media.AudioManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -49,11 +50,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Regular
-import com.adamglin.phosphoricons.regular.SpeakerHigh
-import com.adamglin.phosphoricons.regular.SpeakerLow
-import com.adamglin.phosphoricons.regular.SpeakerX
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -201,9 +197,9 @@ private fun VolumePill(
     val f by animateFloatAsState(fraction.coerceIn(0f, 1f), tween(60), label = "volume-fill")
     val icon =
         when {
-            f <= 0f -> PhosphorIcons.Regular.SpeakerX
-            f < 0.5f -> PhosphorIcons.Regular.SpeakerLow
-            else -> PhosphorIcons.Regular.SpeakerHigh
+            f <= 0f -> TablerIcons.VolumeOff
+            f < 0.5f -> TablerIcons.VolumeLow
+            else -> TablerIcons.VolumeHigh
         }
     val shape = RoundedCornerShape(PillHeight / 2)
     val iconTint = if (f > 0.15f) Color.Black.copy(alpha = 0.8f) else Color.White
