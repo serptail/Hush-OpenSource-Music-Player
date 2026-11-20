@@ -87,6 +87,8 @@ data class DspState(
 
 /** What the player knows about the stream and the output beyond the codec itself. */
 data class PipelineDetails(
+    /** Result of a manual "Upgrade quality": [AudioPipelineInfo.UPGRADE_SEARCHING], [AudioPipelineInfo.UPGRADE_NONE], or empty. */
+    val upgradeSearch: String = "",
     /** "Network stream" or "Local file". Empty while nothing is loaded. */
     val origin: String = "",
     val qualitySetting: String = "",

@@ -22,9 +22,14 @@ fun interface TrackSourceResolver {
 /**
  * Looks for a better stream of a track that is already playing. Returns its URL, or null to keep the current
  * one. The player swaps it in at the current position.
+ *
+ * [force] is true when the listener asked by hand: remembered answers are ignored and the sources are asked again.
  */
 fun interface TrackUpgradeResolver {
-    suspend fun upgrade(track: Track): String?
+    suspend fun upgrade(
+        track: Track,
+        force: Boolean,
+    ): String?
 }
 
 interface MusicPlayer {
@@ -81,6 +86,12 @@ interface MusicPlayer {
 
     /** Optional: a slower lookup run while a track plays, whose answer replaces the stream in place. */
     fun setUpgradeResolver(resolver: TrackUpgradeResolver?) {}
+
+    /**
+     * Looks for a better stream of the playing track right now, because the listener asked. The outcome shows up in
+     * [AudioPipelineInfo.details]: `upgradeSearch` while looking or when nothing better exists, `upgradedFrom` after a swap.
+     */
+    fun upgradeQuality() {}
 
     fun warmUp() {}
 }

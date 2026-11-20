@@ -69,8 +69,16 @@ object AudioPipelineInfo {
         _details.update { it.copy(origin = origin, qualitySetting = qualitySetting, qualityEffective = qualityEffective) }
     }
 
+    const val UPGRADE_SEARCHING = "searching"
+    const val UPGRADE_NONE = "none"
+
+    /** A swap (or a new track, with `from` empty) always ends any manual search that was showing. */
     internal fun onUpgraded(from: String) {
-        _details.update { it.copy(upgradedFrom = from) }
+        _details.update { it.copy(upgradedFrom = from, upgradeSearch = "") }
+    }
+
+    internal fun onUpgradeSearch(status: String) {
+        _details.update { it.copy(upgradeSearch = status) }
     }
 
     internal fun onDecoder(name: String) {

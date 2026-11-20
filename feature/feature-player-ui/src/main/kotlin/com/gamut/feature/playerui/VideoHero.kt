@@ -76,6 +76,21 @@ private const val FIRST_FRAME_TIMEOUT_MS = 12_000L
  */
 private const val MinTextureAlpha = 0.01f
 
+/** How the picture sits on the page. */
+internal enum class HeroMode {
+    /** Upright, cropped to cover the screen (wide layouts, which are already landscape). */
+    Backdrop,
+
+    /**
+     * Movie style on a portrait phone: the frame is turned a quarter so its width runs the full height of
+     * the screen, cropped only at the frame's top and bottom. The controls sit low, over a darker scrim.
+     */
+    Rotated,
+}
+
+/** Which way [HeroMode.Rotated] turns the frame. */
+private const val RotatedDegrees = 90f
+
 /** The video is a full-screen backdrop now; the legibility scrim replaces the old bottom fade. */
 private const val HeroFadeFraction = 0f
 
@@ -144,6 +159,7 @@ internal fun VideoHero(
     onFailed: () -> Boolean,
     modifier: Modifier = Modifier,
     onRendered: () -> Unit = {},
+    mode: HeroMode = HeroMode.Backdrop,
 ) {
     val context = LocalContext.current
     val sync = remember { VideoSyncPlayer(context) }
@@ -262,13 +278,24 @@ internal fun VideoHero(
                 Modifier.layout { measurable, constraints ->
                     val width = constraints.maxWidth
                     val height = if (constraints.hasBoundedHeight) constraints.maxHeight else (width / shownAspect).roundToInt()
-                    // Cover: the larger of "fill the height" and "fill the width". On a portrait phone that
-                    // is the height, with the sides cropped.
-                    val coverWidth = maxOf(width.toFloat(), height * shownAspect)
-                    val w = coverWidth.roundToInt()
-                    val h = (coverWidth / shownAspect).roundToInt()
-                    val placeable = measurable.measure(Constraints.fixed(w.coerceAtLeast(1), h.coerceAtLeast(1)))
-                    layout(width, height) { placeable.place((width - w) / 2, (height - h) / 2) }
+                    if (mode == HeroMode.Rotated) {
+                        // Cover the screen with the frame turned: its width runs along the screen's height,
+                        // and its height has to reach the screen's width.
+                        val coverWidth = maxOf(height.toFloat(), width * shownAspect)
+                        val w = coverWidth.roundToInt()
+                        val h = (coverWidth / shownAspect).roundToInt()
+                        val placeable = measurable.measure(Constraints.fixed(w.coerceAtLeast(1), h.coerceAtLeast(1)))
+                        layout(width, height) {
+                            placeable.placeWithLayer((width - w) / 2, (height - h) / 2) { rotationZ = RotatedDegrees }
+                        }
+                    } else {
+                        // Cover: the larger of "fill the height" and "fill the width".
+                        val coverWidth = maxOf(width.toFloat(), height * shownAspect)
+                        val w = coverWidth.roundToInt()
+                        val h = (coverWidth / shownAspect).roundToInt()
+                        val placeable = measurable.measure(Constraints.fixed(w.coerceAtLeast(1), h.coerceAtLeast(1)))
+                        layout(width, height) { placeable.place((width - w) / 2, (height - h) / 2) }
+                    }
                 },
         )
         // Keeps the title, lyrics and controls readable over any footage; fades in with the picture.
@@ -277,9 +304,19 @@ internal fun VideoHero(
                 .fillMaxSize()
                 .alpha(alpha)
                 .background(
-                    Brush.verticalGradient(
-                        listOf(Color.Black.copy(alpha = 0.30f), Color.Black.copy(alpha = 0.50f), Color.Black.copy(alpha = 0.85f)),
-                    ),
+                    if (mode == HeroMode.Rotated) {
+                        // The picture stays clear in the top half; the compact controls sit on the dark lower half.
+                        Brush.verticalGradient(
+                            0f to Color.Black.copy(alpha = 0.10f),
+                            0.38f to Color.Black.copy(alpha = 0.15f),
+                            0.60f to Color.Black.copy(alpha = 0.62f),
+                            1f to Color.Black.copy(alpha = 0.90f),
+                        )
+                    } else {
+                        Brush.verticalGradient(
+                            listOf(Color.Black.copy(alpha = 0.30f), Color.Black.copy(alpha = 0.50f), Color.Black.copy(alpha = 0.85f)),
+                        )
+                    },
                 ),
         )
     }

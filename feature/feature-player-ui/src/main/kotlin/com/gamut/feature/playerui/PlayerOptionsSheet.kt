@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
+import com.adamglin.phosphoricons.bold.ArrowSquareUp
 import com.adamglin.phosphoricons.bold.Equalizer
 import com.adamglin.phosphoricons.bold.Heart
 import com.adamglin.phosphoricons.bold.Info
@@ -53,6 +54,9 @@ internal fun PlayerOptionsSheet(
     videoSupported: Boolean = false,
     videoOn: Boolean = false,
     onToggleVideo: () -> Unit = {},
+    /** Null hides the row (nothing is playing). [upgradeStatus] is the row's right-hand text. */
+    onUpgradeQuality: (() -> Unit)? = null,
+    upgradeStatus: String? = null,
 ) {
     GamutSheet(onDismiss = onDismiss) {
         Column(
@@ -82,6 +86,9 @@ internal fun PlayerOptionsSheet(
             OptionRow(PhosphorIcons.Bold.ListPlus, "Add to playlist", null, onAddToPlaylist)
             OptionRow(PhosphorIcons.Bold.UserCircle, "Go to artist", null, onGoToArtist)
             OptionRow(PhosphorIcons.Bold.Timer, "Sleep timer", if (sleepActive) "On" else "Off", onSleepTimer)
+            if (onUpgradeQuality != null) {
+                OptionRow(PhosphorIcons.Bold.ArrowSquareUp, "Upgrade quality", upgradeStatus, onUpgradeQuality)
+            }
             OptionRow(PhosphorIcons.Bold.Equalizer, "Equalizer", if (eqActive) "On" else "Off", onEqualizer)
             OptionRow(PhosphorIcons.Bold.Info, "Stats for nerds", null, onStats)
         }

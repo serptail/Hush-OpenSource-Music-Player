@@ -20,10 +20,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -55,6 +59,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.layout.ContentScale
@@ -103,6 +108,7 @@ import com.gamut.core.designsystem.rememberArtistTap
 import com.gamut.core.designsystem.splitArtists
 import com.gamut.core.model.PlaybackState
 import com.gamut.core.model.Track
+import com.gamut.core.player.AudioPipelineInfo
 import com.gamut.core.player.EqualizerController
 import com.gamut.core.player.ModController
 import com.gamut.core.player.ModPreset
@@ -128,6 +134,7 @@ import com.gamut.feature.playerui.components.volumeHudHeaderAnchor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import com.adamglin.phosphoricons.fill.Heart as HeartFilled
 import com.gamut.core.model.RepeatMode as PlaybackRepeatMode
 
@@ -139,6 +146,30 @@ private const val PrefVideoOn = "video_on"
 /** How far the content below the hero slides up over the video's faded bottom edge. */
 /** Clear space above the title when the music video is the backdrop. */
 private val VideoTopSpace = 200.dp
+
+/** How small the title and controls get in video mode on a phone. */
+private const val VideoUiScale = 0.8f
+
+/**
+ * Shrinks its content but keeps it full width: it is laid out [scale] times wider than the room it has, then
+ * scaled down to fit, so everything gets smaller instead of narrower. The height it gives back frees space.
+ */
+private fun Modifier.shrunk(scale: Float): Modifier =
+    if (scale >= 1f) {
+        this
+    } else {
+        layout { measurable, constraints ->
+            val innerWidth = (constraints.maxWidth / scale).roundToInt()
+            val placeable = measurable.measure(Constraints(minWidth = innerWidth, maxWidth = innerWidth))
+            layout(constraints.maxWidth, (placeable.height * scale).roundToInt()) {
+                placeable.placeWithLayer(0, 0) {
+                    scaleX = scale
+                    scaleY = scale
+                    transformOrigin = TransformOrigin(0f, 0f)
+                }
+            }
+        }
+    }
 
 @Composable
 fun PlayerScreen(
@@ -203,6 +234,7 @@ fun PlayerScreen(
     var showStats by remember { mutableStateOf(false) }
     var showSleep by remember { mutableStateOf(false) }
     var showMore by remember { mutableStateOf(false) }
+    val pipelineDetails by AudioPipelineInfo.details.collectAsState()
     var showShare by remember { mutableStateOf(false) }
     var showAddToPlaylist by remember { mutableStateOf(false) }
     val playlistChanges = remember { androidx.compose.runtime.mutableStateMapOf<String, Map<String, Boolean>>() }
@@ -357,10 +389,18 @@ fun PlayerScreen(
     // Music video takes over the first page; it brings its own layout, so it overrides the cover/mesh styles.
     val videoSource = rememberVideoSource(track, videoProvider, enabled = videoOn, active = active)
     val heroStream = videoSource.stream.value
-    // The layout only gives way to the picture once a frame is actually on screen: a stream that resolved
-    // but never plays (a stall raises no error) used to leave the page shifted over a blank backdrop.
+    // Video mode starts the moment a stream has resolved and is about to play (not merely because the video
+    // toggle is on). The player has to exist for a first frame to ever land, so the page can't wait for one:
+    // the Styled layout never builds the video, which left it waiting forever. A stream that never plays is
+    // swapped for another client, or dropped, and the page eases back.
     var videoShown by remember(heroStream?.url) { mutableStateOf(false) }
-    val videoMode = heroStream != null && videoShown
+    val videoMode = heroStream != null
+    // 0 -> 1 as the page changes into video layout: the controls slide down and shrink while the picture fades in.
+    val videoReveal by animateFloatAsState(
+        if (videoMode) 1f else 0f,
+        tween(700, easing = GamutMotion.EmphasizedDecelerate),
+        label = "videoReveal",
+    )
 
     val meshStyle = LocalAppearance.current.playerStyle == PlayerStyle.Mesh && !videoMode
     val artworkMesh = if (meshStyle) rememberArtworkMesh(artUrl) else null
@@ -382,7 +422,10 @@ fun PlayerScreen(
             val flowLines = remember(lyricsLoaded) { lyricsLoaded?.lines?.toFlowLines(lyricsLoaded.isSynced) }
             val stripKey = lyricsKey.orEmpty()
             val extrasContent: @Composable () -> Unit = {
-                if (lyricsOn) {
+                // On a phone held upright the video page keeps the preview card out of the way (the lyric strip
+                // still opens the full panel); turned sideways it sits down the page with the rest.
+                val hideLyricsCard = videoMode && !isWideLayout()
+                if (lyricsOn && !hideLyricsCard) {
                     LyricsPreviewCard(
                         lyricsState = lyricsState,
                         activeIndex = activeIndex,
@@ -469,7 +512,10 @@ fun PlayerScreen(
                     FullArtworkBlurBackdrop(image = classicBackdrop ?: heldBackdrop)
                 }
 
-                // The music video is the page's backdrop: full screen, behind everything below.
+                val wide = isWideLayout()
+
+                // The music video is the page's backdrop: full screen, behind everything below. On a portrait
+                // phone it is turned a quarter, so it plays "landscape" at the screen's full height.
                 if (heroStream != null) {
                     VideoHero(
                         stream = heroStream,
@@ -479,11 +525,11 @@ fun PlayerScreen(
                         speed = modState.settings.speed,
                         onFailed = videoSource.refresh,
                         onRendered = { videoShown = true },
+                        mode = if (wide) HeroMode.Backdrop else HeroMode.Rotated,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
 
-                val wide = isWideLayout()
                 val edge = if (wide) 0.dp else gutter
 
                 val trackHeader: @Composable () -> Unit = {
@@ -496,6 +542,7 @@ fun PlayerScreen(
                             onArtist = { name -> track?.let { t -> onGoToArtist(t.copy(artist = name)) } },
                             isFavorite = track?.isrc?.let { it in favoriteIsrcs } == true,
                             onToggleFavorite = { track?.let(onToggleFavorite) },
+                            showFavorite = !videoMode,
                         )
                     }
                 }
@@ -529,7 +576,13 @@ fun PlayerScreen(
                     if (videoMode || meshStyle) {
                         if (videoMode) {
                             // The picture is the backdrop; leave it room at the top before the title.
-                            Spacer(Modifier.height(VideoTopSpace).volumeHudAnchor(volumeHud))
+                            if (wide) {
+                                Spacer(Modifier.height(VideoTopSpace).volumeHudAnchor(volumeHud))
+                            } else {
+                                // On a phone the stack rides the bottom of the screen (see the page column), so
+                                // there is no gap to reserve up here; just keep the volume HUD anchored.
+                                Spacer(Modifier.height(0.dp).volumeHudAnchor(volumeHud))
+                            }
                         } else {
                             Spacer(Modifier.height(10.dp))
                             Box(Modifier.fillMaxWidth().volumeHudAnchor(volumeHud), contentAlignment = Alignment.Center) {
@@ -650,6 +703,8 @@ fun PlayerScreen(
                         PlayerTopBar(
                             leave,
                             onMore = { showMore = true },
+                            favorite = if (videoMode) track?.isrc?.let { it in favoriteIsrcs } == true else null,
+                            onToggleFavorite = { track?.let(onToggleFavorite) },
                             modifier =
                                 Modifier.fillMaxWidth().padding(
                                     start = 24.dp + edge,
@@ -658,7 +713,60 @@ fun PlayerScreen(
                                 ),
                         )
 
-                        if (wide) {
+                        if (wide && videoMode) {
+                            // Sideways with a video: the picture gets the screen. Only the title and the progress
+                            // bar sit on it; the transport, buttons, lyrics and about are a scroll away.
+                            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                                val firstScreen = maxHeight
+                                Column(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(horizontal = 32.dp),
+                                ) {
+                                    Column(
+                                        Modifier.fillMaxWidth().height(firstScreen).volumeHudAnchor(volumeHud),
+                                        verticalArrangement = Arrangement.Bottom,
+                                    ) {
+                                        trackHeader()
+                                        Spacer(Modifier.height(6.dp))
+                                        MeshScrubber(
+                                            progress = progressProvider,
+                                            onScrub = { scrubFraction = it },
+                                            onSeekFraction = seekToFraction,
+                                            seekStep = seekStep,
+                                        )
+                                        TimeRow(positionProvider, effectiveDurationMs)
+                                        Spacer(Modifier.height(12.dp))
+                                    }
+                                    MeshTransport(
+                                        isPlaying = shownPlaying,
+                                        loading = spinnerOn,
+                                        onPrevious = player::skipPrevious,
+                                        onTogglePlay = togglePlay,
+                                        onNext = player::skipNext,
+                                        playModifier = Modifier.focusRequester(coverFocus),
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    controlsGrid()
+                                    LyricStripBlock(
+                                        lyricsOn = lyricsOn,
+                                        lyricsState = shownLyrics,
+                                        flowLines = flowLines,
+                                        trackKey = stripKey,
+                                        playhead = playhead,
+                                        isPlaying = clock.live,
+                                        durationMs = effectiveDurationMs,
+                                        onOpen = { lyricsPanelOpen = true },
+                                        highlight = lyricHighlight,
+                                        modifier = Modifier.padding(top = 8.dp),
+                                    )
+                                    Spacer(Modifier.height(24.dp))
+                                    extrasContent()
+                                    Spacer(Modifier.height(32.dp).navigationBarsPadding())
+                                }
+                            }
+                        } else if (wide) {
                             Row(Modifier.weight(1f).fillMaxWidth()) {
                                 BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
                                     val coverMax = (maxHeight - 360.dp).coerceIn(220.dp, 560.dp)
@@ -685,17 +793,34 @@ fun PlayerScreen(
                                 }
                             }
                         } else {
-                            Column(
-                                Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                                    .verticalScroll(rememberScrollState())
-                                    .padding(horizontal = 24.dp + gutter),
-                            ) {
-                                playerContent(Dp.Infinity)
-                                Spacer(Modifier.height(28.dp))
-                                extrasContent()
-                                Spacer(Modifier.height(32.dp).navigationBarsPadding())
+                            val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                                val viewport = maxHeight
+                                Column(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(horizontal = 24.dp + gutter),
+                                ) {
+                                    // In video mode the title and controls get smaller (still full width) and ride the
+                                    // bottom of the first screen; the artist section is a scroll away. The block's
+                                    // minimum height grows with the reveal, which is what slides the stack down.
+                                    Column(
+                                        Modifier.fillMaxWidth().heightIn(min = viewport * videoReveal),
+                                        verticalArrangement = Arrangement.Bottom,
+                                    ) {
+                                        Column(
+                                            Modifier
+                                                .padding(bottom = (navInset + 12.dp) * videoReveal)
+                                                .shrunk(1f - (1f - VideoUiScale) * videoReveal),
+                                        ) {
+                                            playerContent(Dp.Infinity)
+                                        }
+                                    }
+                                    Spacer(Modifier.height(28.dp))
+                                    extrasContent()
+                                    Spacer(Modifier.height(32.dp).navigationBarsPadding())
+                                }
                             }
                         }
                     }
@@ -762,6 +887,20 @@ fun PlayerScreen(
                 prefs.edit().putBoolean(PrefVideoOn, videoOn).apply()
             },
             onToggleFavorite = { track?.let(onToggleFavorite) },
+            onUpgradeQuality =
+                track?.let {
+                    {
+                        // Ignored while a search is already running; the row shows its progress.
+                        if (pipelineDetails.upgradeSearch != AudioPipelineInfo.UPGRADE_SEARCHING) player.upgradeQuality()
+                    }
+                },
+            upgradeStatus =
+                when {
+                    pipelineDetails.upgradeSearch == AudioPipelineInfo.UPGRADE_SEARCHING -> "Searching\u2026"
+                    pipelineDetails.upgradeSearch == AudioPipelineInfo.UPGRADE_NONE -> "Nothing better found"
+                    pipelineDetails.upgradedFrom.isNotEmpty() -> "Upgraded"
+                    else -> null
+                },
             onAddToPlaylist = {
                 showMore = false
                 showAddToPlaylist = true
@@ -846,16 +985,29 @@ internal fun PlayerTopBar(
     onBack: () -> Unit,
     onMore: () -> Unit,
     modifier: Modifier = Modifier,
+    // Non-null (video mode): the favorite heart sits beside "More" instead of beside the title.
+    favorite: Boolean? = null,
+    onToggleFavorite: () -> Unit = {},
 ) {
     // The same pill as the Cover style, in the same place; "More" sits over its
     // drag zone, not under it.
     Box(modifier.height(54.dp)) {
         PlayerPill(onDismiss = onBack, modifier = Modifier.fillMaxWidth(), height = 54.dp)
-        DepthIcon(
-            PhosphorIcons.Bold.DotsThreeVertical,
-            "More",
-            Modifier.align(Alignment.TopEnd).tapTarget(onClick = onMore).padding(8.dp),
-        )
+        Row(Modifier.align(Alignment.TopEnd), verticalAlignment = Alignment.CenterVertically) {
+            if (favorite != null) {
+                DepthIcon(
+                    if (favorite) PhosphorIcons.Fill.HeartFilled else PhosphorIcons.Regular.Heart,
+                    if (favorite) "Remove from favorites" else "Add to favorites",
+                    Modifier.bounceTap(onClick = onToggleFavorite).padding(8.dp),
+                    tint = if (favorite) FavoriteColor else Color.White,
+                )
+            }
+            DepthIcon(
+                PhosphorIcons.Bold.DotsThreeVertical,
+                "More",
+                Modifier.tapTarget(onClick = onMore).padding(8.dp),
+            )
+        }
     }
 }
 
@@ -870,6 +1022,8 @@ internal fun TrackHeader(
     onMore: (() -> Unit)? = null,
     explicit: Boolean? = null,
     titleStyle: TextStyle = MaterialTheme.typography.headlineLarge.copy(letterSpacing = (-0.3).sp),
+    // Video mode moves the heart up next to "More" in the top bar.
+    showFavorite: Boolean = true,
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f)) {
@@ -894,13 +1048,15 @@ internal fun TrackHeader(
             }
             QualityTagRow(Modifier.padding(top = 6.dp))
         }
-        DepthIcon(
-            if (isFavorite) PhosphorIcons.Fill.HeartFilled else PhosphorIcons.Regular.Heart,
-            if (isFavorite) "Remove from favorites" else "Add to favorites",
-            Modifier.bounceTap(onClick = onToggleFavorite).padding(4.dp),
-            tint = if (isFavorite) FavoriteColor else Color.White,
-            size = 26.dp,
-        )
+        if (showFavorite) {
+            DepthIcon(
+                if (isFavorite) PhosphorIcons.Fill.HeartFilled else PhosphorIcons.Regular.Heart,
+                if (isFavorite) "Remove from favorites" else "Add to favorites",
+                Modifier.bounceTap(onClick = onToggleFavorite).padding(4.dp),
+                tint = if (isFavorite) FavoriteColor else Color.White,
+                size = 26.dp,
+            )
+        }
         if (onMore != null) {
             DepthIcon(PhosphorIcons.Bold.DotsThreeVertical, "More", Modifier.bounceTap(onClick = onMore).padding(4.dp), size = 26.dp)
         }

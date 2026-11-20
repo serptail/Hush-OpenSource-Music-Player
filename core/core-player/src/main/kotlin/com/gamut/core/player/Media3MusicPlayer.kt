@@ -955,28 +955,41 @@ class Media3MusicPlayer
         /**
          * Asks the upgrade resolver for a better stream of [track] while it plays, and swaps it in at the same
          * position when one turns up. The track starts on the fast path first; this is the slow lookup.
+         *
+         * With [force] (the listener tapped "Upgrade quality") the sources are asked again even if this track was
+         * already upgraded, the end-of-track guard is skipped, and the outcome is reported through
+         * [AudioPipelineInfo] so the options sheet can say "Searching…" and then "No better stream" or "Upgraded".
          */
-        private fun scheduleUpgrade(track: Track) {
+        private fun scheduleUpgrade(
+            track: Track,
+            force: Boolean = false,
+        ) {
             val up = upgrader ?: return
-            if (upgradedIsrc == track.isrc) return
+            if (!force && upgradedIsrc == track.isrc) return
             upgradeJob?.cancel()
             upgradeJob =
                 scope.launch {
+                    if (force) AudioPipelineInfo.onUpgradeSearch(AudioPipelineInfo.UPGRADE_SEARCHING)
+                    // Every early exit below is "nothing was swapped"; for a manual search that must be visible.
+                    fun nothing() {
+                        if (force) AudioPipelineInfo.onUpgradeSearch(AudioPipelineInfo.UPGRADE_NONE)
+                    }
                     val url =
                         try {
-                            withContext(Dispatchers.Default) { up.upgrade(track) }
+                            withContext(Dispatchers.Default) { up.upgrade(track, force) }
                         } catch (e: CancellationException) {
                             throw e
                         } catch (_: Exception) {
                             null
-                        } ?: return@launch
-                    val item = player.currentMediaItem ?: return@launch
-                    if (currentTrack?.isrc != track.isrc || item.mediaId != track.isrc || transitioning) return@launch
-                    if (item.localConfiguration?.uri?.toString() == url) return@launch
+                        }
+                    if (url == null) return@launch nothing()
+                    val item = player.currentMediaItem ?: return@launch nothing()
+                    if (currentTrack?.isrc != track.isrc || item.mediaId != track.isrc || transitioning) return@launch nothing()
+                    if (item.localConfiguration?.uri?.toString() == url) return@launch nothing()
                     val duration = player.duration
                     val position = player.currentPosition
-                    // Too close to the end for a swap to be worth the rebuffer.
-                    if (duration != C.TIME_UNSET && duration > 0 && duration - position < UPGRADE_MIN_REMAINING_MS) return@launch
+                    // Too close to the end for a swap to be worth the rebuffer (an explicit request overrides this).
+                    if (!force && duration != C.TIME_UNSET && duration > 0 && duration - position < UPGRADE_MIN_REMAINING_MS) return@launch
                     val from = AudioPipelineInfo.state.value.codec
                     val wasPlaying = player.playWhenReady
                     upgradedIsrc = track.isrc
@@ -987,6 +1000,11 @@ class Media3MusicPlayer
                     AudioPipelineInfo.onUpgraded(from.ifBlank { "stream" })
                     schedulePrefetch(PREFETCH_DELAY_MS)
                 }
+        }
+
+        override fun upgradeQuality() {
+            val track = currentTrack ?: return
+            scheduleUpgrade(track, force = true)
         }
 
         private fun trackAt(p: Int): Track? = order.getOrNull(p)?.let { items.getOrNull(it) }

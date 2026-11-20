@@ -42,15 +42,19 @@ class LosslessStreamResolver
          *
          * [fastOnly] asks only the sources that answer in about a second (JioSaavn), for the moment a track
          * starts; slow sources are left to [urlFor] with it off, which runs while the track already plays.
+         *
+         * [force] skips the remembered answer, for when the listener asked for an upgrade by hand: a hit may be
+         * 20 minutes old and a miss may have been a timeout, and the new answer replaces both.
          */
         suspend fun urlFor(
             track: Track,
             fastOnly: Boolean = false,
+            force: Boolean = false,
         ): String? {
             val state = settings.state.value
             val key = "${track.isrc}|${state.sources.hashCode()}|${state.preferLossless}|${LosslessOutput.capable}|${DeviceCodecs.atmosWanted}|$fastOnly"
             val now = System.currentTimeMillis()
-            cache[key]?.let { hit -> if (now - hit.at < (if (hit.url != null) HIT_TTL_MS else MISS_TTL_MS)) return hit.url }
+            if (!force) cache[key]?.let { hit -> if (now - hit.at < (if (hit.url != null) HIT_TTL_MS else MISS_TTL_MS)) return hit.url }
             val result = lookup(track, state, fastOnly)
             if (!fastOnly || result != null) cache[key] = Hit(result, System.currentTimeMillis())
             return result
@@ -152,10 +156,12 @@ class LosslessStreamResolver
                 row: LosslessTrack,
                 track: Track,
             ): Boolean {
-                val title = fold(track.title)
-                val rowTitle = fold(row.title)
+                val title = coreTitle(track.title)
+                val rowTitle = coreTitle(row.title)
                 if (title.isEmpty() || rowTitle.isEmpty()) return false
                 if (rowTitle != title) return false
+                // "Song" and "Song (Live)" are different recordings; the variant words must agree.
+                if (variants(track.title) != variants(row.title)) return false
                 val artists = tokens(track.artist)
                 val rowArtists = tokens(row.artist)
                 if (artists.isEmpty() || artists.none { it in rowArtists }) return false
@@ -163,6 +169,24 @@ class LosslessStreamResolver
                 val got = row.durationSec
                 return wanted <= 0 || got == null || abs(wanted - got) <= DURATION_TOLERANCE_S
             }
+
+            private val VARIANT_WORDS =
+                setOf("live", "remix", "acoustic", "instrumental", "karaoke", "demo", "cover", "unplugged", "sped", "slowed", "reverb", "edit")
+            private val BRACKETS = Regex("[(\\[][^)\\]]*[)\\]]")
+            private val DASH_SUFFIX = Regex("\\s+-\\s+.*$")
+            private val FEAT = Regex("\\b(feat|ft|featuring)\\b.*$")
+
+            /** The title without catalogue decoration: "(From "Film")", "- Remastered 2011", "(feat. X)". */
+            private fun coreTitle(text: String): String {
+                var t = text
+                // A variant that lives in a bracket or after a dash stays out of the core and is checked separately.
+                t = BRACKETS.replace(t, " ")
+                t = DASH_SUFFIX.replace(t, "")
+                return FEAT.replace(fold(t), "").trim()
+            }
+
+            /** Variant words ("live", "remix", ...) found anywhere in the raw title. */
+            private fun variants(text: String): Set<String> = fold(text).split(' ').filter { it in VARIANT_WORDS }.toSet()
 
             private fun fold(text: String): String =
                 Normalizer

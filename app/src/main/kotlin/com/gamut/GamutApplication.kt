@@ -66,7 +66,7 @@ class GamutApplication :
             onProgress(0.5f)
             audioSources.audioUrl(source.youtubeVideoId, forceRefresh).getOrNull()
         }
-        player.setUpgradeResolver { track -> losslessStreams.urlFor(track) }
+        player.setUpgradeResolver { track, force -> losslessStreams.urlFor(track, force = force) }
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             ytDlp.warmUp()
             YtDlpUpdateWorker.schedule(applicationContext)

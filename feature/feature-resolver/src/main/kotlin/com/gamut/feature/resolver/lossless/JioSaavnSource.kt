@@ -113,6 +113,9 @@ class JioSaavnSource(
                 .header("User-Agent", UA)
                 .header("Accept-Language", "en-IN,en;q=0.9")
                 .header("Cookie", "explicit_content=1")
+                // Same as BitChord: JioSaavn is region-locked and gives other regions empty rows or no media URL.
+                .header("X-Forwarded-For", INDIA_IP)
+                .header("X-Real-IP", INDIA_IP)
                 .build()
         return try {
             Http.client.newCall(req).execute().use { resp ->
@@ -155,6 +158,7 @@ class JioSaavnSource(
     private companion object {
         const val TAG = "Gamut"
         const val MIN_USABLE_KBPS = 96
+        const val INDIA_IP = "49.36.0.1"
         const val DES_KEY = "38346591"
         val API = String(Base64.decode("aHR0cHM6Ly93d3cuamlvc2Fhdm4uY29tL2FwaS5waHA=", Base64.DEFAULT), Charsets.UTF_8)
         const val UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
