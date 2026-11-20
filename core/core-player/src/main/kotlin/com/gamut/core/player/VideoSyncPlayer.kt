@@ -16,6 +16,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -95,6 +96,7 @@ class VideoSyncPlayer(
     val failed: StateFlow<Boolean> = failedFlow
 
     private var lastSeekAtMs = 0L
+    private var lastStatusLogAt = 0L
     private var loadedAtMs = 0L
     private var lastSpeed = 1f
     private var attached: TextureView? = null
@@ -118,6 +120,17 @@ class VideoSyncPlayer(
                 Log.d(TAG, "state $name ${nowMs() - loadedAtMs}ms after load")
             }
 
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                Log.d(TAG, "isPlaying=$isPlaying")
+            }
+
+            override fun onPlayWhenReadyChanged(
+                playWhenReady: Boolean,
+                reason: Int,
+            ) {
+                Log.d(TAG, "playWhenReady=$playWhenReady reason=$reason")
+            }
+
             override fun onRenderedFirstFrame() {
                 Log.d(TAG, "first frame rendered ${nowMs() - loadedAtMs}ms after load")
                 renderedFlow.value = true
@@ -132,6 +145,26 @@ class VideoSyncPlayer(
 
     init {
         exo.addListener(listener)
+        exo.addAnalyticsListener(
+            object : AnalyticsListener {
+                override fun onVideoDecoderInitialized(
+                    eventTime: AnalyticsListener.EventTime,
+                    decoderName: String,
+                    initializedTimestampMs: Long,
+                    initializationDurationMs: Long,
+                ) {
+                    Log.d(TAG, "decoder $decoderName ready in ${initializationDurationMs}ms")
+                }
+
+                override fun onDroppedVideoFrames(
+                    eventTime: AnalyticsListener.EventTime,
+                    droppedFrames: Int,
+                    elapsedMs: Long,
+                ) {
+                    Log.d(TAG, "dropped $droppedFrames frames in ${elapsedMs}ms")
+                }
+            },
+        )
     }
 
     fun attach(view: TextureView) {
@@ -217,6 +250,16 @@ class VideoSyncPlayer(
         val magnitude = abs(drift)
         val now = nowMs()
         val settling = exo.playbackState == Player.STATE_BUFFERING || now - lastSeekAtMs < SEEK_COOLDOWN_MS
+        if (now - lastStatusLogAt >= STATUS_LOG_MS) {
+            lastStatusLogAt = now
+            Log.d(
+                TAG,
+                "sync pos=${exo.currentPosition} target=$target drift=$drift state=${exo.playbackState} " +
+                    "playWhenReady=${exo.playWhenReady} isPlaying=${exo.isPlaying} wantPlay=$wantPlay allowPlay=$allowPlay " +
+                    "audioPlaying=$audioPlaying size=${exo.videoSize.width}x${exo.videoSize.height} " +
+                    "rendered=${renderedFlow.value} attached=${attached != null}",
+            )
+        }
 
         val speed =
             when {
@@ -253,6 +296,7 @@ class VideoSyncPlayer(
     companion object {
         private const val TAG = "GamutVideo"
         const val SYNC_INTERVAL_MS = 200L
+        private const val STATUS_LOG_MS = 2_000L
         private const val HARD_RESYNC_MS = 600L
         private const val SOFT_DRIFT_MS = 60L
         private const val PAUSED_TOLERANCE_MS = 120L

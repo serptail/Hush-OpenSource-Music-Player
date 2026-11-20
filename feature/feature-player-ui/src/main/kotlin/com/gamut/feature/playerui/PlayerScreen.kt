@@ -357,7 +357,10 @@ fun PlayerScreen(
     // Music video takes over the first page; it brings its own layout, so it overrides the cover/mesh styles.
     val videoSource = rememberVideoSource(track, videoProvider, enabled = videoOn, active = active)
     val heroStream = videoSource.stream.value
-    val videoMode = heroStream != null
+    // The layout only gives way to the picture once a frame is actually on screen: a stream that resolved
+    // but never plays (a stall raises no error) used to leave the page shifted over a blank backdrop.
+    var videoShown by remember(heroStream?.url) { mutableStateOf(false) }
+    val videoMode = heroStream != null && videoShown
 
     val meshStyle = LocalAppearance.current.playerStyle == PlayerStyle.Mesh && !videoMode
     val artworkMesh = if (meshStyle) rememberArtworkMesh(artUrl) else null
@@ -475,6 +478,7 @@ fun PlayerScreen(
                         active = active && !lyricsPanelOpen,
                         speed = modState.settings.speed,
                         onFailed = videoSource.refresh,
+                        onRendered = { videoShown = true },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -522,8 +526,8 @@ fun PlayerScreen(
                 val seekStep = if (duration > 0) (10_000f / duration).coerceIn(0.005f, 0.1f) else 0.04f
 
                 val playerContent: @Composable (Dp) -> Unit = { coverMax ->
-                    if (heroStream != null || meshStyle) {
-                        if (heroStream != null) {
+                    if (videoMode || meshStyle) {
+                        if (videoMode) {
                             // The picture is the backdrop; leave it room at the top before the title.
                             Spacer(Modifier.height(VideoTopSpace).volumeHudAnchor(volumeHud))
                         } else {

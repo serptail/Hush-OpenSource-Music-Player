@@ -12,6 +12,7 @@ import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.graphics.SurfaceTexture
 import android.os.Build
+import android.util.Log
 import android.view.TextureView
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -61,6 +62,19 @@ private const val HeroAspect = 16f / 9f
 
 /** Client hops a failing picture gets before the page gives up and shows artwork (BitChord allows three). */
 private const val MAX_VIDEO_REFRESHES = 3
+
+/**
+ * How long a loaded stream gets, while the page is on screen and playing, to put its first frame up.
+ * A URL googlevideo answers slowly or throttles raises no player error, so without this a stalled
+ * stream sat there forever instead of moving on to the next client.
+ */
+private const val FIRST_FRAME_TIMEOUT_MS = 12_000L
+
+/**
+ * The picture's floor opacity. A TextureView at exactly 0 is skipped by the renderer, so it can get no
+ * surface and draw no frame; the picture then never reports one, and so never fades in.
+ */
+private const val MinTextureAlpha = 0.01f
 
 /** The video is a full-screen backdrop now; the legibility scrim replaces the old bottom fade. */
 private const val HeroFadeFraction = 0f
@@ -129,6 +143,7 @@ internal fun VideoHero(
     speed: Float,
     onFailed: () -> Boolean,
     modifier: Modifier = Modifier,
+    onRendered: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val sync = remember { VideoSyncPlayer(context) }
@@ -141,12 +156,24 @@ internal fun VideoHero(
     val rendered by sync.rendered.collectAsState()
     val failed by sync.failed.collectAsState()
     val reportFailed by rememberUpdatedState(onFailed)
+    val reportRendered by rememberUpdatedState(onRendered)
     var textureView by remember { mutableStateOf<TextureView?>(null) }
 
     LaunchedEffect(stream.url) {
         sync.load(stream, startMs = player.currentPositionMs().coerceAtLeast(0L))
+        // Count only the time the picture is meant to be playing (app on screen, lyrics closed).
+        var waited = 0L
+        while (waited < FIRST_FRAME_TIMEOUT_MS) {
+            delay(500L)
+            if (sync.rendered.value || sync.failed.value) return@LaunchedEffect
+            if (allowPlay) waited += 500L
+        }
+        Log.w("GamutVideo", "no first frame within ${FIRST_FRAME_TIMEOUT_MS}ms (${stream.profileId ?: "newpipe"}); trying another client")
+        reportFailed()
     }
+    LaunchedEffect(foreground, active) { Log.d("GamutVideo", "hero gate foreground=$foreground active=$active") }
     LaunchedEffect(failed) { if (failed) reportFailed() }
+    LaunchedEffect(rendered) { if (rendered) reportRendered() }
 
     // Audio is the master clock; the video only ever follows it.
     LaunchedEffect(sync) {
@@ -159,10 +186,9 @@ internal fun VideoHero(
 
     val alpha by animateFloatAsState(if (rendered) 1f else 0f, tween(durationMillis = 600), label = "videoHeroAlpha")
 
-    DisposableEffect(textureView) {
-        val view = textureView
-        onDispose { view?.let { sync.detach(it) } }
-    }
+    // No detach effect keyed on the view: it read the view when it ran, so the first effect (keyed null)
+    // captured the view the factory had just made, and was disposed the moment the key changed, which took
+    // the output surface away from the player for good. release() already lets go of the view.
 
     // Cover the whole area at the video's own shape: the view is sized by layout (nothing stretched, no
     // matrix) to at least the area's height and width, and whatever overhangs is clipped.
@@ -175,7 +201,7 @@ internal fun VideoHero(
                         layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                         // Blend rather than punch a hole, so the page shows through during the fade.
                         isOpaque = false
-                        this.alpha = 0f
+                        this.alpha = MinTextureAlpha
                         sync.attach(this)
                         // setVideoTextureView installed ExoPlayer's own listener; it has to keep working
                         // (it is how the surface reaches the decoder), so wrap it instead of replacing it.
@@ -189,6 +215,7 @@ internal fun VideoHero(
                                     width: Int,
                                     height: Int,
                                 ) {
+                                    Log.d("GamutVideo", "surface available ${width}x$height")
                                     delegate?.onSurfaceTextureAvailable(surface, width, height)
                                     if (!replacing) return
                                     replacing = false
@@ -205,6 +232,7 @@ internal fun VideoHero(
 
                                 override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
                                     replacing = true
+                                    Log.d("GamutVideo", "surface destroyed")
                                     sync.markSurfaceLost()
                                     return delegate?.onSurfaceTextureDestroyed(surface) ?: true
                                 }
@@ -212,7 +240,10 @@ internal fun VideoHero(
                                 override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
                                     delegate?.onSurfaceTextureUpdated(surface)
                                     // Proof that *this* surface holds a drawable frame.
-                                    if (!sync.rendered.value) sync.markRendered()
+                                    if (!sync.rendered.value) {
+                                        Log.d("GamutVideo", "first frame reached the texture view")
+                                        sync.markRendered()
+                                    }
                                 }
                             }
                     }
@@ -224,7 +255,7 @@ internal fun VideoHero(
             },
             update = { frame ->
                 val view = frame.getChildAt(0) as TextureView
-                view.alpha = alpha
+                view.alpha = maxOf(alpha, MinTextureAlpha)
                 frame.applyFade(view)
             },
             modifier =

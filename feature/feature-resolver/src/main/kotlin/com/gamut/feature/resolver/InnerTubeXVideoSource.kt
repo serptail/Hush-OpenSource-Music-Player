@@ -1,6 +1,7 @@
 package com.gamut.feature.resolver
 
 import android.content.Context
+import android.webkit.CookieManager
 import android.util.Log
 import com.metrolist.innertubex.InnerTube
 import com.metrolist.innertubex.InnerTubeLogLevel
@@ -14,6 +15,8 @@ import com.metrolist.innertubex.extraction.InnerTubeExtractor
 import com.metrolist.innertubex.extraction.StreamResolveException
 import com.metrolist.innertubex.extraction.YtConfigParserImpl
 import com.metrolist.innertubex.extraction.generateClientPlaybackNonce
+import com.gamut.feature.resolver.potoken.PoTokenGenerator
+import com.gamut.feature.resolver.potoken.PoTokenWebView
 import com.metrolist.innertubex.models.YouTubeLocale
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.ktor.client.HttpClient
@@ -28,6 +31,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -59,9 +64,12 @@ data class ResolvedVideo(
  * (TV, VR, iOS, web) tried in order, the signature / `n` cipher, the headers each client's URLs
  * need, and an exclusion list so a client googlevideo refused can be skipped on the next ask.
  *
- * No PoToken provider is installed, which leaves the clients that require one out of the
- * catalog; the remaining ones still serve progressive video. A provider can be added later by
- * passing `tokenProvider = ...` to [InnerTubeExtractor].
+ * Two things BitChord does that this has to do as well, or most videos resolve and then never play:
+ *  - a BotGuard PoToken provider (a hidden WebView): direct video comes from the web / TV clients,
+ *    which googlevideo only serves with a token. Without one the catalog is down to Android VR,
+ *    whose URLs hand out the first range and then 403 the next.
+ *  - a stable visitor id on every request. A `player` call without one gets URLs that answer a
+ *    byte and then refuse every real read, which looks exactly like "loads, never plays".
  */
 @Singleton
 class InnerTubeXVideoSource
@@ -72,6 +80,10 @@ class InnerTubeXVideoSource
     ) {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         private var warmup: Job? = null
+
+        init {
+            PoTokenWebView.httpClient = okHttp
+        }
 
         private val playerDir: File by lazy { File(context.filesDir, "innertubex_players").apply { mkdirs() } }
         private val configPrefs by lazy { context.getSharedPreferences("innertubex_config", Context.MODE_PRIVATE) }
@@ -134,6 +146,17 @@ class InnerTubeXVideoSource
             }
 
         private val innerTube = InnerTube(http, logger = logger)
+
+        private val webViewSupported by lazy { runCatching { CookieManager.getInstance() }.isSuccess }
+
+        /** BotGuard PoTokens minted in a hidden WebView; one page is kept per visitor id. */
+        private val poTokens =
+            PoTokenGenerator(
+                createMinter = { PoTokenWebView.getNewPoTokenGenerator(context) },
+                available = { webViewSupported },
+            )
+
+        private val visitorLock = Mutex()
         private val remoteStore = RemotePlayerConfigStore(http, repository, logger)
         private val cipherService = YouTubeCipherService(http, remoteStore, logger)
         private val extractor =
@@ -141,6 +164,7 @@ class InnerTubeXVideoSource
                 configParser = YtConfigParserImpl(http, innerTube, remoteStore, logger),
                 cipherService = cipherService,
                 innerTube = innerTube,
+                tokenProvider = poTokens.asTokenProvider(),
                 logger = logger,
             )
 
@@ -155,7 +179,7 @@ class InnerTubeXVideoSource
                     delay(WARM_DELAY_MS)
                     runCatching {
                         cipherService.setPreprocessedPlayerCache(::readPlayer, ::writePlayer)
-                        applyLocale()
+                        applySession()
                         extractor.prewarm()
                     }.onFailure { if (it is CancellationException) throw it }
                         .onFailure { Log.w(TAG, "InnerTubeX warm-up failed: ${it.message}") }
@@ -205,7 +229,7 @@ class InnerTubeXVideoSource
             ageRestricted: Boolean,
         ): ResolvedVideo? =
             withContext(Dispatchers.IO) {
-                applyLocale()
+                applySession()
                 val stream =
                     extractor.extract(
                         videoId = videoId,
@@ -243,6 +267,33 @@ class InnerTubeXVideoSource
                             .sortedDescending(),
                     profileId = stream.profileId,
                 )
+            }
+
+        /** Locale plus the visitor id every request has to carry. */
+        private suspend fun applySession() {
+            applyLocale()
+            innerTube.visitorData = ensureVisitorData()
+        }
+
+        /**
+         * One visitor id, kept between launches. It is what the PoToken is bound to, so a new id per
+         * ask would also mean a new BotGuard page per ask. Refreshed every few days rather than kept
+         * forever, since an id can get burned.
+         */
+        private suspend fun ensureVisitorData(): String? =
+            visitorLock.withLock {
+                val stored = configPrefs.getString(KEY_VISITOR, null)?.takeIf { it.isNotBlank() }
+                val storedAt = configPrefs.getLong(KEY_VISITOR_AT, 0L)
+                if (stored != null && System.currentTimeMillis() - storedAt < VISITOR_TTL_MS) return@withLock stored
+                val fresh =
+                    runCatching { innerTube.fetchFreshVisitorData() }
+                        .onFailure { if (it is CancellationException) throw it }
+                        .onFailure { Log.w(TAG, "couldn't mint a visitor id: ${it.message}") }
+                        .getOrNull()
+                        ?.takeIf { it.isNotBlank() }
+                if (fresh == null) return@withLock stored
+                configPrefs.edit().putString(KEY_VISITOR, fresh).putLong(KEY_VISITOR_AT, System.currentTimeMillis()).apply()
+                fresh
             }
 
         private fun applyLocale() {
@@ -289,6 +340,9 @@ class InnerTubeXVideoSource
             const val LIVE_MARKER = "yt_live_broadcast"
             const val WARM_DELAY_MS = 2_000L
             const val KEPT_PLAYERS = 3
+            const val KEY_VISITOR = "visitor_data"
+            const val KEY_VISITOR_AT = "visitor_data_at_ms"
+            const val VISITOR_TTL_MS = 3L * 24 * 60 * 60 * 1000
 
             /** What a plain ask fails with when the age gate is why. */
             val ESCALATED_REASONS =
