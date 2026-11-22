@@ -69,24 +69,16 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.bold.CaretRight
-import com.adamglin.phosphoricons.bold.MagnifyingGlass
-import com.adamglin.phosphoricons.bold.MusicNote
-import com.adamglin.phosphoricons.bold.MusicNoteSimple
-import com.adamglin.phosphoricons.bold.Plus
-import com.adamglin.phosphoricons.bold.PlusCircle
-import com.adamglin.phosphoricons.bold.Rows
-import com.adamglin.phosphoricons.bold.SquaresFour
-import com.adamglin.phosphoricons.fill.CheckCircle
-import com.adamglin.phosphoricons.fill.DeviceMobileCamera
-import com.adamglin.phosphoricons.fill.Heart
+import com.adamglin.phosphoricons.Regular
+import com.adamglin.phosphoricons.regular.DeviceMobileCamera
+import com.adamglin.phosphoricons.regular.Rows
+import com.adamglin.phosphoricons.regular.SquaresFour
 import com.gamut.core.designsystem.AcrylicMaterials
 import com.gamut.core.designsystem.AcrylicTone
 import com.gamut.core.designsystem.BottomBarItem
@@ -94,6 +86,7 @@ import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.GamutBottomBar
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNotifier
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.acrylicFill
 import com.gamut.core.designsystem.adaptiveGutter
@@ -176,6 +169,7 @@ fun LibraryScreen(
     val userPlaylists by viewModel.playlists.collectAsStateWithLifecycle()
     val playlistInfo by viewModel.playlistInfo.collectAsStateWithLifecycle()
     val likedOffline by viewModel.likedOffline.collectAsStateWithLifecycle()
+    val likedCount by viewModel.favoriteCount.collectAsStateWithLifecycle()
     val notifier = LocalNotifier.current
 
     val palette = LocalCoverPalette.current
@@ -200,19 +194,32 @@ fun LibraryScreen(
                         Modifier.fillMaxWidth().padding(start = 24.dp + gutter, end = 24.dp + gutter, top = 22.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            "Library",
-                            style = MaterialTheme.typography.displayLarge,
-                            color = TextPrimary,
-                            modifier = Modifier.weight(1f),
-                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "Library",
+                                style = MaterialTheme.typography.displayMedium,
+                                color = TextPrimary,
+                            )
+                            Text(
+                                countOf(userPlaylists.size, "playlist") + " \u00B7 " + countOf(artists.size, "artist"),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ink(0.55f),
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
                         Box {
-                            Box(Modifier.size(44.dp).pressScale(onClick = { addMenuOpen = true }), contentAlignment = Alignment.Center) {
+                            Box(
+                                Modifier
+                                    .pressScale(onClick = { addMenuOpen = true })
+                                    .size(40.dp)
+                                    .background(ink(0.08f), CircleShape),
+                                contentAlignment = Alignment.Center,
+                            ) {
                                 Icon(
-                                    PhosphorIcons.Bold.Plus,
+                                    TablerIcons.Plus,
                                     "Create or import a playlist",
-                                    tint = ink(0.85f),
-                                    modifier = Modifier.size(24.dp),
+                                    tint = ink(0.9f),
+                                    modifier = Modifier.size(20.dp),
                                 )
                             }
                             AddMenu(
@@ -227,7 +234,7 @@ fun LibraryScreen(
                     }
 
                     Row(
-                        Modifier.fillMaxWidth().padding(start = 24.dp + gutter, end = 24.dp + gutter, top = 14.dp),
+                        Modifier.fillMaxWidth().padding(start = 24.dp + gutter, end = 24.dp + gutter, top = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -235,14 +242,7 @@ fun LibraryScreen(
                             FilterPill(f.label, selected = filter == f) { filter = if (filter == f) null else f }
                         }
                         Spacer(Modifier.weight(1f))
-                        Box(Modifier.size(36.dp).pressScale(onClick = { isGrid = !isGrid }), contentAlignment = Alignment.Center) {
-                            Icon(
-                                if (isGrid) PhosphorIcons.Bold.Rows else PhosphorIcons.Bold.SquaresFour,
-                                if (isGrid) "Switch to list" else "Switch to grid",
-                                tint = ink(0.85f),
-                                modifier = Modifier.size(22.dp),
-                            )
-                        }
+                        ViewToggle(isGrid) { isGrid = it }
                     }
 
                     importProgress?.let {
@@ -267,8 +267,8 @@ fun LibraryScreen(
                                 else -> GridCells.Fixed(if (isGrid) 3 else 1)
                             },
                         modifier = Modifier.weight(1f).fadeEdges(),
-                        contentPadding = PaddingValues(start = 24.dp + gutter, end = 24.dp + gutter, top = 6.dp, bottom = 24.dp),
-                        verticalArrangement = Arrangement.spacedBy(if (isGrid) 18.dp else 2.dp),
+                        contentPadding = PaddingValues(start = 24.dp + gutter, end = 24.dp + gutter, top = if (isGrid) 20.dp else 6.dp, bottom = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(if (isGrid) 22.dp else 0.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
                         if (showOffline) {
@@ -285,23 +285,15 @@ fun LibraryScreen(
                             }
                             items(downloaded, key = { "off-${it.isrc}" }, contentType = { "offline" }) { song ->
                                 if (isGrid) {
-                                    GridCell(song.title, { onPlayTrack(song, downloaded) }, offline = true) {
-                                        TileCover(song.albumArtUrl, PhosphorIcons.Bold.MusicNoteSimple)
+                                    GridCell(song.title, { onPlayTrack(song, downloaded) }, offline = true, subtitle = song.artist) {
+                                        TileCover(song.albumArtUrl, TablerIcons.MusicNote)
                                     }
                                 } else {
                                     LibraryRow(
                                         title = song.title,
-                                        meta = {
-                                            Text(
-                                                song.artist,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = TextSecondary,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                            )
-                                        },
+                                        meta = { MetaText(song.artist) },
                                         onClick = { onPlayTrack(song, downloaded) },
-                                        cover = { RowCover(song.albumArtUrl, PhosphorIcons.Bold.MusicNoteSimple) },
+                                        cover = { RowCover(song.albumArtUrl, TablerIcons.MusicNote) },
                                         offline = true,
                                         trailing = {},
                                     )
@@ -316,12 +308,14 @@ fun LibraryScreen(
                                         "Liked songs",
                                         { onOpenPlaylist("liked") },
                                         offline = likedOffline,
-                                    ) { TileCover(null, PhosphorIcons.Fill.Heart) }
+                                        subtitle = countOf(likedCount, "song"),
+                                    ) { TileCover(null, TablerIcons.HeartFilled) }
                                 } else {
                                     LibraryRow(
                                         title = "Liked songs",
+                                        meta = { MetaText(countOf(likedCount, "song")) },
                                         onClick = { onOpenPlaylist("liked") },
-                                        cover = { RowCover(null, PhosphorIcons.Fill.Heart) },
+                                        cover = { RowCover(null, TablerIcons.HeartFilled) },
                                         offline = likedOffline,
                                     )
                                 }
@@ -329,26 +323,18 @@ fun LibraryScreen(
 
                             item(key = "on-device") {
                                 if (isGrid) {
-                                    GridCell("On this device", onOpenLocal) { TileCover(null, PhosphorIcons.Fill.DeviceMobileCamera) }
+                                    GridCell("On this device", onOpenLocal, subtitle = "On your phone") { TileCover(null, PhosphorIcons.Regular.DeviceMobileCamera) }
                                 } else {
                                     LibraryRow(
                                         title = "On this device",
-                                        meta = {
-                                            Text(
-                                                "Music stored on your phone",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = TextSecondary,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                            )
-                                        },
+                                        meta = { MetaText("Music stored on your phone") },
                                         onClick = onOpenLocal,
-                                        cover = { RowCover(null, PhosphorIcons.Fill.DeviceMobileCamera) },
+                                        cover = { RowCover(null, PhosphorIcons.Regular.DeviceMobileCamera) },
                                     )
                                 }
                             }
 
-                            if (filter == null) item(key = "playlists-header", span = fullSpan) { SectionTitle("Your playlists") }
+                            if (filter == null) item(key = "playlists-header", span = fullSpan) { SectionTitle("Your playlists", userPlaylists.size) }
 
                             if (userPlaylists.isEmpty()) {
                                 item(key = "playlists-empty", span = fullSpan) {
@@ -381,13 +367,19 @@ fun LibraryScreen(
                                         playlist.name,
                                         addOrOpen,
                                         offline = offline,
-                                    ) { TileCover(cover, PhosphorIcons.Bold.MusicNoteSimple) }
+                                        subtitle = playlistInfo[playlist.id]?.let { countOf(it.songCount, "song") },
+                                    ) { TileCover(cover, TablerIcons.Playlist) }
                                 } else {
                                     LibraryRow(
                                         title = playlist.name,
-                                        meta = if (playlist.tags.isEmpty()) null else ({ TagRow(playlist.tags) }),
+                                        meta = {
+                                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                playlistInfo[playlist.id]?.let { MetaText(countOf(it.songCount, "song")) }
+                                                if (playlist.tags.isNotEmpty()) TagRow(playlist.tags)
+                                            }
+                                        },
                                         onClick = { onOpenPlaylist(playlist.id.toString()) },
-                                        cover = { RowCover(cover, PhosphorIcons.Bold.MusicNoteSimple) },
+                                        cover = { RowCover(cover, TablerIcons.Playlist) },
                                         offline = offline,
                                         trailing = {
                                             if (selectedTrack != null) {
@@ -399,10 +391,10 @@ fun LibraryScreen(
                                                     contentAlignment = Alignment.Center,
                                                 ) {
                                                     Icon(
-                                                        if (added) PhosphorIcons.Fill.CheckCircle else PhosphorIcons.Bold.PlusCircle,
+                                                        if (added) TablerIcons.CircleCheck else TablerIcons.CirclePlus,
                                                         if (added) "Added" else "Add to playlist",
-                                                        tint = if (added) TextPrimary else ink(0.85f),
-                                                        modifier = Modifier.size(28.dp),
+                                                        tint = if (added) TextPrimary else ink(0.8f),
+                                                        modifier = Modifier.size(24.dp),
                                                     )
                                                 }
                                             } else {
@@ -415,7 +407,7 @@ fun LibraryScreen(
                         }
 
                         if (showArtists) {
-                            if (filter == null) item(key = "artists-header", span = fullSpan) { SectionTitle("Artists you follow") }
+                            if (filter == null) item(key = "artists-header", span = fullSpan) { SectionTitle("Artists you follow", artists.size) }
                             if (artists.isEmpty() && !artistsLoading) {
                                 item(key = "artists-empty", span = fullSpan) {
                                     EmptyStateCard(
@@ -438,14 +430,15 @@ fun LibraryScreen(
                             }
                             items(artists, key = { "a-${it.id}" }, contentType = { "artist" }) { artist ->
                                 if (isGrid) {
-                                    GridCell(artist.name, { onOpenArtist(artist.id) }, circle = true) {
-                                        TileCover(artist.imageUrl, PhosphorIcons.Bold.MusicNote, circle = true)
+                                    GridCell(artist.name, { onOpenArtist(artist.id) }, circle = true, subtitle = "Artist") {
+                                        TileCover(artist.imageUrl, TablerIcons.User, circle = true)
                                     }
                                 } else {
                                     LibraryRow(
                                         title = artist.name,
+                                        meta = { MetaText("Artist") },
                                         onClick = { onOpenArtist(artist.id) },
-                                        cover = { RowCover(artist.imageUrl, PhosphorIcons.Bold.MusicNote, circle = true) },
+                                        cover = { RowCover(artist.imageUrl, TablerIcons.User, circle = true) },
                                     )
                                 }
                             }
@@ -603,7 +596,7 @@ private fun AddMenu(
                     onDismiss()
                     onCreatePlaylist()
                 }) {
-                    Icon(PhosphorIcons.Bold.Plus, null, tint = ink(0.85f), modifier = Modifier.size(22.dp))
+                    Icon(TablerIcons.Plus, null, tint = ink(0.85f), modifier = Modifier.size(20.dp))
                 }
                 AddMenuItem("Import from Spotify", onClick = {
                     onDismiss()
@@ -679,10 +672,57 @@ private fun FilterPill(
         modifier =
             Modifier
                 .pressScale(onClick = onClick)
-                .background(if (selected) ink(0.95f) else ink(0.12f), CircleShape)
-                .padding(horizontal = 18.dp, vertical = 8.dp),
+                .background(if (selected) ink(0.95f) else ink(0.08f), CircleShape)
+                .padding(horizontal = 14.dp, vertical = 7.dp),
     )
 }
+
+/** Two-slot segmented control; the active view gets a soft highlight instead of swapping one icon. */
+@Composable
+private fun ViewToggle(
+    isGrid: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    Row(Modifier.background(ink(0.08f), CircleShape).padding(3.dp)) {
+        ToggleSlot(PhosphorIcons.Regular.Rows, "List view", selected = !isGrid) { onChange(false) }
+        ToggleSlot(PhosphorIcons.Regular.SquaresFour, "Grid view", selected = isGrid) { onChange(true) }
+    }
+}
+
+@Composable
+private fun ToggleSlot(
+    icon: ImageVector,
+    description: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val fill by animateFloatAsState(if (selected) 0.16f else 0f, tween(180), label = "toggleFill")
+    Box(
+        Modifier
+            .pressScale(onClick = onClick)
+            .size(width = 36.dp, height = 28.dp)
+            .background(ink(fill), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, description, tint = ink(if (selected) 0.95f else 0.5f), modifier = Modifier.size(17.dp))
+    }
+}
+
+@Composable
+private fun MetaText(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = TextSecondary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+private fun countOf(
+    n: Int,
+    noun: String,
+): String = if (n == 1) "1 $noun" else "$n ${noun}s"
 
 @Composable
 private fun GridCell(
@@ -690,23 +730,49 @@ private fun GridCell(
     onClick: () -> Unit,
     circle: Boolean = false,
     offline: Boolean = false,
+    subtitle: String? = null,
     cover: @Composable () -> Unit,
 ) {
     Column(
         Modifier.fillMaxWidth().pressScale(onClick = onClick, scaleDown = 0.97f),
         horizontalAlignment = if (circle) Alignment.CenterHorizontally else Alignment.Start,
     ) {
-        cover()
-        Spacer(Modifier.height(8.dp))
+        Box(Modifier.fillMaxWidth()) {
+            cover()
+            if (offline) {
+                Box(
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp)
+                        .size(20.dp)
+                        .background(Color.Black.copy(alpha = 0.55f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(TablerIcons.Check, "Available offline", tint = Color.White, modifier = Modifier.size(12.dp))
+                }
+            }
+        }
+        Spacer(Modifier.height(9.dp))
         Text(
             title,
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),
             color = TextPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = if (circle) TextAlign.Center else TextAlign.Start,
+            modifier = if (circle) Modifier.fillMaxWidth() else Modifier,
         )
-        if (offline) AvailableOfflineLine(Modifier.padding(top = 3.dp))
+        if (subtitle != null) {
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.labelMedium,
+                color = ink(0.5f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = if (circle) TextAlign.Center else TextAlign.Start,
+                modifier = (if (circle) Modifier.fillMaxWidth() else Modifier).padding(top = 1.dp),
+            )
+        }
     }
 }
 
@@ -733,7 +799,7 @@ private fun TileCover(
                     .background(flatCoverFill()),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(icon, null, tint = ink(), modifier = Modifier.size(32.dp))
+                Icon(icon, null, tint = ink(0.75f), modifier = Modifier.size(26.dp))
             }
         }
     }
@@ -786,18 +852,21 @@ private fun ReadyToAddCard(
 }
 
 @Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleLarge,
-        color = TextPrimary,
-        modifier = Modifier.padding(top = 22.dp, bottom = 10.dp),
-    )
+private fun SectionTitle(
+    text: String,
+    count: Int? = null,
+) {
+    Row(Modifier.fillMaxWidth().padding(top = 26.dp, bottom = 8.dp), verticalAlignment = Alignment.Bottom) {
+        Text(text, style = MaterialTheme.typography.titleMedium, color = TextPrimary, modifier = Modifier.weight(1f))
+        if (count != null && count > 0) {
+            Text("$count", style = MaterialTheme.typography.labelMedium, color = ink(0.45f))
+        }
+    }
 }
 
 @Composable
 private fun ChevronIcon() {
-    Icon(PhosphorIcons.Bold.CaretRight, null, tint = ink(0.45f), modifier = Modifier.size(18.dp))
+    Icon(TablerIcons.ChevronRight, null, tint = ink(0.35f), modifier = Modifier.size(18.dp))
 }
 
 @Composable
@@ -809,14 +878,17 @@ private fun RowCover(
     if (!coverUrl.isNullOrBlank()) {
         CoverImage(
             remember(coverUrl) { resolveCoverUrl(coverUrl, 200) },
-            Modifier.size(58.dp).then(if (circle) Modifier.clip(CircleShape).thumbnailBorder(CircleShape) else Modifier.softCover()),
+            Modifier.size(56.dp).then(if (circle) Modifier.clip(CircleShape).thumbnailBorder(CircleShape) else Modifier.softCover()),
         )
     } else {
         Box(
-            Modifier.size(58.dp).then(if (circle) Modifier.clip(CircleShape) else Modifier.softCover()).background(flatCoverFill()),
+            Modifier
+                .size(56.dp)
+                .then(if (circle) Modifier.clip(CircleShape) else Modifier.softCover())
+                .background(flatCoverFill()),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, null, tint = ink(), modifier = Modifier.size(28.dp))
+            Icon(icon, null, tint = ink(0.75f), modifier = Modifier.size(22.dp))
         }
     }
 }
@@ -868,17 +940,33 @@ private fun LibraryRow(
     trailing: @Composable () -> Unit = { ChevronIcon() },
 ) {
     Row(
-        Modifier.fillMaxWidth().pressScale(onClick = onClick, scaleDown = 0.98f).padding(vertical = 9.dp),
+        Modifier.fillMaxWidth().pressScale(onClick = onClick, scaleDown = 0.98f).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         cover()
         Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (offline) {
+                    Icon(
+                        TablerIcons.CircleCheck,
+                        "Available offline",
+                        tint = ink(0.5f),
+                        modifier = Modifier.padding(start = 6.dp).size(15.dp),
+                    )
+                }
+            }
             if (meta != null) {
-                Spacer(Modifier.height(5.dp))
+                Spacer(Modifier.height(3.dp))
                 meta()
             }
-            if (offline) AvailableOfflineLine(Modifier.padding(top = 6.dp))
         }
         trailing()
     }

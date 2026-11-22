@@ -7,6 +7,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -102,6 +104,8 @@ import com.adamglin.phosphoricons.bold.DotsThreeVertical
 import com.adamglin.phosphoricons.bold.FolderOpen
 import com.adamglin.phosphoricons.bold.MagnifyingGlass
 import com.adamglin.phosphoricons.bold.Scan
+import com.adamglin.phosphoricons.bold.Shuffle
+import com.adamglin.phosphoricons.fill.Play
 import com.adamglin.phosphoricons.bold.X
 import com.adamglin.phosphoricons.fill.DeviceMobileCamera
 import com.adamglin.phosphoricons.fill.Heart
@@ -211,6 +215,11 @@ internal fun BadgedCover(
 private fun formatDuration(ms: Long): String {
     val s = (ms / 1000).coerceAtLeast(0)
     return "%d:%02d".format(s / 60, s % 60)
+}
+
+private fun formatTotal(ms: Long): String {
+    val minutes = (ms / 60_000).coerceAtLeast(0)
+    return if (minutes < 60) "$minutes min" else "${minutes / 60} h ${minutes % 60} min"
 }
 
 private fun plural(
@@ -365,60 +374,71 @@ fun LocalMusicScreen(
                     Icon(PhosphorIcons.Bold.ArrowLeft, "Back", tint = ink(0.85f), modifier = Modifier.size(20.dp))
                 }
                 Spacer(Modifier.weight(1f))
-                if (hasPermission && songs.isNotEmpty()) {
-                    Text(sort.label, style = MaterialTheme.typography.labelMedium, color = ink(0.55f))
+                if (hasPermission) {
+                    if (songs.isNotEmpty()) {
+                        Text(sort.label, style = MaterialTheme.typography.labelMedium, color = ink(0.55f))
+                        Box(
+                            Modifier.size(44.dp).pressScale(onClick = {
+                                val next = LocalSort.values()[(sort.ordinal + 1) % LocalSort.values().size]
+                                viewModel.setSort(next)
+                                notifier.info("Sorted by ${next.label.lowercase()}")
+                            }),
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(PhosphorIcons.Bold.ArrowsDownUp, "Sort: ${sort.label}", tint = ink(0.85f), modifier = Modifier.size(22.dp)) }
+                    }
                     Box(
-                        Modifier.size(44.dp).pressScale(onClick = {
-                            val next = LocalSort.values()[(sort.ordinal + 1) % LocalSort.values().size]
-                            viewModel.setSort(next)
-                            notifier.info("Sorted by ${next.label.lowercase()}")
-                        }),
+                        Modifier.size(44.dp).pressScale(onClick = { importPicker.launch(arrayOf("audio/*", "application/ogg")) }),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(PhosphorIcons.Bold.ArrowsDownUp, "Sort: ${sort.label}", tint = ink(0.85f), modifier = Modifier.size(22.dp)) }
+                    ) { Icon(PhosphorIcons.Bold.FolderOpen, "Browse for a song", tint = ink(0.85f), modifier = Modifier.size(22.dp)) }
+                    ScanButton(running = scan.running, onClick = viewModel::deepScan)
                 }
             }
 
-            if (settled && hasPermission && songs.isNotEmpty() && !wide) {
-                LocalSearchField(
-                    query = query,
-                    onChange = { query = it },
-                    onFocus = { searchFocused = it },
-                    onDone = { focus.clearFocus() },
-                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 4.dp),
-                )
-            }
-
             val headerSlot: @Composable () -> Unit = {
-                Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 14.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        DeviceTile(88.dp, RoundedCornerShape(22.dp), background = false)
-                        Column(Modifier.weight(1f).padding(start = 18.dp)) {
-                            Text(
-                                "On this device",
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = ink(),
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                when {
-                                    !hasPermission -> "Allow access to see your music"
-                                    songs.isEmpty() -> "No songs found yet"
-                                    else -> plural(songs.size, "song")
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = ink(0.6f),
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
+                val totalMs = remember(songs) { songs.sumOf { it.track.durationMs } }
+                Column(
+                    Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    DeviceTile(156.dp, RoundedCornerShape(30.dp), raised = true)
+                    Text(
+                        "On this device",
+                        style = MaterialTheme.typography.displayMedium,
+                        color = ink(),
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 24.dp).padding(top = 24.dp),
+                    )
+                    Text(
+                        when {
+                            !hasPermission -> "Allow access to see your music"
+                            songs.isEmpty() -> "No songs found yet"
+                            else -> plural(songs.size, "song") + " \u00B7 " + formatTotal(totalMs)
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ink(0.6f),
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    if (hasPermission && songs.isNotEmpty()) {
+                        Row(
+                            Modifier.padding(top = 20.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            LocalPill("Play", PhosphorIcons.Fill.Play, filled = true) {
+                                onTrackSelected(visibleTracks.first(), visibleTracks)
+                            }
+                            LocalPill("Shuffle", PhosphorIcons.Bold.Shuffle, filled = false) {
+                                val mixed = visibleTracks.shuffled()
+                                onTrackSelected(mixed.first(), mixed)
+                            }
                         }
                     }
                     if (hasPermission) {
-                        ScanCard(
+                        ScanStatus(
                             scan = scan,
-                            deepScanned = deepScanned,
-                            onScan = viewModel::deepScan,
-                            onBrowse = { importPicker.launch(arrayOf("audio/*", "application/ogg")) },
-                            modifier = Modifier.padding(top = 18.dp),
+                            modifier = Modifier.padding(horizontal = 24.dp).padding(top = 16.dp),
                         )
                     }
                 }
@@ -426,6 +446,18 @@ fun LocalMusicScreen(
             val listBody: LazyListScope.(Boolean) -> Unit = { showHeader ->
                 if (showHeader && !searching) {
                     item(key = "header") { headerSlot() }
+                }
+
+                if (showHeader && settled && hasPermission && songs.isNotEmpty()) {
+                    item(key = "search") {
+                        LocalSearchField(
+                            query = query,
+                            onChange = { query = it },
+                            onFocus = { searchFocused = it },
+                            onDone = { focus.clearFocus() },
+                            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 2.dp, bottom = 12.dp),
+                        )
+                    }
                 }
 
                 if (hasPermission && formats.size > 1) {
@@ -723,132 +755,92 @@ fun LocalMusicScreen(
     }
 }
 
-private val CodeNextFont = FontFamily(Font(DesignR.font.codenext_extrabold, FontWeight.ExtraBold))
-
 private val ScanPlaces = listOf("Music", "Downloads", "Documents", "WhatsApp Audio", "Recordings", "Other folders")
 
 @Composable
-private fun ScanCard(
-    scan: ScanUi,
-    deepScanned: Boolean,
-    onScan: () -> Unit,
-    onBrowse: () -> Unit,
-    modifier: Modifier = Modifier,
+private fun ScanButton(
+    running: Boolean,
+    onClick: () -> Unit,
 ) {
-    val running = scan.running
-    val onFill = if (LocalCoverPalette.current.isLight) Color.White else Color.Black
-    val shape = RoundedCornerShape(16.dp)
-    val lineColor = onFill.copy(alpha = 0.6f)
-
-    val transition = rememberInfiniteTransition(label = "scan")
-    val sweep by transition.animateFloat(
-        0f,
-        1f,
-        infiniteRepeatable(tween(1700, easing = FastOutSlowInEasing), RepeatMode.Restart),
-        label = "sweep",
-    )
+    val transition = rememberInfiniteTransition(label = "scanButton")
     val breathe by transition.animateFloat(
-        0.45f,
+        0.35f,
         1f,
-        infiniteRepeatable(tween(1100, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "breathe",
     )
-    val motion by animateFloatAsState(if (running) 1f else 0f, tween(450), label = "motion")
+    Box(
+        Modifier
+            .size(44.dp)
+            .pressScale(onClick = { if (!running) onClick() }),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            PhosphorIcons.Bold.Scan,
+            if (running) "Scanning" else "Scan every folder for music",
+            tint = if (running) MaterialTheme.colorScheme.primary else ink(0.85f),
+            modifier = Modifier.size(22.dp).graphicsLayer { alpha = if (running) breathe else 1f },
+        )
+    }
+}
 
+/** Only shows while a scan is running or has something to report; otherwise it takes no room. */
+@Composable
+private fun ScanStatus(
+    scan: ScanUi,
+    modifier: Modifier = Modifier,
+) {
     var place by remember { mutableIntStateOf(0) }
-    LaunchedEffect(running) {
+    LaunchedEffect(scan.running) {
         place = 0
-        while (running) {
+        while (scan.running) {
             delay(1100)
             place = (place + 1) % ScanPlaces.size
         }
     }
     val seenShown by animateIntAsState(scan.seen, tween(500), label = "seen")
-
-    Column(modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(
-                Modifier
-                    .weight(1f)
-                    .clip(shape)
-                    .background(ink())
-                    .then(if (running) Modifier else Modifier.pressScale(onClick = onScan, scaleDown = 0.98f))
-                    .drawWithContent {
-                        drawContent()
-                        if (motion > 0.01f) {
-                            val h = 2.dp.toPx()
+    val text =
+        when {
+            scan.running -> "Looking in ${ScanPlaces[place]}" + if (seenShown > 0) " \u00B7 $seenShown files checked" else "\u2026"
+            else -> scan.message
+        }
+    val transition = rememberInfiniteTransition(label = "scanBar")
+    val sweep by transition.animateFloat(
+        0f,
+        1f,
+        infiniteRepeatable(tween(1500, easing = FastOutSlowInEasing), RepeatMode.Restart),
+        label = "sweep",
+    )
+    val barColor = ink(0.7f)
+    AnimatedVisibility(visible = text != null, modifier = modifier, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+        var shown by remember { mutableStateOf(text) }
+        if (text != null) shown = text
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (scan.running) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(0.62f)
+                        .height(3.dp)
+                        .clip(CircleShape)
+                        .background(ink(0.12f))
+                        .drawWithContent {
                             val w = size.width * 0.35f
                             val x = -w + (size.width + w) * sweep
                             drawRect(
-                                Brush.horizontalGradient(
-                                    listOf(Color.Transparent, lineColor.copy(alpha = lineColor.alpha * motion), Color.Transparent),
-                                    startX = x,
-                                    endX = x + w,
-                                ),
-                                topLeft = Offset(x.coerceAtLeast(0f), size.height - h),
-                                size = Size((x + w).coerceAtMost(size.width) - x.coerceAtLeast(0f), h),
+                                barColor,
+                                topLeft = Offset(x.coerceAtLeast(0f), 0f),
+                                size = Size((x + w).coerceAtMost(size.width) - x.coerceAtLeast(0f), size.height),
                             )
-                        }
-                    }.padding(horizontal = 14.dp, vertical = 15.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                Icon(
-                    PhosphorIcons.Bold.Scan,
-                    null,
-                    tint = onFill,
-                    modifier =
-                        Modifier
-                            .size(22.dp)
-                            .graphicsLayer { alpha = 1f - (1f - breathe) * motion },
-                )
-                Crossfade(if (running) "Scanning…" else "Scan", animationSpec = tween(300), label = "title") {
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.titleMedium.copy(fontFamily = CodeNextFont),
-                        color = onFill,
-                        maxLines = 1,
-                        modifier = Modifier.padding(start = 10.dp),
-                    )
-                }
-            }
-            Row(
-                Modifier
-                    .weight(1f)
-                    .clip(shape)
-                    .background(ink(0.12f))
-                    .pressScale(onClick = onBrowse, scaleDown = 0.98f)
-                    .padding(horizontal = 14.dp, vertical = 15.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                Icon(PhosphorIcons.Bold.FolderOpen, null, tint = ink(), modifier = Modifier.size(22.dp))
-                Text(
-                    "Browse",
-                    style = MaterialTheme.typography.titleMedium.copy(fontFamily = CodeNextFont),
-                    color = ink(),
-                    maxLines = 1,
-                    modifier = Modifier.padding(start = 10.dp),
+                        },
                 )
             }
-        }
-        Crossfade(
-            when {
-                running -> "Looking in ${ScanPlaces[place]}" + if (seenShown > 0) " · $seenShown files checked" else "…"
-                scan.message != null -> scan.message
-                deepScanned -> "Searched every folder for all audio formats"
-                else -> "Scan searches every folder, or browse to add one song"
-            },
-            animationSpec = tween(350),
-            label = "subtitle",
-        ) {
             Text(
-                it,
+                shown.orEmpty(),
                 style = MaterialTheme.typography.bodyMedium,
                 color = ink(0.6f),
+                textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 4.dp, top = 10.dp),
             )
         }
     }
@@ -1322,9 +1314,7 @@ private fun LocalSongRow(
             ).padding(start = 24.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BadgedCover(local = true) {
-            CoverImage(remember(track.albumArtUrl) { track.albumArtUrl.orEmpty() }, Modifier.size(54.dp).softCover())
-        }
+        CoverImage(remember(track.albumArtUrl) { track.albumArtUrl.orEmpty() }, Modifier.size(54.dp).softCover())
         Column(Modifier.weight(1f).padding(start = 16.dp, end = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (isPlaying) NowPlayingBars(color = accent, modifier = Modifier.padding(end = 8.dp))

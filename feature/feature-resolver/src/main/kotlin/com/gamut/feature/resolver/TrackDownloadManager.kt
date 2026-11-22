@@ -44,12 +44,22 @@ import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
 
+enum class DownloadStage { Preparing, Downloading, Finishing }
+
 sealed interface DownloadState {
     data object Queued : DownloadState
 
     data class Active(
         val progress: Float,
-    ) : DownloadState
+        val bytesDone: Long = 0L,
+        val bytesTotal: Long = 0L,
+        val bytesPerSec: Long = 0L,
+        val stage: DownloadStage = DownloadStage.Downloading,
+    ) : DownloadState {
+        /** Seconds left at the current speed, or null while it can't be estimated yet. */
+        val etaSeconds: Long?
+            get() = if (bytesPerSec > 0 && bytesTotal > bytesDone) (bytesTotal - bytesDone) / bytesPerSec else null
+    }
 
     data object Done : DownloadState
 
@@ -63,7 +73,14 @@ data class DownloadBatch(
     val total: Int = 0,
     val current: String? = null,
     val waitingForWifi: Boolean = false,
-)
+    val currentProgress: Float = 0f,
+    val bytesPerSec: Long = 0L,
+    val failed: Int = 0,
+) {
+    /** Overall fraction across the whole batch, counting the track that is in flight. */
+    val overall: Float
+        get() = if (total <= 0) 0f else ((done + currentProgress.coerceIn(0f, 1f)) / total).coerceIn(0f, 1f)
+}
 
 data class DownloadSummary(
     val succeeded: Int,
@@ -199,8 +216,8 @@ class TrackDownloadManager
 
         private suspend fun process(track: Track) {
             val id = track.isrc
-            batchState.update { it.copy(current = track.title) }
-            setState(id, DownloadState.Active(0f))
+            batchState.update { it.copy(current = track.title, currentProgress = 0f, bytesPerSec = 0L) }
+            setState(id, DownloadState.Active(0f, stage = DownloadStage.Preparing))
             try {
                 val stored = fetch(track)
                 saveMetadata(track)
@@ -214,6 +231,7 @@ class TrackDownloadManager
                 failedTracks[id] = track
                 setState(id, DownloadState.Failed(e.message ?: "Download failed"))
                 recordResult(track.title, ok = false)
+                batchState.update { it.copy(failed = it.failed + 1) }
             } finally {
                 finishOne()
             }
@@ -233,20 +251,31 @@ class TrackDownloadManager
                 var url = bestUrl(videoId, refresh = false)
                 var stream = streamKey(url)
                 var attempts = 0
-                var lastEmit = 0L
+                var lastEmit = SystemClock.elapsedRealtime()
+                var lastBytes = part.length()
+                var speed = 0.0
                 while (true) {
                     try {
                         pump(url, part) { done, all ->
                             val now = SystemClock.elapsedRealtime()
                             if (now - lastEmit >= PROGRESS_EVERY_MS || done >= all) {
+                                val dt = (now - lastEmit).coerceAtLeast(1L)
+                                val instant = (done - lastBytes).coerceAtLeast(0L) * 1000.0 / dt
+                                speed = if (speed == 0.0) instant else speed * 0.7 + instant * 0.3
                                 lastEmit = now
-                                setState(id, DownloadState.Active(done.toFloat() / all))
+                                lastBytes = done
+                                val fraction = done.toFloat() / all
+                                setState(id, DownloadState.Active(fraction, done, all, speed.toLong()))
+                                batchState.update { it.copy(currentProgress = fraction, bytesPerSec = speed.toLong()) }
                             }
                         }
                         break
                     } catch (e: IOException) {
                         currentCoroutineContext().ensureActive()
                         if (++attempts > MAX_ATTEMPTS) throw e
+                        lastBytes = part.length()
+                        lastEmit = SystemClock.elapsedRealtime()
+                        speed = 0.0
                         delay(500L * attempts)
                         url = bestUrl(videoId, refresh = true)
                         if (streamKey(url) != stream) {
@@ -256,6 +285,7 @@ class TrackDownloadManager
                     }
                 }
                 if (part.length() < MIN_VALID_BYTES) throw IOException("Download incomplete")
+                setState(id, DownloadState.Active(1f, part.length(), part.length(), 0L, DownloadStage.Finishing))
                 val extras =
                     withTimeoutOrNull(EXTRAS_WAIT_MS) { extrasJob.await() } ?: run {
                         extrasJob.cancel()

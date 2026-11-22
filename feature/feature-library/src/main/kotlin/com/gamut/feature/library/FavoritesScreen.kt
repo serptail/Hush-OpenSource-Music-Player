@@ -751,7 +751,7 @@ private fun FavoriteRow(
                     )
                 }
                 if (downloading && !playing) {
-                    Box(Modifier.padding(top = 6.dp).height(2.dp)) { DownloadProgressLine(downloadState) }
+                    DownloadProgressLine(downloadState, Modifier.padding(top = 6.dp))
                 }
             }
             when {
@@ -1223,7 +1223,7 @@ private fun WheelRow(
                     )
                 }
                 if (downloading && !playing) {
-                    Box(Modifier.padding(top = 5.dp).height(2.dp)) { DownloadProgressLine(downloadState) }
+                    DownloadProgressLine(downloadState, Modifier.padding(top = 5.dp))
                 }
             }
             if (downloading) {

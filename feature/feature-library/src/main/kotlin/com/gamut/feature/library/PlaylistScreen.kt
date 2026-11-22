@@ -897,6 +897,9 @@ private fun PlaylistHeader(
                 }
             }
         }
+        if (songCount > 0) {
+            PlaylistDownloadPanel(downloadUi, Modifier.padding(horizontal = 20.dp).padding(top = 14.dp))
+        }
     }
 }
 
@@ -985,7 +988,7 @@ private fun PlaylistTrackRow(
                     modifier = m,
                 )
             }
-            Box(Modifier.padding(top = 5.dp).height(2.dp)) { DownloadProgressLine(downloadState) }
+            DownloadProgressLine(downloadState, Modifier.padding(top = 5.dp))
         }
         TrackDownloadButton(downloadState, onDownload = onDownload, onCancel = onCancelDownload, onDone = onMore, glyph = 20.dp)
         Box(Modifier.size(40.dp).pressScale(onClick = onMore), contentAlignment = Alignment.Center) {
@@ -1154,6 +1157,9 @@ private fun VinylHeader(
                 }
             }
         }
+        if (songCount > 0) {
+            PlaylistDownloadPanel(downloadUi, Modifier.padding(horizontal = 20.dp).padding(top = 14.dp))
+        }
     }
 }
 
@@ -1271,7 +1277,7 @@ private fun VinylTrackRow(
                         modifier = m,
                     )
                 }
-                Box(Modifier.padding(top = 4.dp).height(2.dp)) { DownloadProgressLine(downloadState) }
+                DownloadProgressLine(downloadState, Modifier.padding(top = 4.dp))
             }
             if (track.durationMs > 0) {
                 Text(
@@ -1422,6 +1428,9 @@ private fun ImmersiveHeader(
                 }
             }
         }
+        if (songCount > 0) {
+            PlaylistDownloadPanel(downloadUi, Modifier.padding(horizontal = 20.dp).padding(top = 14.dp))
+        }
     }
 }
 
@@ -1494,7 +1503,7 @@ private fun ImmersiveTrackRow(
                         modifier = m,
                     )
                 }
-                Box(Modifier.padding(top = 4.dp).height(2.dp)) { DownloadProgressLine(downloadState) }
+                DownloadProgressLine(downloadState, Modifier.padding(top = 4.dp))
             }
             TrackDownloadButton(downloadState, onDownload = onDownload, onCancel = onCancelDownload, onDone = onMore, glyph = 20.dp)
             Box(Modifier.size(40.dp).pressScale(onClick = onMore), contentAlignment = Alignment.Center) {
