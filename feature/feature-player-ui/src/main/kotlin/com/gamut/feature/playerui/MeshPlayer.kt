@@ -621,9 +621,11 @@ internal fun MeshScrubber(
 internal fun MeshTransport(
     isPlaying: Boolean,
     loading: Boolean,
-    onPrevious: () -> Unit,
+    /** Null leaves the previous button out (the boxed video shows only play / pause). */
+    onPrevious: (() -> Unit)?,
     onTogglePlay: () -> Unit,
-    onNext: () -> Unit,
+    /** Null leaves the next button out. */
+    onNext: (() -> Unit)?,
     modifier: Modifier = Modifier,
     playModifier: Modifier = Modifier,
 ) {
@@ -632,12 +634,14 @@ internal fun MeshTransport(
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        DepthIcon(
-            TablerIcons.TrackPrev,
-            "Previous",
-            Modifier.bounceTap(onClick = onPrevious).padding(8.dp),
-            size = 22.dp,
-        )
+        if (onPrevious != null) {
+            DepthIcon(
+                TablerIcons.TrackPrev,
+                "Previous",
+                Modifier.bounceTap(onClick = onPrevious).padding(8.dp),
+                size = 22.dp,
+            )
+        }
         Box(
             playModifier.bounceTap(onClick = onTogglePlay).padding(4.dp).size(56.dp),
             contentAlignment = Alignment.Center,
@@ -654,11 +658,13 @@ internal fun MeshTransport(
                 }
             }
         }
-        DepthIcon(
-            TablerIcons.TrackNext,
-            "Next",
-            Modifier.bounceTap(onClick = onNext).padding(8.dp),
-            size = 22.dp,
-        )
+        if (onNext != null) {
+            DepthIcon(
+                TablerIcons.TrackNext,
+                "Next",
+                Modifier.bounceTap(onClick = onNext).padding(8.dp),
+                size = 22.dp,
+            )
+        }
     }
 }

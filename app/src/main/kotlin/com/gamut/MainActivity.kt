@@ -155,6 +155,7 @@ import com.gamut.feature.search.DiscoverRepository
 import com.gamut.feature.search.LocalPlaylistRemove
 import com.gamut.feature.search.SearchScreen
 import com.gamut.feature.search.SearchViewModel
+import com.gamut.feature.search.ShazamHistorySheet
 import com.gamut.feature.search.ShazamSheet
 import com.gamut.feature.search.ShazamState
 import com.gamut.feature.search.ShazamViewModel
@@ -479,6 +480,7 @@ private fun GamutApp(
 
     val shazamVm = hiltViewModel<ShazamViewModel>()
     val shazamState by shazamVm.state.collectAsState()
+    var showShazamHistory by remember { mutableStateOf(false) }
     val appLibraryVm = hiltViewModel<LibraryViewModel>()
     LaunchedEffect(appLibraryVm) {
         appLibraryVm.tracksByPlaylist.collect { map -> supportVm.store.recordPlaylistSize(map.values.maxOfOrNull { it.size } ?: 0) }
@@ -720,6 +722,7 @@ private fun GamutApp(
                                         openLibraryTick = openLibraryTick,
                                         onProfile = { nav.navigate("settings") { launchSingleTop = true } },
                                         onShazam = onShazam,
+                                        onShazamHistory = { showShazamHistory = true },
                                         nowPlaying = nowPlaying,
                                     )
                                     SettingsLayer(
@@ -1104,9 +1107,24 @@ private fun GamutApp(
                                     )
                                 }
                             }
+                            if (showShazamHistory) {
+                                val shazamHistory by shazamVm.history.collectAsState()
+                                CoverTheme(palette) {
+                                    ShazamHistorySheet(
+                                        entries = shazamHistory,
+                                        onDismiss = { showShazamHistory = false },
+                                        onPlay = { track ->
+                                            showShazamHistory = false
+                                            playTrackWithQueue(track, emptyList())
+                                        },
+                                        onRemove = shazamVm::removeFromHistory,
+                                        onClear = shazamVm::clearHistory,
+                                    )
+                                }
+                            }
                             val supportSafe =
                                 !showLoading && coldStartQuiet && !isPlayingNow && !playerOpen && !createOpen &&
-                                    shazamState is ShazamState.Idle && !showConnect
+                                    shazamState is ShazamState.Idle && !showShazamHistory && !showConnect
                             CoverTheme(palette) { SupportSheetHost(vm = supportVm, safeMoment = supportSafe) }
                             CoverTheme(if (playerOpen || createOpen) neutralPalette else palette) { NoticeHost() }
                             if (showConnect) {
@@ -1249,6 +1267,7 @@ private fun HomeTabs(
     openLibraryTick: Int,
     onProfile: () -> Unit,
     onShazam: () -> Unit,
+    onShazamHistory: () -> Unit,
     nowPlaying: @Composable () -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -1355,6 +1374,7 @@ private fun HomeTabs(
                         onArtistSelected = onArtistSelected,
                         onAlbumSelected = onAlbumSelected,
                         onShazam = onShazam,
+                        onShazamHistory = onShazamHistory,
                         onProfile = onProfile,
                         profileName = profileName,
                         profileSeed = profileId,

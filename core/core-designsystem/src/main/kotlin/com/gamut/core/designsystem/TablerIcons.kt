@@ -63,5 +63,28 @@ object TablerIcons {
     val Box: ImageVector by lazy { icon("Box", "M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5", "M12 12l8 -4.5", "M12 12l0 9", "M12 12l-8 -4.5") }
     val Expand: ImageVector by lazy { icon("Expand", "M16 4l4 0l0 4", "M14 10l6 -6", "M8 20l-4 0l0 -4", "M4 20l6 -6", "M16 20l4 0l0 -4", "M14 14l6 6", "M8 4l-4 0l0 4", "M4 4l6 6") }
     val Collapse: ImageVector by lazy { icon("Collapse", "M5 9l4 0l0 -4", "M3 3l6 6", "M5 15l4 0l0 4", "M3 21l6 -6", "M19 9l-4 0l0 -4", "M15 9l6 -6", "M19 15l-4 0l0 4", "M15 15l6 6") }
+    val RippleUp: ImageVector by lazy { icon("RippleUp", "M3 7q 4.5 -3 9 0t 9 0", "M3 17q 4.5 -3 9 0q .218 .144 .434 .275", "M3 12q 4.5 -3 9 0q 1.941 1.294 3.882 1.472", "M19 22v-6", "M22 19l-3 -3l-3 3") }
+    val PlayRegular: ImageVector by lazy { icon("PlayRegular", "M7 4v16l13 -8l-13 -8") }
+    val CircleCheck: ImageVector by lazy { icon("CircleCheck", "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0", "M9 12l2 2l4 -4") }
+    val CirclePlus: ImageVector by lazy { icon("CirclePlus", "M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0", "M9 12h6", "M12 9v6") }
+    val CircleOutline: ImageVector by lazy { icon("CircleOutline", "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0") }
+    val CircleArrowDown: ImageVector by lazy { icon("CircleArrowDown", "M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0", "M8 12l4 4", "M12 8v8", "M16 12l-4 4") }
+    val Dots: ImageVector by lazy { icon("Dots", "M4 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M18 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0") }
+    val GripVertical: ImageVector by lazy { icon("GripVertical", "M8 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M8 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M8 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M14 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M14 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M14 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0") }
+    val Trash: ImageVector by lazy { icon("Trash", "M4 7l16 0", "M10 11l0 6", "M14 11l0 6", "M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12", "M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3") }
+    val ArrowLeft: ImageVector by lazy { icon("ArrowLeft", "M5 12l14 0", "M5 12l6 6", "M5 12l6 -6") }
+    val ChevronRight: ImageVector by lazy { icon("ChevronRight", "M9 6l6 6l-6 6") }
+    val User: ImageVector by lazy { icon("User", "M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0", "M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2") }
+    val Plus: ImageVector by lazy { icon("Plus", "M12 5l0 14", "M5 12l14 0") }
+    val Pencil: ImageVector by lazy { icon("Pencil", "M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4", "M13.5 6.5l4 4") }
+    val RowInsertTop: ImageVector by lazy { icon("RowInsertTop", "M4 18v-4a1 1 0 0 1 1 -1h14a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-14a1 1 0 0 1 -1 -1", "M12 9v-4", "M10 7l4 0") }
+    val Photo: ImageVector by lazy { icon("Photo", "M15 8h.01", "M3 6a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v12a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3v-12", "M3 16l5 -5c.928 -.893 2.072 -.893 3 0l5 5", "M14 14l1 -1c.928 -.893 2.072 -.893 3 0l3 3") }
+    val Tag: ImageVector by lazy { icon("Tag", "M6.5 7.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M3 6v5.172a2 2 0 0 0 .586 1.414l7.71 7.71a2.41 2.41 0 0 0 3.408 0l5.592 -5.592a2.41 2.41 0 0 0 0 -3.408l-7.71 -7.71a2 2 0 0 0 -1.414 -.586h-5.172a3 3 0 0 0 -3 3") }
+    val World: ImageVector by lazy { icon("World", "M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0", "M3.6 9h16.8", "M3.6 15h16.8", "M11.5 3a17 17 0 0 0 0 18", "M12.5 3a17 17 0 0 1 0 18") }
+    val Link: ImageVector by lazy { icon("Link", "M9 15l6 -6", "M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464", "M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463") }
+    val History: ImageVector by lazy { icon("History", "M12 8l0 4l2 2", "M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5") }
+    val Download: ImageVector by lazy { icon("Download", "M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2", "M7 11l5 5l5 -5", "M12 4l0 12") }
+    val PackageImport: ImageVector by lazy { icon("PackageImport", "M12 21l-8 -4.5v-9l8 -4.5l8 4.5v4.5", "M12 12l8 -4.5", "M12 12v9", "M12 12l-8 -4.5", "M22 18h-7", "M18 15l-3 3l3 3") }
+    val Archive: ImageVector by lazy { icon("Archive", "M3 6a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2", "M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-10", "M10 12l4 0") }
     val HeartFilled: ImageVector by lazy { icon("HeartFilled", "M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572Z", filled = true) }
 }

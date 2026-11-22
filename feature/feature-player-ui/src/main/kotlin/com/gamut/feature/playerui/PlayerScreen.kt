@@ -409,7 +409,12 @@ fun PlayerScreen(
     BackHandler(enabled = active && videoExpanded) { videoExpanded = false }
     ExpandedVideoWindow(enabled = videoExpanded)
     // Where the page keeps room for the video box (see BoxedVideoPlayer).
+    // Measured at the page's resting scroll position (see below); the box follows the scroll offset on top of it.
     var videoSlot by remember { mutableStateOf<Rect?>(null) }
+    // The boxed page scrolls as one: the video is the first thing on it and scrolls away with the rest.
+    val boxedScroll = rememberScrollState()
+    // Top edge (in root) of the scrolling area, i.e. just under the top bar. The box is cut off above it.
+    var boxedViewportTop by remember { mutableStateOf(0f) }
 
     val meshStyle = LocalAppearance.current.playerStyle == PlayerStyle.Mesh && !videoMode
     val artworkMesh = if (meshStyle) rememberArtworkMesh(artUrl) else null
@@ -729,70 +734,78 @@ fun PlayerScreen(
                         )
 
                         if (boxedVideo) {
-                            // The video box is pinned under the top bar (BoxedVideoPlayer draws it over the room reserved
-                            // here); everything else scrolls below it. Expanded, the video owns the screen instead.
+                            // The video box is the first thing on the page and scrolls away with it. BoxedVideoPlayer draws
+                            // it over the room reserved here, following the scroll offset, and cuts it off under the top bar.
+                            // Expanded, the video owns the screen instead.
                             if (!videoExpanded) {
-                                Box(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp + gutter)
-                                        .padding(top = 8.dp, bottom = 14.dp)
-                                        .layout { measurable, constraints ->
-                                            val placeable = measurable.measure(constraints)
-                                            // The room opens with the reveal, so the page slides down as the picture arrives.
-                                            layout(placeable.width, (placeable.height * videoReveal).roundToInt()) { placeable.place(0, 0) }
-                                        },
-                                ) {
-                                    Spacer(
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .aspectRatio(16f / 9f)
-                                            .volumeHudAnchor(volumeHud)
-                                            .onGloballyPositioned { videoSlot = Rect(it.positionInRoot(), it.size.toSize()) },
-                                    )
-                                }
                                 Column(
                                     Modifier
                                         .weight(1f)
                                         .fillMaxWidth()
-                                        .verticalScroll(rememberScrollState())
-                                        .padding(horizontal = 24.dp + gutter),
+                                        .onGloballyPositioned { boxedViewportTop = it.positionInRoot().y }
+                                        .verticalScroll(boxedScroll),
                                 ) {
-                                    trackHeader()
-                                    Spacer(Modifier.height(6.dp))
-                                    LyricStripBlock(
-                                        lyricsOn = lyricsOn,
-                                        lyricsState = shownLyrics,
-                                        flowLines = flowLines,
-                                        trackKey = stripKey,
-                                        playhead = playhead,
-                                        isPlaying = clock.live,
-                                        durationMs = effectiveDurationMs,
-                                        onOpen = { lyricsPanelOpen = true },
-                                        highlight = lyricHighlight,
-                                    )
-                                    Spacer(Modifier.height(6.dp))
-                                    MeshScrubber(
-                                        progress = progressProvider,
-                                        onScrub = { scrubFraction = it },
-                                        onSeekFraction = seekToFraction,
-                                        seekStep = seekStep,
-                                    )
-                                    TimeRow(positionProvider, effectiveDurationMs)
-                                    Spacer(Modifier.height(6.dp))
-                                    MeshTransport(
-                                        isPlaying = shownPlaying,
-                                        loading = spinnerOn,
-                                        onPrevious = player::skipPrevious,
-                                        onTogglePlay = togglePlay,
-                                        onNext = player::skipNext,
-                                        playModifier = Modifier.focusRequester(coverFocus),
-                                    )
-                                    Spacer(Modifier.height(4.dp))
-                                    controlsGrid()
-                                    Spacer(Modifier.height(28.dp))
-                                    extrasContent()
-                                    Spacer(Modifier.height(32.dp).navigationBarsPadding())
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp + gutter)
+                                            .padding(top = 8.dp, bottom = 14.dp)
+                                            .layout { measurable, constraints ->
+                                                val placeable = measurable.measure(constraints)
+                                                // The room opens with the reveal, so the page slides down as the picture arrives.
+                                                layout(placeable.width, (placeable.height * videoReveal).roundToInt()) { placeable.place(0, 0) }
+                                            },
+                                    ) {
+                                        Spacer(
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .aspectRatio(16f / 9f)
+                                                .volumeHudAnchor(volumeHud)
+                                                .onGloballyPositioned {
+                                                    // Store the slot as if the page were not scrolled; the scroll offset is applied
+                                                    // where the box is placed, so it never lags a frame behind the content.
+                                                    val at = it.positionInRoot()
+                                                    videoSlot = Rect(Offset(at.x, at.y + boxedScroll.value), it.size.toSize())
+                                                },
+                                        )
+                                    }
+                                    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp + gutter)) {
+                                        trackHeader()
+                                        Spacer(Modifier.height(6.dp))
+                                        LyricStripBlock(
+                                            lyricsOn = lyricsOn,
+                                            lyricsState = shownLyrics,
+                                            flowLines = flowLines,
+                                            trackKey = stripKey,
+                                            playhead = playhead,
+                                            isPlaying = clock.live,
+                                            durationMs = effectiveDurationMs,
+                                            onOpen = { lyricsPanelOpen = true },
+                                            highlight = lyricHighlight,
+                                        )
+                                        Spacer(Modifier.height(6.dp))
+                                        MeshScrubber(
+                                            progress = progressProvider,
+                                            onScrub = { scrubFraction = it },
+                                            onSeekFraction = seekToFraction,
+                                            seekStep = seekStep,
+                                        )
+                                        TimeRow(positionProvider, effectiveDurationMs)
+                                        Spacer(Modifier.height(6.dp))
+                                        MeshTransport(
+                                            isPlaying = shownPlaying,
+                                            loading = spinnerOn,
+                                            onPrevious = player::skipPrevious,
+                                            onTogglePlay = togglePlay,
+                                            onNext = player::skipNext,
+                                            playModifier = Modifier.focusRequester(coverFocus),
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        controlsGrid()
+                                        Spacer(Modifier.height(28.dp))
+                                        extrasContent()
+                                        Spacer(Modifier.height(32.dp).navigationBarsPadding())
+                                    }
                                 }
                             }
                         } else if (wide && videoMode) {
@@ -920,7 +933,8 @@ fun PlayerScreen(
                         onFailed = videoSource.refresh,
                         onRendered = { videoShown = true },
                         expanded = videoExpanded,
-                        slot = { videoSlot },
+                        slot = { videoSlot?.translate(0f, -boxedScroll.value.toFloat()) },
+                        viewportTop = { boxedViewportTop },
                         reveal = { videoReveal },
                     ) {
                         BoxedVideoControls(
@@ -935,8 +949,6 @@ fun PlayerScreen(
                             onScrub = { scrubFraction = it },
                             onSeekFraction = seekToFraction,
                             onTogglePlay = togglePlay,
-                            onPrevious = player::skipPrevious,
-                            onNext = player::skipNext,
                             onToggleExpand = { videoExpanded = !videoExpanded },
                         )
                     }
@@ -1000,6 +1012,7 @@ fun PlayerScreen(
             videoOn = videoOn,
             onToggleVideo = toggleVideo,
             onToggleFavorite = { track?.let(onToggleFavorite) },
+            accent = accent,
             onUpgradeQuality =
                 track?.let {
                     {

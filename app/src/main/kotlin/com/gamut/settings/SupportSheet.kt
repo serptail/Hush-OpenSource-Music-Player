@@ -66,10 +66,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.bold.Heart
 import com.gamut.core.designsystem.AdaptiveLayout
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import kotlinx.coroutines.delay
@@ -194,7 +192,7 @@ private fun SupportSheet(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(PhosphorIcons.Bold.Heart, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    Icon(TablerIcons.Heart, null, tint = Color.White, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(10.dp))
                     Text("Buy me a coffee", style = MaterialTheme.typography.titleMedium, color = Color.White)
                 }

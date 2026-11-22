@@ -95,14 +95,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.bold.ArrowCircleDown
 import com.adamglin.phosphoricons.bold.ArrowLeft
 import com.adamglin.phosphoricons.bold.DotsThreeVertical
-import com.adamglin.phosphoricons.bold.Plus
-import com.adamglin.phosphoricons.bold.ShareNetwork
 import com.adamglin.phosphoricons.bold.Shuffle
-import com.adamglin.phosphoricons.bold.Trash
-import com.adamglin.phosphoricons.bold.User
 import com.adamglin.phosphoricons.fill.CheckCircle
 import com.adamglin.phosphoricons.fill.Heart
 import com.adamglin.phosphoricons.fill.Play
@@ -119,6 +114,7 @@ import com.gamut.core.designsystem.LocalNavSettled
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.ShareSheet
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.glass
 import com.gamut.core.designsystem.ink
@@ -875,24 +871,24 @@ private fun TrackActionsSheet(
                 }
             }
 
-            SheetAction("Play", PhosphorIcons.Fill.Play) { close(onPlay) }
+            SheetAction("Play", TablerIcons.PlayRegular) { close(onPlay) }
             if (!track.isLocal) {
                 when (downloadState) {
-                    DownloadState.Done -> SheetAction("Remove download", PhosphorIcons.Fill.CheckCircle) { close(onRemoveDownload) }
-                    null, is DownloadState.Failed -> SheetAction("Download", PhosphorIcons.Bold.ArrowCircleDown) { close(onDownload) }
+                    DownloadState.Done -> SheetAction("Remove download", TablerIcons.CircleCheck) { close(onRemoveDownload) }
+                    null, is DownloadState.Failed -> SheetAction("Download", TablerIcons.CircleArrowDown) { close(onDownload) }
                     else -> Unit
                 }
             }
             SheetAction(
                 if (splitArtists(track.artist).size > 1) "Go to artist\u2026" else "Go to artist",
-                PhosphorIcons.Bold.User,
+                TablerIcons.User,
             ) { close(onGoToArtist) }
-            SheetAction("Share", PhosphorIcons.Bold.ShareNetwork) { close(onShare) }
+            SheetAction("Share", TablerIcons.Share) { close(onShare) }
             if (onAddToPlaylist != null) {
-                SheetAction("Add to playlist", PhosphorIcons.Bold.Plus) { close(onAddToPlaylist) }
+                SheetAction("Add to playlist", TablerIcons.Plus) { close(onAddToPlaylist) }
             }
             Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp).height(0.5.dp).background(ink(0.1f)))
-            SheetAction("Remove from favorites", PhosphorIcons.Bold.Trash, SheetDestructive) {
+            SheetAction("Remove from favorites", TablerIcons.Trash, SheetDestructive) {
                 close {
                     onRemove()
                     notifier.success("Removed from favorites")

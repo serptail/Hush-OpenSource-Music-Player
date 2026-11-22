@@ -129,6 +129,7 @@ import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.ProfileAvatar
 import com.gamut.core.designsystem.ShareSheet
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.TrackRowSkeleton
 import com.gamut.core.designsystem.acrylicSource
 import com.gamut.core.designsystem.adaptiveGutter
@@ -176,6 +177,8 @@ fun SearchScreen(
     onArtistSelected: (Long) -> Unit,
     onAlbumSelected: (DiscoverItem) -> Unit,
     onShazam: () -> Unit,
+    /** Opens the list of songs Shazam has identified. Null leaves the button out. */
+    onShazamHistory: (() -> Unit)? = null,
     onProfile: () -> Unit = {},
     profileName: String? = null,
     profileSeed: String? = null,
@@ -287,6 +290,18 @@ fun SearchScreen(
                         Spacer(Modifier.width(8.dp))
                     }
                     headerExtra()
+                    if (onShazamHistory != null) {
+                        Box(
+                            Modifier.size(44.dp).pressScale(onClick = onShazamHistory).semantics {
+                                contentDescription =
+                                    "Shazam history"
+                            },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(TablerIcons.History, null, tint = ink(0.9f), modifier = Modifier.size(26.dp))
+                        }
+                        Spacer(Modifier.width(4.dp))
+                    }
                     Box(Modifier.size(44.dp).pressScale(onClick = onShazam), contentAlignment = Alignment.Center) {
                         Icon(
                             painterResource(com.gamut.core.designsystem.R.drawable.ic_shazam),

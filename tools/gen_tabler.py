@@ -28,6 +28,15 @@ ICONS = {
     "Equalizer": "adjustments", "Bluetooth": "bluetooth", "BluetoothConnected": "bluetooth-connected",
     "BluetoothOff": "bluetooth-off", "Devices": "devices",
     "Vinyl": "disc", "Headphones": "headphones", "Waveform": "wave-sine", "Box": "box",
+    "Expand": "arrows-maximize", "Collapse": "arrows-minimize",
+    # Sheets: regular (outline) weight throughout.
+    "RippleUp": "ripple-up", "PlayRegular": "player-play",
+    "CircleCheck": "circle-check", "CirclePlus": "circle-plus", "CircleOutline": "circle",
+    "CircleArrowDown": "circle-arrow-down", "Dots": "dots", "GripVertical": "grip-vertical",
+    "Trash": "trash", "ArrowLeft": "arrow-left", "ChevronRight": "chevron-right",
+    "User": "user", "Plus": "plus", "Pencil": "pencil", "RowInsertTop": "row-insert-top",
+    "Photo": "photo", "Tag": "tag", "World": "world", "Link": "link",
+    "History": "history", "Download": "download", "PackageImport": "package-import", "Archive": "archive",
 }
 # Kotlin name -> Tabler file name, drawn stroke + fill
 FILLED = {"HeartFilled": "heart"}

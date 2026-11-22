@@ -38,9 +38,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.bold.CaretRight
 import kotlinx.coroutines.launch
 
 private val SPLIT = Regex("(?i)\\s+(featuring|feat\\.?|ft\\.?|with|x|&|and)\\s+|\\s*,\\s*|\\s*/\\s*|\\s*;\\s*")
@@ -239,7 +236,7 @@ fun ArtistPickerSheet(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
                         )
-                        Icon(PhosphorIcons.Bold.CaretRight, null, tint = ink(0.4f), modifier = Modifier.size(18.dp))
+                        Icon(TablerIcons.ChevronRight, null, tint = ink(0.4f), modifier = Modifier.size(18.dp))
                     }
                 }
             }

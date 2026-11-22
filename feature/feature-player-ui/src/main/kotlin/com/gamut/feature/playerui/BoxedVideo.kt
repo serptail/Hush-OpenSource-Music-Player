@@ -40,9 +40,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
@@ -52,6 +56,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -88,6 +94,10 @@ private val OnVideoText =
  * page keeps for it under the top bar (the page is laid out around that room, so the picture needs no
  * layout of its own). It is drawn above the page; the page never overlaps the slot.
  *
+ * [slot] may move (the page scrolls the box away with the rest of it). [viewportTop] is the top edge, in root
+ * coordinates, of the area the page scrolls in: anything of the box above it is cut off, drawing and touches
+ * alike, so a box scrolled up never covers the top bar.
+ *
  * [controls] is drawn over the picture, inside the box's rounded clip.
  */
 @Composable
@@ -100,6 +110,7 @@ internal fun BoxedVideoPlayer(
     onRendered: () -> Unit,
     expanded: Boolean,
     slot: () -> Rect?,
+    viewportTop: () -> Float,
     reveal: () -> Float,
     modifier: Modifier = Modifier,
     controls: @Composable BoxScope.() -> Unit,
@@ -110,7 +121,12 @@ internal fun BoxedVideoPlayer(
     Box(
         modifier
             .fillMaxSize()
-            .onGloballyPositioned { origin = it.positionInRoot() },
+            .onGloballyPositioned { origin = it.positionInRoot() }
+            .graphicsLayer {
+                // Expanded, the video owns the screen; otherwise it is cut off where the page's scroll area begins.
+                clip = !expanded
+                shape = if (expanded) RectangleShape else TopCutShape(viewportTop() - origin.y)
+            },
     ) {
         Box(
             if (expanded) {
@@ -139,6 +155,14 @@ internal fun BoxedVideoPlayer(
                 controls()
             }
         }
+    }
+}
+
+/** A rectangle with its top [top] pixels cut off, in the shape's own coordinates. */
+private data class TopCutShape(val top: Float) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val cut = top.coerceIn(0f, size.height)
+        return Outline.Rectangle(Rect(0f, cut, size.width, size.height))
     }
 }
 
@@ -184,8 +208,6 @@ internal fun BoxScope.BoxedVideoControls(
     onScrub: (Float?) -> Unit,
     onSeekFraction: (Float) -> Unit,
     onTogglePlay: () -> Unit,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
     onToggleExpand: () -> Unit,
 ) {
     var shown by remember { mutableStateOf(true) }
@@ -249,21 +271,16 @@ internal fun BoxScope.BoxedVideoControls(
                         .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.62f)))),
                 )
 
+                // Play / pause only: previous and next are left off the video (a double tap skips ten seconds).
                 MeshTransport(
                     isPlaying = isPlaying,
                     loading = loading,
-                    onPrevious = {
-                        touches++
-                        onPrevious()
-                    },
+                    onPrevious = null,
                     onTogglePlay = {
                         touches++
                         onTogglePlay()
                     },
-                    onNext = {
-                        touches++
-                        onNext()
-                    },
+                    onNext = null,
                     modifier = Modifier.align(Alignment.Center).fillMaxWidth(if (expanded) 0.4f else 0.62f),
                 )
 

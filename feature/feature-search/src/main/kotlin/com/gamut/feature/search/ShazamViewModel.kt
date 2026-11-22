@@ -31,9 +31,17 @@ class ShazamViewModel
     @Inject
     constructor(
         private val session: ShazamSession,
+        private val historyStore: ShazamHistoryStore,
     ) : ViewModel() {
         val state: StateFlow<ShazamState> = session.state
         val level: StateFlow<Float> = session.level
+
+        /** Every song identified so far, newest first. */
+        val history: StateFlow<List<ShazamHistoryEntry>> = historyStore.entries
+
+        fun removeFromHistory(entry: ShazamHistoryEntry) = historyStore.remove(entry)
+
+        fun clearHistory() = historyStore.clear()
 
         fun start() = session.start()
 

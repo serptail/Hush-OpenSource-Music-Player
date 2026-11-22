@@ -110,11 +110,7 @@ import com.adamglin.phosphoricons.bold.ArrowUp
 import com.adamglin.phosphoricons.bold.BoxArrowDown
 import com.adamglin.phosphoricons.bold.DotsThreeVertical
 import com.adamglin.phosphoricons.bold.Heart
-import com.adamglin.phosphoricons.bold.ImageSquare
 import com.adamglin.phosphoricons.bold.MagnifyingGlass
-import com.adamglin.phosphoricons.bold.PencilSimple
-import com.adamglin.phosphoricons.bold.Plus
-import com.adamglin.phosphoricons.bold.RowsPlusTop
 import com.adamglin.phosphoricons.bold.ShareNetwork
 import com.adamglin.phosphoricons.bold.Shuffle
 import com.adamglin.phosphoricons.bold.Trash
@@ -134,6 +130,7 @@ import com.gamut.core.designsystem.LocalNavSettled
 import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.PlaylistStyle
 import com.gamut.core.designsystem.ShareSheet
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.ink
@@ -553,7 +550,7 @@ fun PlaylistScreen(
                                 Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)).background(sheetInk(0.08f)),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Icon(PhosphorIcons.Bold.VinylRecord, null, tint = sheetInk(0.6f), modifier = Modifier.size(24.dp))
+                                Icon(TablerIcons.Vinyl, null, tint = sheetInk(0.6f), modifier = Modifier.size(24.dp))
                             }
                         } else {
                             CoverImage(
@@ -579,25 +576,25 @@ fun PlaylistScreen(
                             .height(1.dp)
                             .background(sheetInk(0.10f)),
                     )
-                    SheetAction(PhosphorIcons.Bold.PencilSimple, "Edit playlist") { closeSheet(state) { startEdit() } }
+                    SheetAction(TablerIcons.Pencil, "Edit playlist") { closeSheet(state) { startEdit() } }
                     if (songs.isNotEmpty()) {
-                        SheetAction(PhosphorIcons.Bold.RowsPlusTop, "Manage playlist") {
+                        SheetAction(TablerIcons.RowInsertTop, "Manage playlist") {
                             closeSheet(state) {
                                 showManage =
                                     true
                             }
                         }
                     }
-                    SheetAction(PhosphorIcons.Bold.ImageSquare, "Change cover art") {
+                    SheetAction(TablerIcons.Photo, "Change cover art") {
                         pickQuickCover()
                         closeSheet(state)
                     }
                     if (streamedDownloaded >
                         0
                     ) {
-                        SheetAction(PhosphorIcons.Bold.X, "Remove downloads") { closeSheet(state) { confirmRemoveDownloads = true } }
+                        SheetAction(TablerIcons.Close, "Remove downloads") { closeSheet(state) { confirmRemoveDownloads = true } }
                     }
-                    SheetAction(PhosphorIcons.Bold.Trash, "Delete playlist", danger = true) { closeSheet(state) { confirmDelete = true } }
+                    SheetAction(TablerIcons.Trash, "Delete playlist", danger = true) { closeSheet(state) { confirmDelete = true } }
                 }
             }
         }
@@ -631,7 +628,7 @@ fun PlaylistScreen(
                                 Modifier.fillMaxSize().clip(HeaderCoverShape).background(sheetInk(0.07f)),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Icon(PhosphorIcons.Bold.Plus, "Add cover", tint = sheetInk(0.6f), modifier = Modifier.size(44.dp))
+                                Icon(TablerIcons.Plus, "Add cover", tint = sheetInk(0.6f), modifier = Modifier.size(44.dp))
                             }
                         } else {
                             CoverImage(
@@ -648,7 +645,7 @@ fun PlaylistScreen(
                                 .background(Color.Black.copy(alpha = 0.55f), CircleShape),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(PhosphorIcons.Bold.PencilSimple, "Change cover", tint = Color.White, modifier = Modifier.size(18.dp))
+                            Icon(TablerIcons.Pencil, "Change cover", tint = Color.White, modifier = Modifier.size(18.dp))
                         }
                     }
                     if (draftCover != null) {

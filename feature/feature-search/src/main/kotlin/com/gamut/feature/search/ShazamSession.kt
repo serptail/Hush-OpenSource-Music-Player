@@ -25,6 +25,7 @@ class ShazamSession
     constructor(
         private val recorder: MicRecorder,
         private val client: ShazamClient,
+        private val history: ShazamHistoryStore,
     ) {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -56,6 +57,8 @@ class ShazamSession
                             ShazamState.Failed(e.message ?: "Couldn't use the microphone")
                         }
                     _level.value = 0f
+                    // Every song that gets identified is kept in the Shazam history.
+                    if (outcome is ShazamState.Found) history.add(outcome.track)
                     _state.value = outcome
                 }
         }

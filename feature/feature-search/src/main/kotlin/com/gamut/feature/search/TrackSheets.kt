@@ -48,26 +48,16 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.bold.Heart
-import com.adamglin.phosphoricons.bold.ListPlus
-import com.adamglin.phosphoricons.bold.MusicNote
-import com.adamglin.phosphoricons.bold.PlusCircle
-import com.adamglin.phosphoricons.bold.ShareNetwork
-import com.adamglin.phosphoricons.bold.UserCircle
-import com.adamglin.phosphoricons.fill.CheckCircle
 import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.Track
-import com.adamglin.phosphoricons.fill.Heart as HeartFill
 
 internal val SheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
 
@@ -132,14 +122,14 @@ internal fun TrackActionsSheet(
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
             TrackHeader(track)
             HorizontalDivider(Modifier.padding(top = 14.dp, bottom = 6.dp), color = ink(0.1f))
-            ActionRow(PhosphorIcons.Bold.ShareNetwork, "Share") { onShare() }
+            ActionRow(TablerIcons.Share, "Share") { onShare() }
             ActionRow(
-                if (isFavorite) PhosphorIcons.Fill.HeartFill else PhosphorIcons.Bold.Heart,
+                if (isFavorite) TablerIcons.HeartFilled else TablerIcons.Heart,
                 if (isFavorite) "Added to favorites" else "Add to favorites",
                 tint = if (isFavorite) MaterialTheme.colorScheme.primary else ink(),
             ) { onToggleFavorite() }
-            ActionRow(PhosphorIcons.Bold.ListPlus, "Add to playlist") { onAddToPlaylist() }
-            if (onGoToArtist != null) ActionRow(PhosphorIcons.Bold.UserCircle, "Go to artist") { onGoToArtist() }
+            ActionRow(TablerIcons.ListPlus, "Add to playlist") { onAddToPlaylist() }
+            if (onGoToArtist != null) ActionRow(TablerIcons.CircleUser, "Go to artist") { onGoToArtist() }
         }
     }
 }
@@ -150,7 +140,7 @@ private fun TrackHeader(track: Track) {
         ArtImage(
             url = remember(track.albumArtUrl) { squareArtUrl(track.albumArtUrl, 256) },
             modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)).thumbnailBorder(RoundedCornerShape(8.dp)),
-            fallback = { Icon(PhosphorIcons.Bold.MusicNote, null, tint = ink(0.5f)) },
+            fallback = { Icon(TablerIcons.MusicNote, null, tint = ink(0.5f)) },
         )
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -210,7 +200,7 @@ internal fun SavedInSheet(
     GamutSheet(onDismiss = onDismiss, shape = SheetShape) {
         Row(Modifier.padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (showFavorites) {
-                Icon(PhosphorIcons.Fill.CheckCircle, null, tint = accent, modifier = Modifier.size(24.dp))
+                Icon(TablerIcons.CircleCheck, null, tint = accent, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.width(10.dp))
             }
             Text(if (showFavorites) "Saved in" else "Add to playlist", style = MaterialTheme.typography.titleLarge, color = ink())
@@ -218,7 +208,7 @@ internal fun SavedInSheet(
         LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
             if (showFavorites) {
                 item {
-                    PlaylistRow("Favorites", "Liked songs", null, checked = true, accent = accent, icon = PhosphorIcons.Fill.HeartFill, iconTint = accent, onClick = {
+                    PlaylistRow("Favorites", "Liked songs", null, checked = true, accent = accent, icon = TablerIcons.HeartFilled, iconTint = accent, onClick = {
                     })
                 }
             }
@@ -262,7 +252,7 @@ private fun PlaylistRow(
     coverUrl: String?,
     checked: Boolean,
     accent: Color,
-    icon: ImageVector = PhosphorIcons.Bold.MusicNote,
+    icon: ImageVector = TablerIcons.MusicNote,
     iconTint: Color = ink(0.5f),
     onClick: () -> Unit,
 ) {
@@ -286,9 +276,9 @@ private fun PlaylistRow(
         }
         Crossfade(targetState = checked, label = "added") { on ->
             if (on) {
-                Icon(PhosphorIcons.Fill.CheckCircle, "Added", tint = accent, modifier = Modifier.size(28.dp))
+                Icon(TablerIcons.CircleCheck, "Added", tint = accent, modifier = Modifier.size(28.dp))
             } else {
-                Icon(PhosphorIcons.Bold.PlusCircle, "Add", tint = ink(0.6f), modifier = Modifier.size(28.dp))
+                Icon(TablerIcons.CirclePlus, "Add", tint = ink(0.6f), modifier = Modifier.size(28.dp))
             }
         }
     }

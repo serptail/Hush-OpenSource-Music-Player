@@ -97,31 +97,21 @@ import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.ArrowLeft
 import com.adamglin.phosphoricons.bold.ArrowsDownUp
-import com.adamglin.phosphoricons.bold.Check
-import com.adamglin.phosphoricons.bold.Circle
 import com.adamglin.phosphoricons.bold.DeviceMobileCamera
 import com.adamglin.phosphoricons.bold.DotsThreeVertical
 import com.adamglin.phosphoricons.bold.FolderOpen
-import com.adamglin.phosphoricons.bold.Globe
-import com.adamglin.phosphoricons.bold.Heart
-import com.adamglin.phosphoricons.bold.Image
-import com.adamglin.phosphoricons.bold.Link
 import com.adamglin.phosphoricons.bold.MagnifyingGlass
-import com.adamglin.phosphoricons.bold.PencilSimple
-import com.adamglin.phosphoricons.bold.PlusCircle
-import com.adamglin.phosphoricons.bold.ReadCvLogo
 import com.adamglin.phosphoricons.bold.Scan
 import com.adamglin.phosphoricons.bold.X
-import com.adamglin.phosphoricons.fill.CheckCircle
 import com.adamglin.phosphoricons.fill.DeviceMobileCamera
 import com.adamglin.phosphoricons.fill.Heart
-import com.adamglin.phosphoricons.fill.Play
 import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNavSettled
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.NowPlayingBars
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.isWideLayout
@@ -605,16 +595,16 @@ fun LocalMusicScreen(
                             )
                         }
                     } else if (sheetMode == SongSheetMode.Actions) {
-                        SongAction(PhosphorIcons.Fill.Play, "Play now") {
+                        SongAction(TablerIcons.PlayRegular, "Play now") {
                             onTrackSelected(song.track, visibleTracks)
                             closeSheet()
                         }
-                        SongAction(PhosphorIcons.Bold.PlusCircle, "Add to playlist…") { sheetMode = SongSheetMode.Playlists }
+                        SongAction(TablerIcons.CirclePlus, "Add to playlist…") { sheetMode = SongSheetMode.Playlists }
                         SongAction(
-                            if (isFavorite) PhosphorIcons.Fill.Heart else PhosphorIcons.Bold.Heart,
+                            if (isFavorite) TablerIcons.HeartFilled else TablerIcons.Heart,
                             if (isFavorite) "Remove from Favorites" else "Add to Favorites",
                         ) { toggleFavorite(song, isFavorite) }
-                        SongAction(PhosphorIcons.Bold.ReadCvLogo, "Edit metadata") { sheetMode = SongSheetMode.EditChoice }
+                        SongAction(TablerIcons.Tag, "Edit metadata") { sheetMode = SongSheetMode.EditChoice }
                         if (song.needsInfo) {
                             Text(
                                 "Missing artist or album? It’s filled in when you save the song.",
@@ -633,7 +623,7 @@ fun LocalMusicScreen(
                                 .padding(horizontal = 24.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(PhosphorIcons.Bold.ArrowLeft, "Back", tint = ink(0.7f), modifier = Modifier.size(18.dp))
+                            Icon(TablerIcons.ArrowLeft, "Back", tint = ink(0.7f), modifier = Modifier.size(18.dp))
                             Text(
                                 "Edit metadata",
                                 style = MaterialTheme.typography.labelLarge,
@@ -641,13 +631,13 @@ fun LocalMusicScreen(
                                 modifier = Modifier.padding(start = 12.dp),
                             )
                         }
-                        SongAction(PhosphorIcons.Bold.Globe, "Auto fetch", subtitle = "Find the cover, name and artist online") {
+                        SongAction(TablerIcons.World, "Auto fetch", subtitle = "Find the cover, name and artist online") {
                             editMode = EditMode.Auto
                             editSong = song
                             closeSheet()
                         }
                         SongAction(
-                            PhosphorIcons.Bold.PencilSimple,
+                            TablerIcons.Pencil,
                             "Manual edit",
                             subtitle = "Change the cover, name and artist yourself",
                         ) {
@@ -668,13 +658,13 @@ fun LocalMusicScreen(
                             color = ink(0.6f),
                             modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
                         )
-                        SongAction(PhosphorIcons.Bold.PencilSimple, "Edit manually") {
+                        SongAction(TablerIcons.Pencil, "Edit manually") {
                             val s = song
                             closeSheet()
                             editMode = EditMode.Manual
                             editSong = s
                         }
-                        SongAction(PhosphorIcons.Bold.Check, "Save anyway") {
+                        SongAction(TablerIcons.Check, "Save anyway") {
                             busy = true
                             scope.launch { pendingSave?.invoke() }
                         }
@@ -693,7 +683,7 @@ fun LocalMusicScreen(
                                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                             )
                         }
-                        playlists.forEach { p -> SongAction(PhosphorIcons.Bold.PlusCircle, p.name) { addToPlaylist(song, p.id, p.name) } }
+                        playlists.forEach { p -> SongAction(TablerIcons.CirclePlus, p.name) { addToPlaylist(song, p.id, p.name) } }
                     }
                 }
             }
@@ -998,8 +988,8 @@ private fun ManualEditSheet(
                 BoxScopeDeviceBadge(Modifier.align(Alignment.BottomEnd).padding(6.dp))
             }
             Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                LocalPill("Choose photo", PhosphorIcons.Bold.Image, filled = false) { picker.launch("image/*") }
-                LocalPill("Use link", PhosphorIcons.Bold.Link, filled = false) { linkOpen = !linkOpen }
+                LocalPill("Choose photo", TablerIcons.Photo, filled = false) { picker.launch("image/*") }
+                LocalPill("Use link", TablerIcons.Link, filled = false) { linkOpen = !linkOpen }
             }
             AnimatedVisibility(linkOpen, enter = fadeIn(tween(250)) + expandVertically(tween(250))) {
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.Bottom) {
@@ -1022,7 +1012,7 @@ private fun ManualEditSheet(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            PhosphorIcons.Bold.Check,
+                            TablerIcons.Check,
                             "Use this link",
                             tint = if (light) Color.White else Color.Black,
                             modifier = Modifier.size(22.dp),
@@ -1252,7 +1242,7 @@ private fun FoundRow(
                 CoverImage(c.artUrl, Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)).thumbnailBorder(RoundedCornerShape(10.dp)))
             } else {
                 Box(Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)).background(ink(0.10f)), contentAlignment = Alignment.Center) {
-                    Icon(PhosphorIcons.Bold.Image, null, tint = ink(0.4f), modifier = Modifier.size(22.dp))
+                    Icon(TablerIcons.Photo, null, tint = ink(0.4f), modifier = Modifier.size(22.dp))
                 }
             }
             Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
@@ -1274,13 +1264,13 @@ private fun FoundRow(
             Crossfade(selected, animationSpec = tween(200), label = "pick") { on ->
                 if (on) {
                     Icon(
-                        PhosphorIcons.Fill.CheckCircle,
+                        TablerIcons.CircleCheck,
                         "Selected",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp),
                     )
                 } else {
-                    Icon(PhosphorIcons.Bold.Circle, null, tint = ink(0.35f), modifier = Modifier.size(24.dp))
+                    Icon(TablerIcons.CircleOutline, null, tint = ink(0.35f), modifier = Modifier.size(24.dp))
                 }
             }
         }

@@ -45,12 +45,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.bold.DotsThree
-import com.adamglin.phosphoricons.bold.Heart
-import com.adamglin.phosphoricons.fill.Heart
 import com.gamut.core.designsystem.AlertTick
 import com.gamut.core.designsystem.ArtistPickerSheet
 import com.gamut.core.designsystem.CoverPalette
@@ -59,6 +53,7 @@ import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.R
 import com.gamut.core.designsystem.ShareSheet
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.splitArtists
@@ -307,7 +302,7 @@ private fun FoundContent(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    if (isFavorite) PhosphorIcons.Fill.Heart else PhosphorIcons.Bold.Heart,
+                    if (isFavorite) TablerIcons.HeartFilled else TablerIcons.Heart,
                     if (isFavorite) "Remove from favorites" else "Add to favorites",
                     tint = if (isFavorite) FavoriteRed else ink(),
                     modifier = Modifier.size(24.dp),
@@ -321,7 +316,7 @@ private fun FoundContent(
                     .clip(CircleShape)
                     .background(ink(0.12f)),
                 contentAlignment = Alignment.Center,
-            ) { Icon(PhosphorIcons.Bold.DotsThree, "More", tint = ink(), modifier = Modifier.size(24.dp)) }
+            ) { Icon(TablerIcons.Dots, "More", tint = ink(), modifier = Modifier.size(24.dp)) }
         }
         note?.let { message ->
             Text(

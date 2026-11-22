@@ -90,12 +90,17 @@ internal fun EqualizerSheet(
                 Column(Modifier.weight(1f)) {
                     Text("Equalizer", style = MaterialTheme.typography.titleLarge, color = ink())
                     if (s.available) {
-                        Text(
-                            if (s.enabled) s.preset else "Off",
-                            fontSize = 13.sp,
-                            color = ink(0.55f),
-                            modifier = Modifier.padding(top = 2.dp),
-                        )
+                        Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            ToggleValue(on = s.enabled, accent = accent)
+                            if (s.enabled) {
+                                Text(
+                                    s.preset,
+                                    fontSize = 13.sp,
+                                    color = ink(0.7f),
+                                    modifier = Modifier.padding(start = 10.dp),
+                                )
+                            }
+                        }
                     }
                 }
                 if (s.available) {
