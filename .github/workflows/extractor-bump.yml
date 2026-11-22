@@ -26,7 +26,7 @@ jobs:
       changed: ${{ steps.plan.outputs.changed }}
       summary: ${{ steps.plan.outputs.summary }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -139,7 +139,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.BUMP_TOKEN || github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           token: ${{ secrets.BUMP_TOKEN || github.token }}
 
