@@ -15,7 +15,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -130,6 +129,8 @@ import com.gamut.core.designsystem.ShareSheet
 import com.gamut.core.designsystem.TrackRowSkeleton
 import com.gamut.core.designsystem.acrylicSource
 import com.gamut.core.designsystem.adaptiveGutter
+import com.gamut.core.designsystem.bounceClickable
+import com.gamut.core.designsystem.collectIsPulsedAsState
 import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.glass
 import com.gamut.core.designsystem.ink
@@ -932,8 +933,9 @@ internal fun InteractiveSurface(
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val pressed by interaction.collectIsPressedAsState()
+    val pulsed by interaction.collectIsPulsedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) pressedScale else 1f,
+        targetValue = if (pulsed) pressedScale else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
         label = "surface-scale",
     )
@@ -1146,7 +1148,7 @@ internal fun RowIconButton(
             .size(40.dp)
             .clip(CircleShape)
             .focusRing(CircleShape)
-            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = description, onClick = onClick),
+            .bounceClickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = description, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Icon(icon, description, tint = tint, modifier = Modifier.size(24.dp)) }
 }

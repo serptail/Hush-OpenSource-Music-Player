@@ -4,7 +4,6 @@ import androidx.activity.ComponentActivity
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +43,7 @@ import com.gamut.core.designsystem.CoverTheme
 import com.gamut.core.designsystem.GamutTheme
 import com.gamut.core.designsystem.LocalAppearance
 import com.gamut.core.designsystem.appNeutralPalette
+import com.gamut.core.designsystem.bounceClickable
 import com.gamut.core.designsystem.ink
 import com.gamut.settings.GamutButton
 import com.gamut.settings.GamutDestructive
@@ -156,7 +156,7 @@ private fun UpdateRequired(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .clickable(onClick = onCancel)
+                        .bounceClickable(onClick = onCancel)
                         .padding(top = 8.dp)
                         .padding(vertical = 8.dp),
             )
@@ -169,7 +169,7 @@ private fun UpdateRequired(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .clickable(onClick = onSkip)
+                    .bounceClickable(onClick = onSkip)
                     .padding(top = 4.dp, bottom = 12.dp)
                     .padding(vertical = 8.dp),
         )

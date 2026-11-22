@@ -1,5 +1,6 @@
 package com.gamut.feature.playerui.components
 
+import com.gamut.core.designsystem.BounceDefaults
 import com.gamut.core.designsystem.TablerIcons
 import android.graphics.Bitmap
 import androidx.compose.animation.animateColorAsState
@@ -83,7 +84,7 @@ internal fun SeekBar(
     modifier: Modifier = Modifier,
 ) {
     var dragging by remember { mutableStateOf(false) }
-    val knob by animateFloatAsState(if (dragging) 1f else 0f, tween(120), label = "seek-knob")
+    val knob by animateFloatAsState(if (dragging) 1f else 0f, BounceDefaults.ThumbSpec, label = "seek-knob")
     val currentScrub by rememberUpdatedState(onScrub)
     val currentSeek by rememberUpdatedState(onSeek)
     Box(
@@ -117,7 +118,7 @@ internal fun SeekBar(
                 val inset = 7.dp.toPx()
                 val usable = size.width - inset * 2
                 val y = size.height / 2f
-                val stroke = 4.dp.toPx()
+                val stroke = 4.dp.toPx() + 2.dp.toPx() * knob
                 val p = progress().coerceIn(0f, 1f)
                 drawLine(Color.White.copy(alpha = 0.28f), Offset(inset, y), Offset(inset + usable, y), stroke, StrokeCap.Round)
                 if (p > 0f) drawLine(Color.White, Offset(inset, y), Offset(inset + usable * p, y), stroke, StrokeCap.Round)

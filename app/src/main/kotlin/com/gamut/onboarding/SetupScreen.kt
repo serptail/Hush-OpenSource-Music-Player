@@ -29,7 +29,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -130,6 +129,8 @@ import com.gamut.core.designsystem.AppThemeMode
 import com.gamut.core.designsystem.GamutDisplayFont
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.acrylicSource
+import com.gamut.core.designsystem.bounceClickable
+import com.gamut.core.designsystem.collectIsPulsedAsState
 import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.ink
 import com.gamut.onboarding.applemusic.AppleMusicLinks
@@ -572,8 +573,8 @@ private fun SourceTile(
     logo: @Composable () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.96f else 1f, spring(stiffness = 900f), label = "tileScale")
+    val pulsed by interaction.collectIsPulsedAsState()
+    val scale by animateFloatAsState(if (pulsed) 0.96f else 1f, spring(stiffness = 900f), label = "tileScale")
     val appear = rememberAppear(appearDelay)
     Panel(
         modifier =
@@ -634,7 +635,7 @@ private fun Pill(
             modifier
                 .clip(CircleShape)
                 .background(ink(0.12f))
-                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+                .then(if (onClick != null) Modifier.bounceClickable(onClick = onClick) else Modifier)
                 .padding(horizontal = 18.dp, vertical = 9.dp),
     )
 }
@@ -992,8 +993,8 @@ private fun OptionCard(
     glyph: @Composable (Color) -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.96f else 1f, spring(stiffness = 900f), label = "optionScale")
+    val pulsed by interaction.collectIsPulsedAsState()
+    val scale by animateFloatAsState(if (pulsed) 0.96f else 1f, spring(stiffness = 900f), label = "optionScale")
     val ring by animateColorAsState(if (selected) ink(0.95f) else Color.Transparent, tween(220), label = "optionRing")
     val badge by animateFloatAsState(if (selected) 1f else 0f, spring(dampingRatio = 0.5f, stiffness = 400f), label = "optionBadge")
     val shape = RoundedCornerShape(26.dp)
@@ -1073,7 +1074,7 @@ private fun ProgressDots(
                 Box(
                     Modifier
                         .height(40.dp)
-                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onSelect(index) }
+                        .bounceClickable(scaleDown = 0.7f) { onSelect(index) }
                         .padding(horizontal = 7.dp),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -1188,7 +1189,7 @@ private fun SetupLink(
         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
         color = ink(0.75f),
         maxLines = 1,
-        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(vertical = 8.dp, horizontal = 4.dp),
+        modifier = Modifier.clip(RoundedCornerShape(8.dp)).bounceClickable(onClick = onClick).padding(vertical = 8.dp, horizontal = 4.dp),
     )
 }
 
@@ -1255,8 +1256,8 @@ private fun PrimaryButton(
     enabled: Boolean = true,
 ) {
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, spring(stiffness = 900f), label = "primaryScale")
+    val pulsed by interaction.collectIsPulsedAsState()
+    val scale by animateFloatAsState(if (pulsed) 0.97f else 1f, spring(stiffness = 900f), label = "primaryScale")
     val onPrimary = if (LocalCoverPalette.current.isLight) Color.White else Color.Black
     Box(
         modifier
@@ -1286,8 +1287,8 @@ private fun GhostButton(
     enabled: Boolean = true,
 ) {
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, spring(stiffness = 900f), label = "ghostScale")
+    val pulsed by interaction.collectIsPulsedAsState()
+    val scale by animateFloatAsState(if (pulsed) 0.97f else 1f, spring(stiffness = 900f), label = "ghostScale")
     Box(
         modifier
             .height(BUTTON_HEIGHT)
@@ -1335,7 +1336,7 @@ private fun Segmented(
                     .height(42.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(background)
-                    .clickable { onSelect(index) },
+                    .bounceClickable { onSelect(index) },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -1366,7 +1367,7 @@ private fun TileFrame(
                 .border(2.5.dp, ring, RoundedCornerShape(18.dp))
                 .padding(4.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .clickable(onClick = onClick),
+                .bounceClickable(onClick = onClick),
         ) { fill() }
         Spacer(Modifier.height(5.dp))
         Text(label, style = MaterialTheme.typography.labelSmall, color = ink(if (selected) 0.95f else 0.55f), maxLines = 1)
@@ -1425,8 +1426,8 @@ private fun GoogleButton(
     onClick: () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, spring(stiffness = 900f), label = "googleButtonScale")
+    val pulsed by interaction.collectIsPulsedAsState()
+    val scale by animateFloatAsState(if (pulsed) 0.97f else 1f, spring(stiffness = 900f), label = "googleButtonScale")
     val onPrimary = if (LocalCoverPalette.current.isLight) Color.White else Color.Black
     Row(
         Modifier

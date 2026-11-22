@@ -5,7 +5,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,6 +51,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.gamut.R
 import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.bounceClickable
 import com.gamut.core.designsystem.ink
 import com.gamut.onboarding.applemusic.AppleMusicLinks
 import com.gamut.onboarding.spotify.SpotifyLinks
@@ -258,7 +258,7 @@ private fun ImportButton(
             .height(54.dp)
             .clip(CircleShape)
             .background(ink(if (enabled) 0.95f else 0.12f))
-            .clickable(enabled = enabled, onClick = onClick),
+            .bounceClickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -284,7 +284,7 @@ private fun Pill(
             Modifier
                 .clip(CircleShape)
                 .background(ink(0.12f))
-                .clickable(onClick = onClick)
+                .bounceClickable(onClick = onClick)
                 .padding(horizontal = 18.dp, vertical = 9.dp),
     )
 }
@@ -299,6 +299,6 @@ private fun TextLink(
         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
         color = ink(0.75f),
         maxLines = 1,
-        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(vertical = 8.dp, horizontal = 4.dp),
+        modifier = Modifier.clip(RoundedCornerShape(8.dp)).bounceClickable(onClick = onClick).padding(vertical = 8.dp, horizontal = 4.dp),
     )
 }

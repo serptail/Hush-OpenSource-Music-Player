@@ -9,7 +9,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -54,6 +53,7 @@ import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.R
 import com.gamut.core.designsystem.ShareSheet
 import com.gamut.core.designsystem.TablerIcons
+import com.gamut.core.designsystem.bounceOnTouch
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.splitArtists
@@ -191,7 +191,7 @@ private fun ListeningContent(
             color = ink(0.6f),
             modifier = Modifier.padding(top = 4.dp),
         )
-        TextButton(onClick = onCancel, modifier = Modifier.padding(top = 12.dp)) { Text("Cancel", color = ink(0.8f)) }
+        TextButton(onClick = onCancel, modifier = Modifier.padding(top = 12.dp).bounceOnTouch()) { Text("Cancel", color = ink(0.8f)) }
     }
 }
 

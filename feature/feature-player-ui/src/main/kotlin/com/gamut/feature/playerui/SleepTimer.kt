@@ -1,7 +1,6 @@
 package com.gamut.feature.playerui
 
 import android.os.SystemClock
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.bounceClickable
 import com.gamut.core.designsystem.ink
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -88,7 +88,7 @@ internal fun SleepTimerSheet(
                     "$m minutes",
                     color = ink(),
                     style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.fillMaxWidth().clickable { onPick(m) }.padding(vertical = 14.dp),
+                    modifier = Modifier.fillMaxWidth().bounceClickable { onPick(m) }.padding(vertical = 14.dp),
                 )
             }
             if (endsAt != null) {
@@ -96,7 +96,7 @@ internal fun SleepTimerSheet(
                     "Turn off timer",
                     color = ink(0.7f),
                     style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.fillMaxWidth().clickable(onClick = onTurnOff).padding(vertical = 14.dp),
+                    modifier = Modifier.fillMaxWidth().bounceClickable(onClick = onTurnOff).padding(vertical = 14.dp),
                 )
             }
         }

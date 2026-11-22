@@ -24,7 +24,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -84,6 +83,8 @@ import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.gamut.core.designsystem.TablerIcons
+import com.gamut.core.designsystem.bounceClickable
+import com.gamut.core.designsystem.collectIsPulsedAsState
 import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
@@ -126,11 +127,7 @@ internal fun TimeRow(
     }
 }
 
-@Composable
-internal fun Modifier.tapTarget(onClick: () -> Unit): Modifier {
-    val interaction = remember { MutableInteractionSource() }
-    return this.focusRing().clickable(interactionSource = interaction, indication = null, onClick = onClick)
-}
+internal fun Modifier.tapTarget(onClick: () -> Unit): Modifier = this.focusRing().bounceClickable(scaleDown = 0.94f, onClick = onClick)
 
 internal fun Modifier.bounceTap(
     onClick: () -> Unit,
@@ -138,13 +135,13 @@ internal fun Modifier.bounceTap(
 ): Modifier =
     composed {
         val interaction = remember { MutableInteractionSource() }
-        val pressed by interaction.collectIsPressedAsState()
+        val pulsed by interaction.collectIsPulsedAsState()
         val hovered by interaction.collectIsHoveredAsState()
         val haptic = LocalHapticFeedback.current
         val scale by animateFloatAsState(
             targetValue =
                 when {
-                    pressed -> scaleDown
+                    pulsed -> scaleDown
                     hovered -> 1.08f
                     else -> 1f
                 },

@@ -1,7 +1,6 @@
 package com.gamut.feature.playerui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.bounceClickable
 import com.gamut.core.designsystem.ink
 import com.gamut.core.player.AudioPipelineInfo
 import com.gamut.core.player.AudioStatsReport
@@ -90,7 +90,7 @@ internal fun StatsForNerdsSheet(
                     modifier =
                         Modifier
                             .clip(RoundedCornerShape(50))
-                            .clickable { clipboard.setText(AnnotatedString(report.asText())) }
+                            .bounceClickable { clipboard.setText(AnnotatedString(report.asText())) }
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }

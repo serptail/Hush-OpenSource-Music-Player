@@ -86,6 +86,9 @@ import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.ShareSheet
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.artTileColor
+import com.gamut.core.designsystem.bounceClickable
+import com.gamut.core.designsystem.bounceOnPress
+import com.gamut.core.designsystem.collectIsPulsedAsState
 import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.glass
 import com.gamut.core.designsystem.ink
@@ -639,6 +642,7 @@ private fun SoftTrackRow(
         Row(
             Modifier
                 .fillMaxWidth()
+                .bounceOnPress(interaction, 0.98f)
                 .clip(shape)
                 .background(fill)
                 .focusRing(shape)
@@ -848,6 +852,7 @@ private fun FullTrackRow(
         Row(
             Modifier
                 .fillMaxWidth()
+                .bounceOnPress(interaction, 0.985f)
                 .drawBehind { drawRect(tint) }
                 .focusRing(RoundedCornerShape(0.dp))
                 .hoverable(interaction)
@@ -963,10 +968,11 @@ private fun AlbumTrackRow(
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val pressed by interaction.collectIsPressedAsState()
+    val pulsed by interaction.collectIsPulsedAsState()
     val active = hovered || pressed
 
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.95f else 1f,
+        targetValue = if (pulsed) 0.95f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
         label = "rowScale",
     )
@@ -1049,7 +1055,7 @@ private fun AlbumMoreButton(onClick: () -> Unit) {
             .size(40.dp)
             .clip(CircleShape)
             .focusRing(CircleShape)
-            .clickable(role = Role.Button, onClickLabel = "More options", onClick = onClick),
+            .bounceClickable(role = Role.Button, onClickLabel = "More options", onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Icon(PhosphorIcons.Bold.DotsThreeVertical, "More options", tint = ink(0.5f), modifier = Modifier.size(22.dp)) }
 }

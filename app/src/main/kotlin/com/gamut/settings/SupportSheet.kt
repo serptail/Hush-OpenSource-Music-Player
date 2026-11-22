@@ -11,7 +11,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -68,6 +67,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.gamut.core.designsystem.AdaptiveLayout
 import com.gamut.core.designsystem.TablerIcons
+import com.gamut.core.designsystem.bounceClickable
+import com.gamut.core.designsystem.bounceOnTouch
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import kotlinx.coroutines.delay
@@ -197,7 +198,11 @@ private fun SupportSheet(
                     Text("Buy me a coffee", style = MaterialTheme.typography.titleMedium, color = Color.White)
                 }
                 Spacer(Modifier.height(6.dp))
-                TextButton(onClick = { leave(onLater) }, colors = ButtonDefaults.textButtonColors(contentColor = ink(0.7f))) {
+                TextButton(
+                    onClick = { leave(onLater) },
+                    modifier = Modifier.bounceOnTouch(),
+                    colors = ButtonDefaults.textButtonColors(contentColor = ink(0.7f)),
+                ) {
                     Text(if (trigger == SupportTrigger.Donate) "Not now" else "Maybe later")
                 }
                 if (trigger != SupportTrigger.Donate) {
@@ -209,7 +214,7 @@ private fun SupportSheet(
                             Modifier
                                 .clip(
                                     RoundedCornerShape(8.dp),
-                                ).clickable { leave(onNever) }
+                                ).bounceClickable { leave(onNever) }
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                     )
                 }

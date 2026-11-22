@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import com.gamut.core.designsystem.bounceOnTouch
 import com.gamut.feature.resolver.PlaybackHealth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.StateFlow
@@ -57,8 +58,8 @@ fun SourceNoticeBanner(
                 modifier = Modifier.padding(top = 4.dp),
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = { dismissed = true }) { Text("Dismiss") }
-                TextButton(onClick = onCheckForUpdate) { Text("Check for update") }
+                TextButton(onClick = { dismissed = true }, modifier = Modifier.bounceOnTouch()) { Text("Dismiss") }
+                TextButton(onClick = onCheckForUpdate, modifier = Modifier.bounceOnTouch()) { Text("Check for update") }
             }
         }
     }

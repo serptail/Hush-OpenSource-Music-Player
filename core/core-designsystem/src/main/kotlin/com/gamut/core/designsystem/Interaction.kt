@@ -58,7 +58,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 fun Modifier.pressScale(
@@ -80,27 +81,41 @@ fun Modifier.pressScale(
         LaunchedEffect(interaction, scaleDown, hoverScale, focusScale) {
             val pressSpec = spring<Float>(dampingRatio = 1f, stiffness = 900f)
             val releaseSpec = spring<Float>(dampingRatio = 0.42f, stiffness = 420f)
-            var pressed = false
             var hovered = false
             var focused = false
-            interaction.interactions.collectLatest { event ->
-                when (event) {
-                    is PressInteraction.Press -> pressed = true
-                    is PressInteraction.Release, is PressInteraction.Cancel -> pressed = false
-                    is HoverInteraction.Enter -> hovered = true
-                    is HoverInteraction.Exit -> hovered = false
-                    is FocusInteraction.Focus -> focused = true
-                    is FocusInteraction.Unfocus -> focused = false
+            var pulse: Job? = null
+
+            fun rest() =
+                when {
+                    focused -> focusScale
+                    hovered -> hoverScale
+                    else -> 1f
                 }
-                val target =
-                    when {
-                        pressed -> scaleDown
-                        focused -> focusScale
-                        hovered -> hoverScale
-                        else -> 1f
+            coroutineScope {
+                interaction.interactions.collect { event ->
+                    when (event) {
+                        is PressInteraction.Press -> {
+                            pulse?.cancel()
+                            pulse =
+                                launch {
+                                    scale.animateTo(scaleDown, pressSpec)
+                                    scale.animateTo(rest(), releaseSpec)
+                                }
+                        }
+
+                        is HoverInteraction.Enter -> hovered = true
+
+                        is HoverInteraction.Exit -> hovered = false
+
+                        is FocusInteraction.Focus -> focused = true
+
+                        is FocusInteraction.Unfocus -> focused = false
                     }
-                launch { ring.animateTo(if (focused) 1f else 0f, tween(120)) }
-                scale.animateTo(target, if (pressed) pressSpec else releaseSpec)
+                    if (event !is PressInteraction.Press) {
+                        launch { ring.animateTo(if (focused) 1f else 0f, tween(120)) }
+                        if (pulse?.isActive != true) launch { scale.animateTo(rest(), releaseSpec) }
+                    }
+                }
             }
         }
         this

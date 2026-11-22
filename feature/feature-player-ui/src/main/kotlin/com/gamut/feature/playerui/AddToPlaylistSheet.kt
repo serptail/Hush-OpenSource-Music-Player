@@ -5,7 +5,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.GamutSheet
+import com.gamut.core.designsystem.bounceClickable
 import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.thumbnailBorder
@@ -78,7 +78,7 @@ internal fun AddToPlaylistSheet(
                     Modifier
                         .fillMaxWidth()
                         .focusRing(RoundedCornerShape(12.dp))
-                        .clickable { if (added) onRemove(playlist) else onPick(playlist) }
+                        .bounceClickable { if (added) onRemove(playlist) else onPick(playlist) }
                         .padding(horizontal = 24.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

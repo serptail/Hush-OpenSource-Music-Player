@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.GamutMotion
 import com.gamut.core.designsystem.TablerIcons
+import com.gamut.core.designsystem.bounceOnTouch
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.squareArtUrl
@@ -70,7 +71,7 @@ fun ShazamHistoryScreen(
                     modifier = Modifier.weight(1f),
                 )
                 if (entries.isNotEmpty()) {
-                    TextButton(onClick = onClear) { Text("Clear all", color = ink(0.7f)) }
+                    TextButton(onClick = onClear, modifier = Modifier.bounceOnTouch()) { Text("Clear all", color = ink(0.7f)) }
                 }
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {

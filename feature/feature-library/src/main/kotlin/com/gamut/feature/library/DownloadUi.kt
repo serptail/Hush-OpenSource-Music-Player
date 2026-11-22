@@ -14,7 +14,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -51,6 +50,7 @@ import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.ArrowCircleDown
 import com.adamglin.phosphoricons.fill.CheckCircle
+import com.gamut.core.designsystem.collectIsPulsedAsState
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.feature.resolver.DownloadState
@@ -119,8 +119,8 @@ fun DownloadButton(
     doneIcon: ImageVector = PhosphorIcons.Fill.CheckCircle,
 ) {
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val press by animateFloatAsState(if (pressed) 0.88f else 1f, tween(120), label = "downloadPress")
+    val pulsed by interaction.collectIsPulsedAsState()
+    val press by animateFloatAsState(if (pulsed) 0.88f else 1f, tween(120), label = "downloadPress")
     var watched by remember { mutableStateOf(false) }
     LaunchedEffect(ui.status) { if (ui.status == PlaylistDownloadStatus.Active) watched = true }
 

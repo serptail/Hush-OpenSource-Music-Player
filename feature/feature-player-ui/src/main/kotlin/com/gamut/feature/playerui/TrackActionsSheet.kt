@@ -3,7 +3,6 @@ package com.gamut.feature.playerui
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -41,6 +40,8 @@ import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.designsystem.GamutMotion
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.bounceClickable
+import com.gamut.core.designsystem.bounceOnTouch
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.softResize
 import com.gamut.core.model.Playlist
@@ -136,7 +137,11 @@ fun TrackActionsSheet(
                                     )
                                 }
                                 Spacer(Modifier.width(8.dp))
-                                TextButton(onClick = { submitNew() }, enabled = name.isNotBlank()) { Text("Create") }
+                                TextButton(
+                                    onClick = { submitNew() },
+                                    enabled = name.isNotBlank(),
+                                    modifier = Modifier.bounceOnTouch(),
+                                ) { Text("Create") }
                             }
                         } else {
                             ActionRow("New playlist\u2026") { creating = true }
@@ -168,7 +173,7 @@ private fun ActionRow(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onClick)
+                .bounceClickable(onClick = onClick)
                 .padding(horizontal = 24.dp, vertical = 14.dp),
     )
 }

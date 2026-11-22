@@ -2,7 +2,9 @@ package com.gamut.feature.library
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -81,6 +83,7 @@ import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalFocusLive
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.TransparentStatusBar
+import com.gamut.core.designsystem.bounceOnPress
 import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.isWideLayout
@@ -400,15 +403,17 @@ private fun OptionRow(
     checked: Boolean,
     onChange: (Boolean) -> Unit,
 ) {
+    val source = remember { MutableInteractionSource() }
     Row(
         Modifier
             .fillMaxWidth()
+            .bounceOnPress(source, 0.97f)
             .clip(PanelShape)
             .background(ink(0.06f))
             .focusRing(PanelShape)
             .toggleable(
                 value = checked,
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = source,
                 indication = null,
                 role = Role.Switch,
                 onValueChange = onChange,
@@ -426,7 +431,11 @@ private fun OptionRow(
 
 @Composable
 private fun FlatSwitch(checked: Boolean) {
-    val thumbX by animateDpAsState(if (checked) 20.dp else 2.dp, tween(160), label = "switch-x")
+    val thumbX by animateDpAsState(
+        if (checked) 20.dp else 2.dp,
+        spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow),
+        label = "switch-x",
+    )
     val track by animateColorAsState(if (checked) ink() else ink(0.18f), tween(160), label = "switch-track")
     val base = LocalCoverPalette.current.base
     val thumb by animateColorAsState(if (checked) base else ink(0.8f), tween(160), label = "switch-thumb")

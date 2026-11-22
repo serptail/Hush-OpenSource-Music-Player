@@ -3,7 +3,6 @@ package com.gamut.feature.search
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -88,6 +87,7 @@ import com.gamut.core.designsystem.ShareSheet
 import com.gamut.core.designsystem.TrackRowSkeleton
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.VerticalTabs
+import com.gamut.core.designsystem.bounceClickable
 import com.gamut.core.designsystem.fadeEdges
 import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.glass
@@ -684,7 +684,7 @@ private fun TrackMoreButton(onClick: () -> Unit) {
             .size(40.dp)
             .clip(CircleShape)
             .focusRing(CircleShape)
-            .clickable(role = Role.Button, onClickLabel = "More options", onClick = onClick),
+            .bounceClickable(role = Role.Button, onClickLabel = "More options", onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Icon(PhosphorIcons.Bold.DotsThreeVertical, "More options", tint = ink(0.6f), modifier = Modifier.size(24.dp)) }
 }

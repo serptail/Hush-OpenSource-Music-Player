@@ -1,12 +1,12 @@
 package com.gamut.feature.playerui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -31,7 +31,10 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,10 +52,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gamut.core.designsystem.BounceDefaults
 import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.designsystem.GamutMotion
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.bounceClickable
 import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.softResize
@@ -329,7 +334,7 @@ private fun TogglePill(
                         Modifier.border(1.dp, ink(0.18f), shape)
                     },
                 ).focusRing(shape)
-                .clickable(onClick = onClick)
+                .bounceClickable(onClick = onClick)
                 .padding(horizontal = 16.dp, vertical = 7.dp),
     )
 }
@@ -347,6 +352,8 @@ private fun LineSlider(
     val trackC = ink(0.16f)
     val tickC = ink(0.3f)
     val dotC = ink()
+    var pressed by remember { mutableStateOf(false) }
+    val grow by animateFloatAsState(if (pressed) 1.35f else 1f, BounceDefaults.ThumbSpec, label = "thumbGrow")
     Canvas(
         Modifier
             .fillMaxWidth()
@@ -376,10 +383,15 @@ private fun LineSlider(
                         onChangeNow(snapped.coerceIn(min, max))
                     }
                     val down = awaitFirstDown()
-                    apply(down.position.x)
-                    drag(down.id) { change ->
-                        change.consume()
-                        apply(change.position.x)
+                    pressed = true
+                    try {
+                        apply(down.position.x)
+                        drag(down.id) { change ->
+                            change.consume()
+                            apply(change.position.x)
+                        }
+                    } finally {
+                        pressed = false
                     }
                 }
             },
@@ -390,7 +402,7 @@ private fun LineSlider(
         val stroke = 4.dp.toPx()
         drawLine(trackC, Offset(pad, cy), Offset(size.width - pad, cy), stroke, StrokeCap.Round)
         drawLine(accent, Offset(pad, cy), Offset(x, cy), stroke, StrokeCap.Round)
-        drawCircle(accent.copy(alpha = 0.25f), 12.dp.toPx(), Offset(x, cy))
-        drawCircle(dotC, 7.dp.toPx(), Offset(x, cy))
+        drawCircle(accent.copy(alpha = 0.25f), 12.dp.toPx() * grow, Offset(x, cy))
+        drawCircle(dotC, 7.dp.toPx() * grow, Offset(x, cy))
     }
 }

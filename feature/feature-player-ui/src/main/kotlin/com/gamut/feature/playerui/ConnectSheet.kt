@@ -11,7 +11,6 @@ import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.provider.Settings
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -51,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.bounceClickable
 import com.gamut.core.designsystem.ink
 
 data class OutputDevice(
@@ -166,7 +166,7 @@ fun ConnectSheet(
                 .height(52.dp)
                 .clip(RoundedCornerShape(26.dp))
                 .background(accent)
-                .clickable {
+                .bounceClickable {
                     val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     runCatching { context.startActivity(intent) }
                 },

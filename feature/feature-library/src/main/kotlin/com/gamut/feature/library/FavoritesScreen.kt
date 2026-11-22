@@ -20,7 +20,6 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -116,6 +115,7 @@ import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.ShareSheet
 import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.TransparentStatusBar
+import com.gamut.core.designsystem.collectIsPulsedAsState
 import com.gamut.core.designsystem.glass
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
@@ -689,9 +689,9 @@ private fun FavoriteRow(
     val downloading = downloadState != null && downloadState != DownloadState.Done && downloadState !is DownloadState.Failed
 
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
+    val pulsed by interaction.collectIsPulsedAsState()
     val focused by interaction.collectIsFocusedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.985f else 1f, label = "rowPress")
+    val scale by animateFloatAsState(if (pulsed) 0.985f else 1f, label = "rowPress")
     val fill by animateColorAsState(
         if (playing) accent.copy(alpha = 0.14f) else ink(if (focused) 0.12f else 0.07f),
         tween(GamutMotion.CONTENT_MS),
@@ -1154,8 +1154,8 @@ private fun WheelRow(
     val downloading = downloadState != null && downloadState != DownloadState.Done && downloadState !is DownloadState.Failed
 
     val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val pressScale by animateFloatAsState(if (pressed && active) 0.97f else 1f, label = "wheelRowPress")
+    val pulsed by interaction.collectIsPulsedAsState()
+    val pressScale by animateFloatAsState(if (pulsed && active) 0.97f else 1f, label = "wheelRowPress")
 
     Box(
         Modifier

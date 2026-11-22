@@ -1,6 +1,5 @@
 package com.gamut.feature.playerui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +34,7 @@ import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.bounceClickable
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.thumbnailBorder
 import com.gamut.core.model.QueueState
@@ -72,7 +72,7 @@ internal fun QueueSheet(
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .clickable { onPlay(index) }
+                        .bounceClickable { onPlay(index) }
                         .padding(horizontal = 24.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -106,7 +106,7 @@ internal fun QueueSheet(
                     }
                     if (!isCurrent) {
                         Box(
-                            Modifier.size(40.dp).clickable { onRemove(index) },
+                            Modifier.size(40.dp).bounceClickable { onRemove(index) },
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(TablerIcons.Close, "Remove from queue", tint = ink(0.6f), modifier = Modifier.size(20.dp))

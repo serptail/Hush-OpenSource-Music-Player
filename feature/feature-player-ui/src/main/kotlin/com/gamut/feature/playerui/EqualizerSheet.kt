@@ -1,11 +1,11 @@
 package com.gamut.feature.playerui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
@@ -32,7 +32,10 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -45,10 +48,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gamut.core.designsystem.BounceDefaults
 import com.gamut.core.designsystem.CoverPalette
 import com.gamut.core.designsystem.GamutMotion
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.bounceClickable
 import com.gamut.core.designsystem.ink
 import com.gamut.core.player.EqualizerController
 import java.util.Locale
@@ -91,7 +96,7 @@ internal fun EqualizerSheet(
                     Text("Equalizer", style = MaterialTheme.typography.titleLarge, color = ink())
                     if (s.available) {
                         Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            ToggleValue(on = s.enabled, accent = accent)
+                            ToggleValue(on = s.enabled)
                             if (s.enabled) {
                                 Text(
                                     s.preset,
@@ -192,7 +197,7 @@ private fun EnableButton(
                     } else {
                         Modifier.background(accent)
                     },
-                ).clickable(onClick = onClick)
+                ).bounceClickable(onClick = onClick)
                 .padding(horizontal = 16.dp, vertical = 7.dp),
     )
 }
@@ -219,7 +224,7 @@ private fun PresetChip(
             Modifier
                 .clip(RoundedCornerShape(50))
                 .background(chipBg)
-                .clickable(onClick = onClick)
+                .bounceClickable(onClick = onClick)
                 .padding(horizontal = 14.dp, vertical = 8.dp),
     )
 }
@@ -239,6 +244,8 @@ private fun BandSlider(
     val trackC = ink(0.16f)
     val zeroC = ink(0.14f)
     val dotC = ink()
+    var pressed by remember { mutableStateOf(false) }
+    val grow by animateFloatAsState(if (pressed) 1.4f else 1f, BounceDefaults.ThumbSpec, label = "bandGrow")
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             dbLabel(levelMb),
@@ -266,10 +273,15 @@ private fun BandSlider(
                             onChangeNow(mb.coerceIn(minMb, maxMb))
                         }
                         val down = awaitFirstDown()
-                        apply(down.position.y)
-                        drag(down.id) { change ->
-                            change.consume()
-                            apply(change.position.y)
+                        pressed = true
+                        try {
+                            apply(down.position.y)
+                            drag(down.id) { change ->
+                                change.consume()
+                                apply(change.position.y)
+                            }
+                        } finally {
+                            pressed = false
                         }
                     }
                 },
@@ -286,8 +298,8 @@ private fun BandSlider(
             drawLine(zeroC, Offset(0f, zeroY), Offset(size.width, zeroY), 1.dp.toPx())
             drawLine(trackC, Offset(x, top), Offset(x, bottom), stroke, StrokeCap.Round)
             drawLine(accent, Offset(x, zeroY), Offset(x, y), stroke, StrokeCap.Round)
-            if (levelMb != 0) drawCircle(accent.copy(alpha = 0.25f), 11.dp.toPx(), Offset(x, y))
-            drawCircle(dotC, 6.dp.toPx(), Offset(x, y))
+            if (levelMb != 0 || pressed) drawCircle(accent.copy(alpha = 0.25f), 11.dp.toPx() * grow, Offset(x, y))
+            drawCircle(dotC, 6.dp.toPx() * grow, Offset(x, y))
         }
         Spacer(Modifier.height(8.dp))
         Text(
@@ -343,6 +355,8 @@ private fun LineSlider(
     val onChangeNow by rememberUpdatedState(onChange)
     val trackC = ink(0.16f)
     val dotC = ink()
+    var pressed by remember { mutableStateOf(false) }
+    val grow by animateFloatAsState(if (pressed) 1.35f else 1f, BounceDefaults.ThumbSpec, label = "thumbGrow")
     Canvas(
         Modifier
             .fillMaxWidth()
@@ -357,10 +371,15 @@ private fun LineSlider(
                         onChangeNow((f * max).roundToInt())
                     }
                     val down = awaitFirstDown()
-                    apply(down.position.x)
-                    drag(down.id) { change ->
-                        change.consume()
-                        apply(change.position.x)
+                    pressed = true
+                    try {
+                        apply(down.position.x)
+                        drag(down.id) { change ->
+                            change.consume()
+                            apply(change.position.x)
+                        }
+                    } finally {
+                        pressed = false
                     }
                 }
             },
@@ -371,8 +390,8 @@ private fun LineSlider(
         val stroke = 4.dp.toPx()
         drawLine(trackC, Offset(pad, cy), Offset(size.width - pad, cy), stroke, StrokeCap.Round)
         drawLine(accent, Offset(pad, cy), Offset(x, cy), stroke, StrokeCap.Round)
-        drawCircle(accent.copy(alpha = 0.25f), 12.dp.toPx(), Offset(x, cy))
-        drawCircle(dotC, 7.dp.toPx(), Offset(x, cy))
+        drawCircle(accent.copy(alpha = 0.25f), 12.dp.toPx() * grow, Offset(x, cy))
+        drawCircle(dotC, 7.dp.toPx() * grow, Offset(x, cy))
     }
 }
 

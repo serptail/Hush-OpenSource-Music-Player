@@ -1,7 +1,6 @@
 package com.gamut.feature.playerui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -23,6 +22,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.gamut.core.designsystem.LocalPlayerMotion
+import com.gamut.core.designsystem.bounceClickable
 
 /**
  * The grabber at the top of every player style. Dragging it steers the player
@@ -54,7 +54,7 @@ internal fun PlayerPill(
                 } else {
                     Modifier
                 },
-            ).clickable(onClick = { dismiss() }),
+            ).bounceClickable(onClick = { dismiss() }),
         contentAlignment = Alignment.TopCenter,
     ) {
         Box(

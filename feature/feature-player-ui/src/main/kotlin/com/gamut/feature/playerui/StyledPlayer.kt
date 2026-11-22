@@ -5,7 +5,6 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -63,6 +62,7 @@ import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.AdaptiveLayout
 import com.gamut.core.designsystem.PlayerStyle
 import com.gamut.core.designsystem.adaptiveGutter
+import com.gamut.core.designsystem.bounceClickable
 import com.gamut.core.designsystem.dockArtHide
 import com.gamut.core.designsystem.dockArtReport
 import com.gamut.core.designsystem.squareArtUrl
@@ -372,7 +372,7 @@ internal fun StyledPlayerLayer(
                                             Modifier
                                                 .clip(
                                                     RoundedCornerShape(8.dp),
-                                                ).clickable { onLyricsOpenChange(true) }
+                                                ).bounceClickable { onLyricsOpenChange(true) }
                                                 .padding(vertical = 4.dp),
                                     )
                                 }

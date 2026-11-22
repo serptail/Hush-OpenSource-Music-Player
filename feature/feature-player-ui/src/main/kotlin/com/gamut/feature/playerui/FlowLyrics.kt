@@ -21,7 +21,6 @@ import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -77,6 +76,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.gamut.core.designsystem.bounceClickable
+import com.gamut.core.designsystem.bounceOnPress
+import com.gamut.core.designsystem.collectIsPulsedAsState
 import com.gamut.feature.playerui.components.fadingEdges
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -417,15 +419,15 @@ internal fun FlowLyricsPanel(
                 val behind = if (run.delta >= 0f) index - focusLine else focusLine - index
                 val staggerDelay = behind.coerceIn(0, STAGGER_STEPS) * STAGGER_FRACTION * run.durationMs
                 val interaction = remember { MutableInteractionSource() }
-                val pressed by interaction.collectIsPressedAsState()
+                val pulsed by interaction.collectIsPulsedAsState()
                 val scale by animateFloatAsState(
                     targetValue =
                         when {
-                            pressed -> PRESSED_SCALE
+                            pulsed -> PRESSED_SCALE
                             isActive -> 1f
                             else -> INACTIVE_SCALE
                         },
-                    animationSpec = tween(if (pressed) 120 else LYRIC_SETTLE_MS, easing = LYRIC_EASING),
+                    animationSpec = tween(if (pulsed) 120 else LYRIC_SETTLE_MS, easing = LYRIC_EASING),
                     label = "flowScale",
                 )
                 val glow by animateFloatAsState(
@@ -463,6 +465,7 @@ internal fun FlowLyricsPanel(
                                     )
                                 }
                         }.blur(blur, BlurredEdgeTreatment.Unbounded)
+                        .bounceOnPress(interaction, 0.985f, enabled = isSynced)
                         .clip(RoundedCornerShape(10.dp))
                         .clickable(
                             enabled = isSynced,
@@ -573,7 +576,7 @@ private fun FlowGapRow(
                 Modifier
                     .blur(blur, BlurredEdgeTreatment.Unbounded)
                     .clip(RoundedCornerShape(10.dp))
-                    .clickable(enabled = enabled, onClick = onClick)
+                    .bounceClickable(enabled = enabled, onClick = onClick)
                     .padding(GLOW_ROOM)
                     .size(width = GAP_DOT_SIZE * 3 + GAP_DOT_GAP * 2, height = GAP_DOT_SIZE)
                     .graphicsLayer {
@@ -638,7 +641,7 @@ internal fun FlowLyricStrip(
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
+            .bounceClickable(onClick = onClick)
             .padding(vertical = 4.dp),
     ) {
         AnimatedContent(

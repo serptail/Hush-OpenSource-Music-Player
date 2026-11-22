@@ -118,9 +118,10 @@ private fun Modifier.bounceClick(onClick: () -> Unit): Modifier =
     composed {
         val source = remember { MutableInteractionSource() }
         val pressed by source.collectIsPressedAsState()
+        val pulsed by source.collectIsPulsedAsState()
         val hovered by source.collectIsHoveredAsState()
         val scale by animateFloatAsState(
-            targetValue = if (pressed) 0.97f else 1f,
+            targetValue = if (pulsed) 0.97f else 1f,
             animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
             label = "bounce",
         )
@@ -302,7 +303,7 @@ private fun ShareSheetContent(
                                     .clip(CircleShape)
                                     .background(Brush.verticalGradient(listOf(st.top, st.bottom)))
                                     .border(if (selected) 2.dp else 1.dp, if (selected) ink() else ink(0.25f), CircleShape)
-                                    .clickable { scope.launch { pager.animateScrollToPage(i) } },
+                                    .bounceClickable { scope.launch { pager.animateScrollToPage(i) } },
                             )
                         }
                     }
@@ -383,7 +384,7 @@ private fun ModeChip(
                 .clip(CircleShape)
                 .background(ink(if (selected) 0.14f else 0.05f))
                 .border(BorderStroke(1.dp, ink(if (selected) 0.35f else 0.12f)), CircleShape)
-                .clickable(onClick = onClick)
+                .bounceClickable(onClick = onClick)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),

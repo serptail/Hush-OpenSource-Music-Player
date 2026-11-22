@@ -54,6 +54,7 @@ import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.GamutSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.TablerIcons
+import com.gamut.core.designsystem.collectIsPulsedAsState
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.designsystem.thumbnailBorder
@@ -76,9 +77,10 @@ internal fun Modifier.bounceClick(onClick: () -> Unit): Modifier =
     composed {
         val source = remember { MutableInteractionSource() }
         val pressed by source.collectIsPressedAsState()
+        val pulsed by source.collectIsPulsedAsState()
         val hovered by source.collectIsHoveredAsState()
         val scale by animateFloatAsState(
-            targetValue = if (pressed) 0.97f else 1f,
+            targetValue = if (pulsed) 0.97f else 1f,
             animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
             label = "bounce",
         )

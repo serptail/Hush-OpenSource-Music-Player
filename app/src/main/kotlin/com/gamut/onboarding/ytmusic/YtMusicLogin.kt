@@ -7,7 +7,6 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -34,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.gamut.core.designsystem.LocalCoverPalette
+import com.gamut.core.designsystem.bounceClickable
 import com.gamut.core.designsystem.ink
 import com.gamut.onboarding.importer.MiniJson
 
@@ -137,7 +137,7 @@ fun YtMusicLoginScreen(
                 "Close",
                 style = MaterialTheme.typography.titleSmall,
                 color = ink(0.7f),
-                modifier = Modifier.clip(CircleShape).clickable(onClick = onClose).padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.clip(CircleShape).bounceClickable(onClick = onClose).padding(horizontal = 12.dp, vertical = 8.dp),
             )
         }
         AndroidView(
@@ -180,7 +180,7 @@ fun YtMusicLoginScreen(
                     .height(54.dp)
                     .clip(CircleShape)
                     .background(ink(if (pageReady) 0.95f else 0.2f))
-                    .clickable(enabled = pageReady) {
+                    .bounceClickable(enabled = pageReady) {
                         val view = webView
                         if (view == null) {
                             notReady = true

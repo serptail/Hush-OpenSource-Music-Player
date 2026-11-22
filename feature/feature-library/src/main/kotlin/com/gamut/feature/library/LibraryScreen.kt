@@ -11,7 +11,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -98,6 +97,8 @@ import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.acrylicFill
 import com.gamut.core.designsystem.adaptiveGutter
+import com.gamut.core.designsystem.bounceClickable
+import com.gamut.core.designsystem.bounceOnTouch
 import com.gamut.core.designsystem.fadeEdges
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.isWideLayout
@@ -517,7 +518,7 @@ private fun ImportProgressCard(
                     )
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onCancel) { Text("Cancel", color = TextPrimary) }
+                    TextButton(onClick = onCancel, modifier = Modifier.bounceOnTouch()) { Text("Cancel", color = TextPrimary) }
                 }
             }
 
@@ -539,7 +540,7 @@ private fun ImportProgressCard(
                             )
                         }
                     }
-                    TextButton(onClick = onDismiss) { Text("Dismiss", color = TextPrimary) }
+                    TextButton(onClick = onDismiss, modifier = Modifier.bounceOnTouch()) { Text("Dismiss", color = TextPrimary) }
                 }
             }
         }
@@ -636,7 +637,7 @@ private fun AddMenuItem(
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .bounceClickable(onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

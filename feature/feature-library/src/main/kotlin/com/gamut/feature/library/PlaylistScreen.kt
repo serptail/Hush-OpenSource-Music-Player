@@ -123,6 +123,7 @@ import com.gamut.core.designsystem.PlaylistStyle
 import com.gamut.core.designsystem.ShareSheet
 import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.TransparentStatusBar
+import com.gamut.core.designsystem.collectIsPulsedAsState
 import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.isWideLayout
@@ -927,8 +928,8 @@ private fun Modifier.rowPress(
 ): Modifier =
     composed {
         val source = remember { MutableInteractionSource() }
-        val pressed by source.collectIsPressedAsState()
-        val scale by animateFloatAsState(if (pressed) 0.98f else 1f, tween(90), label = "row-press")
+        val pulsed by source.collectIsPulsedAsState()
+        val scale by animateFloatAsState(if (pulsed) 0.98f else 1f, tween(90), label = "row-press")
         graphicsLayer {
             scaleX = scale
             scaleY = scale

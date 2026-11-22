@@ -71,6 +71,7 @@ import com.gamut.core.designsystem.LocalAppearance
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.TransparentStatusBar
 import com.gamut.core.designsystem.appNeutralPalette
+import com.gamut.core.designsystem.bounceOnTouch
 import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.ink
 import com.gamut.settings.AppearanceViewModel
@@ -328,6 +329,7 @@ private fun WelcomeActions(
                 Modifier
                     .fillMaxWidth()
                     .height(56.dp)
+                    .bounceOnTouch(0.97f)
                     .focusRing(CircleShape)
                     .focusRequester(primaryFocus),
             shape = CircleShape,
@@ -357,7 +359,12 @@ private fun WelcomeActions(
         OutlinedButton(
             onClick = vm::continueLocally,
             enabled = !ui.busy,
-            modifier = Modifier.fillMaxWidth().height(56.dp).focusRing(CircleShape),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .bounceOnTouch(0.97f)
+                    .focusRing(CircleShape),
             shape = CircleShape,
             border = BorderStroke(1.dp, ink(0.25f)),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = ink()),
