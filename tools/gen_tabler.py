@@ -33,10 +33,10 @@ ICONS = {
     "RippleUp": "ripple-up", "PlayRegular": "player-play",
     "CircleCheck": "circle-check", "CirclePlus": "circle-plus", "CircleOutline": "circle",
     "CircleArrowDown": "circle-arrow-down", "Dots": "dots", "GripVertical": "grip-vertical",
-    "Trash": "trash", "ArrowLeft": "arrow-left", "ChevronRight": "chevron-right",
+    "Trash": "trash", "ArrowLeft": "arrow-left", "ArrowUp": "arrow-up", "ArrowDown": "arrow-down", "ChevronRight": "chevron-right",
     "User": "user", "Plus": "plus", "Pencil": "pencil", "RowInsertTop": "row-insert-top",
     "Photo": "photo", "Tag": "tag", "World": "world", "Link": "link",
-    "History": "history", "Download": "download", "PackageImport": "package-import", "Archive": "archive",
+    "History": "history", "BrandShazam": "brand-shazam", "Download": "download", "PackageImport": "package-import", "Archive": "archive",
 }
 # Kotlin name -> Tabler file name, drawn stroke + fill
 FILLED = {"HeartFilled": "heart"}

@@ -103,23 +103,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.bold.ArrowCircleDown
-import com.adamglin.phosphoricons.bold.ArrowDown
 import com.adamglin.phosphoricons.bold.ArrowLeft
-import com.adamglin.phosphoricons.bold.ArrowUp
 import com.adamglin.phosphoricons.bold.BoxArrowDown
 import com.adamglin.phosphoricons.bold.DotsThreeVertical
-import com.adamglin.phosphoricons.bold.Heart
 import com.adamglin.phosphoricons.bold.MagnifyingGlass
-import com.adamglin.phosphoricons.bold.ShareNetwork
 import com.adamglin.phosphoricons.bold.Shuffle
-import com.adamglin.phosphoricons.bold.Trash
-import com.adamglin.phosphoricons.bold.User
 import com.adamglin.phosphoricons.bold.VinylRecord
 import com.adamglin.phosphoricons.bold.X
 import com.adamglin.phosphoricons.fill.Archive
-import com.adamglin.phosphoricons.fill.CheckCircle
-import com.adamglin.phosphoricons.fill.Heart
 import com.adamglin.phosphoricons.fill.Play
 import com.gamut.core.designsystem.ArtistLine
 import com.gamut.core.designsystem.ArtistPickerSheet
@@ -1562,21 +1553,21 @@ private fun TrackOptionsPanel(
                 }
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(ink(0.10f)))
-            PanelAction(PhosphorIcons.Fill.Play, "Play", true) {
+            PanelAction(TablerIcons.PlayRegular, "Play", true) {
                 onPlay()
                 onDismiss()
             }
             if (!local) {
                 when (downloadState) {
                     DownloadState.Done -> {
-                        PanelAction(PhosphorIcons.Fill.CheckCircle, "Remove download", true) {
+                        PanelAction(TablerIcons.CircleCheck, "Remove download", true) {
                             onRemoveDownload()
                             onDismiss()
                         }
                     }
 
                     null, is DownloadState.Failed -> {
-                        PanelAction(PhosphorIcons.Bold.ArrowCircleDown, "Download", true) {
+                        PanelAction(TablerIcons.CircleArrowDown, "Download", true) {
                             onDownload()
                             onDismiss()
                         }
@@ -1588,30 +1579,30 @@ private fun TrackOptionsPanel(
                 }
             }
             PanelAction(
-                if (isFavorite) PhosphorIcons.Fill.Heart else PhosphorIcons.Bold.Heart,
+                if (isFavorite) TablerIcons.HeartFilled else TablerIcons.Heart,
                 if (isFavorite) "Remove from Favorites" else "Add to Favorites",
                 true,
             ) {
                 onToggleFavorite()
                 onDismiss()
             }
-            PanelAction(PhosphorIcons.Bold.User, if (splitArtists(track.artist).size > 1) "Go to artist\u2026" else "Go to artist", true) {
+            PanelAction(TablerIcons.User, if (splitArtists(track.artist).size > 1) "Go to artist\u2026" else "Go to artist", true) {
                 onGoToArtist()
                 onDismiss()
             }
-            PanelAction(PhosphorIcons.Bold.ShareNetwork, "Share", true) {
+            PanelAction(TablerIcons.Share, "Share", true) {
                 onShare()
                 onDismiss()
             }
-            PanelAction(PhosphorIcons.Bold.ArrowUp, "Move up", canMoveUp) {
+            PanelAction(TablerIcons.ArrowUp, "Move up", canMoveUp) {
                 onMoveUp()
                 onDismiss()
             }
-            PanelAction(PhosphorIcons.Bold.ArrowDown, "Move down", canMoveDown) {
+            PanelAction(TablerIcons.ArrowDown, "Move down", canMoveDown) {
                 onMoveDown()
                 onDismiss()
             }
-            PanelAction(PhosphorIcons.Bold.Trash, "Remove from playlist", true) {
+            PanelAction(TablerIcons.Trash, "Remove from playlist", true) {
                 onRemove()
                 onDismiss()
             }
@@ -1634,7 +1625,7 @@ private fun PanelAction(
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, null, tint = ink(0.85f * alpha), modifier = Modifier.size(18.dp))
+        Icon(icon, null, tint = ink(0.85f * alpha), modifier = Modifier.size(22.dp))
         Text(label, style = MaterialTheme.typography.titleMedium, color = ink(alpha), modifier = Modifier.padding(start = 16.dp))
     }
 }

@@ -73,6 +73,8 @@ object TablerIcons {
     val GripVertical: ImageVector by lazy { icon("GripVertical", "M8 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M8 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M8 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M14 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M14 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M14 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0") }
     val Trash: ImageVector by lazy { icon("Trash", "M4 7l16 0", "M10 11l0 6", "M14 11l0 6", "M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12", "M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3") }
     val ArrowLeft: ImageVector by lazy { icon("ArrowLeft", "M5 12l14 0", "M5 12l6 6", "M5 12l6 -6") }
+    val ArrowUp: ImageVector by lazy { icon("ArrowUp", "M12 5l0 14", "M18 11l-6 -6", "M6 11l6 -6") }
+    val ArrowDown: ImageVector by lazy { icon("ArrowDown", "M12 5l0 14", "M18 13l-6 6", "M6 13l6 6") }
     val ChevronRight: ImageVector by lazy { icon("ChevronRight", "M9 6l6 6l-6 6") }
     val User: ImageVector by lazy { icon("User", "M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0", "M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2") }
     val Plus: ImageVector by lazy { icon("Plus", "M12 5l0 14", "M5 12l14 0") }
@@ -83,6 +85,7 @@ object TablerIcons {
     val World: ImageVector by lazy { icon("World", "M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0", "M3.6 9h16.8", "M3.6 15h16.8", "M11.5 3a17 17 0 0 0 0 18", "M12.5 3a17 17 0 0 1 0 18") }
     val Link: ImageVector by lazy { icon("Link", "M9 15l6 -6", "M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464", "M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463") }
     val History: ImageVector by lazy { icon("History", "M12 8l0 4l2 2", "M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5") }
+    val BrandShazam: ImageVector by lazy { icon("BrandShazam", "M10 12l2 -2a2.828 2.828 0 0 1 4 0a2.828 2.828 0 0 1 0 4l-3 3", "M14 12l-2 2a2.828 2.828 0 1 1 -4 -4l3 -3", "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0") }
     val Download: ImageVector by lazy { icon("Download", "M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2", "M7 11l5 5l5 -5", "M12 4l0 12") }
     val PackageImport: ImageVector by lazy { icon("PackageImport", "M12 21l-8 -4.5v-9l8 -4.5l8 4.5v4.5", "M12 12l8 -4.5", "M12 12v9", "M12 12l-8 -4.5", "M22 18h-7", "M18 15l-3 3l3 3") }
     val Archive: ImageVector by lazy { icon("Archive", "M3 6a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2", "M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-10", "M10 12l4 0") }

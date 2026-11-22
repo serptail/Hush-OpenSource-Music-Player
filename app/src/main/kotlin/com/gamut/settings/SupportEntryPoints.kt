@@ -8,7 +8,6 @@ import android.content.Intent
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabColorSchemeParams
 import androidx.browser.customtabs.CustomTabsIntent
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -42,13 +41,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.SweepGradientShader
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
@@ -59,7 +64,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.bold.Heart
 import com.adamglin.phosphoricons.bold.TipJar
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNotifier
@@ -127,19 +131,38 @@ fun rememberOpenKoFi(): () -> Unit {
 fun SupportHeartButton(onClick: () -> Unit) {
     val vm: SupportViewModel = hiltViewModel()
     val filled by vm.store.donateOpen.collectAsState()
-    val inverse = if (LocalCoverPalette.current.isLight) Color.White else Color.Black
+    // 0 = resting (heart-shaped hole in the disc, like the profile and Shazam buttons), 1 = open (pink heart).
+    val fill by animateFloatAsState(if (filled) 1f else 0f, tween(220), label = "heart")
     Box(
         Modifier.size(44.dp).pressScale(onClick = onClick).semantics { contentDescription = "Support Gamut" },
         contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.size(34.dp).clip(CircleShape).background(ink(0.9f)), contentAlignment = Alignment.Center) {
-            Crossfade(targetState = filled, animationSpec = tween(220), label = "heart") { on ->
-                if (on) {
-                    Icon(PhosphorIcons.Fill.HeartFill, null, tint = KoFiPink, modifier = Modifier.size(22.dp))
-                } else {
-                    Icon(PhosphorIcons.Bold.Heart, null, tint = inverse, modifier = Modifier.size(22.dp))
-                }
-            }
+        Box(
+            Modifier
+                .size(34.dp)
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                .clip(CircleShape)
+                .background(ink(0.9f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            // Punches the heart out of the disc so the page shows through, whatever the theme or cover colours are.
+            Icon(
+                PhosphorIcons.Fill.HeartFill,
+                null,
+                tint = Color.Black.copy(alpha = 1f - fill),
+                modifier =
+                    Modifier.size(20.dp).drawWithContent {
+                        drawIntoCanvas { canvas ->
+                            canvas.saveLayer(
+                                Rect(0f, 0f, this.size.width, this.size.height),
+                                Paint().apply { blendMode = BlendMode.DstOut },
+                            )
+                            drawContent()
+                            canvas.restore()
+                        }
+                    },
+            )
+            Icon(PhosphorIcons.Fill.HeartFill, null, tint = KoFiPink.copy(alpha = fill), modifier = Modifier.size(20.dp))
         }
     }
     Spacer(Modifier.width(8.dp))

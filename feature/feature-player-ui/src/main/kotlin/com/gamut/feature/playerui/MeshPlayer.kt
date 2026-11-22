@@ -459,6 +459,9 @@ internal fun MeshSleeve(
     var attempt by remember(candidates) { mutableIntStateOf(0) }
     val shownUrl = candidates.getOrNull(attempt)
     val placeholderUrl = if (isThumb) null else url
+    // Shadow and border wait for something opaque on screen, so they don't show through the empty loading box.
+    var artDrawn by remember(shownUrl) { mutableStateOf(false) }
+    val frameVisible = artDrawn || shownUrl == null || isThumb
 
     Box(
         modifier
@@ -468,13 +471,13 @@ internal fun MeshSleeve(
                 scaleX = scale
                 scaleY = scale
             }.then(
-                if (shownUrl != null) {
+                if (shownUrl != null && frameVisible) {
                     Modifier.shadow(10.dp, SleeveShape, clip = false, ambientColor = Color.Black, spotColor = Color.Black)
                 } else {
                     Modifier
                 },
             ).clip(SleeveShape)
-            .thumbnailBorder(SleeveShape)
+            .then(if (frameVisible) Modifier.thumbnailBorder(SleeveShape) else Modifier)
             .dockArtReport(model = shownUrl, corner = 8.dp, enabled = dockEnabled && !isThumb),
     ) {
         if (shownUrl == null) {
@@ -507,6 +510,7 @@ internal fun MeshSleeve(
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),
+                            onSuccess = { artDrawn = true },
                         )
                     } else {
                         Box(Modifier.fillMaxSize())
@@ -514,6 +518,7 @@ internal fun MeshSleeve(
                 },
                 error = { ArtworkPlaceholder() },
                 onError = { if (attempt < candidates.size) attempt++ },
+                onSuccess = { artDrawn = true },
             )
         }
     }

@@ -155,7 +155,6 @@ import com.gamut.feature.search.DiscoverRepository
 import com.gamut.feature.search.LocalPlaylistRemove
 import com.gamut.feature.search.SearchScreen
 import com.gamut.feature.search.SearchViewModel
-import com.gamut.feature.search.ShazamHistorySheet
 import com.gamut.feature.search.ShazamSheet
 import com.gamut.feature.search.ShazamState
 import com.gamut.feature.search.ShazamViewModel
@@ -173,6 +172,7 @@ import com.gamut.settings.LocalSupportNudge
 import com.gamut.settings.PlaybackSettingsScreen
 import com.gamut.settings.RecentlyPlayedScreen
 import com.gamut.settings.RecentlyPlayedViewModel
+import com.gamut.settings.ShazamHistoryScreen
 import com.gamut.settings.SettingsScreen
 import com.gamut.settings.StatsViewModel
 import com.gamut.settings.StorageSettingsScreen
@@ -480,7 +480,6 @@ private fun GamutApp(
 
     val shazamVm = hiltViewModel<ShazamViewModel>()
     val shazamState by shazamVm.state.collectAsState()
-    var showShazamHistory by remember { mutableStateOf(false) }
     val appLibraryVm = hiltViewModel<LibraryViewModel>()
     LaunchedEffect(appLibraryVm) {
         appLibraryVm.tracksByPlaylist.collect { map -> supportVm.store.recordPlaylistSize(map.values.maxOfOrNull { it.size } ?: 0) }
@@ -722,7 +721,6 @@ private fun GamutApp(
                                         openLibraryTick = openLibraryTick,
                                         onProfile = { nav.navigate("settings") { launchSingleTop = true } },
                                         onShazam = onShazam,
-                                        onShazamHistory = { showShazamHistory = true },
                                         nowPlaying = nowPlaying,
                                     )
                                     SettingsLayer(
@@ -740,6 +738,7 @@ private fun GamutApp(
                                                 nav.popBackStack("home", false)
                                             },
                                             onRecentlyPlayed = { openLayer(SettingsPage.Recent) },
+                                            onShazamHistory = { openLayer(SettingsPage.Shazam) },
                                             onProfile = { openLayer(SettingsPage.Profile) },
                                             onAppearance = { openLayer(SettingsPage.Appearance) },
                                             onPlaybackAudio = { openLayer(SettingsPage.Playback) },
@@ -762,6 +761,23 @@ private fun GamutApp(
                                             tracks = recent,
                                             onBack = closeLayer,
                                             onTrackSelected = playTrackWithQueue,
+                                            nowPlaying = nowPlayingDocked,
+                                        )
+                                    }
+                                    SlideLayer(
+                                        composed = SettingsPage.Shazam in composedPages,
+                                        selected = layerPage == SettingsPage.Shazam,
+                                        open = layerOpen,
+                                        position = layerPos,
+                                        onClose = closeLayer,
+                                    ) {
+                                        val shazamHistory by shazamVm.history.collectAsState()
+                                        ShazamHistoryScreen(
+                                            entries = shazamHistory,
+                                            onBack = closeLayer,
+                                            onPlay = { track -> playTrackWithQueue(track, emptyList()) },
+                                            onRemove = shazamVm::removeFromHistory,
+                                            onClear = shazamVm::clearHistory,
                                             nowPlaying = nowPlayingDocked,
                                         )
                                     }
@@ -1107,24 +1123,9 @@ private fun GamutApp(
                                     )
                                 }
                             }
-                            if (showShazamHistory) {
-                                val shazamHistory by shazamVm.history.collectAsState()
-                                CoverTheme(palette) {
-                                    ShazamHistorySheet(
-                                        entries = shazamHistory,
-                                        onDismiss = { showShazamHistory = false },
-                                        onPlay = { track ->
-                                            showShazamHistory = false
-                                            playTrackWithQueue(track, emptyList())
-                                        },
-                                        onRemove = shazamVm::removeFromHistory,
-                                        onClear = shazamVm::clearHistory,
-                                    )
-                                }
-                            }
                             val supportSafe =
                                 !showLoading && coldStartQuiet && !isPlayingNow && !playerOpen && !createOpen &&
-                                    shazamState is ShazamState.Idle && !showShazamHistory && !showConnect
+                                    shazamState is ShazamState.Idle && !showConnect
                             CoverTheme(palette) { SupportSheetHost(vm = supportVm, safeMoment = supportSafe) }
                             CoverTheme(if (playerOpen || createOpen) neutralPalette else palette) { NoticeHost() }
                             if (showConnect) {
@@ -1267,7 +1268,6 @@ private fun HomeTabs(
     openLibraryTick: Int,
     onProfile: () -> Unit,
     onShazam: () -> Unit,
-    onShazamHistory: () -> Unit,
     nowPlaying: @Composable () -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -1374,7 +1374,6 @@ private fun HomeTabs(
                         onArtistSelected = onArtistSelected,
                         onAlbumSelected = onAlbumSelected,
                         onShazam = onShazam,
-                        onShazamHistory = onShazamHistory,
                         onProfile = onProfile,
                         profileName = profileName,
                         profileSeed = profileId,
@@ -1519,7 +1518,7 @@ private fun SettingsLayer(
     ) { FocusLive(active && !childOpen) { CompositionLocalProvider(LocalPageActive provides active) { content() } } }
 }
 
-private enum class SettingsPage { Recent, Appearance, Playback, Storage, Profile, Feedback, About }
+private enum class SettingsPage { Recent, Shazam, Appearance, Playback, Storage, Profile, Feedback, About }
 
 @Composable
 private fun SlideLayer(

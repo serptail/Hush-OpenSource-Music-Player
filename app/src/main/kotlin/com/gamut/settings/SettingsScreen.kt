@@ -46,6 +46,7 @@ import com.adamglin.phosphoricons.regular.User
 import com.gamut.account.AccountViewModel
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.ProfileAvatar
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import kotlinx.coroutines.delay
@@ -59,6 +60,7 @@ fun SettingsScreen(
     onLikedSongs: () -> Unit,
     onPlaylists: () -> Unit,
     onRecentlyPlayed: () -> Unit,
+    onShazamHistory: () -> Unit,
     onProfile: () -> Unit,
     onAppearance: () -> Unit,
     onPlaybackAudio: () -> Unit,
@@ -157,6 +159,8 @@ fun SettingsScreen(
             GroupedRow("Your Playlists", PhosphorIcons.Regular.Playlist, onClick = onPlaylists)
             GroupedDivider()
             GroupedRow("Recently Played", PhosphorIcons.Regular.ClockCounterClockwise, onClick = onRecentlyPlayed)
+            GroupedDivider()
+            GroupedRow("Shazam History", TablerIcons.BrandShazam, onClick = onShazamHistory)
 
             GroupedHeader("Preferences")
             GroupedRow("Appearance", PhosphorIcons.Regular.Palette, value = appearance.mode.name, onClick = onAppearance)

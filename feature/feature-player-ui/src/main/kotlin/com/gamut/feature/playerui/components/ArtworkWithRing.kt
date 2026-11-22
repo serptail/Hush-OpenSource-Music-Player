@@ -145,6 +145,10 @@ internal fun ArtworkWithRing(
     val shownUrl = candidates.getOrNull(attempt)
     val placeholderUrl = if (isThumb) null else url
     var loadedAspect by remember(shownUrl) { mutableStateOf<Float?>(null) }
+    // Until something opaque is on screen (the image, its low-res stand-in, or the fallback tile) the frame draws
+    // nothing, so its shadow and border don't show through the empty loading box as a faint square.
+    var artDrawn by remember(shownUrl) { mutableStateOf(false) }
+    val frameVisible = artDrawn || shownUrl == null || isThumb
     val targetAspect = if (enabled && isThumb) (loadedAspect ?: (16f / 9f)).coerceIn(1f, 2f) else 1f
     val aspect by animateFloatAsState(targetAspect, tween(250), label = "cover-aspect")
 
@@ -170,9 +174,14 @@ internal fun ArtworkWithRing(
                     .padding(RingInset)
                     .fillMaxSize()
                     .dockArtHide(dockEnabled && !isThumb)
-                    .shadow(elevation = 14.dp, shape = CoverShape, ambientColor = Color.Black, spotColor = Color.Black, clip = false)
-                    .clip(CoverShape)
-                    .thumbnailBorder(CoverShape)
+                    .then(
+                        if (frameVisible) {
+                            Modifier.shadow(elevation = 14.dp, shape = CoverShape, ambientColor = Color.Black, spotColor = Color.Black, clip = false)
+                        } else {
+                            Modifier
+                        },
+                    ).clip(CoverShape)
+                    .then(if (frameVisible) Modifier.thumbnailBorder(CoverShape) else Modifier)
                     .dockArtReport(model = shownUrl, corner = CoverCornerRadius, enabled = dockEnabled && !isThumb),
                 contentAlignment = Alignment.Center,
             ) {
@@ -207,6 +216,7 @@ internal fun ArtworkWithRing(
                                         contentDescription = null,
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier.fillMaxSize(),
+                                        onSuccess = { artDrawn = true },
                                     )
                                 } else {
                                     Box(Modifier.fillMaxSize())
@@ -215,6 +225,7 @@ internal fun ArtworkWithRing(
                             error = { CoverPlaceholder() },
                             onError = { if (attempt < candidates.size) attempt++ },
                             onSuccess = { state ->
+                                artDrawn = true
                                 val size = state.painter.intrinsicSize
                                 if (size.width > 0f && size.height > 0f) loadedAspect = size.width / size.height
                             },

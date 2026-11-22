@@ -109,14 +109,11 @@ import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.ArrowClockwise
 import com.adamglin.phosphoricons.bold.ArrowRight
 import com.adamglin.phosphoricons.bold.ClockCounterClockwise
-import com.adamglin.phosphoricons.bold.DotsThreeVertical
 import com.adamglin.phosphoricons.bold.MagnifyingGlass
 import com.adamglin.phosphoricons.bold.MusicNote
 import com.adamglin.phosphoricons.bold.Play
-import com.adamglin.phosphoricons.bold.PlusCircle
 import com.adamglin.phosphoricons.bold.User
 import com.adamglin.phosphoricons.bold.X
-import com.adamglin.phosphoricons.fill.CheckCircle
 import com.gamut.core.designsystem.AcrylicHost
 import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.ArtistLine
@@ -128,8 +125,8 @@ import com.gamut.core.designsystem.LocalAcrylicState
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.ProfileAvatar
-import com.gamut.core.designsystem.ShareSheet
 import com.gamut.core.designsystem.TablerIcons
+import com.gamut.core.designsystem.ShareSheet
 import com.gamut.core.designsystem.TrackRowSkeleton
 import com.gamut.core.designsystem.acrylicSource
 import com.gamut.core.designsystem.adaptiveGutter
@@ -177,8 +174,6 @@ fun SearchScreen(
     onArtistSelected: (Long) -> Unit,
     onAlbumSelected: (DiscoverItem) -> Unit,
     onShazam: () -> Unit,
-    /** Opens the list of songs Shazam has identified. Null leaves the button out. */
-    onShazamHistory: (() -> Unit)? = null,
     onProfile: () -> Unit = {},
     profileName: String? = null,
     profileSeed: String? = null,
@@ -290,18 +285,6 @@ fun SearchScreen(
                         Spacer(Modifier.width(8.dp))
                     }
                     headerExtra()
-                    if (onShazamHistory != null) {
-                        Box(
-                            Modifier.size(44.dp).pressScale(onClick = onShazamHistory).semantics {
-                                contentDescription =
-                                    "Shazam history"
-                            },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(TablerIcons.History, null, tint = ink(0.9f), modifier = Modifier.size(26.dp))
-                        }
-                        Spacer(Modifier.width(4.dp))
-                    }
                     Box(Modifier.size(44.dp).pressScale(onClick = onShazam), contentAlignment = Alignment.Center) {
                         Icon(
                             painterResource(com.gamut.core.designsystem.R.drawable.ic_shazam),
@@ -1142,12 +1125,12 @@ private fun TrackResultRow(
             }
         }
         RowIconButton(
-            icon = if (isFavorite) PhosphorIcons.Fill.CheckCircle else PhosphorIcons.Bold.PlusCircle,
+            icon = if (isFavorite) TablerIcons.CircleCheck else TablerIcons.CirclePlus,
             description = if (isFavorite) "Saved" else "Add to favorites",
             tint = if (isFavorite) accent else ink(0.7f),
             onClick = onAdd,
         )
-        RowIconButton(PhosphorIcons.Bold.DotsThreeVertical, "More options", ink(0.6f), onMore)
+        RowIconButton(TablerIcons.MoreVertical, "More options", ink(0.6f), onMore)
     }
 }
 

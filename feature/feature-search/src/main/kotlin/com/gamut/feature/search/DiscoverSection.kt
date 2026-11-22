@@ -42,12 +42,12 @@ import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
 import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.CaretRight
-import com.adamglin.phosphoricons.bold.DotsThreeVertical
 import com.adamglin.phosphoricons.fill.Play
 import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.TrackRowSkeleton
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.squareArtUrl
@@ -537,7 +537,7 @@ private fun ChartRow(
             }
         }
         if (onMore != null) {
-            RowIconButton(PhosphorIcons.Bold.DotsThreeVertical, "More options", ink(0.6f), onMore)
+            RowIconButton(TablerIcons.MoreVertical, "More options", ink(0.6f), onMore)
         } else {
             Icon(PhosphorIcons.Bold.CaretRight, null, tint = ink(0.4f), modifier = Modifier.padding(end = 8.dp).size(18.dp))
         }
