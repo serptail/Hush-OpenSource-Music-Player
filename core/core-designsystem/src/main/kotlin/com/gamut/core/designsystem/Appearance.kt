@@ -12,6 +12,9 @@ enum class AppearanceLevel { Low, Medium, High }
 
 enum class PlayerStyle { Classic, Mesh, Cover }
 
+/** How a music video sits on the player page when the phone is held upright. */
+enum class VideoViewMode { Full, Boxed }
+
 @Immutable
 data class AppearanceSettings(
     val mode: AppThemeMode = AppThemeMode.Auto,
@@ -25,6 +28,7 @@ data class AppearanceSettings(
     val glass: Boolean = true,
     val glassDensity: AppearanceLevel = AppearanceLevel.Medium,
     val playerStyle: PlayerStyle = PlayerStyle.Classic,
+    val videoViewMode: VideoViewMode = VideoViewMode.Full,
 ) {
     val effectiveMode: AppThemeMode get() = if (mode == AppThemeMode.Auto && !adaptive) AppThemeMode.System else mode
 

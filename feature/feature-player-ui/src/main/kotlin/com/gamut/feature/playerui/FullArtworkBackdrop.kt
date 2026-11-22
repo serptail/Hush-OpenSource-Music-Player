@@ -120,16 +120,19 @@ private val fullBlurCache =
     }
 
 /** Three small box passes approximate a broad Gaussian blur at thumbnail scale. */
-private fun Bitmap.boxBlurred(passes: Int): Bitmap {
+internal fun Bitmap.boxBlurred(
+    passes: Int,
+    radius: Int? = null,
+): Bitmap {
     val w = width
     val h = height
     if (w < 2 || h < 2) return this
     var source = IntArray(w * h).also { getPixels(it, 0, w, 0, 0, w, h) }
     var target = IntArray(source.size)
-    val radius = (minOf(w, h) / 12).coerceAtLeast(2)
+    val r = (radius ?: (minOf(w, h) / 12)).coerceAtLeast(1)
     repeat(passes) {
-        boxBlurPass(source, target, w, h, radius, horizontal = true)
-        boxBlurPass(target, source, w, h, radius, horizontal = false)
+        boxBlurPass(source, target, w, h, r, horizontal = true)
+        boxBlurPass(target, source, w, h, r, horizontal = false)
     }
     return Bitmap.createBitmap(source, w, h, Bitmap.Config.ARGB_8888)
 }

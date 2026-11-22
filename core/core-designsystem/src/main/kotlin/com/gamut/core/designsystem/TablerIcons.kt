@@ -61,5 +61,7 @@ object TablerIcons {
     val Headphones: ImageVector by lazy { icon("Headphones", "M4 15a2 2 0 0 1 2 -2h1a2 2 0 0 1 2 2v3a2 2 0 0 1 -2 2h-1a2 2 0 0 1 -2 -2l0 -3", "M15 15a2 2 0 0 1 2 -2h1a2 2 0 0 1 2 2v3a2 2 0 0 1 -2 2h-1a2 2 0 0 1 -2 -2l0 -3", "M4 15v-3a8 8 0 0 1 16 0v3") }
     val Waveform: ImageVector by lazy { icon("Waveform", "M21 12h-2c-.894 0 -1.662 -.857 -1.761 -2c-.296 -3.45 -.749 -6 -2.749 -6s-2.5 3.582 -2.5 8s-.5 8 -2.5 8s-2.452 -2.547 -2.749 -6c-.1 -1.147 -.867 -2 -1.763 -2h-2") }
     val Box: ImageVector by lazy { icon("Box", "M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5", "M12 12l8 -4.5", "M12 12l0 9", "M12 12l-8 -4.5") }
+    val Expand: ImageVector by lazy { icon("Expand", "M16 4l4 0l0 4", "M14 10l6 -6", "M8 20l-4 0l0 -4", "M4 20l6 -6", "M16 20l4 0l0 -4", "M14 14l6 6", "M8 4l-4 0l0 4", "M4 4l6 6") }
+    val Collapse: ImageVector by lazy { icon("Collapse", "M5 9l4 0l0 -4", "M3 3l6 6", "M5 15l4 0l0 4", "M3 21l6 -6", "M19 9l-4 0l0 -4", "M15 9l6 -6", "M19 15l-4 0l0 4", "M15 15l6 6") }
     val HeartFilled: ImageVector by lazy { icon("HeartFilled", "M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572Z", filled = true) }
 }

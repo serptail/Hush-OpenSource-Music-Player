@@ -79,8 +79,10 @@ import com.gamut.feature.playerui.components.youtubeThumbCandidates
 import kotlinx.coroutines.delay
 import com.gamut.core.model.RepeatMode as PlaybackRepeatMode
 
-// The cover art dissolves over this much height, ending where the title starts.
-private val COVER_FADE = 40.dp
+// The cover art dissolves over this share of its height, ending where the title starts. The long
+// run lets it melt through the blur levels in StyledBackdrop instead of ending at a hard edge.
+private const val COVER_FADE_FRACTION = 0.42f
+private val COVER_FADE_MIN = 96.dp
 
 // Auris's playerInkGlow over white ink: a soft dark halo behind chrome text so it keeps an edge
 // where it crosses a bright patch of the backdrop.
@@ -148,9 +150,10 @@ internal fun StyledPlayerLayer(
     extras: @Composable () -> Unit,
     highlight: Color,
 ) {
-    val mesh = rememberArtworkMesh(blurArt)
+    val bannerModel = remember(rawArt) { coverBannerModel(rawArt) }
+    // The cover style blurs the exact image the banner shows so the two line up pixel for pixel.
+    val backdropBlur = rememberArtworkBlurSet(if (style == PlayerStyle.Cover) bannerModel else blurArt, prepare = true)
     val lyricsBackdropImage = rememberFullArtworkBlurImage(blurArt, prepare = active)
-    val seam = remember { MeshSeam() }
     val density = LocalDensity.current
     val gutter = adaptiveGutter(AdaptiveLayout.PlayerMaxWidth)
     val edge = 24.dp + gutter
@@ -179,8 +182,7 @@ internal fun StyledPlayerLayer(
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .onGloballyPositioned { layerTop = it.positionInRoot().y }
-            .then(seam.onHost),
+            .onGloballyPositioned { layerTop = it.positionInRoot().y },
     ) {
         val width = maxWidth
         val height = maxHeight
@@ -194,9 +196,19 @@ internal fun StyledPlayerLayer(
                 fallbackBanner
             }
         val bannerPx = with(density) { bannerHeight.toPx() }
+        val coverFade = (bannerHeight * COVER_FADE_FRACTION).coerceAtLeast(COVER_FADE_MIN).coerceAtMost(bannerHeight / 2)
+        val coverFadePx = with(density) { coverFade.toPx() }
+        val screenPx = with(density) { height.toPx() }
+        val scrollPx = remember(scroll) { { scroll.value.toFloat() } }
 
         Box(Modifier.fillMaxSize().graphicsLayer { alpha = (1f - lyricsT) * BACKDROP_STRENGTH }) {
-            ArtworkMeshBackdrop(mesh = mesh, seam = if (cover) ({ bannerPx - scroll.value }) else ({ seam.px - scroll.value }))
+            StyledBackdrop(
+                blur = backdropBlur,
+                coverGeometry = cover,
+                artPx = if (cover) bannerPx else screenPx,
+                fadePx = if (cover) coverFadePx else screenPx,
+                scroll = scrollPx,
+            )
         }
         if (lyricsBackdrop && blurArt != null) {
             Box(Modifier.fillMaxSize().graphicsLayer { alpha = lyricsT }) {
@@ -208,7 +220,7 @@ internal fun StyledPlayerLayer(
             CoverBanner(
                 url = rawArt,
                 height = bannerHeight,
-                fade = COVER_FADE.coerceAtMost(bannerHeight / 2),
+                fade = coverFade,
                 dockEnabled = !lyricsOpen,
                 modifier =
                     Modifier
@@ -307,7 +319,7 @@ internal fun StyledPlayerLayer(
                                 MeshSleeve(
                                     url = rawArt,
                                     isPlaying = isPlaying,
-                                    modifier = Modifier.size(side).then(seam.onSleeve).volumeHudAnchor(volumeHud),
+                                    modifier = Modifier.size(side).volumeHudAnchor(volumeHud),
                                 )
                                 Spacer(Modifier.height(20.dp))
                                 Box(Modifier.padding(horizontal = edge).volumeHudHeaderAnchor(volumeHud)) {
@@ -452,6 +464,9 @@ private fun RowScope.Cell(content: @Composable () -> Unit) {
     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { content() }
 }
 
+private fun coverBannerModel(url: String?): String? =
+    url?.let { youtubeThumbCandidates(it)?.firstOrNull() ?: squareArtUrl(it, 1200) ?: it }
+
 @Composable
 private fun CoverBanner(
     url: String?,
@@ -460,10 +475,7 @@ private fun CoverBanner(
     modifier: Modifier = Modifier,
     dockEnabled: Boolean = true,
 ) {
-    val model =
-        remember(url) {
-            url?.let { youtubeThumbCandidates(it)?.firstOrNull() ?: squareArtUrl(it, 1200) ?: it }
-        }
+    val model = remember(url) { coverBannerModel(url) }
     val curve =
         remember {
             Array(FADE_CURVE_STOPS + 1) { i ->

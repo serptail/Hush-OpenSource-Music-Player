@@ -69,6 +69,7 @@ import com.gamut.core.designsystem.GamutMotion
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.FavoritesStyle
 import com.gamut.core.designsystem.PlayerStyle
+import com.gamut.core.designsystem.VideoViewMode
 import com.gamut.core.designsystem.PlaylistStyle
 import com.gamut.core.designsystem.acrylicSource
 import com.gamut.core.designsystem.ink
@@ -260,6 +261,23 @@ fun AppearanceScreen(
                         PlayerStyle.Classic -> "The cover blurred behind the player, with the artwork in a progress ring."
                         PlayerStyle.Mesh -> "A plain cover that eases back when paused, with the screen below it carrying on in the cover's own colours."
                         PlayerStyle.Cover -> "Full-screen artwork that dissolves into a blurred reflection, with flowing lyrics."
+                    },
+            )
+            GroupedDivider()
+            GroupedSegmentedRow(
+                title = "Video view",
+                icon = icons.MonitorPlay,
+                options =
+                    listOf(
+                        Choice(VideoViewMode.Full, "Full"),
+                        Choice(VideoViewMode.Boxed, "Boxed"),
+                    ),
+                selected = s.videoViewMode,
+                onSelect = { v -> vm.update { it.copy(videoViewMode = v) } },
+                hint =
+                    when (s.videoViewMode) {
+                        VideoViewMode.Full -> "Music videos turn sideways and fill the whole screen, with the controls over the picture."
+                        VideoViewMode.Boxed -> "Music videos play upright in a box under the top bar, with their own controls and a button to expand to landscape. The player stays as it is below."
                     },
             )
 

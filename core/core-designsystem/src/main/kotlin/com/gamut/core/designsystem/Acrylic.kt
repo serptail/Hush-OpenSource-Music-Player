@@ -79,7 +79,7 @@ data class AcrylicMaterial(
 )
 
 object AcrylicMaterials {
-    val Scrim = AcrylicMaterial(16.dp, 0.12f, 0f, 0f, 0f, 0.25f)
+    val Scrim = AcrylicMaterial(22.dp, 0.28f, 0f, 0f, 0f, 0.40f)
 
     val UltraThin = AcrylicMaterial(14.dp, 0.10f, 0.015f, 0f, 0f, 0.40f)
 

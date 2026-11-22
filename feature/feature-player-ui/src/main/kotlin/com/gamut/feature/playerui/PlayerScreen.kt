@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -58,6 +59,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -65,6 +67,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalInputModeManager
@@ -88,6 +93,7 @@ import com.gamut.core.designsystem.LocalAppearance
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.PlayerStyle
 import com.gamut.core.designsystem.ShareSheet
+import com.gamut.core.designsystem.VideoViewMode
 import com.gamut.core.designsystem.acrylicSource
 import com.gamut.core.designsystem.adaptiveGutter
 import com.gamut.core.designsystem.isWideLayout
@@ -393,6 +399,18 @@ fun PlayerScreen(
         label = "videoReveal",
     )
 
+    // "Boxed" video view: held upright, the music video plays in a box under the top bar instead of taking the
+    // whole turned screen. Expanding it turns the screen to landscape, which makes the layout "wide", so an
+    // expanded video stays boxed until it is collapsed.
+    val videoViewMode = LocalAppearance.current.videoViewMode
+    var videoExpanded by remember { mutableStateOf(false) }
+    val boxedVideo = videoMode && videoViewMode == VideoViewMode.Boxed && (!isWideLayout() || videoExpanded)
+    LaunchedEffect(boxedVideo, active) { if (!boxedVideo || !active) videoExpanded = false }
+    BackHandler(enabled = active && videoExpanded) { videoExpanded = false }
+    ExpandedVideoWindow(enabled = videoExpanded)
+    // Where the page keeps room for the video box (see BoxedVideoPlayer).
+    var videoSlot by remember { mutableStateOf<Rect?>(null) }
+
     val meshStyle = LocalAppearance.current.playerStyle == PlayerStyle.Mesh && !videoMode
     val artworkMesh = if (meshStyle) rememberArtworkMesh(artUrl) else null
     val meshSeam = remember { MeshSeam() }
@@ -404,7 +422,7 @@ fun PlayerScreen(
                 .fillMaxSize()
                 .background(CoverPalette.Neutral.base)
                 .then(if (meshStyle) meshSeam.onHost else Modifier)
-                .then(if (lyricsPanelOpen) Modifier else Modifier.swipeVolumeGesture(volumeHud)),
+                .then(if (lyricsPanelOpen || videoExpanded) Modifier else Modifier.swipeVolumeGesture(volumeHud)),
         ) {
             val coverStyle = LocalAppearance.current.playerStyle == PlayerStyle.Cover && !videoMode
             val exactLyrics = (shownLyrics as? LyricsState.Loaded)?.lines?.any { it.exact } == true
@@ -415,7 +433,7 @@ fun PlayerScreen(
             val extrasContent: @Composable () -> Unit = {
                 // On a phone held upright the video page keeps the preview card out of the way (the lyric strip
                 // still opens the full panel); turned sideways it sits down the page with the rest.
-                val hideLyricsCard = videoMode && !isWideLayout()
+                val hideLyricsCard = videoMode && !boxedVideo && !isWideLayout()
                 if (lyricsOn && !hideLyricsCard) {
                     LyricsPreviewCard(
                         lyricsState = lyricsState,
@@ -510,7 +528,7 @@ fun PlayerScreen(
 
                 // The music video is the page's backdrop: full screen, behind everything below. On a portrait
                 // phone it is turned a quarter, so it plays "landscape" at the screen's full height.
-                if (heroStream != null) {
+                if (heroStream != null && !boxedVideo) {
                     VideoHero(
                         stream = heroStream,
                         player = player,
@@ -536,7 +554,7 @@ fun PlayerScreen(
                             onArtist = { name -> track?.let { t -> onGoToArtist(t.copy(artist = name)) } },
                             isFavorite = track?.isrc?.let { it in favoriteIsrcs } == true,
                             onToggleFavorite = { track?.let(onToggleFavorite) },
-                            showFavorite = !videoMode,
+                            showFavorite = !videoMode || boxedVideo,
                             videoSupported = videoProvider != null,
                             videoOn = videoOn,
                             onToggleVideo = toggleVideo,
@@ -700,7 +718,7 @@ fun PlayerScreen(
                         PlayerTopBar(
                             leave,
                             onMore = { showMore = true },
-                            favorite = if (videoMode) track?.isrc?.let { it in favoriteIsrcs } == true else null,
+                            favorite = if (videoMode && !boxedVideo) track?.isrc?.let { it in favoriteIsrcs } == true else null,
                             onToggleFavorite = { track?.let(onToggleFavorite) },
                             modifier =
                                 Modifier.fillMaxWidth().padding(
@@ -710,7 +728,74 @@ fun PlayerScreen(
                                 ),
                         )
 
-                        if (wide && videoMode) {
+                        if (boxedVideo) {
+                            // The video box is pinned under the top bar (BoxedVideoPlayer draws it over the room reserved
+                            // here); everything else scrolls below it. Expanded, the video owns the screen instead.
+                            if (!videoExpanded) {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp + gutter)
+                                        .padding(top = 8.dp, bottom = 14.dp)
+                                        .layout { measurable, constraints ->
+                                            val placeable = measurable.measure(constraints)
+                                            // The room opens with the reveal, so the page slides down as the picture arrives.
+                                            layout(placeable.width, (placeable.height * videoReveal).roundToInt()) { placeable.place(0, 0) }
+                                        },
+                                ) {
+                                    Spacer(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .aspectRatio(16f / 9f)
+                                            .volumeHudAnchor(volumeHud)
+                                            .onGloballyPositioned { videoSlot = Rect(it.positionInRoot(), it.size.toSize()) },
+                                    )
+                                }
+                                Column(
+                                    Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth()
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(horizontal = 24.dp + gutter),
+                                ) {
+                                    trackHeader()
+                                    Spacer(Modifier.height(6.dp))
+                                    LyricStripBlock(
+                                        lyricsOn = lyricsOn,
+                                        lyricsState = shownLyrics,
+                                        flowLines = flowLines,
+                                        trackKey = stripKey,
+                                        playhead = playhead,
+                                        isPlaying = clock.live,
+                                        durationMs = effectiveDurationMs,
+                                        onOpen = { lyricsPanelOpen = true },
+                                        highlight = lyricHighlight,
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                    MeshScrubber(
+                                        progress = progressProvider,
+                                        onScrub = { scrubFraction = it },
+                                        onSeekFraction = seekToFraction,
+                                        seekStep = seekStep,
+                                    )
+                                    TimeRow(positionProvider, effectiveDurationMs)
+                                    Spacer(Modifier.height(6.dp))
+                                    MeshTransport(
+                                        isPlaying = shownPlaying,
+                                        loading = spinnerOn,
+                                        onPrevious = player::skipPrevious,
+                                        onTogglePlay = togglePlay,
+                                        onNext = player::skipNext,
+                                        playModifier = Modifier.focusRequester(coverFocus),
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    controlsGrid()
+                                    Spacer(Modifier.height(28.dp))
+                                    extrasContent()
+                                    Spacer(Modifier.height(32.dp).navigationBarsPadding())
+                                }
+                            }
+                        } else if (wide && videoMode) {
                             // Sideways with a video: the picture gets the screen. Only the title and the progress
                             // bar sit on it; the transport, buttons, lyrics and about are a scroll away.
                             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
@@ -820,6 +905,40 @@ fun PlayerScreen(
                                 }
                             }
                         }
+                    }
+                }
+
+                // The boxed music video: drawn over the page's reserved room, or over the whole screen when expanded.
+                // Above the page but below the lyrics panel, which covers it.
+                if (heroStream != null && boxedVideo) {
+                    BoxedVideoPlayer(
+                        stream = heroStream,
+                        player = player,
+                        // The lyrics panel covers the page; no point decoding behind it.
+                        active = active && !lyricsPanelOpen,
+                        speed = modState.settings.speed,
+                        onFailed = videoSource.refresh,
+                        onRendered = { videoShown = true },
+                        expanded = videoExpanded,
+                        slot = { videoSlot },
+                        reveal = { videoReveal },
+                    ) {
+                        BoxedVideoControls(
+                            expanded = videoExpanded,
+                            isPlaying = shownPlaying,
+                            loading = spinnerOn,
+                            title = track?.title.orEmpty(),
+                            artist = track?.artist.orEmpty(),
+                            progress = progressProvider,
+                            positionMs = positionProvider,
+                            durationMs = effectiveDurationMs,
+                            onScrub = { scrubFraction = it },
+                            onSeekFraction = seekToFraction,
+                            onTogglePlay = togglePlay,
+                            onPrevious = player::skipPrevious,
+                            onNext = player::skipNext,
+                            onToggleExpand = { videoExpanded = !videoExpanded },
+                        )
                     }
                 }
 

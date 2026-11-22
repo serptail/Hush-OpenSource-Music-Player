@@ -86,6 +86,12 @@ internal enum class HeroMode {
      * the screen, cropped only at the frame's top and bottom. The controls sit low, over a darker scrim.
      */
     Rotated,
+
+    /**
+     * Upright inside a box of the page's own (see [BoxedVideoPlayer]): the whole frame is shown, fitted to the
+     * box on black, with no page scrim because the box brings its own controls.
+     */
+    Boxed,
 }
 
 /** Which way [HeroMode.Rotated] turns the frame. */
@@ -209,7 +215,10 @@ internal fun VideoHero(
     // Cover the whole area at the video's own shape: the view is sized by layout (nothing stretched, no
     // matrix) to at least the area's height and width, and whatever overhangs is clipped.
     val shownAspect = if (aspect > 0f) aspect else HeroAspect
-    Box(modifier.clipToBounds(), contentAlignment = Alignment.Center) {
+    Box(
+        modifier.clipToBounds().then(if (mode == HeroMode.Boxed) Modifier.background(Color.Black) else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
         AndroidView(
             factory = { viewContext ->
                 val texture =
@@ -288,6 +297,13 @@ internal fun VideoHero(
                         layout(width, height) {
                             placeable.placeWithLayer((width - w) / 2, (height - h) / 2) { rotationZ = RotatedDegrees }
                         }
+                    } else if (mode == HeroMode.Boxed) {
+                        // Contain: the smaller of "fit the width" and "fit the height", so nothing is cropped.
+                        val containWidth = minOf(width.toFloat(), height * shownAspect)
+                        val w = containWidth.roundToInt()
+                        val h = (containWidth / shownAspect).roundToInt()
+                        val placeable = measurable.measure(Constraints.fixed(w.coerceAtLeast(1), h.coerceAtLeast(1)))
+                        layout(width, height) { placeable.place((width - w) / 2, (height - h) / 2) }
                     } else {
                         // Cover: the larger of "fill the height" and "fill the width".
                         val coverWidth = maxOf(width.toFloat(), height * shownAspect)
@@ -299,7 +315,7 @@ internal fun VideoHero(
                 },
         )
         // Keeps the title, lyrics and controls readable over any footage; fades in with the picture.
-        Box(
+        if (mode != HeroMode.Boxed) Box(
             Modifier
                 .fillMaxSize()
                 .alpha(alpha)

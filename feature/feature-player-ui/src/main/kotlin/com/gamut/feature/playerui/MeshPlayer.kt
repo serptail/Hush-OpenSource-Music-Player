@@ -168,6 +168,10 @@ internal fun ArtworkMeshBackdrop(
             shown?.let { drawMesh(it, seamY, alpha = 1f) }
             incoming?.let { drawMesh(it, seamY, alpha = fade.value) }
 
+            // Fade the colour wash toward the dark floor. Done as an overlay (not by lowering the
+            // mesh alpha) so the track-change crossfade doesn't double up or pop.
+            drawRect(FallbackBackdrop.copy(alpha = 1f - MESH_STRENGTH))
+
             drawRect(
                 brush =
                     Brush.verticalGradient(
@@ -237,6 +241,9 @@ internal class MeshSeam {
 }
 
 private val FallbackBackdrop = Color(0xFF121212)
+
+// 1f = original colour strength; lower = fainter blurred colour behind the player.
+private const val MESH_STRENGTH = 0.8f
 
 private val meshCache =
     object : LinkedHashMap<String, ArtworkMesh>(0, 0.75f, true) {

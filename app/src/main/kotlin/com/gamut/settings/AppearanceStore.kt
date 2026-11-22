@@ -9,6 +9,7 @@ import com.gamut.core.designsystem.ArtistStyle
 import com.gamut.core.designsystem.FavoritesStyle
 import com.gamut.core.designsystem.FlowStyle
 import com.gamut.core.designsystem.PlayerStyle
+import com.gamut.core.designsystem.VideoViewMode
 import com.gamut.core.designsystem.PlaylistStyle
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -133,6 +134,7 @@ class AppearanceStore
                 glass = prefs.getBoolean("glass", d.glass),
                 glassDensity = enum("glass_density", d.glassDensity),
                 playerStyle = enum("player_style", d.playerStyle),
+                videoViewMode = enum("video_view_mode", d.videoViewMode),
             )
         }
 
@@ -150,6 +152,7 @@ class AppearanceStore
                 .putBoolean("glass", s.glass)
                 .putString("glass_density", s.glassDensity.name)
                 .putString("player_style", s.playerStyle.name)
+                .putString("video_view_mode", s.videoViewMode.name)
                 .apply()
         }
 
