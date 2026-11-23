@@ -1,5 +1,6 @@
 package com.gamut.feature.search
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,8 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -26,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +60,7 @@ import com.gamut.core.model.Track
 
 private val NUMBERED_TABS = setOf("Trending", "Billboard")
 private const val COLLAPSED_ROWS = 10
+private const val FEATURED_COUNT = 5
 
 internal fun LazyListScope.discoverFeaturedItems(
     state: DiscoverState,
@@ -106,15 +111,15 @@ internal fun LazyListScope.discoverFeaturedItems(
     }
 
     val trending = state.tabs.first()
-    val heroItem = trending.items.firstOrNull { it.track != null }
+    val featured = trending.items.filter { it.track != null }.take(FEATURED_COUNT)
 
-    if (heroItem != null) {
+    if (featured.isNotEmpty()) {
         item(key = "hero") {
-            HeroCard(
-                item = heroItem,
-                isPlaying = heroItem.track?.isrc == nowPlayingIsrc,
-                onClick = { heroItem.track?.let { onTrackClick(it, trending.items.mapNotNull { i -> i.track }) } },
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+            val queue = remember(trending.items) { trending.items.mapNotNull { it.track } }
+            FeaturedPager(
+                items = featured,
+                nowPlayingIsrc = nowPlayingIsrc,
+                onPlay = { picked -> picked.track?.let { onTrackClick(it, queue) } },
             )
         }
     }
@@ -225,7 +230,16 @@ internal fun LazyListScope.discoverChartItems(
     val shown = if (chartExpanded) tab.items else tab.items.take(COLLAPSED_ROWS)
     itemsIndexed(shown, key = { i, it -> "chart-${tab.label}-$i-${it.id}" }) { index, item ->
         val track = item.track
-        Box(Modifier.padding(horizontal = 16.dp)) {
+        Column(Modifier.padding(horizontal = 16.dp)) {
+            if (index > 0) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(start = if (numbered) 64.dp else 24.dp, end = 8.dp)
+                        .height(0.5.dp)
+                        .background(ink(0.07f)),
+                )
+            }
             ChartRow(
                 rank = if (numbered) index + 1 else null,
                 item = item,
@@ -272,6 +286,59 @@ internal fun LazyListScope.discoverItems(
         onToggleChartExpanded,
     )
     discoverFeedItems(state, onTrackClick, onMoreClick, nowPlayingIsrc, onArtistItemClick, onAlbumClick, onLoadMore)
+}
+
+/** The week's top songs as a swipeable shelf: one large card at a time with the next one peeking in. */
+@Composable
+private fun FeaturedPager(
+    items: List<DiscoverItem>,
+    nowPlayingIsrc: String?,
+    onPlay: (DiscoverItem) -> Unit,
+) {
+    val pager = rememberPagerState(pageCount = { items.size })
+    Column(Modifier.fillMaxWidth()) {
+        HorizontalPager(
+            state = pager,
+            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp),
+            pageSpacing = 12.dp,
+            key = { items[it].id },
+            modifier = Modifier.fillMaxWidth(),
+        ) { page ->
+            val item = items[page]
+            HeroCard(
+                item = item,
+                isPlaying = item.track?.isrc == nowPlayingIsrc,
+                onClick = { onPlay(item) },
+                label = "#${page + 1} Trending",
+            )
+        }
+        if (items.size > 1) PagerDots(count = items.size, current = pager.currentPage)
+    }
+}
+
+@Composable
+private fun PagerDots(
+    count: Int,
+    current: Int,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 2.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        repeat(count) { index ->
+            val selected = index == current
+            val width by animateDpAsState(if (selected) 18.dp else 6.dp, label = "featured-dot")
+            Box(
+                Modifier
+                    .padding(horizontal = 3.dp)
+                    .height(6.dp)
+                    .width(width)
+                    .clip(CircleShape)
+                    .background(if (selected) TextPrimary else ink(0.2f)),
+            )
+        }
+    }
 }
 
 @Composable

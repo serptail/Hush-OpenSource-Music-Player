@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -58,7 +57,7 @@ class SearchViewModel
         private val repository: SearchRepository,
         private val prefetch: PrefetchCoordinator,
         private val discoverRepository: DiscoverRepository,
-        private val suggestionsRepository: SearchSuggestionsRepository,
+        private val suggestionEngine: SuggestionEngine,
         private val previewPlayer: PreviewPlayer,
     ) : ViewModel() {
         private val query = MutableStateFlow("")
@@ -109,24 +108,14 @@ class SearchViewModel
                 hit?.takeIf { SearchRanking.showArtistCard(ui.query, it.title, signal, ui.tracks) }
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-        val suggestions: StateFlow<List<String>> =
+        val suggestions: StateFlow<RemoteSuggestions> =
             query
-                .debounce(80)
+                .debounce(110)
                 .distinctUntilChanged()
-                .transformLatest { value ->
-                    if (value.trim().length < MIN_QUERY_LENGTH) {
-                        emit(emptyList())
-                    } else {
-                        // Completions that still fit what was typed appear at once, the fetch refines them.
-                        emit(suggestionsRepository.localFor(value))
-                        try {
-                            emit(suggestionsRepository.suggest(value))
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (_: Exception) {
-                        }
-                    }
-                }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+                .flatMapLatest { value ->
+                    // Local sources appear at once; each remote source folds in as it arrives.
+                    suggestionEngine.stream(value).catch { e -> if (e is CancellationException) throw e }
+                }.stateIn(viewModelScope, SharingStarted.Eagerly, RemoteSuggestions())
 
         /** Which result's clip is playing (by isrc) and whether it is still buffering. */
         val preview: StateFlow<PreviewPlayer.State> = previewPlayer.state

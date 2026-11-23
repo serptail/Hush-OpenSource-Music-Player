@@ -66,7 +66,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -83,6 +82,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -94,10 +95,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -231,10 +232,19 @@ fun SearchScreen(
             recents.add(q)
             recentList = recents.all()
         }
-        val showingRecents = showingDiscover && fieldFocused && recentList.isNotEmpty()
+        val trendingSearches =
+            remember(discover.tabs) {
+                discover.tabs
+                    .firstOrNull()
+                    ?.items
+                    .orEmpty()
+                    .filter { it.track != null }
+                    .take(TRENDING_ROWS)
+            }
+        val showingRecents = showingDiscover && fieldFocused && (recentList.isNotEmpty() || trendingSearches.isNotEmpty())
         val suggestionRows =
             remember(state.query, recentList, remoteSuggestions) {
-                SearchSuggestions.merge(state.query, recentList, remoteSuggestions)
+                SuggestionRanker.rank(state.query, recentList, remoteSuggestions)
             }
 
         LaunchedEffect(focusSearchTick) {
@@ -245,8 +255,28 @@ fun SearchScreen(
                 keyboard?.show()
             }
         }
-        LaunchedEffect(listState) {
-            snapshotFlow { listState.isScrollInProgress }.collect { if (it) keyboard?.hide() }
+        // Hide the keyboard only for finger-driven scrolls. Programmatic scrolls (scrollToItem) never go
+        // through nested scrolling, so resetting the list below doesn't dismiss the keyboard.
+        val hideKeyboardOnUserScroll =
+            remember(keyboard) {
+                object : NestedScrollConnection {
+                    override fun onPreScroll(
+                        available: Offset,
+                        source: NestedScrollSource,
+                    ): Offset {
+                        if (source == NestedScrollSource.UserInput && available.y != 0f) keyboard?.hide()
+                        return Offset.Zero
+                    }
+                }
+            }
+        // New suggestions/results are inserted at the top; if the list is still scrolled from the previous
+        // search they'd sit above the viewport, so jump back to the top whenever the query changes.
+        var lastQuery by remember { mutableStateOf(state.query) }
+        LaunchedEffect(state.query) {
+            if (state.query != lastQuery) {
+                lastQuery = state.query
+                listState.scrollToItem(0)
+            }
         }
         LaunchedEffect(state.query) { filter = FILTER_ALL }
 
@@ -357,7 +387,8 @@ fun SearchScreen(
                     .fillMaxSize()
                     .padding(bottom = tabsHeight)
                     .acrylicSource()
-                    .nestedScroll(refresh.connection),
+                    .nestedScroll(refresh.connection)
+                    .nestedScroll(hideKeyboardOnUserScroll),
             ) {
                 val resultsAlpha by animateFloatAsState(if (state.isLoading) 0.55f else 1f, tween(150), label = "results-alpha")
                 val resultCell: @Composable (Track) -> Unit = { track ->
@@ -469,37 +500,59 @@ fun SearchScreen(
                             contentPadding = PaddingValues(start = gutter, end = gutter, bottom = stripHeight + 32.dp),
                         ) {
                             if (showingRecents) {
-                                item(key = "recents-head") {
-                                    Row(
-                                        Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Text(
-                                            "Recent",
-                                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                                            color = TextPrimary,
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                        Text(
-                                            "Clear",
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = TextSecondary,
-                                            modifier =
-                                                Modifier
-                                                    .pressScale(onClick = {
-                                                        recents.clear()
-                                                        recentList = emptyList()
-                                                    }, scaleDown = 0.92f)
-                                                    .padding(4.dp),
-                                        )
+                                if (recentList.isNotEmpty()) {
+                                    item(key = "recents-head") {
+                                        Row(
+                                            Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text(
+                                                "Recent",
+                                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                                                color = TextPrimary,
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                            Text(
+                                                "Clear",
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = TextSecondary,
+                                                modifier =
+                                                    Modifier
+                                                        .pressScale(onClick = {
+                                                            recents.clear()
+                                                            recentList = emptyList()
+                                                        }, scaleDown = 0.92f)
+                                                        .padding(4.dp),
+                                            )
+                                        }
+                                    }
+                                    items(recentList, key = { "recent-$it" }) { q ->
+                                        Box(Modifier.padding(horizontal = 16.dp)) {
+                                            RecentRow(q, onClick = { viewModel.updateQuery(q) }, onRemove = {
+                                                recents.remove(q)
+                                                recentList = recents.all()
+                                            })
+                                        }
                                     }
                                 }
-                                items(recentList, key = { "recent-$it" }) { q ->
-                                    Box(Modifier.padding(horizontal = 16.dp)) {
-                                        RecentRow(q, onClick = { viewModel.updateQuery(q) }, onRemove = {
-                                            recents.remove(q)
-                                            recentList = recents.all()
-                                        })
+                                if (trendingSearches.isNotEmpty()) {
+                                    item(key = "trending-head") {
+                                        Text(
+                                            "Trending now",
+                                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                                            color = TextPrimary,
+                                            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 4.dp),
+                                        )
+                                    }
+                                    itemsIndexed(trendingSearches, key = { _, it -> "trend-${it.id}" }) { index, item ->
+                                        Box(Modifier.padding(horizontal = 16.dp)) {
+                                            TrendingSearchRow(rank = index + 1, item = item) {
+                                                val text = "${item.title} ${item.subtitle}".trim()
+                                                saveRecent(text)
+                                                viewModel.updateQuery(text)
+                                                keyboard?.hide()
+                                            }
+                                        }
                                     }
                                 }
                             } else if (showingDiscover) {
@@ -530,10 +583,21 @@ fun SearchScreen(
                                 // suggestions out of view; this one grows in place at the top instead.
                                 item(key = "suggestions") {
                                     if (state.query.trim().length >= 2 && suggestionRows.isNotEmpty()) {
-                                        SuggestionList(
+                                        SuggestionPanel(
                                             typed = state.query,
-                                            suggestions = suggestionRows.take(SUGGESTION_ROWS),
-                                            onPick = { picked ->
+                                            suggestions = suggestionRows,
+                                            onArtist = { artist ->
+                                                saveRecent(artist.name)
+                                                keyboard?.hide()
+                                                if (artist.artistId >= 0) {
+                                                    onArtistSelected(artist.artistId)
+                                                } else {
+                                                    openArtistItem(
+                                                        DiscoverItem(id = "follow-${artist.name}", title = artist.name, subtitle = "", imageUrl = artist.imageUrl.orEmpty()),
+                                                    )
+                                                }
+                                            },
+                                            onSearch = { picked ->
                                                 saveRecent(picked)
                                                 viewModel.updateQuery(picked)
                                                 keyboard?.hide()
@@ -865,84 +929,7 @@ private fun RecentRow(
     }
 }
 
-private const val SUGGESTION_ROWS = 4
-
-/**
- * Completions under the search field. They are part of the scrolling results, so they move with the
- * list instead of staying pinned. Tapping a row searches it; the arrow drops it into the field so it
- * can be refined. What you have typed stays regular and what the completion adds is bold.
- */
-@Composable
-private fun SuggestionList(
-    typed: String,
-    suggestions: List<String>,
-    onPick: (String) -> Unit,
-    onFill: (String) -> Unit,
-) {
-    Box(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 8.dp)) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(RowShape)
-                .background(ink(0.06f)),
-        ) {
-            suggestions.forEachIndexed { index, suggestion ->
-                if (index > 0) {
-                    Box(Modifier.fillMaxWidth().padding(start = 44.dp).height(0.5.dp).background(ink(0.08f)))
-                }
-                SuggestionRow(suggestion, typed, onPick = { onPick(suggestion) }, onFill = { onFill(suggestion) })
-            }
-        }
-    }
-}
-
-@Composable
-private fun SuggestionRow(
-    suggestion: String,
-    typed: String,
-    onPick: () -> Unit,
-    onFill: () -> Unit,
-) {
-    val prefix = typed.trim().length
-    val label =
-        remember(suggestion, typed) {
-            buildAnnotatedString {
-                if (suggestion.startsWith(typed.trim(), ignoreCase = true) && prefix in 1 until suggestion.length) {
-                    append(suggestion.substring(0, prefix))
-                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(suggestion.substring(prefix)) }
-                } else {
-                    append(suggestion)
-                }
-            }
-        }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(40.dp)
-            .pressScale(onClick = onPick, scaleDown = 0.985f)
-            .padding(start = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(PhosphorIcons.Bold.MagnifyingGlass, null, tint = ink(0.4f), modifier = Modifier.size(15.dp))
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-            color = ink(0.85f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(horizontal = 14.dp),
-        )
-        Box(
-            Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .bounceClickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "Use suggestion", onClick = onFill),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("\u2196", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp), color = ink(0.4f))
-        }
-    }
-}
+private const val TRENDING_ROWS = 6
 
 /** Over the cover of the track being previewed: a stop icon centred on a light scrim. Tapping the cover stops it. */
 @Composable

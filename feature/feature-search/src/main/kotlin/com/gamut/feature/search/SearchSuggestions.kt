@@ -55,29 +55,3 @@ class SearchSuggestionsRepository
             const val MAX_ENTRIES = 80
         }
     }
-
-internal object SearchSuggestions {
-    const val LIMIT = 8
-    private const val RECENT_LIMIT = 3
-
-    /**
-     * Recent searches that continue what was typed come first (they are the user's own words), then
-     * the remote completions. Whatever the user already typed in full is not offered back to them.
-     */
-    fun merge(
-        typed: String,
-        recents: List<String>,
-        remote: List<String>,
-    ): List<String> {
-        val typedKey = TrackIdentity.fold(typed)
-        if (typedKey.length < 2) return emptyList()
-        val seen = hashSetOf(typedKey)
-        val out = ArrayList<String>()
-        recents
-            .filter { TrackIdentity.fold(it).startsWith(typedKey) }
-            .take(RECENT_LIMIT)
-            .forEach { if (seen.add(TrackIdentity.fold(it))) out += it }
-        remote.forEach { if (out.size < LIMIT && seen.add(TrackIdentity.fold(it))) out += it }
-        return out
-    }
-}
