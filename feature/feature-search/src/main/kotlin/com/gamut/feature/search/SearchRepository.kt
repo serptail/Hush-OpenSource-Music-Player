@@ -1,6 +1,7 @@
 package com.gamut.feature.search
 
 import com.gamut.core.common.TextMatch
+import com.gamut.core.common.TrackIdentity
 import com.gamut.core.model.Track
 import com.gamut.core.model.TrackSource
 import com.gamut.core.network.DeezerApi
@@ -107,7 +108,7 @@ class SearchRepositoryImpl
             val response =
                 withItunesRateLimit {
                     withTimeoutOrNull(ITUNES_TIMEOUT_MS) {
-                        runCatching { itunesApi.search(term = rawQuery, limit = SEARCH_LIMIT) }.getOrNull()
+                        runCatching { itunesApi.search(term = rawQuery, limit = ITUNES_LIMIT) }.getOrNull()
                     }
                 } ?: return emptyList()
 
@@ -145,7 +146,7 @@ class SearchRepositoryImpl
 
         private suspend fun searchDeezerTracks(query: String): List<DeezerTrackDto> =
             withTimeoutOrNull(DEEZER_TIMEOUT_MS) {
-                runCatching { deezerApi.searchTracks(query, limit = SEARCH_LIMIT).data }.getOrDefault(emptyList())
+                runCatching { deezerApi.searchTracks(query, limit = DEEZER_LIMIT).data }.getOrDefault(emptyList())
             }.orEmpty()
 
         private suspend fun lookupArtist(query: String): DeezerArtistDto? =
@@ -179,8 +180,6 @@ class SearchRepositoryImpl
             return true
         }
 
-        private fun Track.key() = TextMatch.norm(title) + "|" + TextMatch.primaryArtist(artist)
-
         private fun assemble(
             query: String,
             itunes: List<Track>,
@@ -189,76 +188,74 @@ class SearchRepositoryImpl
             boostArtist: Boolean,
             youtube: List<YoutubeCandidate>,
         ): List<Track> {
-            val popularityByKey = HashMap<String, Double>()
-            (deezer + artistTracks).forEach { dto ->
-                popularityByKey.merge(dto.toDomain().key(), SearchRanking.trackPopularity(dto.rank), ::maxOf)
-            }
-            val artistKeys = if (boostArtist) artistTracks.map { it.toDomain().key() }.toSet() else emptySet()
+            val items = ArrayList<Sourced>()
 
-            fun boostFor(key: String) = if (key in artistKeys) ARTIST_BOOST else 0.0
-
-            val candidates = ArrayList<Candidate>()
-            val known = HashSet<String>()
+            // Priority order matters: the first hit of a recording supplies the metadata that is shown.
             itunes.forEachIndexed { i, track ->
-                val key = track.key()
-                known += key
-                candidates += Candidate(track, popularityByKey[key] ?: 0.0, i, boost = boostFor(key))
+                items += Sourced(track, popularity = 0.0, position = i, provider = Provider.APPLE)
             }
             deezer.forEachIndexed { i, dto ->
-                val track = dto.toDomain()
-                val key = track.key()
-                if (known.add(key)) {
-                    candidates += Candidate(track, SearchRanking.trackPopularity(dto.rank), i, penalty = 2.0, boost = boostFor(key))
-                }
+                items +=
+                    Sourced(
+                        dto.toDomain(),
+                        SearchRanking.trackPopularity(dto.rank),
+                        i,
+                        Provider.DEEZER,
+                        penalty = DEEZER_PENALTY,
+                    )
             }
             artistTracks.forEachIndexed { i, dto ->
-                val track = dto.toDomain()
-                if (known.add(track.key())) {
-                    candidates += Candidate(track, SearchRanking.trackPopularity(dto.rank), i, boost = boostFor(track.key()))
-                }
+                items +=
+                    Sourced(
+                        dto.toDomain(),
+                        SearchRanking.trackPopularity(dto.rank),
+                        i,
+                        Provider.DEEZER,
+                        boost = if (boostArtist) ARTIST_BOOST else 0.0,
+                    )
             }
-
-            val catalog = candidates.map { it.track }
             youtube
                 .filter { isCleanYoutubeResult(it, query) }
-                .filter { candidate -> catalog.none { duplicates(candidate, it) } }
                 .forEachIndexed { i, candidate ->
-                    candidates +=
-                        Candidate(
+                    items +=
+                        Sourced(
                             candidate.toYoutubeOnlyTrack(),
                             SearchRanking.viewsPopularity(candidate.viewCount),
                             i,
-                            penalty = YOUTUBE_PENALTY,
+                            Provider.YOUTUBE,
+                            // Catalogue audio and Topic channels are real song entries; other uploads
+                            // (reuploads, lyric videos) stay below them.
+                            penalty =
+                                if (candidate.isMusicCatalog || candidate.channelIsTopicChannel) {
+                                    YOUTUBE_PENALTY
+                                } else {
+                                    YOUTUBE_UPLOAD_PENALTY
+                                },
                         )
                 }
-            return SearchRanking.rank(query, candidates)
+
+            // A recording that Apple, Deezer and YouTube all return becomes one candidate with
+            // the best position and popularity any of them gave it, and a cross-provider agreement bonus.
+            return SearchRanking.rank(query, ResultMerger.merge(items))
         }
 
-        private fun YoutubeCandidate.toYoutubeOnlyTrack(): Track =
-            Track(
+        private fun YoutubeCandidate.toYoutubeOnlyTrack(): Track {
+            val artist = channelName.removeSuffix(" - Topic")
+            return Track(
                 isrc = "youtube:$videoId",
                 musicBrainzId = null,
-                title = title,
-                artist = channelName.removeSuffix(" - Topic"),
+                title = TrackIdentity.displayTitle(title, artist),
+                artist = artist,
                 album = null,
                 durationMs = durationMs,
-                albumArtUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg",
+                // YouTube Music catalogue songs carry square cover art; only plain video uploads fall back
+                // to the wide video thumbnail.
+                albumArtUrl =
+                    thumbnailUrl?.takeIf { isMusicCatalog && it.isNotBlank() }
+                        ?: "https://i.ytimg.com/vi/$videoId/hqdefault.jpg",
                 source = TrackSource.YOUTUBE,
                 youtubeVideoId = videoId,
             )
-
-        private fun duplicates(
-            candidate: YoutubeCandidate,
-            track: Track,
-        ): Boolean {
-            val titleTokens = TextMatch.toks(track.title)
-            val candidateTokens = TextMatch.toks(candidate.title)
-            val coverage = titleTokens.count { it in candidateTokens }.toDouble() / titleTokens.size.coerceAtLeast(1)
-            val artistHit = TextMatch.toks(track.artist).any { it in candidateTokens || it in TextMatch.toks(candidate.channelName) }
-            val durationOk =
-                candidate.durationMs <= 0 || track.durationMs <= 0 ||
-                    kotlin.math.abs(candidate.durationMs - track.durationMs) <= 10_000
-            return coverage >= 0.8 && artistHit && durationOk
         }
 
         private fun isCleanYoutubeResult(
@@ -266,7 +263,7 @@ class SearchRepositoryImpl
             query: String,
         ): Boolean {
             if (!isValidYoutubeVideoId(candidate.videoId)) return false
-            if (candidate.durationMs > 0 && (candidate.durationMs < 60_000 || candidate.durationMs > 10 * 60_000)) return false
+            if (candidate.durationMs > 0 && (candidate.durationMs < 30_000 || candidate.durationMs > 12 * 60_000)) return false
             val tokens = TextMatch.toks(candidate.title + " " + candidate.channelName)
             val queryTokens = TextMatch.toks(query)
             val queryEvidence = queryTokens.count { it in tokens }.toDouble() / queryTokens.size.coerceAtLeast(1)
@@ -284,13 +281,16 @@ class SearchRepositoryImpl
 
         private companion object {
             const val ITUNES_TIMEOUT_MS = 8_000L
-            const val SEARCH_LIMIT = 25
+            const val ITUNES_LIMIT = 50
+            const val DEEZER_LIMIT = 40
             const val YOUTUBE_BUDGET_MS = 5_000L
             const val DEEZER_TIMEOUT_MS = 3_000L
             const val ARTIST_TRACK_LIMIT = 30
             const val ARTIST_BOOST_TRACKS = 15
             const val ARTIST_BOOST = 15.0
-            const val YOUTUBE_PENALTY = 10.0
+            const val YOUTUBE_PENALTY = 3.0
+            const val YOUTUBE_UPLOAD_PENALTY = 12.0
+            const val DEEZER_PENALTY = 2.0
             const val ITUNES_MAX_REQUESTS = 15
             const val ITUNES_WINDOW_MS = 60_000L
             const val CACHE_TTL_MS = 10 * 60 * 1_000L
@@ -310,6 +310,7 @@ private fun ItunesTrackDto.toDomain(): Track {
         source = TrackSource.ITUNES,
         youtubeVideoId = null,
         isExplicit = explicitFromApple(trackExplicitness),
+        previewUrl = previewUrl?.takeIf { it.isNotBlank() },
     )
 }
 
@@ -325,6 +326,7 @@ private fun DeezerTrackDto.toDomain(): Track =
         albumArtUrl = album.coverXl ?: album.coverBig,
         source = TrackSource.ITUNES,
         isExplicit = explicitLyrics,
+        previewUrl = preview?.takeIf { it.isNotBlank() },
     )
 
 private fun String.upscaleArtwork(size: Int = 600): String = replace(Regex("/\\d+x\\d+bb\\."), "/${size}x${size}bb.")

@@ -152,6 +152,7 @@ import com.gamut.feature.search.AlbumViewModel
 import com.gamut.feature.search.ArtistViewModel
 import com.gamut.feature.search.DiscoverItem
 import com.gamut.feature.search.DiscoverRepository
+import com.gamut.feature.search.LocalPlaylistCreate
 import com.gamut.feature.search.LocalPlaylistRemove
 import com.gamut.feature.search.SearchScreen
 import com.gamut.feature.search.SearchViewModel
@@ -604,12 +605,17 @@ private fun GamutApp(
                                     Unit
                                 }
                             }
+                        val createPlaylistAndAdd =
+                            remember(appLibraryVm) {
+                                { name: String, t: Track -> appLibraryVm.createPlaylistAndAdd(name, t) }
+                            }
                         CompositionLocalProvider(
                             LocalCoverPalette provides palette,
                             LocalSupportNudge provides supportNudge,
                             LocalNotifier provides notifier,
                             LocalArtistPhotoResolver provides photoResolver,
                             LocalPlaylistRemove provides removeFromPlaylist,
+                            LocalPlaylistCreate provides createPlaylistAndAdd,
                             LocalPlayerDock provides playerDock,
                             LocalPlayerMotion provides playerMotion,
                         ) {
@@ -1064,6 +1070,7 @@ private fun GamutApp(
                                     onRemoveFromPlaylist = { t, playlistId ->
                                         playlists.firstOrNull { it.id.toString() == playlistId }?.let { libraryVm.removeTrack(it.id, t) }
                                     },
+                                    onCreatePlaylistAndAdd = { t, name -> libraryVm.createPlaylistAndAdd(name, t) },
                                     onGoToArtist = { t ->
                                         closePlayer()
                                         nav.navigate("artist-name/${Uri.encode(t.artist)}")

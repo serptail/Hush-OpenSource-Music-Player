@@ -173,6 +173,7 @@ fun PlayerScreen(
     onAddToPlaylist: (Track, String) -> Unit = { _, _ -> },
     playlistIdsWithTrack: Set<String> = emptySet(),
     onRemoveFromPlaylist: (Track, String) -> Unit = { _, _ -> },
+    onCreatePlaylistAndAdd: (Track, String) -> Unit = { _, _ -> },
     onGoToArtist: (Track) -> Unit = {},
     active: Boolean = true,
     videoProvider: VideoStreamProvider? = null,
@@ -1077,6 +1078,10 @@ fun PlayerScreen(
                 }
             },
             onDismiss = { showAddToPlaylist = false },
+            onCreate = { name ->
+                track?.let { onCreatePlaylistAndAdd(it, name) }
+                showAddToPlaylist = false
+            },
         )
     }
     if (showEq) EqualizerSheet(eq, accent, onDismiss = { showEq = false })

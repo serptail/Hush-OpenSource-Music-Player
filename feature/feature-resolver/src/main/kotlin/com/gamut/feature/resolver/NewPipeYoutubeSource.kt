@@ -213,6 +213,22 @@ class NewPipeYoutubeSource
 
         override suspend fun searchBroad(query: String): List<YoutubeCandidate> = emptyList()
 
+        override suspend fun suggestions(query: String): List<String> =
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    ensureInitialized()
+                    NewPipe
+                        .getService("YouTube")
+                        .getSuggestionExtractor()
+                        .suggestionList(query)
+                        .orEmpty()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            }
+
         suspend fun warmUp() {
             runCatching { searchSongs("music") }
         }
@@ -233,6 +249,11 @@ class NewPipeYoutubeSource
                 viewCount = viewCount.coerceAtLeast(0),
                 category = "songs",
                 isMusicCatalog = true,
+                thumbnailUrl =
+                    thumbnails
+                        .filter { it.url.isNotBlank() }
+                        .maxByOrNull { it.height.coerceAtLeast(0) * it.width.coerceAtLeast(0) }
+                        ?.url,
             )
         }
 
@@ -255,6 +276,8 @@ class HybridYoutubeMusicSearchSource
         }
 
         override suspend fun searchBroad(query: String): List<YoutubeCandidate> = ytDlp.searchBroad(query)
+
+        override suspend fun suggestions(query: String): List<String> = newPipe.suggestions(query)
     }
 
 private class OkHttpDownloader(

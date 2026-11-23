@@ -18,6 +18,8 @@ data class Track(
     val youtubeVideoId: String? = null,
     /** Explicit-content flag from the catalogue; null when the source doesn't say (never assumed clean). */
     val isExplicit: Boolean? = null,
+    /** A ~30s clip from the catalogue (Apple or Deezer); null when none is known. Not the playable source. */
+    val previewUrl: String? = null,
 )
 
 @Serializable

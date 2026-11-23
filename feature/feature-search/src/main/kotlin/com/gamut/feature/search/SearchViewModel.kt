@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -57,6 +58,8 @@ class SearchViewModel
         private val repository: SearchRepository,
         private val prefetch: PrefetchCoordinator,
         private val discoverRepository: DiscoverRepository,
+        private val suggestionsRepository: SearchSuggestionsRepository,
+        private val previewPlayer: PreviewPlayer,
     ) : ViewModel() {
         private val query = MutableStateFlow("")
         private val _state = MutableStateFlow(SearchUiState())
@@ -105,6 +108,40 @@ class SearchViewModel
             combine(rawArtistHit, artistSignal, _state) { hit, signal, ui ->
                 hit?.takeIf { SearchRanking.showArtistCard(ui.query, it.title, signal, ui.tracks) }
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+        val suggestions: StateFlow<List<String>> =
+            query
+                .debounce(80)
+                .distinctUntilChanged()
+                .transformLatest { value ->
+                    if (value.trim().length < MIN_QUERY_LENGTH) {
+                        emit(emptyList())
+                    } else {
+                        // Completions that still fit what was typed appear at once, the fetch refines them.
+                        emit(suggestionsRepository.localFor(value))
+                        try {
+                            emit(suggestionsRepository.suggest(value))
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                        }
+                    }
+                }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+        /** Which result's clip is playing (by isrc) and whether it is still buffering. */
+        val preview: StateFlow<PreviewPlayer.State> = previewPlayer.state
+
+        fun togglePreview(track: Track) {
+            val url = track.previewUrl ?: return
+            previewPlayer.toggle(track.isrc, url)
+        }
+
+        fun stopPreview() = previewPlayer.stop()
+
+        override fun onCleared() {
+            previewPlayer.stop()
+            super.onCleared()
+        }
 
         private var discoverJob: Job? = null
 

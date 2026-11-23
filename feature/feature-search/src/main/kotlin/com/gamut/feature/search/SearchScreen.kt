@@ -14,9 +14,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -91,9 +93,11 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -101,6 +105,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
@@ -194,6 +199,9 @@ fun SearchScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val discover by viewModel.discover.collectAsStateWithLifecycle()
     val artistHit by viewModel.artistHit.collectAsStateWithLifecycle()
+    val remoteSuggestions by viewModel.suggestions.collectAsStateWithLifecycle()
+    val preview by viewModel.preview.collectAsStateWithLifecycle()
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { viewModel.stopPreview() } }
 
     val palette = LocalCoverPalette.current
 
@@ -224,6 +232,10 @@ fun SearchScreen(
             recentList = recents.all()
         }
         val showingRecents = showingDiscover && fieldFocused && recentList.isNotEmpty()
+        val suggestionRows =
+            remember(state.query, recentList, remoteSuggestions) {
+                SearchSuggestions.merge(state.query, recentList, remoteSuggestions)
+            }
 
         LaunchedEffect(focusSearchTick) {
             if (focusSearchTick > 0) {
@@ -368,7 +380,11 @@ fun SearchScreen(
                                 onToggleFavorite(track)
                                 if (!isFav) savedTrack = track
                             },
+                            isPreviewing = preview.key == track.isrc,
+                            previewLoading = preview.key == track.isrc && preview.loading,
+                            onPreview = if (track.previewUrl != null) ({ viewModel.togglePreview(track) }) else null,
                             onTrackSelected = { picked ->
+                                viewModel.stopPreview()
                                 saveRecent(state.query)
                                 onTrackSelected(picked, visibleTracks)
                             },
@@ -508,6 +524,24 @@ fun SearchScreen(
                             } else {
                                 val loadingEmpty = state.tracks.isEmpty() && (state.isLoading || !settled)
                                 val noResults = state.tracks.isEmpty() && !loadingEmpty
+
+                                // Always present, empty until there are completions. A lazy list keeps the item you
+                                // were looking at in place, so an item inserted above it later would push the
+                                // suggestions out of view; this one grows in place at the top instead.
+                                item(key = "suggestions") {
+                                    if (state.query.trim().length >= 2 && suggestionRows.isNotEmpty()) {
+                                        SuggestionList(
+                                            typed = state.query,
+                                            suggestions = suggestionRows.take(SUGGESTION_ROWS),
+                                            onPick = { picked ->
+                                                saveRecent(picked)
+                                                viewModel.updateQuery(picked)
+                                                keyboard?.hide()
+                                            },
+                                            onFill = { viewModel.updateQuery("$it ") },
+                                        )
+                                    }
+                                }
 
                                 artistHit?.let { hit ->
                                     item(key = "artist-hit") {
@@ -831,6 +865,102 @@ private fun RecentRow(
     }
 }
 
+private const val SUGGESTION_ROWS = 4
+
+/**
+ * Completions under the search field. They are part of the scrolling results, so they move with the
+ * list instead of staying pinned. Tapping a row searches it; the arrow drops it into the field so it
+ * can be refined. What you have typed stays regular and what the completion adds is bold.
+ */
+@Composable
+private fun SuggestionList(
+    typed: String,
+    suggestions: List<String>,
+    onPick: (String) -> Unit,
+    onFill: (String) -> Unit,
+) {
+    Box(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 8.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RowShape)
+                .background(ink(0.06f)),
+        ) {
+            suggestions.forEachIndexed { index, suggestion ->
+                if (index > 0) {
+                    Box(Modifier.fillMaxWidth().padding(start = 44.dp).height(0.5.dp).background(ink(0.08f)))
+                }
+                SuggestionRow(suggestion, typed, onPick = { onPick(suggestion) }, onFill = { onFill(suggestion) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun SuggestionRow(
+    suggestion: String,
+    typed: String,
+    onPick: () -> Unit,
+    onFill: () -> Unit,
+) {
+    val prefix = typed.trim().length
+    val label =
+        remember(suggestion, typed) {
+            buildAnnotatedString {
+                if (suggestion.startsWith(typed.trim(), ignoreCase = true) && prefix in 1 until suggestion.length) {
+                    append(suggestion.substring(0, prefix))
+                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(suggestion.substring(prefix)) }
+                } else {
+                    append(suggestion)
+                }
+            }
+        }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .pressScale(onClick = onPick, scaleDown = 0.985f)
+            .padding(start = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(PhosphorIcons.Bold.MagnifyingGlass, null, tint = ink(0.4f), modifier = Modifier.size(15.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+            color = ink(0.85f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(horizontal = 14.dp),
+        )
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .bounceClickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "Use suggestion", onClick = onFill),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("\u2196", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp), color = ink(0.4f))
+        }
+    }
+}
+
+/** Over the cover of the track being previewed: a stop icon centred on a light scrim. Tapping the cover stops it. */
+@Composable
+private fun PreviewOverlay(
+    loading: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier.clip(ThumbShape).background(Color.Black.copy(alpha = 0.4f)), contentAlignment = Alignment.Center) {
+        if (loading) {
+            CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+        } else {
+            Canvas(Modifier.size(16.dp)) {
+                drawRoundRect(Color.White, cornerRadius = CornerRadius(2.5.dp.toPx()))
+            }
+        }
+    }
+}
+
 @Composable
 private fun NoResults(query: String) {
     Column(
@@ -1041,6 +1171,10 @@ private fun TrackResultRow(
     onLongPress: () -> Unit,
     onAdd: () -> Unit,
     onTrackSelected: (Track) -> Unit,
+    isPreviewing: Boolean = false,
+    previewLoading: Boolean = false,
+    /** Tapping the cover auditions the clip; null (no clip known) leaves the cover as part of the row. */
+    onPreview: (() -> Unit)? = null,
 ) {
     InteractiveSurface(
         shape = RowShape,
@@ -1048,25 +1182,43 @@ private fun TrackResultRow(
         onClick = { onTrackSelected(track) },
         onLongClick = onLongPress,
         modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp),
     ) { active ->
         val isYoutubeThumb = track.albumArtUrl?.let { "ytimg.com" in it || "img.youtube.com" in it } == true
-        ArtImage(
-            url = remember(track.albumArtUrl) { squareArtUrl(track.albumArtUrl, 256) },
-            modifier =
+        Box(
+            if (onPreview != null) {
                 Modifier
-                    .size(width = if (isYoutubeThumb) 100.dp else 56.dp, height = 56.dp)
-                    .shadow(
-                        6.dp,
-                        ThumbShape,
-                        clip = false,
-                        ambientColor = Color.Black.copy(alpha = 0.20f),
-                        spotColor = Color.Black.copy(alpha = 0.30f),
-                    ).clip(ThumbShape)
-                    .thumbnailBorder(ThumbShape),
-            fallback = { ArtworkFallbackIcon() },
-        )
-        Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
+                    .clip(ThumbShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClickLabel = if (isPreviewing) "Stop preview" else "Play preview",
+                        onClick = onPreview,
+                    )
+            } else {
+                Modifier
+            },
+        ) {
+            ArtImage(
+                url = remember(track.albumArtUrl) { squareArtUrl(track.albumArtUrl, 256) },
+                modifier =
+                    Modifier
+                        .size(width = if (isYoutubeThumb) 78.dp else 44.dp, height = 44.dp)
+                        .shadow(
+                            6.dp,
+                            ThumbShape,
+                            clip = false,
+                            ambientColor = Color.Black.copy(alpha = 0.20f),
+                            spotColor = Color.Black.copy(alpha = 0.30f),
+                        ).clip(ThumbShape)
+                        .thumbnailBorder(ThumbShape),
+                fallback = { ArtworkFallbackIcon() },
+            )
+            if (isPreviewing) {
+                PreviewOverlay(previewLoading, Modifier.matchParentSize())
+            }
+        }
+        Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (isPlaying) NowPlayingBars(color = accent, modifier = Modifier.padding(end = 8.dp))
                 val titleColor = if (isPlaying) accent else ink(0.85f)
@@ -1074,18 +1226,20 @@ private fun TrackResultRow(
                 Text(
                     text = highlight(track.title, query, if (isPlaying) accent else TextPrimary),
                     style =
-                        MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Normal,
+                        MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 14.sp,
+                            lineHeight = 18.sp,
+                            fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium,
                         ),
                     color = titleColor,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (track.source == TrackSource.YOUTUBE) {
-                    Icon(YouTubeGlyph, "From YouTube", tint = ink(0.6f), modifier = Modifier.padding(end = 4.dp).size(18.dp))
+                if (track.source == TrackSource.YOUTUBE && isYoutubeThumb) {
+                    Icon(YouTubeGlyph, "From YouTube", tint = ink(0.6f), modifier = Modifier.padding(end = 4.dp).size(14.dp))
                 }
                 val subtitle =
                     if (isResolving) {
@@ -1095,7 +1249,7 @@ private fun TrackResultRow(
                     }
                 Text(
                     subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp),
                     color = TextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1104,16 +1258,16 @@ private fun TrackResultRow(
             }
         }
         if (isResolving) {
-            CircularProgressIndicator(Modifier.size(16.dp), color = accent, strokeWidth = 1.5.dp)
+            CircularProgressIndicator(Modifier.size(14.dp), color = accent, strokeWidth = 1.5.dp)
             Spacer(Modifier.width(8.dp))
         } else {
             val playAlpha by animateFloatAsState(if (active) 0.9f else 0f, tween(140), label = "row-play")
             val duration = formatDuration(track.durationMs)
-            Box(Modifier.padding(horizontal = 6.dp).width(36.dp), contentAlignment = Alignment.CenterEnd) {
+            Box(Modifier.padding(horizontal = 2.dp).width(32.dp), contentAlignment = Alignment.CenterEnd) {
                 if (duration.isNotEmpty()) {
                     Text(
                         duration,
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                         color = TextTertiary,
                         modifier = Modifier.graphicsLayer { alpha = 1f - playAlpha },
                     )
@@ -1122,7 +1276,7 @@ private fun TrackResultRow(
                     PhosphorIcons.Bold.Play,
                     null,
                     tint = ink(),
-                    modifier = Modifier.size(18.dp).graphicsLayer { alpha = playAlpha },
+                    modifier = Modifier.size(14.dp).graphicsLayer { alpha = playAlpha },
                 )
             }
         }
@@ -1131,8 +1285,10 @@ private fun TrackResultRow(
             description = if (isFavorite) "Saved" else "Add to favorites",
             tint = if (isFavorite) accent else ink(0.7f),
             onClick = onAdd,
+            buttonSize = 32.dp,
+            iconSize = 18.dp,
         )
-        RowIconButton(TablerIcons.MoreVertical, "More options", ink(0.6f), onMore)
+        RowIconButton(TablerIcons.MoreVertical, "More options", ink(0.6f), onMore, buttonSize = 32.dp, iconSize = 18.dp)
     }
 }
 
@@ -1142,15 +1298,17 @@ internal fun RowIconButton(
     description: String,
     tint: Color,
     onClick: () -> Unit,
+    buttonSize: Dp = 40.dp,
+    iconSize: Dp = 24.dp,
 ) {
     Box(
         Modifier
-            .size(40.dp)
+            .size(buttonSize)
             .clip(CircleShape)
             .focusRing(CircleShape)
             .bounceClickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = description, onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, description, tint = tint, modifier = Modifier.size(24.dp)) }
+    ) { Icon(icon, description, tint = tint, modifier = Modifier.size(iconSize)) }
 }
 
 @Composable

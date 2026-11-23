@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -39,6 +40,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -72,6 +83,9 @@ data class TrackPlaylistOption(
 )
 
 val LocalPlaylistRemove = staticCompositionLocalOf<(Track, String) -> Unit> { { _, _ -> } }
+
+/** Creates a playlist with the given name and puts the track in it. */
+val LocalPlaylistCreate = staticCompositionLocalOf<(String, Track) -> Unit> { { _, _ -> } }
 
 internal fun Modifier.bounceClick(onClick: () -> Unit): Modifier =
     composed {
@@ -195,6 +209,7 @@ internal fun SavedInSheet(
     onDismiss: () -> Unit,
 ) {
     val removeFromPlaylist = LocalPlaylistRemove.current
+    val createPlaylist = LocalPlaylistCreate.current
     val ticked =
         remember {
             mutableStateListOf<String>().apply { addAll(playlists.filter { it.contains || track.isrc in it.trackIsrcs }.map { it.id }) }
@@ -207,7 +222,7 @@ internal fun SavedInSheet(
             }
             Text(if (showFavorites) "Saved in" else "Add to playlist", style = MaterialTheme.typography.titleLarge, color = ink())
         }
-        LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
+        LazyColumn(modifier = Modifier.imePadding(), contentPadding = PaddingValues(bottom = 32.dp)) {
             if (showFavorites) {
                 item {
                     PlaylistRow("Favorites", "Liked songs", null, checked = true, accent = accent, icon = TablerIcons.HeartFilled, iconTint = accent, onClick = {
@@ -215,13 +230,19 @@ internal fun SavedInSheet(
                 }
             }
             if (playlists.isEmpty()) {
-                item {
+                item(key = "no-playlists") {
                     Text(
                         "You don't have any playlists yet.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = ink(0.6f),
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp),
+                        modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 12.dp),
                     )
+                }
+                item(key = "create-playlist") {
+                    CreatePlaylistRow(accent) { name ->
+                        createPlaylist(name, track)
+                        onDismiss()
+                    }
                 }
             }
             items(playlists, key = { it.id }) { p ->
@@ -241,6 +262,72 @@ internal fun SavedInSheet(
                             onAddToPlaylist(p.id)
                         }
                     },
+                )
+            }
+        }
+    }
+}
+
+/** "Create playlist" that expands into a name field in place; [onCreate] gets the trimmed name. */
+@Composable
+private fun CreatePlaylistRow(
+    accent: Color,
+    onCreate: (String) -> Unit,
+) {
+    var creating by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("") }
+    val focus = remember { FocusRequester() }
+    val submit = { if (name.isNotBlank()) onCreate(name.trim()) }
+    Crossfade(targetState = creating, label = "create-playlist") { isCreating ->
+        if (isCreating) {
+            LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .background(ink(0.1f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                ) {
+                    if (name.isEmpty()) {
+                        Text("Playlist name", color = ink(0.4f), style = MaterialTheme.typography.bodyLarge)
+                    }
+                    BasicTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyLarge.merge(TextStyle(color = ink())),
+                        cursorBrush = SolidColor(ink()),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { submit() }),
+                        modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = { submit() }, enabled = name.isNotBlank()) { Text("Create") }
+            }
+        } else {
+            Row(
+                Modifier.fillMaxWidth().bounceClick { creating = true }.padding(horizontal = 24.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(accent.copy(alpha = 0.15f))
+                        .thumbnailBorder(RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(TablerIcons.ListPlus, null, tint = accent, modifier = Modifier.size(24.dp))
+                }
+                Text(
+                    "Create playlist",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = ink(),
+                    modifier = Modifier.padding(start = 14.dp),
                 )
             }
         }

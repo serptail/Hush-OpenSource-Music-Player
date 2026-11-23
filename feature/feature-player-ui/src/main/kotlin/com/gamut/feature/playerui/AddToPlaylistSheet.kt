@@ -23,6 +23,22 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,6 +52,69 @@ import com.gamut.core.designsystem.bounceClickable
 import com.gamut.core.designsystem.focusRing
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.thumbnailBorder
+
+/** "Create playlist" that expands into a name field in place; [onCreate] gets the trimmed name. */
+@Composable
+private fun CreatePlaylistRow(onCreate: (String) -> Unit) {
+    var creating by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("") }
+    val focus = remember { FocusRequester() }
+    val submit = { if (name.isNotBlank()) onCreate(name.trim()) }
+    Crossfade(targetState = creating, label = "create-playlist") { isCreating ->
+        if (isCreating) {
+            LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .background(ink(0.1f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                ) {
+                    if (name.isEmpty()) {
+                        Text("Playlist name", color = ink(0.4f), style = MaterialTheme.typography.bodyLarge)
+                    }
+                    BasicTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyLarge.merge(TextStyle(color = ink())),
+                        cursorBrush = SolidColor(ink()),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { submit() }),
+                        modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = { submit() }, enabled = name.isNotBlank()) { Text("Create") }
+            }
+        } else {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .focusRing(RoundedCornerShape(12.dp))
+                    .bounceClickable { creating = true }
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(ink(0.07f)).thumbnailBorder(RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(TablerIcons.ListPlus, contentDescription = null, tint = ink(0.7f), modifier = Modifier.size(24.dp))
+                }
+                Text(
+                    "Create playlist",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = ink(),
+                    modifier = Modifier.padding(start = 14.dp),
+                )
+            }
+        }
+    }
+}
 
 data class PlaylistPickerItem(
     val id: String,
@@ -52,6 +131,8 @@ internal fun AddToPlaylistSheet(
     onPick: (PlaylistPickerItem) -> Unit,
     onRemove: (PlaylistPickerItem) -> Unit,
     onDismiss: () -> Unit,
+    /** Creates a playlist with this name and adds the current track; null hides the option. */
+    onCreate: ((String) -> Unit)? = null,
 ) {
     GamutSheet(onDismiss = onDismiss) {
         Text(
@@ -66,8 +147,11 @@ internal fun AddToPlaylistSheet(
                 "You don't have any playlists yet.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = ink(0.6f),
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp),
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 12.dp),
             )
+            if (onCreate != null) {
+                Box(Modifier.imePadding().padding(bottom = 24.dp)) { CreatePlaylistRow(onCreate) }
+            }
             return@GamutSheet
         }
 

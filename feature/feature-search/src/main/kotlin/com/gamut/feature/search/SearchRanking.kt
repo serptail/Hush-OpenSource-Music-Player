@@ -1,6 +1,7 @@
 package com.gamut.feature.search
 
 import com.gamut.core.common.TextMatch
+import com.gamut.core.common.TrackIdentity
 import com.gamut.core.model.Track
 import kotlin.math.log10
 import kotlin.math.min
@@ -17,6 +18,8 @@ internal data class Candidate(
     val position: Int,
     val penalty: Double = 0.0,
     val boost: Double = 0.0,
+    /** How many independent providers (Apple, Deezer, YouTube) returned this same recording. */
+    val providers: Int = 1,
 )
 
 internal object SearchRanking {
@@ -24,7 +27,10 @@ internal object SearchRanking {
 
     const val ARTIST_BOOST_THRESHOLD = 0.60
 
-    const val MAX_RESULTS = 50
+    const val MAX_RESULTS = 80
+
+    /** Per extra provider that independently returned the same recording, capped at two extras. */
+    const val AGREEMENT_BONUS = 10.0
 
     fun nameMatch(
         query: String,
@@ -118,7 +124,7 @@ internal object SearchRanking {
         return hits.toDouble() / queryTokens.size
     }
 
-    private fun Track.dedupeKey() = TextMatch.norm(title) + "|" + TextMatch.primaryArtist(artist)
+    private fun Track.dedupeKey() = TrackIdentity.key(title, artist)
 
     private class Scored(
         val candidate: Candidate,
@@ -155,7 +161,8 @@ internal object SearchRanking {
                 val junk = (all intersect TextMatch.DERIVATIVE) - queryTokens.toSet()
                 score -= junk.size * 60.0
 
-                score += c.popularity * 25.0 + 12.0 / (1.0 + 0.2 * c.position) + c.boost - c.penalty
+                score += c.popularity * 25.0 + 12.0 / (1.0 + 0.2 * c.position) + c.boost - c.penalty +
+                    (c.providers - 1).coerceIn(0, 2) * AGREEMENT_BONUS
                 Scored(c, coverage, score)
             }
 

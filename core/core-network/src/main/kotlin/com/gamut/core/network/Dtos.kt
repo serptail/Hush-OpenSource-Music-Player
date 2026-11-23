@@ -72,6 +72,7 @@ data class ItunesTrackDto(
     val kind: String? = null,
     /** iTunes: "explicit", "cleaned" or "notExplicit". */
     val trackExplicitness: String? = null,
+    val previewUrl: String? = null,
 )
 
 @Serializable
@@ -159,6 +160,7 @@ data class DeezerTrackDto(
     val artist: DeezerArtistDto,
     val album: DeezerAlbumDto = DeezerAlbumDto(),
     @SerialName("explicit_lyrics") val explicitLyrics: Boolean? = null,
+    val preview: String? = null,
 )
 
 @Serializable
