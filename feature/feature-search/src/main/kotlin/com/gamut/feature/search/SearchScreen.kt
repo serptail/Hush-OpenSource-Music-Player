@@ -13,6 +13,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -69,7 +70,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -78,6 +78,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -164,7 +165,6 @@ internal val TextTertiary: Color
     @Composable @ReadOnlyComposable
     get() = ink(0.4f)
 
-private val PanelShape = RoundedCornerShape(16.dp)
 internal val CardShapeLarge = RoundedCornerShape(22.dp)
 internal val RowShape = RoundedCornerShape(16.dp)
 internal val ThumbShape = RoundedCornerShape(10.dp)
@@ -322,13 +322,30 @@ fun SearchScreen(
 
         val header: @Composable (Modifier) -> Unit = { m ->
             Column(m.fillMaxWidth().onSizeChanged { headerHeightPx = it.height }.statusBarsPadding()) {
-                Row(Modifier.fillMaxWidth().padding(top = 22.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "Discover",
-                        style = MaterialTheme.typography.displayLarge,
-                        color = TextPrimary,
-                        modifier = Modifier.weight(1f),
-                    )
+                val searching = fieldFocused || state.query.isNotBlank()
+                Row(Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "Discover",
+                            style = MaterialTheme.typography.displayLarge,
+                            color = TextPrimary,
+                        )
+                        // The tagline gives way to the results as soon as the person starts searching.
+                        AnimatedVisibility(
+                            visible = !searching,
+                            enter = fadeIn(tween(160)) + expandVertically(tween(200)),
+                            exit = fadeOut(tween(120)) + shrinkVertically(tween(180)),
+                        ) {
+                            Text(
+                                "Made from what you play and follow",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                                color = TextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
+                    }
                     if (showingDiscover && LocalInputModeManager.current.inputMode == InputMode.Keyboard) {
                         Box(
                             Modifier.size(44.dp).pressScale(onClick = { viewModel.refreshDiscover() }).semantics {
@@ -342,12 +359,15 @@ fun SearchScreen(
                         Spacer(Modifier.width(8.dp))
                     }
                     headerExtra()
-                    Box(Modifier.size(44.dp).pressScale(onClick = onShazam), contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier.size(44.dp).pressScale(onClick = onShazam, scaleDown = 0.92f).clip(CircleShape).background(ink(0.07f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         Icon(
                             painterResource(com.gamut.core.designsystem.R.drawable.ic_shazam),
                             "Identify a song",
                             tint = ink(0.9f),
-                            modifier = Modifier.size(34.dp),
+                            modifier = Modifier.size(26.dp),
                         )
                     }
                     Spacer(Modifier.width(8.dp))
@@ -361,14 +381,14 @@ fun SearchScreen(
                         ProfileAvatar(
                             name = profileName,
                             seed = profileSeed,
-                            size = 34.dp,
+                            size = 40.dp,
                             guestIcon = PhosphorIcons.Bold.User,
                             image = profileImage,
                             invertedGuest = true,
                         )
                     }
                 }
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(16.dp))
                 SearchField(
                     query = state.query,
                     onQueryChange = viewModel::updateQuery,
@@ -378,7 +398,7 @@ fun SearchScreen(
                     onSubmit = { saveRecent(state.query) },
                     armTick = focusSearchTick,
                 )
-                Box(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 12.dp).height(2.dp)) {
+                Box(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp).height(2.dp)) {
                     if (state.isLoading && state.tracks.isNotEmpty()) {
                         LinearProgressIndicator(
                             modifier = Modifier.fillMaxSize().clip(CircleShape),
@@ -406,7 +426,7 @@ fun SearchScreen(
             ) {
                 val resultsAlpha by animateFloatAsState(if (state.isLoading) 0.55f else 1f, tween(150), label = "results-alpha")
                 val resultCell: @Composable (Track) -> Unit = { track ->
-                    Box(Modifier.padding(horizontal = 16.dp).graphicsLayer { alpha = resultsAlpha }) {
+                    Box(Modifier.padding(horizontal = 12.dp).graphicsLayer { alpha = resultsAlpha }) {
                         val isFav = track.isrc in favoriteIsrcs
                         TrackResultRow(
                             track = track,
@@ -437,7 +457,7 @@ fun SearchScreen(
                     }
                 }
                 Column(Modifier.fillMaxSize()) {
-                    header(Modifier.padding(horizontal = gutter + 24.dp))
+                    header(Modifier.padding(horizontal = gutter + DiscoverInset))
 
                     if (wide && showingDiscover && !showingRecents) {
                         Row(
@@ -519,12 +539,12 @@ fun SearchScreen(
                                 if (recentList.isNotEmpty()) {
                                     item(key = "recents-head") {
                                         Row(
-                                            Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 4.dp),
+                                            Modifier.fillMaxWidth().padding(start = DiscoverInset, end = DiscoverInset, top = 8.dp, bottom = 4.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                         ) {
                                             Text(
                                                 "Recent",
-                                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                                                style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
                                                 color = TextPrimary,
                                                 modifier = Modifier.weight(1f),
                                             )
@@ -543,7 +563,7 @@ fun SearchScreen(
                                         }
                                     }
                                     items(recentList, key = { "recent-$it" }) { q ->
-                                        Box(Modifier.padding(horizontal = 16.dp)) {
+                                        Box(Modifier.padding(horizontal = 12.dp)) {
                                             RecentRow(q, onClick = { viewModel.updateQuery(q) }, onRemove = {
                                                 recents.remove(q)
                                                 recentList = recents.all()
@@ -555,13 +575,13 @@ fun SearchScreen(
                                     item(key = "trending-head") {
                                         Text(
                                             "Trending now",
-                                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
                                             color = TextPrimary,
-                                            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 4.dp),
+                                            modifier = Modifier.padding(start = DiscoverInset, end = DiscoverInset, top = 24.dp, bottom = 4.dp),
                                         )
                                     }
                                     itemsIndexed(trendingSearches, key = { _, it -> "trend-${it.id}" }) { index, item ->
-                                        Box(Modifier.padding(horizontal = 16.dp)) {
+                                        Box(Modifier.padding(horizontal = 12.dp)) {
                                             TrendingSearchRow(rank = index + 1, item = item) {
                                                 val text = "${item.title} ${item.subtitle}".trim()
                                                 saveRecent(text)
@@ -632,7 +652,7 @@ fun SearchScreen(
                                             visibleState = visible,
                                             enter = fadeIn(tween(240)) + expandVertically(tween(240)),
                                         ) {
-                                            Column(Modifier.padding(horizontal = 16.dp)) {
+                                            Column(Modifier.padding(horizontal = 12.dp)) {
                                                 SectionLabel("Top result", Modifier.padding(horizontal = 8.dp))
                                                 ArtistHit(hit) { id ->
                                                     saveRecent(state.query)
@@ -646,7 +666,7 @@ fun SearchScreen(
                                 if (hasYoutube) {
                                     item(key = "filters") {
                                         Row(
-                                            Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
+                                            Modifier.fillMaxWidth().padding(horizontal = DiscoverInset, vertical = 4.dp),
                                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                                         ) {
                                             Pill("All", activeFilter == FILTER_ALL) { filter = FILTER_ALL }
@@ -659,12 +679,12 @@ fun SearchScreen(
                                 if (state.tracks.isNotEmpty()) {
                                     item(key = "results-title") {
                                         Row(
-                                            Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 6.dp),
+                                            Modifier.fillMaxWidth().padding(start = DiscoverInset, end = DiscoverInset, top = 14.dp, bottom = 6.dp),
                                             verticalAlignment = Alignment.Bottom,
                                         ) {
                                             Text(
                                                 "Songs",
-                                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                                                style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
                                                 color = TextPrimary,
                                             )
                                             Spacer(Modifier.width(8.dp))
@@ -681,7 +701,7 @@ fun SearchScreen(
                                 when {
                                     loadingEmpty -> {
                                         items(8, key = { "skeleton-$it" }) {
-                                            TrackRowSkeleton(Modifier.padding(horizontal = 24.dp))
+                                            TrackRowSkeleton(Modifier.padding(horizontal = DiscoverInset))
                                         }
                                     }
 
@@ -795,7 +815,7 @@ private fun SearchField(
         Row(
             Modifier
                 .weight(1f)
-                .height(52.dp)
+                .height(48.dp)
                 .then(
                     if (remote && !editing &&
                         !focused
@@ -804,8 +824,8 @@ private fun SearchField(
                     } else {
                         Modifier
                     },
-                ).glass(PanelShape, fill = 0.07f + 0.03f * focus, borderColor = accent.copy(alpha = 0.55f * focus))
-                .padding(start = 16.dp, end = 6.dp),
+                ).glass(CircleShape, fill = 0.07f + 0.03f * focus, borderColor = accent.copy(alpha = 0.55f * focus))
+                .padding(start = 18.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
@@ -840,7 +860,7 @@ private fun SearchField(
                 decorationBox = { inner ->
                     Box(contentAlignment = Alignment.CenterStart) {
                         if (query.isEmpty()) {
-                            Text("Artists, songs, albums", style = MaterialTheme.typography.bodyLarge, color = TextTertiary)
+                            Text("Search artists, songs, albums", style = MaterialTheme.typography.bodyLarge, color = TextTertiary)
                         }
                         inner()
                     }
@@ -899,8 +919,10 @@ internal fun Pill(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val fill by animateColorAsState(ink(if (selected) 0.16f else 0.06f), tween(200), label = "pill-fill")
-    val text by animateColorAsState(ink(if (selected) 1f else 0.6f), tween(200), label = "pill-text")
+    // The cover theme makes the page background transparent, so the label on a filled pill takes the opposite of the ink.
+    val onFill = if (ink().luminance() > 0.5f) Color(0xFF0B0B0D) else Color.White
+    val fill by animateColorAsState(if (selected) ink(0.92f) else ink(0.07f), tween(200), label = "pill-fill")
+    val text by animateColorAsState(if (selected) onFill else ink(0.72f), tween(200), label = "pill-text")
     Box(
         Modifier
             .pressScale(onClick = onClick, scaleDown = 0.94f)
@@ -911,7 +933,7 @@ internal fun Pill(
     ) {
         Text(
             label,
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
             color = text,
             maxLines = 1,
             softWrap = false,
@@ -1117,21 +1139,15 @@ private fun ArtistHit(
         shape = CardShapeLarge,
         pressedScale = 0.97f,
         onClick = { item.artistId?.let(onClick) },
-        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp).background(ink(0.05f), CardShapeLarge),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 14.dp),
     ) { active ->
         ArtImage(
             url = item.imageUrl,
             modifier =
                 Modifier
-                    .size(76.dp)
-                    .shadow(
-                        10.dp,
-                        CircleShape,
-                        clip = false,
-                        ambientColor = Color.Black.copy(alpha = 0.25f),
-                        spotColor = Color.Black.copy(alpha = 0.35f),
-                    ).clip(CircleShape)
+                    .size(64.dp)
+                    .clip(CircleShape)
                     .thumbnailBorder(CircleShape),
             contentDescription = item.title,
             fallback = { ArtworkFallbackIcon() },
@@ -1140,7 +1156,7 @@ private fun ArtistHit(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     item.title,
-                    style = MaterialTheme.typography.headlineMedium,
+                    style = MaterialTheme.typography.headlineMedium.copy(fontSize = 20.sp, lineHeight = 24.sp),
                     color = TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1187,7 +1203,7 @@ private fun TrackResultRow(
         onClick = { onTrackSelected(track) },
         onLongClick = onLongPress,
         modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
     ) { active ->
         val isYoutubeThumb = track.albumArtUrl?.let { "ytimg.com" in it || "img.youtube.com" in it } == true
         Box(
@@ -1208,14 +1224,8 @@ private fun TrackResultRow(
                 url = remember(track.albumArtUrl) { squareArtUrl(track.albumArtUrl, 256) },
                 modifier =
                     Modifier
-                        .size(width = if (isYoutubeThumb) 78.dp else 44.dp, height = 44.dp)
-                        .shadow(
-                            6.dp,
-                            ThumbShape,
-                            clip = false,
-                            ambientColor = Color.Black.copy(alpha = 0.20f),
-                            spotColor = Color.Black.copy(alpha = 0.30f),
-                        ).clip(ThumbShape)
+                        .size(width = if (isYoutubeThumb) 84.dp else 48.dp, height = 48.dp)
+                        .clip(ThumbShape)
                         .thumbnailBorder(ThumbShape),
                 fallback = { ArtworkFallbackIcon() },
             )
@@ -1223,18 +1233,18 @@ private fun TrackResultRow(
                 PreviewOverlay(previewLoading, Modifier.matchParentSize())
             }
         }
-        Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (isPlaying) NowPlayingBars(color = accent, modifier = Modifier.padding(end = 8.dp))
-                val titleColor = if (isPlaying) accent else ink(0.85f)
+                val titleColor = if (isPlaying) accent else ink(0.95f)
                 ExplicitMark(track.isExplicit, ink(0.6f))
                 Text(
                     text = highlight(track.title, query, if (isPlaying) accent else TextPrimary),
                     style =
                         MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 14.sp,
-                            lineHeight = 18.sp,
-                            fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium,
+                            fontSize = 15.sp,
+                            lineHeight = 20.sp,
+                            fontWeight = FontWeight.SemiBold,
                         ),
                     color = titleColor,
                     maxLines = 2,
@@ -1254,7 +1264,7 @@ private fun TrackResultRow(
                     }
                 Text(
                     subtitle,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp),
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, lineHeight = 18.sp),
                     color = TextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

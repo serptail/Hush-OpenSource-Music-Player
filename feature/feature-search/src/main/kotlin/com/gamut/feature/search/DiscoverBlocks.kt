@@ -1,6 +1,7 @@
 package com.gamut.feature.search
 
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,7 +17,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -27,12 +31,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -45,6 +46,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.inset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -57,6 +59,7 @@ import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.fill.Play
 import com.gamut.core.designsystem.ArtImage
+import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
@@ -69,17 +72,88 @@ import kotlin.math.sin
 
 /*
  * The blocks Discover is made of, top to bottom:
- *   1. a cover-led carousel: what is new for the listener, then the week's biggest songs
- *   2. "Made for you": station rows
- *   3. the shelves the page already had, restyled flat
- *   4. "Find your mood": dense shortcut chips, each with a tinted tile and an emblem
+ *   1. mood pills: one-tap stations, scrolling sideways under the search field
+ *   2. a cover-led hero carousel: what is new for the listener, then the week's biggest songs
+ *   3. "Made for you": station cards
+ *   4. the shelves, charts and artists, styled to match (see DiscoverSection.kt)
  *
  * Nothing here animates on its own and no artwork is downloaded for a station, so the page costs
  * nothing while idle.
  */
 
+/** The page's side margin. Every Discover row, title and card lines up on it. */
+internal val DiscoverInset: Dp = 20.dp
+
 private const val HERO_COUNT = 6
-private const val MOOD_COLLAPSED = 6
+private const val HERO_ASPECT = 0.84f
+private val HeroShape = RoundedCornerShape(28.dp)
+private val HeroDot = Color(0xFFFF5C5C)
+private val StationCardSize = 156.dp
+
+// ---- Mood pills ---------------------------------------------------------------------------------------------------
+
+/** The mood stations as a sideways row of pills, the ones that suit the hour first. */
+internal fun LazyListScope.discoverMoodPills(
+    state: DiscoverState,
+    loadingId: String?,
+    onStation: (DiscoverItem) -> Unit,
+) {
+    val section = state.feed.firstOrNull { it.kind == FeedKind.MOODS } ?: return
+    val moods = section.items.mapNotNull { item -> Mood.bySlug(item.id.substringAfterLast(':'))?.let { item to it } }
+    if (moods.isEmpty()) return
+    item(key = "mood-pills") {
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = DiscoverInset, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(moods, key = { it.first.id }) { (item, mood) ->
+                MoodPill(item.title, mood, loading = item.id == loadingId) { onStation(item) }
+            }
+        }
+    }
+}
+
+/** A small tinted dot with the mood's emblem, then its name, on a quiet pill. */
+@Composable
+private fun MoodPill(
+    label: String,
+    mood: Mood,
+    loading: Boolean,
+    onClick: () -> Unit,
+) {
+    val from = Color(mood.from)
+    val to = Color(mood.to)
+    Row(
+        Modifier
+            .pressScale(onClick = onClick, scaleDown = 0.95f)
+            .height(40.dp)
+            .clip(CircleShape)
+            .background(ink(0.07f))
+            .border(1.dp, ink(0.08f), CircleShape)
+            .semantics { contentDescription = "$label mood station" }
+            .padding(start = 8.dp, end = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+            if (loading) {
+                CircularProgressIndicator(Modifier.size(18.dp), color = TextPrimary, strokeWidth = 2.dp)
+            } else {
+                Canvas(Modifier.size(24.dp).clip(CircleShape)) {
+                    drawRect(Brush.linearGradient(listOf(from, to), Offset.Zero, Offset(size.width, size.height)))
+                    drawEmblem(mood, Offset(size.width / 2f, size.height / 2f), size.width * 0.5f, Color.White.copy(alpha = 0.95f), 1.3.dp.toPx())
+                }
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+            color = TextPrimary,
+            maxLines = 1,
+            softWrap = false,
+        )
+    }
+}
 
 // ---- Hero carousel ------------------------------------------------------------------------------------------------
 
@@ -98,6 +172,13 @@ private fun personalLead(state: DiscoverState): List<DiscoverItem> =
         .flatMap { it.items }
         .filter { it.imageUrl.isNotBlank() && (it.id.startsWith(FeedRepository.DEEZER_ALBUM_PREFIX) || StationId.kindOf(it.id) == StationId.ARTIST) }
         .take(2)
+
+/** "New from Dua Lipa" for a release (its subtitle reads "Dua Lipa · 3 days ago"); the card's own label otherwise. */
+private fun heroEyebrow(entry: HeroEntry): String {
+    if (entry.kind != HeroKind.RELEASE) return entry.eyebrow
+    val artist = entry.item.subtitle.substringBefore(" \u00B7 ").trim()
+    return if (artist.isEmpty()) "New release" else "New from $artist"
+}
 
 internal fun LazyListScope.discoverHero(
     state: DiscoverState,
@@ -137,89 +218,159 @@ private fun HeroCarousel(
 ) {
     val pager = rememberPagerState(pageCount = { entries.size })
     val current = pager.currentPage.coerceIn(0, entries.lastIndex)
-    val background = MaterialTheme.colorScheme.background
-    Box(Modifier.fillMaxWidth()) {
-        // The cover's colours, softened, bleeding up behind the carousel and out into the page.
-        Crossfade(targetState = entries[current].item.imageUrl, label = "hero-tint") { url ->
-            ArtImage(url = squareArtUrl(url, 160), modifier = Modifier.fillMaxWidth().height(460.dp).graphicsLayer { alpha = 0.55f }.blur(60.dp))
+    // One card per screen with a sliver of the next one showing, so it reads as swipeable.
+    HorizontalPager(
+        state = pager,
+        contentPadding = PaddingValues(horizontal = DiscoverInset),
+        pageSpacing = 12.dp,
+        key = { entries[it].item.id },
+        modifier = Modifier.padding(top = 4.dp),
+    ) { page ->
+        val entry = entries[page]
+        val playing = entry.item.track?.isrc != null && entry.item.track?.isrc == nowPlayingIsrc
+        HeroCard(
+            item = entry.item,
+            eyebrow = heroEyebrow(entry),
+            cta = if (entry.kind == HeroKind.RELEASE) "Open album" else "Play",
+            isPlaying = playing,
+            onClick = { onClick(entry) },
+            modifier =
+                Modifier.graphicsLayer {
+                    val distance = ((pager.currentPage - page) + pager.currentPageOffsetFraction).absoluteValue.coerceIn(0f, 1f)
+                    val scale = 1f - 0.04f * distance
+                    scaleX = scale
+                    scaleY = scale
+                    alpha = 1f - 0.35f * distance
+                },
+            indicator = { if (entries.size > 1) PagerDashes(entries.size, current) },
+        )
+    }
+}
+
+/**
+ * The big cover card: artwork edge to edge, a scrim for the text, an eyebrow with a live dot, the title, who it is
+ * by, then a white call-to-action pill and, when given, [indicator] on the right. The whole card is the tap target.
+ */
+@Composable
+internal fun HeroCard(
+    item: DiscoverItem,
+    eyebrow: String,
+    cta: String,
+    isPlaying: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    aspect: Float = HERO_ASPECT,
+    indicator: @Composable () -> Unit = {},
+) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .aspectRatio(aspect)
+            .pressScale(onClick = onClick, scaleDown = 0.985f)
+            .clip(HeroShape)
+            .background(ink(0.06f)),
+    ) {
+        ArtImage(
+            url = remember(item.imageUrl) { squareArtUrl(item.imageUrl, 800) },
+            modifier = Modifier.fillMaxSize(),
+            contentDescription = item.title,
+            fallback = { ArtworkFallbackIcon() },
+        )
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(0.28f to Color.Transparent, 0.6f to Color.Black.copy(alpha = 0.38f), 1f to Color.Black.copy(alpha = 0.9f)),
+            ),
+        )
+        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(6.dp).clip(CircleShape).background(HeroDot))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    eyebrow.uppercase(),
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
+                    color = Color.White.copy(alpha = 0.82f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ExplicitMark(item.track?.isExplicit, Color.White.copy(alpha = 0.78f), size = 18.dp)
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.headlineLarge.copy(fontSize = 30.sp, lineHeight = 34.sp),
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                item.subtitle,
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                color = Color.White.copy(alpha = 0.78f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(18.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                HeroButton(cta, isPlaying)
+                Spacer(Modifier.weight(1f))
+                indicator()
+            }
         }
-        Box(Modifier.fillMaxWidth().height(460.dp).background(Brush.verticalGradient(0f to background.copy(alpha = 0.35f), 1f to background)))
-        Column(Modifier.padding(top = 12.dp)) {
-            HorizontalPager(
-                state = pager,
-                contentPadding = PaddingValues(horizontal = 34.dp, vertical = 12.dp),
-                pageSpacing = 14.dp,
-                key = { entries[it].item.id },
-            ) { page ->
-                val entry = entries[page]
-                val playing = entry.item.track?.isrc != null && entry.item.track?.isrc == nowPlayingIsrc
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(0.8f)
-                        .graphicsLayer {
-                            val distance = ((pager.currentPage - page) + pager.currentPageOffsetFraction).absoluteValue.coerceIn(0f, 1f)
-                            val scale = 1f - 0.07f * distance
-                            scaleX = scale
-                            scaleY = scale
-                            alpha = 1f - 0.4f * distance
-                        }.pressScale(onClick = { onClick(entry) }, scaleDown = 0.98f)
-                        .clip(RoundedCornerShape(18.dp)),
-                ) {
-                    ArtImage(url = squareArtUrl(entry.item.imageUrl, 700), modifier = Modifier.fillMaxSize(), contentDescription = entry.item.title)
-                    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.5f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.8f))))
-                    Column(Modifier.align(Alignment.BottomStart).padding(start = 18.dp, end = 64.dp, bottom = 18.dp)) {
-                        Text(
-                            entry.eyebrow.uppercase(),
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp),
-                            color = Color.White.copy(alpha = 0.72f),
-                            maxLines = 1,
-                        )
-                        Text(
-                            entry.item.title,
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 24.sp, lineHeight = 28.sp),
-                            color = Color.White,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = 2.dp),
-                        )
-                        Text(
-                            entry.item.subtitle,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.8f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    if (entry.kind != HeroKind.RELEASE) {
-                        Box(Modifier.align(Alignment.BottomEnd).padding(16.dp).size(40.dp), contentAlignment = Alignment.Center) {
-                            if (playing) {
-                                NowPlayingBars(color = Color.White)
-                            } else {
-                                Icon(PhosphorIcons.Fill.Play, "Play", tint = Color.White, modifier = Modifier.size(26.dp))
-                            }
-                        }
-                    }
-                }
-            }
-            Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.Center) {
-                repeat(entries.size) { i ->
-                    Box(
-                        Modifier
-                            .padding(horizontal = 3.dp)
-                            .size(if (i == current) 7.dp else 5.dp)
-                            .clip(CircleShape)
-                            .background(if (i == current) TextPrimary else ink(0.25f)),
-                    )
-                }
-            }
+    }
+}
+
+@Composable
+private fun HeroButton(
+    label: String,
+    playing: Boolean,
+) {
+    Row(
+        Modifier.height(44.dp).clip(CircleShape).background(Color.White).padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (playing) {
+            NowPlayingBars(color = Color.Black)
+        } else {
+            Icon(PhosphorIcons.Fill.Play, null, tint = Color.Black, modifier = Modifier.size(14.dp))
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            if (playing) "Playing" else label,
+            style = MaterialTheme.typography.labelLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+            color = Color.Black,
+            maxLines = 1,
+            softWrap = false,
+        )
+    }
+}
+
+/** The current page is a short bar, the others dots; the bar glides as the pager moves. */
+@Composable
+private fun PagerDashes(
+    count: Int,
+    current: Int,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+        repeat(count) { i ->
+            val width by animateDpAsState(if (i == current) 18.dp else 4.dp, tween(220), label = "hero-dash")
+            Box(
+                Modifier
+                    .height(4.dp)
+                    .width(width)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = if (i == current) 1f else 0.4f)),
+            )
         }
     }
 }
 
 // ---- Made for you -------------------------------------------------------------------------------------------------
 
-/** Station rows, leaving out what the carousel already shows and the moods, which have their own grid. */
+/** Station cards, leaving out what the carousel already shows and the moods, which are the pills at the top. */
 internal fun LazyListScope.discoverMadeForYou(
     state: DiscoverState,
     loadingId: String?,
@@ -236,165 +387,127 @@ internal fun LazyListScope.discoverMadeForYou(
     if (rows.isEmpty()) return
     item(key = "made-title") { DiscoverSectionTitle("Made for you", section.subtitle) }
     item(key = "made-rows") {
-        Column(Modifier.padding(horizontal = 24.dp)) {
-            rows.forEach { row ->
-                StationRow(row, loading = row.id == loadingId) { onStation(row) }
-                Box(Modifier.fillMaxWidth().padding(start = 72.dp).height(0.5.dp).background(ink(0.08f)))
-            }
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = DiscoverInset, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            items(rows, key = { it.id }) { row -> StationCard(row, loading = row.id == loadingId) { onStation(row) } }
         }
     }
 }
 
+private fun stationBadge(item: DiscoverItem): String =
+    when (StationId.kindOf(item.id)) {
+        StationId.MIX -> "MIX"
+        StationId.DISCOVER -> "DISCOVERY"
+        StationId.ARTIST -> "RADIO"
+        StationId.CHART -> "CHARTS"
+        else -> item.meta.orEmpty().uppercase()
+    }
+
+/** A square station cover with its kind in the corner and a round play button, its name and blurb underneath. */
 @Composable
-private fun StationRow(
+private fun StationCard(
     item: DiscoverItem,
     loading: Boolean,
     onClick: () -> Unit,
 ) {
-    Row(
-        Modifier.fillMaxWidth().pressScale(onClick = onClick, scaleDown = 0.985f).padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        StationTile(item, 56.dp)
-        Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-            Text(
-                item.title,
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = TextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(item.subtitle, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        Box(Modifier.size(36.dp).border(1.dp, ink(0.25f), CircleShape), contentAlignment = Alignment.Center) {
-            if (loading) {
-                CircularProgressIndicator(Modifier.size(16.dp), color = TextPrimary, strokeWidth = 2.dp)
-            } else {
-                Icon(PhosphorIcons.Fill.Play, "Play", tint = TextPrimary, modifier = Modifier.size(14.dp))
+    val badge = stationBadge(item)
+    Column(Modifier.width(StationCardSize).pressScale(onClick = onClick, scaleDown = 0.96f)) {
+        Box(Modifier.size(StationCardSize).clip(RoundedCornerShape(18.dp))) {
+            StationTile(item, Modifier.fillMaxSize())
+            Box(Modifier.fillMaxWidth().height(56.dp).background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.32f), 1f to Color.Transparent)))
+            if (badge.isNotEmpty()) {
+                Text(
+                    badge,
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp),
+                    color = Color.White,
+                    maxLines = 1,
+                    modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 12.dp),
+                )
+            }
+            Box(
+                Modifier.align(Alignment.BottomEnd).padding(10.dp).size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (loading) {
+                    CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                } else {
+                    Icon(PhosphorIcons.Fill.Play, "Play", tint = Color.White, modifier = Modifier.size(14.dp))
+                }
             }
         }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            item.title,
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+            color = TextPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            item.subtitle,
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 16.sp),
+            color = TextSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
-/** A station's square: its photo where it has one, otherwise a colour with a small drawn mark. */
+/** A station's square: its photo where it has one, otherwise a colour wash with soft shapes and a drawn mark. */
 @Composable
 private fun StationTile(
     item: DiscoverItem,
-    size: Dp,
+    modifier: Modifier,
 ) {
-    val shape = RoundedCornerShape(8.dp)
     if (item.imageUrl.isNotBlank()) {
-        ArtImage(url = squareArtUrl(item.imageUrl, 200), modifier = Modifier.size(size).clip(shape))
+        ArtImage(url = squareArtUrl(item.imageUrl, 400), modifier = modifier)
         return
     }
     val kind = StationId.kindOf(item.id)
     val hue = ((item.id.hashCode().toLong() and 0x7fffffffL) % 360L).toFloat()
     val top = if (kind == StationId.MIX) Color(0xFFFF4D6D) else if (kind == StationId.DISCOVER) Color(0xFF4F5BD5) else Color.hsv(hue, 0.55f, 0.6f)
     val bottom = if (kind == StationId.MIX) Color(0xFFFF8A4C) else if (kind == StationId.DISCOVER) Color(0xFF2FB8A6) else Color.hsv((hue + 40f) % 360f, 0.6f, 0.5f)
-    Canvas(Modifier.size(size).clip(shape)) {
+    Canvas(modifier) {
         drawRect(Brush.linearGradient(listOf(top, bottom), Offset.Zero, Offset(this.size.width, this.size.height)))
-        val w = this.size.width
-        val h = this.size.height
-        val stroke = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-        val path = Path()
-        when (kind) {
-            StationId.MIX ->
-                listOf(0.34f, 0.2f).forEach { inset ->
-                    path.reset()
-                    path.moveTo(w * inset, h * 0.26f)
-                    path.lineTo(w * (inset + 0.3f), h * 0.5f)
-                    path.lineTo(w * inset, h * 0.74f)
-                    drawPath(path, Color.White.copy(alpha = 0.9f), style = stroke)
+        // Two soft discs break up the flat gradient and give the tile some depth.
+        drawCircle(Color.White.copy(alpha = 0.12f), radius = this.size.width * 0.55f, center = Offset(this.size.width * 0.9f, this.size.height * 0.05f))
+        drawCircle(Color.Black.copy(alpha = 0.14f), radius = this.size.width * 0.45f, center = Offset(this.size.width * 0.05f, this.size.height * 1.0f))
+        inset(this.size.width * 0.24f) {
+            val w = size.width
+            val h = size.height
+            val stroke = Stroke(width = (w / 14f).coerceAtLeast(2.dp.toPx()), cap = StrokeCap.Round, join = StrokeJoin.Round)
+            val mark = Color.White.copy(alpha = 0.92f)
+            val path = Path()
+            when (kind) {
+                StationId.MIX ->
+                    listOf(0.34f, 0.2f).forEach { at ->
+                        path.reset()
+                        path.moveTo(w * at, h * 0.26f)
+                        path.lineTo(w * (at + 0.3f), h * 0.5f)
+                        path.lineTo(w * at, h * 0.74f)
+                        drawPath(path, mark, style = stroke)
+                    }
+
+                StationId.DISCOVER -> {
+                    val c = Offset(w / 2f, h / 2f)
+                    val r = w * 0.34f
+                    path.moveTo(c.x, c.y - r)
+                    path.quadraticTo(c.x, c.y, c.x + r, c.y)
+                    path.quadraticTo(c.x, c.y, c.x, c.y + r)
+                    path.quadraticTo(c.x, c.y, c.x - r, c.y)
+                    path.quadraticTo(c.x, c.y, c.x, c.y - r)
+                    path.close()
+                    drawPath(path, mark, style = stroke)
                 }
 
-            StationId.DISCOVER -> {
-                val c = Offset(w / 2f, h / 2f)
-                val r = w * 0.26f
-                path.moveTo(c.x, c.y - r)
-                path.quadraticTo(c.x, c.y, c.x + r, c.y)
-                path.quadraticTo(c.x, c.y, c.x, c.y + r)
-                path.quadraticTo(c.x, c.y, c.x - r, c.y)
-                path.quadraticTo(c.x, c.y, c.x, c.y - r)
-                path.close()
-                drawPath(path, Color.White.copy(alpha = 0.9f), style = stroke)
-            }
-
-            else ->
-                listOf(0.3f to 0.3f, 0.5f to 0.5f, 0.7f to 0.38f).forEach { (fx, fh) ->
-                    drawLine(Color.White.copy(alpha = 0.9f), Offset(w * fx, h * 0.72f), Offset(w * fx, h * (0.72f - fh)), 3.dp.toPx(), StrokeCap.Round)
-                }
-        }
-    }
-}
-
-// ---- Moods --------------------------------------------------------------------------------------------------------
-
-@Composable
-internal fun MoodGrid(
-    items: List<DiscoverItem>,
-    loadingId: String?,
-    onClick: (DiscoverItem) -> Unit,
-) {
-    val moods = remember(items) { items.mapNotNull { item -> Mood.bySlug(item.id.substringAfterLast(':'))?.let { item to it } } }
-    var expanded by remember { mutableStateOf(false) }
-    val shown = if (expanded) moods else moods.take(MOOD_COLLAPSED)
-    Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        shown.chunked(2).forEach { pair ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                pair.forEach { (item, mood) ->
-                    MoodChip(item.title, mood, loading = item.id == loadingId, modifier = Modifier.weight(1f)) { onClick(item) }
-                }
-                if (pair.size == 1) Spacer(Modifier.weight(1f))
+                else ->
+                    listOf(0.3f to 0.3f, 0.5f to 0.5f, 0.7f to 0.38f).forEach { (fx, fh) ->
+                        drawLine(mark, Offset(w * fx, h * 0.72f), Offset(w * fx, h * (0.72f - fh)), stroke.width, StrokeCap.Round)
+                    }
             }
         }
-        if (moods.size > MOOD_COLLAPSED) {
-            Text(
-                if (expanded) "Show fewer" else "All ${moods.size} moods",
-                style = MaterialTheme.typography.labelLarge,
-                color = TextSecondary,
-                modifier =
-                    Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .pressScale(onClick = { expanded = !expanded }, scaleDown = 0.94f)
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-        }
-    }
-}
-
-/** A shortcut: a tile in the mood's colours with its emblem, on a chip washed with the same colour. */
-@Composable
-private fun MoodChip(
-    label: String,
-    mood: Mood,
-    loading: Boolean,
-    modifier: Modifier,
-    onClick: () -> Unit,
-) {
-    val from = Color(mood.from)
-    val to = Color(mood.to)
-    Row(
-        modifier
-            .height(56.dp)
-            .pressScale(onClick = onClick, scaleDown = 0.97f)
-            .clip(RoundedCornerShape(10.dp))
-            .background(Brush.horizontalGradient(0f to from.copy(alpha = 0.30f), 0.7f to ink(0.06f)))
-            .semantics { contentDescription = "$label mood station" },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Canvas(Modifier.size(56.dp)) {
-            drawRect(Brush.linearGradient(listOf(from, to), Offset.Zero, Offset(size.width, size.height)))
-            drawEmblem(mood, Offset(size.width / 2f, size.height / 2f), size.width * 0.5f, Color.White.copy(alpha = 0.92f), 1.8.dp.toPx())
-        }
-        Text(
-            label,
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-            color = TextPrimary,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
-        )
-        if (loading) CircularProgressIndicator(Modifier.padding(end = 12.dp).size(16.dp), color = TextPrimary, strokeWidth = 2.dp)
     }
 }
 
@@ -524,8 +637,16 @@ private fun DrawScope.drawEmblem(
     }
 }
 
+
 /** Stands in for the carousel while the page is built, at about its size, so nothing jumps when it arrives. */
 @Composable
 internal fun TopPicksSkeleton() {
-    Box(Modifier.fillMaxWidth().padding(horizontal = 34.dp, vertical = 24.dp).aspectRatio(0.8f).clip(RoundedCornerShape(18.dp)).background(ink(0.06f)))
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = DiscoverInset, vertical = 4.dp)
+            .aspectRatio(HERO_ASPECT)
+            .clip(HeroShape)
+            .background(ink(0.06f)),
+    )
 }

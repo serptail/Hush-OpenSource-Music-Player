@@ -7,13 +7,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -30,18 +29,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.CaretRight
-import com.adamglin.phosphoricons.fill.Play
 import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.NowPlayingBars
@@ -92,13 +89,14 @@ internal fun LazyListScope.discoverFeaturedItems(
             }
         } else {
             item(key = "discover-skeleton-hero") { TopPicksSkeleton() }
-            items(6, key = { "discover-skeleton-$it" }) { TrackRowSkeleton(Modifier.padding(horizontal = 24.dp)) }
+            items(6, key = { "discover-skeleton-$it" }) { TrackRowSkeleton(Modifier.padding(horizontal = DiscoverInset)) }
         }
         return
     }
 
-    // Top to bottom: the carousel, stations made for the listener, what they played, the shelves and moods,
+    // Top to bottom: the mood pills, the carousel, stations made for the listener, what they played, the shelves,
     // then the artists and albums of the week.
+    discoverMoodPills(state, stationLoadingId, onStationClick)
     if (state.personalLoading && state.feed.none { it.kind == FeedKind.TOP_PICKS }) {
         item(key = "top-picks-skeleton") { TopPicksSkeleton() }
     }
@@ -130,7 +128,7 @@ internal fun LazyListScope.discoverFeaturedItems(
         item(key = "artists-title") { DiscoverSectionTitle("Artists to know") }
         item(key = "artists-row") {
             LazyRow(
-                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
+                contentPadding = PaddingValues(horizontal = DiscoverInset, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(18.dp),
             ) {
                 items(state.artists, key = { it.id }) { artist -> ArtistBubble(artist) { artist.artistId?.let(onArtistClick) } }
@@ -142,7 +140,7 @@ internal fun LazyListScope.discoverFeaturedItems(
         item(key = "albums-title") { DiscoverSectionTitle("Albums on the rise") }
         item(key = "albums-row") {
             LazyRow(
-                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
+                contentPadding = PaddingValues(horizontal = DiscoverInset, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 items(state.albums, key = { it.id }) { album -> AlbumCard(album) { onAlbumClick(album) } }
@@ -189,35 +187,36 @@ internal fun LazyListScope.discoverChartItems(
     if (state.tabs.isEmpty()) return
     val tabIndex = selectedTab.coerceIn(0, state.tabs.lastIndex)
     val tab = state.tabs[tabIndex]
-    item(key = "charts-title") { DiscoverSectionTitle("Charts") }
+    val canExpand = tab.items.size > COLLAPSED_ROWS
+    item(key = "charts-title") {
+        DiscoverSectionTitle(
+            text = "Charts",
+            subtitle = tab.title,
+            actionLabel = if (canExpand) (if (chartExpanded) "Show less" else "See all") else null,
+            onAction = onToggleChartExpanded,
+        )
+    }
     item(key = "charts-tabs") {
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
+            contentPadding = PaddingValues(horizontal = DiscoverInset, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             itemsIndexed(state.tabs, key = { _, t -> t.label }) { i, t -> Pill(t.label, i == tabIndex) { onSelectTab(i) } }
         }
     }
-    item(key = "charts-caption") {
-        Text(
-            tab.title,
-            style = MaterialTheme.typography.labelLarge,
-            color = TextTertiary,
-            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 4.dp),
-        )
-    }
+    item(key = "charts-gap") { Spacer(Modifier.height(6.dp)) }
 
     val numbered = tab.label in NUMBERED_TABS
     val queue = tab.items.mapNotNull { it.track }
     val shown = if (chartExpanded) tab.items else tab.items.take(COLLAPSED_ROWS)
     itemsIndexed(shown, key = { i, it -> "chart-${tab.label}-$i-${it.id}" }) { index, item ->
         val track = item.track
-        Column(Modifier.padding(horizontal = 16.dp)) {
+        Column(Modifier.padding(horizontal = 12.dp)) {
             if (index > 0) {
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .padding(start = if (numbered) 64.dp else 24.dp, end = 8.dp)
+                        .padding(start = if (numbered) 36.dp else 8.dp, end = 8.dp)
                         .height(0.5.dp)
                         .background(ink(0.07f)),
                 )
@@ -231,10 +230,11 @@ internal fun LazyListScope.discoverChartItems(
             )
         }
     }
-    if (tab.items.size > COLLAPSED_ROWS) {
+    // "See all" sits in the title; once the list is long, "Show less" is repeated at its foot.
+    if (chartExpanded && canExpand) {
         item(key = "charts-more") {
             Box(Modifier.fillMaxWidth().padding(top = 12.dp), contentAlignment = Alignment.Center) {
-                Pill(if (chartExpanded) "Show less" else "Show all ${tab.items.size}", false, onToggleChartExpanded)
+                Pill("Show less", false, onToggleChartExpanded)
             }
         }
     }
@@ -287,94 +287,45 @@ internal fun LazyListScope.discoverItems(
 internal fun DiscoverSectionTitle(
     text: String,
     subtitle: String? = null,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
 ) {
-    Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 10.dp)) {
-        Text(
-            text,
-            style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
-            color = TextPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (subtitle != null) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = DiscoverInset, end = DiscoverInset, top = 32.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        Column(Modifier.weight(1f)) {
             Text(
-                subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextTertiary,
+                text,
+                style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
+                color = TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+            )
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, lineHeight = 18.sp),
+                    color = TextTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        if (actionLabel != null && onAction != null) {
+            Text(
+                actionLabel,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = TextSecondary,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.pressScale(onClick = onAction, scaleDown = 0.94f).padding(start = 12.dp, top = 8.dp, bottom = 2.dp),
             )
         }
     }
 }
 
-@Composable
-private fun HeroCard(
-    item: DiscoverItem,
-    isPlaying: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    label: String = "#1 Trending",
-    opensAlbum: Boolean = false,
-    aspect: Float = 1.35f,
-) {
-    Box(
-        modifier
-            .fillMaxWidth()
-            .aspectRatio(aspect)
-            .pressScale(onClick = onClick, scaleDown = 0.98f)
-            .clip(CardShapeLarge)
-            .thumbnailBorder(CardShapeLarge),
-    ) {
-        ArtImage(
-            url = remember(item.imageUrl) { squareArtUrl(item.imageUrl, 600) },
-            modifier = Modifier.fillMaxSize(),
-            contentDescription = item.title,
-            fallback = { ArtworkFallbackIcon() },
-        )
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(0.45f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.72f)),
-            ),
-        )
-        Column(
-            Modifier.align(Alignment.BottomStart).padding(start = 20.dp, end = 80.dp, bottom = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Box(Modifier.clip(CircleShape).background(Color.White.copy(alpha = 0.2f)).padding(horizontal = 10.dp, vertical = 3.dp)) {
-                Text(label, style = MaterialTheme.typography.labelMedium, color = Color.White)
-            }
-            Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ExplicitMark(item.track?.isExplicit, Color.White.copy(alpha = 0.78f), size = 17.dp)
-                Text(
-                    item.title,
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = Color.White,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-            }
-            Text(
-                item.subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.78f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Box(Modifier.align(Alignment.BottomEnd).padding(18.dp).size(44.dp), contentAlignment = Alignment.Center) {
-            if (isPlaying) {
-                NowPlayingBars(color = Color.White)
-            } else if (opensAlbum) {
-                Icon(PhosphorIcons.Bold.CaretRight, "Open album", tint = Color.White.copy(alpha = 0.95f), modifier = Modifier.size(28.dp))
-            } else {
-                Icon(PhosphorIcons.Fill.Play, "Play", tint = Color.White.copy(alpha = 0.95f), modifier = Modifier.size(34.dp))
-            }
-        }
-    }
-}
+private val CoverShape = RoundedCornerShape(14.dp)
 
 @Composable
 private fun ArtistBubble(
@@ -382,14 +333,14 @@ private fun ArtistBubble(
     onClick: () -> Unit,
 ) {
     Column(
-        Modifier.width(88.dp).pressScale(onClick = onClick, scaleDown = 0.94f),
+        Modifier.width(92.dp).pressScale(onClick = onClick, scaleDown = 0.94f),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         ArtImage(
             url = item.imageUrl,
             modifier =
                 Modifier
-                    .size(88.dp)
+                    .size(92.dp)
                     .clip(CircleShape)
                     .thumbnailBorder(CircleShape),
             contentDescription = item.title,
@@ -398,7 +349,7 @@ private fun ArtistBubble(
         Spacer(Modifier.height(10.dp))
         Text(
             item.title,
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
+            style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
             color = TextPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -411,25 +362,26 @@ private fun ArtistBubble(
 private fun AlbumCard(
     item: DiscoverItem,
     isPlaying: Boolean = false,
+    size: Dp = 144.dp,
     onClick: () -> Unit,
 ) {
-    Column(Modifier.width(148.dp).pressScale(onClick = onClick, scaleDown = 0.95f)) {
+    Column(Modifier.width(size).pressScale(onClick = onClick, scaleDown = 0.96f)) {
         ArtImage(
             url = remember(item.imageUrl) { squareArtUrl(item.imageUrl, 400) },
             modifier =
                 Modifier
-                    .size(148.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .thumbnailBorder(RoundedCornerShape(8.dp)),
+                    .size(size)
+                    .clip(CoverShape)
+                    .thumbnailBorder(CoverShape),
             contentDescription = item.title,
             fallback = { ArtworkFallbackIcon() },
         )
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            ExplicitMark(item.track?.isExplicit, TextSecondary, size = 11.dp)
+            ExplicitMark(item.track?.isExplicit, TextSecondary, size = 12.dp)
             Text(
                 item.title,
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium),
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
                 color = if (isPlaying) MaterialTheme.colorScheme.primary else TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -438,13 +390,19 @@ private fun AlbumCard(
         }
         Text(
             item.subtitle,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 16.sp),
             color = TextSecondary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         item.meta?.let {
-            Text(it, style = MaterialTheme.typography.labelMedium, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                it,
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 16.sp),
+                color = TextTertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -460,33 +418,22 @@ private fun ChartRow(
     val accent = MaterialTheme.colorScheme.primary
     InteractiveSurface(
         shape = RowShape,
-        pressedScale = 0.97f,
+        pressedScale = 0.98f,
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
     ) { _ ->
         if (rank != null) {
-            Column(Modifier.width(40.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Box(Modifier.width(28.dp), contentAlignment = Alignment.CenterStart) {
                 if (isPlaying) {
                     NowPlayingBars(color = accent)
                 } else {
                     Text(
                         rank.toString(),
-                        style =
-                            MaterialTheme.typography.titleMedium.copy(
-                                fontWeight =
-                                    if (rank <=
-                                        3
-                                    ) {
-                                        FontWeight.SemiBold
-                                    } else {
-                                        FontWeight.Normal
-                                    },
-                            ),
-                        color = if (rank <= 3) TextPrimary else TextTertiary,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+                        color = TextTertiary,
                     )
                 }
-                TrendMark(item.trend, item.trendDelta, accent)
             }
         }
         ArtImage(
@@ -503,8 +450,8 @@ private fun ChartRow(
                 ExplicitMark(item.track?.isExplicit, TextSecondary)
                 Text(
                     item.title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Normal),
-                    color = if (isPlaying) accent else ink(0.9f),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = if (isPlaying) accent else TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
@@ -512,7 +459,7 @@ private fun ChartRow(
             }
             Text(
                 item.subtitle,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, lineHeight = 18.sp),
                 color = TextSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -521,6 +468,7 @@ private fun ChartRow(
                 Text(it, style = MaterialTheme.typography.labelMedium, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
+        if (rank != null) TrendMark(item.trend, item.trendDelta, accent)
         if (onMore != null) {
             RowIconButton(TablerIcons.MoreVertical, "More options", ink(0.6f), onMore)
         } else {
@@ -529,19 +477,22 @@ private fun ChartRow(
     }
 }
 
+/** How a chart entry moved since last week, at the end of its row: green up, red down, a dash for no change. */
 @Composable
 private fun TrendMark(
     trend: Trend?,
     delta: Int,
     accent: Color,
 ) {
-    val small = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-    when (trend) {
-        null -> Unit
-        Trend.NEW -> Text("NEW", style = small, color = accent)
-        Trend.UP -> Text("\u25B2$delta", style = small, color = Color(0xFF3DDC84))
-        Trend.DOWN -> Text("\u25BC$delta", style = small, color = Color(0xFFFF6B6B))
-        Trend.SAME -> Text("\u2013", style = small, color = TextTertiary)
+    val small = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    Box(Modifier.widthIn(min = 28.dp), contentAlignment = Alignment.CenterEnd) {
+        when (trend) {
+            null -> Unit
+            Trend.NEW -> Text("NEW", style = small, color = accent)
+            Trend.UP -> Text("\u25B2$delta", style = small, color = Color(0xFF3DDC84))
+            Trend.DOWN -> Text("\u25BC$delta", style = small, color = Color(0xFFFF6B6B))
+            Trend.SAME -> Text("\u2013", style = small, color = TextTertiary)
+        }
     }
 }
 
@@ -556,8 +507,8 @@ private fun LazyListScope.feedSectionItems(
     stationLoadingId: String? = null,
 ) {
     sections.forEach { section ->
-        // The station rows are drawn by discoverMadeForYou, beside the hero they belong with.
-        if (section.items.isEmpty() || section.kind == FeedKind.TOP_PICKS) return@forEach
+        // Station cards are drawn by discoverMadeForYou and the mood pills by discoverMoodPills, beside the hero they belong with.
+        if (section.items.isEmpty() || section.kind == FeedKind.TOP_PICKS || section.kind == FeedKind.MOODS) return@forEach
         val queue = section.items.mapNotNull { it.track }
         val play: (DiscoverItem) -> Unit = { item -> item.track?.let { onTrackClick(it, queue) } }
         val playing: (DiscoverItem) -> Boolean = { item -> nowPlayingIsrc != null && item.track?.isrc == nowPlayingIsrc }
@@ -567,12 +518,12 @@ private fun LazyListScope.feedSectionItems(
                 val album = section.items.first()
                 HeroCard(
                     item = album,
+                    eyebrow = section.title,
+                    cta = "Open album",
                     isPlaying = false,
                     onClick = { onAlbumClick(album) },
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
-                    label = section.title,
-                    opensAlbum = true,
-                    aspect = 1.7f,
+                    modifier = Modifier.padding(horizontal = DiscoverInset, vertical = 20.dp),
+                    aspect = 1.2f,
                 )
             }
             return@forEach
@@ -586,25 +537,36 @@ private fun LazyListScope.feedSectionItems(
                 }
 
                 FeedKind.MOODS -> {
-                    MoodGrid(section.items, stationLoadingId, onStationClick)
+                    Unit
                 }
 
                 FeedKind.TRACK_RAILS -> {
-                    TrackRails(section.items, playing, play, onMoreClick)
+                    if (section.id.startsWith("recent:")) {
+                        // What you played last reads best as covers you can tap straight back into.
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = DiscoverInset, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            items(section.items, key = { it.id }) { song -> AlbumCard(song, isPlaying = playing(song)) { play(song) } }
+                        }
+                    } else {
+                        TrackRails(section.items, playing, play, onMoreClick)
+                    }
                 }
 
                 FeedKind.TRACK_CAROUSEL, FeedKind.QUICK_PICKS -> {
+                    val cover = if (section.kind == FeedKind.QUICK_PICKS) 176.dp else 144.dp
                     LazyRow(
-                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
+                        contentPadding = PaddingValues(horizontal = DiscoverInset, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        items(section.items, key = { it.id }) { song -> AlbumCard(song, isPlaying = playing(song)) { play(song) } }
+                        items(section.items, key = { it.id }) { song -> AlbumCard(song, isPlaying = playing(song), size = cover) { play(song) } }
                     }
                 }
 
                 FeedKind.ALBUM_CAROUSEL -> {
                     LazyRow(
-                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
+                        contentPadding = PaddingValues(horizontal = DiscoverInset, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
                         items(section.items, key = { it.id }) { album -> AlbumCard(album) { onAlbumClick(album) } }
@@ -613,7 +575,7 @@ private fun LazyListScope.feedSectionItems(
 
                 FeedKind.ARTIST_CAROUSEL -> {
                     LazyRow(
-                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
+                        contentPadding = PaddingValues(horizontal = DiscoverInset, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(18.dp),
                     ) {
                         items(section.items, key = { it.id }) { artist -> ArtistBubble(artist) { onArtistItemClick(artist) } }
@@ -636,7 +598,7 @@ private fun TrackRails(
     onMore: (Track) -> Unit,
 ) {
     val pages = remember(items) { items.chunked(3) }
-    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         itemsIndexed(pages, key = { index, _ -> index }) { _, page ->
             Column(Modifier.fillParentMaxWidth(0.9f)) {
                 page.forEach { item ->

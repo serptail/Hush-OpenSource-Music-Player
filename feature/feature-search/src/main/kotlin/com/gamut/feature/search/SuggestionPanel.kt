@@ -54,11 +54,11 @@ internal fun SuggestionPanel(
     onSearch: (String) -> Unit,
     onFill: (String) -> Unit,
 ) {
-    Box(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 8.dp)) {
+    Box(Modifier.fillMaxWidth().padding(start = DiscoverInset, end = DiscoverInset, bottom = 8.dp)) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .clip(RowShape)
+                .clip(RoundedCornerShape(18.dp))
                 .background(ink(0.06f)),
         ) {
             suggestions.forEachIndexed { index, suggestion ->
