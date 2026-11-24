@@ -13,6 +13,8 @@ data class DiscoverItem(
     val meta: String? = null,
     val trend: Trend? = null,
     val trendDelta: Int = 0,
+    /** Extra pictures a station card is dressed with: the artists in a mix, or in an artist's radio. */
+    val images: List<String> = emptyList(),
 )
 
 enum class Trend { UP, DOWN, SAME, NEW }

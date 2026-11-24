@@ -31,11 +31,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.bold.ClockCounterClockwise
-import com.adamglin.phosphoricons.bold.MagnifyingGlass
 import com.gamut.core.designsystem.ArtImage
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.bounceClickable
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
@@ -107,7 +104,7 @@ internal fun SuggestionPanel(
                         TextRow(
                             text = suggestion.text,
                             typed = typed,
-                            icon = if (suggestion.origin == Suggestion.Origin.RECENT) PhosphorIcons.Bold.ClockCounterClockwise else PhosphorIcons.Bold.MagnifyingGlass,
+                            icon = if (suggestion.origin == Suggestion.Origin.RECENT) TablerIcons.History else TablerIcons.Search,
                             onClick = { onSearch(suggestion.text) },
                             onFill = { onFill(suggestion.text) },
                         )

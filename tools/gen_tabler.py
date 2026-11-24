@@ -37,6 +37,8 @@ ICONS = {
     "User": "user", "Plus": "plus", "Pencil": "pencil", "RowInsertTop": "row-insert-top",
     "Photo": "photo", "Tag": "tag", "World": "world", "Link": "link",
     "History": "history", "BrandShazam": "brand-shazam", "Download": "download", "PackageImport": "package-import", "Archive": "archive",
+    # Search screen: the magnifier, the refresh arrow and the arrow that opens a result.
+    "Search": "search", "Refresh": "refresh", "ArrowRight": "arrow-right",
 }
 # Kotlin name -> Tabler file name, drawn stroke + fill
 FILLED = {"HeartFilled": "heart"}

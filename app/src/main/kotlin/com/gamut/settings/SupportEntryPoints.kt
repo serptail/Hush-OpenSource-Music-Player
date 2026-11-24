@@ -41,19 +41,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.SweepGradientShader
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
@@ -63,13 +57,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.adamglin.PhosphorIcons
 import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.bold.TipJar
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNotifier
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
-import com.adamglin.phosphoricons.fill.Heart as HeartFill
 
 internal val KoFiCoral = Color(0xFFFF5E5B)
 
@@ -131,39 +124,19 @@ fun rememberOpenKoFi(): () -> Unit {
 fun SupportHeartButton(onClick: () -> Unit) {
     val vm: SupportViewModel = hiltViewModel()
     val filled by vm.store.donateOpen.collectAsState()
-    // 0 = resting (heart-shaped hole in the disc, like the profile and Shazam buttons), 1 = open (pink heart).
+    // 0 = resting (an outline heart, like the Shazam and profile buttons), 1 = open (a pink filled heart).
     val fill by animateFloatAsState(if (filled) 1f else 0f, tween(220), label = "heart")
     Box(
-        Modifier.size(44.dp).pressScale(onClick = onClick).semantics { contentDescription = "Support Gamut" },
+        Modifier
+            .size(44.dp)
+            .pressScale(onClick = onClick)
+            .clip(CircleShape)
+            .background(ink(0.07f))
+            .semantics { contentDescription = "Support Gamut" },
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            Modifier
-                .size(34.dp)
-                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                .clip(CircleShape)
-                .background(ink(0.9f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            // Punches the heart out of the disc so the page shows through, whatever the theme or cover colours are.
-            Icon(
-                PhosphorIcons.Fill.HeartFill,
-                null,
-                tint = Color.Black.copy(alpha = 1f - fill),
-                modifier =
-                    Modifier.size(20.dp).drawWithContent {
-                        drawIntoCanvas { canvas ->
-                            canvas.saveLayer(
-                                Rect(0f, 0f, this.size.width, this.size.height),
-                                Paint().apply { blendMode = BlendMode.DstOut },
-                            )
-                            drawContent()
-                            canvas.restore()
-                        }
-                    },
-            )
-            Icon(PhosphorIcons.Fill.HeartFill, null, tint = KoFiPink.copy(alpha = fill), modifier = Modifier.size(20.dp))
-        }
+        Icon(TablerIcons.Heart, null, tint = ink(0.9f * (1f - fill)), modifier = Modifier.size(24.dp))
+        Icon(TablerIcons.HeartFilled, null, tint = KoFiPink.copy(alpha = fill), modifier = Modifier.size(24.dp))
     }
     Spacer(Modifier.width(8.dp))
 }

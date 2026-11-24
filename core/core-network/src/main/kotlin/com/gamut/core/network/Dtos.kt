@@ -148,6 +148,8 @@ data class DeezerPlaylistDto(
     val id: Long,
     val title: String? = null,
     @SerialName("nb_tracks") val trackCount: Int = 0,
+    @SerialName("picture_big") val pictureBig: String? = null,
+    @SerialName("picture_xl") val pictureXl: String? = null,
 )
 
 @Serializable

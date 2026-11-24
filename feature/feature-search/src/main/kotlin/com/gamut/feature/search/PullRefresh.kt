@@ -39,9 +39,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.bold.ArrowClockwise
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.ink
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -188,7 +186,7 @@ fun BoxScope.SlingshotIndicator(
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            PhosphorIcons.Bold.ArrowClockwise,
+            TablerIcons.Refresh,
             "Refresh",
             tint = ink(),
             modifier =

@@ -268,6 +268,8 @@ class DiscoverRepository
                     // The personal rows build independently, so each lands as soon as its own requests are done.
                     listOf<suspend () -> FeedSection?>(
                         { engine.topPicks() },
+                        { engine.mixes() },
+                        { engine.popularRadio() },
                         { engine.jumpBackIn() },
                         { engine.newArtistsForYou() },
                     ).forEach { build ->
@@ -520,7 +522,7 @@ class DiscoverRepository
             const val ARTIST_IMAGES_TIMEOUT_MS = 20_000L
             const val ALBUM_TIMEOUT_MS = 10_000L
             const val FEED_TIMEOUT_MS = 25_000L
-            private const val PERSONAL_ROWS = 3
+            private const val PERSONAL_ROWS = 5
             const val BILLBOARD_RESOLVE_TIMEOUT_MS = 45_000L
             const val BILLBOARD_TAB_LIMIT = 100
             const val PUSH_THROTTLE_MS = 500L

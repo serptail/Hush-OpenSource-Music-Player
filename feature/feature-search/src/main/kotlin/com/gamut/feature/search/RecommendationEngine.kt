@@ -128,26 +128,18 @@ class RecommendationEngine
                             imageUrl = seeds.first().artist.picture.orEmpty(),
                             artistId = seeds.first().artist.id,
                             meta = "Made for you",
+                            images = seeds.mapNotNull { it.artist.picture?.takeIf(String::isNotBlank) },
                         )
                 }
-                seeds.firstOrNull()?.let { seed ->
-                    rest +=
-                        DiscoverItem(
-                            id = "station:artist:${seed.artist.id}",
-                            title = "${seed.artist.name} Radio",
-                            subtitle = "${seed.artist.name} and artists like them",
-                            imageUrl = seed.artist.picture.orEmpty(),
-                            artistId = seed.artist.id,
-                            meta = "Artist radio",
-                        )
-                }
+                // A radio for each of the artists the listener plays most.
+                rest += seeds.map { seed -> async { radioCard(seed.artist.id, seed.artist.name, seed.artist.picture) } }.awaitAll()
                 if (seeds.size >= 2) {
                     rest +=
                         DiscoverItem(
                             id = "station:discover:${seeds.joinToString(",") { it.artist.id.toString() }}",
                             title = "Discovery mix",
                             subtitle = "Artists you haven\u2019t played yet",
-                            imageUrl = "",
+                            imageUrl = seeds.getOrNull(1)?.artist?.picture.orEmpty(),
                             meta = "Discovery",
                         )
                 }
@@ -161,7 +153,7 @@ class RecommendationEngine
                         meta = "Mood",
                     )
                 if (seeds.isEmpty()) {
-                    // No taste yet: the biggest songs and a couple of genres stand in until there is some.
+                    // No taste yet: the biggest songs stand in until there is some. Genre and decade mixes have their own shelf.
                     rest +=
                         DiscoverItem(
                             id = "station:chart:0",
@@ -170,16 +162,6 @@ class RecommendationEngine
                             imageUrl = "",
                             meta = "Charts",
                         )
-                    STARTER_GENRES.shuffled().take(2).forEach { (id, name) ->
-                        rest +=
-                            DiscoverItem(
-                                id = "station:chart:$id",
-                                title = "$name mix",
-                                subtitle = "What listeners play most",
-                                imageUrl = "",
-                                meta = "Genre",
-                            )
-                    }
                 }
 
                 latest?.let { cards += it }
@@ -223,6 +205,115 @@ class RecommendationEngine
                     },
             )
         }
+
+        /**
+         * Mixes by genre and by decade, each dressed with the photo of whoever tops that genre's chart. They need no
+         * listening history, so the page always has station cards. Nothing is queued until a card is tapped.
+         */
+        suspend fun mixes(): FeedSection? =
+            coroutineScope {
+                val genreRows =
+                    MIX_GENRES
+                        .shuffled(Random(LocalDate.now().toEpochDay()))
+                        .take(MIX_GENRE_COUNT)
+                        .map { (id, name) ->
+                            async {
+                                val artists = attempt { api.chartArtists(id, 4).data }.orEmpty()
+                                DiscoverItem(
+                                    id = "station:chart:$id",
+                                    title = "$name Mix",
+                                    subtitle = joinNames(artists.map { it.name }),
+                                    imageUrl = artists.firstNotNullOfOrNull { it.photo() }.orEmpty(),
+                                    meta = "Mix",
+                                )
+                            }
+                        }
+                val eraRows =
+                    ERAS.map { era ->
+                        async {
+                            val lists = attempt { api.searchPlaylists(era.query, 6).data }.orEmpty()
+                            val usable = lists.filter { it.trackCount in 20..300 }.ifEmpty { lists }
+                            DiscoverItem(
+                                id = "station:era:${era.slug}",
+                                title = "${era.label} Mix",
+                                subtitle = era.blurb,
+                                imageUrl = usable.firstNotNullOfOrNull { (it.pictureXl ?: it.pictureBig)?.takeIf(String::isNotBlank) }.orEmpty(),
+                                meta = "Mix",
+                            )
+                        }
+                    }
+                val genres = genreRows.awaitAll()
+                val eras = eraRows.awaitAll()
+                // A decade, then two genres, so neither runs for long.
+                val items = ArrayList<DiscoverItem>()
+                var next = 0
+                eras.forEach { era ->
+                    items += era
+                    repeat(2) { genres.getOrNull(next++)?.let { items += it } }
+                }
+                items += genres.drop(next)
+                if (items.none { it.imageUrl.isNotBlank() }) return@coroutineScope null
+                FeedSection(
+                    id = "mixes:daily",
+                    kind = FeedKind.TOP_PICKS,
+                    slot = FeedSlot.TOP,
+                    order = -9,
+                    title = "Your top mixes",
+                    subtitle = "By genre and by decade",
+                    items = items,
+                )
+            }
+
+        /** Radio for the artists topping the chart today, each with the artists fans play beside them. */
+        suspend fun popularRadio(): FeedSection? =
+            coroutineScope {
+                val chart = attempt { api.chartArtists(0, 16).data }.orEmpty().distinctBy { it.id }.filter { it.photo() != null }
+                if (chart.size < 3) return@coroutineScope null
+                val cards =
+                    chart
+                        .shuffled(Random(LocalDate.now().toEpochDay()))
+                        .take(RADIO_COUNT)
+                        .map { artist ->
+                            async {
+                                val fallback = chart.filter { it.id != artist.id }.take(2).mapNotNull { it.photo() }
+                                radioCard(artist.id, artist.name, artist.photo(), fallback)
+                            }
+                        }.awaitAll()
+                FeedSection(
+                    id = "radio:popular",
+                    kind = FeedKind.TOP_PICKS,
+                    slot = FeedSlot.TOP,
+                    order = -8,
+                    title = "Popular radio",
+                    subtitle = "Start from an artist",
+                    items = cards,
+                )
+            }
+
+        /** An artist's radio card: their photo in the middle, the artists fans play next to them either side. */
+        private suspend fun radioCard(
+            id: Long,
+            name: String,
+            picture: String?,
+            fallback: List<String> = emptyList(),
+        ): DiscoverItem {
+            val neighbours = related(id).take(3)
+            val photo = picture?.takeIf { it.isNotBlank() }
+            return DiscoverItem(
+                id = "station:artist:$id",
+                title = "$name Radio",
+                subtitle =
+                    (listOf(name) + neighbours.map { it.name })
+                        .joinToString(", ")
+                        .plus(if (neighbours.isEmpty()) " and artists like them" else ", \u2026"),
+                imageUrl = photo.orEmpty(),
+                artistId = id,
+                meta = "Artist radio",
+                images = listOfNotNull(photo) + neighbours.mapNotNull { it.photo() }.ifEmpty { fallback },
+            )
+        }
+
+        private fun DeezerArtistDto.photo(): String? = (pictureBig ?: pictureXl)?.takeIf { it.isNotBlank() }
 
         /** Mood tiles, the ones that suit the hour first. No request: each station is built when tapped. */
         fun moods(now: LocalDateTime = LocalDateTime.now()): FeedSection =
@@ -281,6 +372,7 @@ class RecommendationEngine
                 "discover" -> discoveryQueue(ids)
                 "mood" -> Mood.bySlug(arg)?.let { moodQueue(it) }.orEmpty()
                 "chart" -> chartQueue(arg.toIntOrNull() ?: 0)
+                "era" -> ERAS.firstOrNull { it.slug == arg }?.let { playlistQueue(it.query) }.orEmpty()
                 else -> emptyList()
             }
         }
@@ -317,8 +409,11 @@ class RecommendationEngine
                 interleave(found.map { a -> async { top(a.id, 5) } }.awaitAll(), QUEUE_SIZE)
             }
 
-        private suspend fun moodQueue(mood: Mood): List<Track> {
-            val lists = attempt { api.searchPlaylists(mood.query, 10).data }.orEmpty()
+        private suspend fun moodQueue(mood: Mood): List<Track> = playlistQueue(mood.query)
+
+        /** A shuffled queue from one of the public playlists found for [query]. */
+        private suspend fun playlistQueue(query: String): List<Track> {
+            val lists = attempt { api.searchPlaylists(query, 10).data }.orEmpty()
             val usable = lists.filter { it.trackCount in 20..300 }.ifEmpty { lists }
             val pick = usable.take(3).randomOrNull() ?: return emptyList()
             return attempt { api.playlistTracks(pick.id, QUEUE_SIZE).data }
@@ -492,7 +587,30 @@ class RecommendationEngine
             private const val CACHE_TTL_MS = 15 * 60_000L
             private const val ARTIST_CAP = 6
 
-            private val STARTER_GENRES = listOf(132 to "Pop", 116 to "Rap & Hip-Hop", 152 to "Rock", 113 to "Dance", 165 to "R&B", 197 to "Latin")
+            private const val MIX_GENRE_COUNT = 8
+            private const val RADIO_COUNT = 8
+
+            private class Era(
+                val slug: String,
+                val label: String,
+                val query: String,
+                val blurb: String,
+            )
+
+            private val ERAS =
+                listOf(
+                    Era("90s", "90s", "90s hits", "Hits from the nineties"),
+                    Era("2000s", "2000s", "2000s hits", "The songs of the 2000s"),
+                    Era("2010s", "2010s", "2010s hits", "Hits from the 2010s"),
+                    Era("80s", "80s", "80s hits", "Hits from the eighties"),
+                )
+
+            /** Deezer genre ids; a handful are picked each day so the shelf is not the same twice. */
+            private val MIX_GENRES =
+                listOf(
+                    132 to "Pop", 152 to "Rock", 116 to "Rap & Hip-Hop", 85 to "Alternative", 464 to "Metal", 106 to "Electro",
+                    165 to "R&B", 197 to "Latin", 129 to "Jazz", 144 to "Reggae", 113 to "Dance", 169 to "Soul & Funk",
+                )
         }
     }
 
@@ -504,6 +622,7 @@ internal object StationId {
     const val DISCOVER = "discover"
     const val MOOD = "mood"
     const val CHART = "chart"
+    const val ERA = "era"
 
     fun isStation(id: String): Boolean = id.startsWith(PREFIX)
 

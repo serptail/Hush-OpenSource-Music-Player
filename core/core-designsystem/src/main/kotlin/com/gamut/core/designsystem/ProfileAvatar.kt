@@ -12,18 +12,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 
@@ -36,7 +30,7 @@ fun ProfileAvatar(
     modifier: Modifier = Modifier,
     image: Any? = null,
     shape: Shape = CircleShape,
-    invertedGuest: Boolean = false,
+    softGuest: Boolean = false,
 ) {
     if (image != null) {
         AsyncImage(
@@ -47,32 +41,10 @@ fun ProfileAvatar(
         )
         return
     }
-    if (seed == null && invertedGuest) {
-        val disc = ink(0.9f)
-        Box(
-            modifier
-                .size(size)
-                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                .clip(shape)
-                .background(disc),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                guestIcon,
-                null,
-                tint = Color.Black,
-                modifier =
-                    Modifier.size(size * 0.55f).drawWithContent {
-                        drawIntoCanvas { canvas ->
-                            canvas.saveLayer(
-                                Rect(0f, 0f, this.size.width, this.size.height),
-                                Paint().apply { blendMode = BlendMode.DstOut },
-                            )
-                            drawContent()
-                            canvas.restore()
-                        }
-                    },
-            )
+    if (seed == null && softGuest) {
+        // The same soft circle and outline icon as the Shazam button beside it.
+        Box(modifier.size(size).clip(shape).background(ink(0.07f)), contentAlignment = Alignment.Center) {
+            Icon(guestIcon, null, tint = ink(0.9f), modifier = Modifier.size(26.dp))
         }
         return
     }

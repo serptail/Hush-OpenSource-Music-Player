@@ -36,14 +36,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.bold.CaretRight
 import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.NowPlayingBars
-import com.gamut.core.designsystem.TrackRowSkeleton
 import com.gamut.core.designsystem.TablerIcons
+import com.gamut.core.designsystem.TrackRowSkeleton
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.squareArtUrl
@@ -94,14 +91,14 @@ internal fun LazyListScope.discoverFeaturedItems(
         return
     }
 
-    // Top to bottom: the mood pills, the carousel, stations made for the listener, what they played, the shelves,
-    // then the artists and albums of the week.
-    discoverMoodPills(state, stationLoadingId, onStationClick)
+    // Top to bottom: the station shelves (made for the listener, then the mixes), what they played and the first
+    // shelves, the carousel in the middle of the page, popular radio, the mood cards, the remaining shelves, then the
+    // artists and albums of the week.
     if (state.personalLoading && state.feed.none { it.kind == FeedKind.TOP_PICKS }) {
         item(key = "top-picks-skeleton") { TopPicksSkeleton() }
     }
-    discoverHero(state, nowPlayingIsrc, onStationClick, onAlbumClick, onTrackClick)
-    discoverMadeForYou(state, stationLoadingId, onStationClick)
+    discoverStations(state, stationLoadingId, onStationClick, "picks")
+    discoverStations(state, stationLoadingId, onStationClick, "mixes")
 
     feedSectionItems(
         state.feed.filter { it.slot == FeedSlot.TOP },
@@ -113,6 +110,9 @@ internal fun LazyListScope.discoverFeaturedItems(
         onStationClick,
         stationLoadingId,
     )
+    discoverHero(state, nowPlayingIsrc, onStationClick, onAlbumClick, onTrackClick)
+    discoverStations(state, stationLoadingId, onStationClick, "radio")
+    discoverMoods(state, stationLoadingId, onStationClick)
     feedSectionItems(
         state.feed.filter { it.slot == FeedSlot.MIDDLE },
         onTrackClick,
@@ -289,9 +289,10 @@ internal fun DiscoverSectionTitle(
     subtitle: String? = null,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
+    topPadding: Dp = 32.dp,
 ) {
     Row(
-        Modifier.fillMaxWidth().padding(start = DiscoverInset, end = DiscoverInset, top = 32.dp, bottom = 10.dp),
+        Modifier.fillMaxWidth().padding(start = DiscoverInset, end = DiscoverInset, top = topPadding, bottom = 10.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
         Column(Modifier.weight(1f)) {
@@ -472,7 +473,7 @@ private fun ChartRow(
         if (onMore != null) {
             RowIconButton(TablerIcons.MoreVertical, "More options", ink(0.6f), onMore)
         } else {
-            Icon(PhosphorIcons.Bold.CaretRight, null, tint = ink(0.4f), modifier = Modifier.padding(end = 8.dp).size(18.dp))
+            Icon(TablerIcons.ChevronRight, null, tint = ink(0.4f), modifier = Modifier.padding(end = 8.dp).size(18.dp))
         }
     }
 }
@@ -507,7 +508,7 @@ private fun LazyListScope.feedSectionItems(
     stationLoadingId: String? = null,
 ) {
     sections.forEach { section ->
-        // Station cards are drawn by discoverMadeForYou and the mood pills by discoverMoodPills, beside the hero they belong with.
+        // Station cards are drawn by discoverStations and the mood cards by discoverMoods, in their own places on the page.
         if (section.items.isEmpty() || section.kind == FeedKind.TOP_PICKS || section.kind == FeedKind.MOODS) return@forEach
         val queue = section.items.mapNotNull { it.track }
         val play: (DiscoverItem) -> Unit = { item -> item.track?.let { onTrackClick(it, queue) } }

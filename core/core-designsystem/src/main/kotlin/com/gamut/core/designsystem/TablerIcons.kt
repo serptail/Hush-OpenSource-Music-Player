@@ -89,5 +89,8 @@ object TablerIcons {
     val Download: ImageVector by lazy { icon("Download", "M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2", "M7 11l5 5l5 -5", "M12 4l0 12") }
     val PackageImport: ImageVector by lazy { icon("PackageImport", "M12 21l-8 -4.5v-9l8 -4.5l8 4.5v4.5", "M12 12l8 -4.5", "M12 12v9", "M12 12l-8 -4.5", "M22 18h-7", "M18 15l-3 3l3 3") }
     val Archive: ImageVector by lazy { icon("Archive", "M3 6a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2", "M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-10", "M10 12l4 0") }
+    val Search: ImageVector by lazy { icon("Search", "M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0", "M21 21l-6 -6") }
+    val Refresh: ImageVector by lazy { icon("Refresh", "M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4", "M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4") }
+    val ArrowRight: ImageVector by lazy { icon("ArrowRight", "M5 12l14 0", "M13 18l6 -6", "M13 6l6 6") }
     val HeartFilled: ImageVector by lazy { icon("HeartFilled", "M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572Z", filled = true) }
 }

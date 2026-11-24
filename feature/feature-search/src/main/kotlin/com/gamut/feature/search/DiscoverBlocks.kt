@@ -7,20 +7,28 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -35,19 +43,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.PathOperation
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.inset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -55,27 +54,23 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.fill.Play
 import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.ExplicitMark
 import com.gamut.core.designsystem.NowPlayingBars
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.squareArtUrl
 import com.gamut.core.model.Track
-import kotlin.math.PI
 import kotlin.math.absoluteValue
-import kotlin.math.cos
-import kotlin.math.sin
 
 /*
  * The blocks Discover is made of, top to bottom:
- *   1. mood pills: one-tap stations, scrolling sideways under the search field
- *   2. a cover-led hero carousel: what is new for the listener, then the week's biggest songs
- *   3. "Made for you": station cards
- *   4. the shelves, charts and artists, styled to match (see DiscoverSection.kt)
+ *   1. "Made for you": station cards, mixes on their cover and radio on a colour with artist photos
+ *   2. the listener's own shelves (see DiscoverSection.kt)
+ *   3. a cover-led hero carousel, in the middle of the page: what is new for the listener, then the week's biggest songs
+ *   4. "Find your mood": flat colour cards with a tilted cover
+ *   5. the rest of the shelves, charts and artists, styled to match
  *
  * Nothing here animates on its own and no artwork is downloaded for a station, so the page costs
  * nothing while idle.
@@ -90,10 +85,36 @@ private val HeroShape = RoundedCornerShape(28.dp)
 private val HeroDot = Color(0xFFFF5C5C)
 private val StationCardSize = 156.dp
 
-// ---- Mood pills ---------------------------------------------------------------------------------------------------
+// ---- Moods --------------------------------------------------------------------------------------------------------
 
-/** The mood stations as a sideways row of pills, the ones that suit the hour first. */
-internal fun LazyListScope.discoverMoodPills(
+private val MoodCardWidth = 168.dp
+private val MoodCardHeight = 92.dp
+private val MoodGap = 12.dp
+private val TileShape = RoundedCornerShape(10.dp)
+
+/** One flat colour per mood, the way a browse tile is: no gradient, no drawn symbol. */
+private fun moodColor(mood: Mood): Color =
+    Color(
+        when (mood) {
+            Mood.ENERGY -> 0xFFE8451E
+            Mood.CHILL -> 0xFF2D7D9A
+            Mood.FOCUS -> 0xFF6B3E75
+            Mood.FEEL_GOOD -> 0xFFC77B0A
+            Mood.LOVE -> 0xFFD6247F
+            Mood.BLUE -> 0xFF1E3264
+            Mood.PARTY -> 0xFF8D67AB
+            Mood.WORKOUT -> 0xFF9E1B32
+            Mood.LATE_NIGHT -> 0xFF23235C
+            Mood.SLEEP -> 0xFF477D95
+            Mood.COMMUTE -> 0xFF1E7B4F
+        },
+    )
+
+/**
+ * Every mood as a colour card with a tilted cover tucked into its corner, two rows that scroll sideways. The covers
+ * are artwork the page already holds (this week's biggest songs), so a card costs no request of its own.
+ */
+internal fun LazyListScope.discoverMoods(
     state: DiscoverState,
     loadingId: String?,
     onStation: (DiscoverItem) -> Unit,
@@ -101,57 +122,84 @@ internal fun LazyListScope.discoverMoodPills(
     val section = state.feed.firstOrNull { it.kind == FeedKind.MOODS } ?: return
     val moods = section.items.mapNotNull { item -> Mood.bySlug(item.id.substringAfterLast(':'))?.let { item to it } }
     if (moods.isEmpty()) return
-    item(key = "mood-pills") {
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = DiscoverInset, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+    val covers = state.tabs.firstOrNull()?.items.orEmpty().map { it.imageUrl }.filter { it.isNotBlank() }.distinct()
+    item(key = "moods-title") { DiscoverSectionTitle(section.title, section.subtitle) }
+    item(key = "moods-grid") {
+        LazyHorizontalGrid(
+            rows = GridCells.Fixed(2),
+            modifier = Modifier.fillMaxWidth().height(MoodCardHeight * 2 + MoodGap),
+            contentPadding = PaddingValues(horizontal = DiscoverInset),
+            horizontalArrangement = Arrangement.spacedBy(MoodGap),
+            verticalArrangement = Arrangement.spacedBy(MoodGap),
         ) {
-            items(moods, key = { it.first.id }) { (item, mood) ->
-                MoodPill(item.title, mood, loading = item.id == loadingId) { onStation(item) }
+            itemsIndexed(moods, key = { _, pair -> pair.first.id }) { index, (item, mood) ->
+                MoodCard(
+                    label = item.title,
+                    color = moodColor(mood),
+                    cover = covers.takeIf { it.isNotEmpty() }?.get((index * 3) % covers.size),
+                    loading = item.id == loadingId,
+                ) { onStation(item) }
             }
         }
     }
 }
 
-/** A small tinted dot with the mood's emblem, then its name, on a quiet pill. */
+/** A flat colour card: the mood's name top left, a cover turned on its corner at the bottom right. */
 @Composable
-private fun MoodPill(
+private fun MoodCard(
     label: String,
-    mood: Mood,
+    color: Color,
+    cover: String?,
     loading: Boolean,
     onClick: () -> Unit,
 ) {
-    val from = Color(mood.from)
-    val to = Color(mood.to)
-    Row(
+    Box(
         Modifier
-            .pressScale(onClick = onClick, scaleDown = 0.95f)
-            .height(40.dp)
-            .clip(CircleShape)
-            .background(ink(0.07f))
-            .border(1.dp, ink(0.08f), CircleShape)
-            .semantics { contentDescription = "$label mood station" }
-            .padding(start = 8.dp, end = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .pressScale(onClick = onClick, scaleDown = 0.96f)
+            .width(MoodCardWidth)
+            .height(MoodCardHeight)
+            .clip(TileShape)
+            .background(color)
+            .semantics { contentDescription = "$label mood station" },
     ) {
-        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-            if (loading) {
-                CircularProgressIndicator(Modifier.size(18.dp), color = TextPrimary, strokeWidth = 2.dp)
+        Text(
+            label,
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold),
+            color = Color.White,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 12.dp, top = 12.dp).width(96.dp),
+        )
+        Box(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .offset(x = 14.dp, y = 12.dp)
+                .size(70.dp)
+                .graphicsLayer {
+                    rotationZ = 25f
+                    shadowElevation = 8.dp.toPx()
+                    shape = RoundedCornerShape(5.dp)
+                    clip = true
+                },
+        ) {
+            if (cover != null) {
+                ArtImage(url = squareArtUrl(cover, 200), modifier = Modifier.fillMaxSize())
             } else {
-                Canvas(Modifier.size(24.dp).clip(CircleShape)) {
-                    drawRect(Brush.linearGradient(listOf(from, to), Offset.Zero, Offset(size.width, size.height)))
-                    drawEmblem(mood, Offset(size.width / 2f, size.height / 2f), size.width * 0.5f, Color.White.copy(alpha = 0.95f), 1.3.dp.toPx())
+                // No artwork yet: a plain record in a lighter tone of the card.
+                Canvas(Modifier.fillMaxSize()) {
+                    drawRect(Color.White.copy(alpha = 0.2f))
+                    drawCircle(Color.Black.copy(alpha = 0.35f), radius = size.width * 0.36f)
+                    drawCircle(color, radius = size.width * 0.1f)
                 }
             }
         }
-        Spacer(Modifier.width(8.dp))
-        Text(
-            label,
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-            color = TextPrimary,
-            maxLines = 1,
-            softWrap = false,
-        )
+        if (loading) {
+            CircularProgressIndicator(
+                Modifier.align(Alignment.TopEnd).padding(10.dp).size(18.dp),
+                color = Color.White,
+                strokeWidth = 2.dp,
+            )
+        }
     }
 }
 
@@ -165,13 +213,13 @@ private class HeroEntry(
     val eyebrow: String,
 )
 
-/** The station cards that carry a picture of their own: the latest release and the artist's radio. */
+/** The listener's newest release from a favourite artist. Artist radio is a station card, not part of the carousel. */
 private fun personalLead(state: DiscoverState): List<DiscoverItem> =
     state.feed
         .filter { it.kind == FeedKind.TOP_PICKS }
         .flatMap { it.items }
-        .filter { it.imageUrl.isNotBlank() && (it.id.startsWith(FeedRepository.DEEZER_ALBUM_PREFIX) || StationId.kindOf(it.id) == StationId.ARTIST) }
-        .take(2)
+        .filter { it.imageUrl.isNotBlank() && it.id.startsWith(FeedRepository.DEEZER_ALBUM_PREFIX) }
+        .take(1)
 
 /** "New from Dua Lipa" for a release (its subtitle reads "Dua Lipa · 3 days ago"); the card's own label otherwise. */
 private fun heroEyebrow(entry: HeroEntry): String {
@@ -198,6 +246,7 @@ internal fun LazyListScope.discoverHero(
                 .take(HERO_COUNT - personal.size)
                 .mapIndexed { index, item -> HeroEntry(item, HeroKind.TRACK, "#${index + 1} Trending") }
     if (entries.isEmpty()) return
+    item(key = "hero-title") { DiscoverSectionTitle("New and trending") }
     item(key = "hero") {
         val queue = remember(trending) { trending.mapNotNull { it.track } }
         HeroCarousel(entries, nowPlayingIsrc) { entry ->
@@ -335,7 +384,7 @@ private fun HeroButton(
         if (playing) {
             NowPlayingBars(color = Color.Black)
         } else {
-            Icon(PhosphorIcons.Fill.Play, null, tint = Color.Black, modifier = Modifier.size(14.dp))
+            Icon(TablerIcons.Play, null, tint = Color.Black, modifier = Modifier.size(14.dp))
         }
         Spacer(Modifier.width(8.dp))
         Text(
@@ -370,34 +419,57 @@ private fun PagerDashes(
 
 // ---- Made for you -------------------------------------------------------------------------------------------------
 
-/** Station cards, leaving out what the carousel already shows and the moods, which are the pills at the top. */
-internal fun LazyListScope.discoverMadeForYou(
+private val OnPastel = Color(0xFF121212)
+
+/** Soft card colours for radio cards and unlabelled stations. */
+private val PastelColors =
+    listOf(0xFFF8A9BE, 0xFF8EE3CF, 0xFFFFD579, 0xFFAFC8FF, 0xFFC9B6F2, 0xFFFFB38A, 0xFFB5E48C, 0xFF9AD9F5, 0xFFF2A6E0, 0xFFE6CF8B).map { Color(it) }
+
+/** Label colours for the cover cards: light, a little different from card to card. */
+private val TagColors =
+    listOf(0xFFF4F24B, 0xFFD9D4FF, 0xFFB8F2E6, 0xFFFFC9D9, 0xFFFFD7A8, 0xFFC4E4FF, 0xFFE2F5A3, 0xFFFFB3A7).map { Color(it) }
+
+/** The shelf of station cards whose section id starts with [family]: "picks", "mixes" or "radio". */
+private fun shelf(
+    state: DiscoverState,
+    family: String,
+): Pair<FeedSection, List<DiscoverItem>>? {
+    val section = state.feed.firstOrNull { it.kind == FeedKind.TOP_PICKS && it.id.substringBefore(':') == family } ?: return null
+    // The latest release belongs to the carousel and the moods have their own cards.
+    val rows = section.items.filter { !it.id.startsWith(FeedRepository.DEEZER_ALBUM_PREFIX) && StationId.kindOf(it.id) != StationId.MOOD }
+    return if (rows.isEmpty()) null else section to rows
+}
+
+/**
+ * One shelf of station cards: "Made for you" (picks), "Your top mixes" or "Popular radio". The first shelf on the page
+ * sits close under the search field instead of leaving the usual gap for a title.
+ */
+internal fun LazyListScope.discoverStations(
     state: DiscoverState,
     loadingId: String?,
     onStation: (DiscoverItem) -> Unit,
+    family: String,
 ) {
-    val section = state.feed.firstOrNull { it.kind == FeedKind.TOP_PICKS } ?: return
-    val shown = personalLead(state).mapTo(HashSet()) { it.id }
-    val rows =
-        section.items.filter { item ->
-            item.id !in shown &&
-                !item.id.startsWith(FeedRepository.DEEZER_ALBUM_PREFIX) &&
-                StationId.kindOf(item.id) != StationId.MOOD
-        }
-    if (rows.isEmpty()) return
-    item(key = "made-title") { DiscoverSectionTitle("Made for you", section.subtitle) }
-    item(key = "made-rows") {
+    val (section, rows) = shelf(state, family) ?: return
+    val first = family == "picks" || (family == "mixes" && shelf(state, "picks") == null)
+    val title = if (family == "picks") "Made for you" else section.title
+    item(key = "$family-title") { DiscoverSectionTitle(title, section.subtitle, topPadding = if (first) 4.dp else 32.dp) }
+    item(key = "$family-rows") {
         LazyRow(
             contentPadding = PaddingValues(horizontal = DiscoverInset, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            items(rows, key = { it.id }) { row -> StationCard(row, loading = row.id == loadingId) { onStation(row) } }
+            itemsIndexed(rows, key = { _, row -> row.id }) { index, row ->
+                StationCard(row, index, loading = row.id == loadingId) { onStation(row) }
+            }
         }
     }
 }
 
 private fun stationBadge(item: DiscoverItem): String =
-    when (StationId.kindOf(item.id)) {
+    if (item.meta == "Mix") {
+        "MIX"
+    } else when (StationId.kindOf(item.id)) {
         StationId.MIX -> "MIX"
         StationId.DISCOVER -> "DISCOVERY"
         StationId.ARTIST -> "RADIO"
@@ -405,248 +477,136 @@ private fun stationBadge(item: DiscoverItem): String =
         else -> item.meta.orEmpty().uppercase()
     }
 
-/** A square station cover with its kind in the corner and a round play button, its name and blurb underneath. */
+/**
+ * A square station card with its names underneath. A mix wears its cover art with a colour label across the bottom;
+ * a radio is a colour with the artists' photos in a row. Tapping anywhere plays it.
+ */
 @Composable
 private fun StationCard(
     item: DiscoverItem,
+    index: Int,
     loading: Boolean,
     onClick: () -> Unit,
 ) {
-    val badge = stationBadge(item)
+    val onCover = item.imageUrl.isNotBlank() && StationId.kindOf(item.id) != StationId.ARTIST
     Column(Modifier.width(StationCardSize).pressScale(onClick = onClick, scaleDown = 0.96f)) {
-        Box(Modifier.size(StationCardSize).clip(RoundedCornerShape(18.dp))) {
-            StationTile(item, Modifier.fillMaxSize())
-            Box(Modifier.fillMaxWidth().height(56.dp).background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.32f), 1f to Color.Transparent)))
-            if (badge.isNotEmpty()) {
-                Text(
-                    badge,
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp),
-                    color = Color.White,
-                    maxLines = 1,
-                    modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 12.dp),
-                )
-            }
-            Box(
-                Modifier.align(Alignment.BottomEnd).padding(10.dp).size(36.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (loading) {
-                    CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-                } else {
-                    Icon(PhosphorIcons.Fill.Play, "Play", tint = Color.White, modifier = Modifier.size(14.dp))
+        Box(Modifier.size(StationCardSize).clip(TileShape)) {
+            if (onCover) CoverFace(item, index) else ColorFace(item, index)
+            if (loading) {
+                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
                 }
             }
         }
         Spacer(Modifier.height(10.dp))
         Text(
-            item.title,
-            style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
-            color = TextPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
             item.subtitle,
-            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 16.sp),
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, lineHeight = 18.sp),
             color = TextSecondary,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
     }
 }
 
-/** A station's square: its photo where it has one, otherwise a colour wash with soft shapes and a drawn mark. */
+/** The small round mark in a card's corner, in the card's own accent. */
 @Composable
-private fun StationTile(
+private fun BoxScope.CornerMark(color: Color) {
+    Box(
+        Modifier.align(Alignment.TopStart).padding(10.dp).size(24.dp).clip(CircleShape).background(color),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(TablerIcons.Play, null, tint = OnPastel, modifier = Modifier.size(10.dp))
+    }
+}
+
+/** Full-bleed artwork with a colour label across the bottom: a pale stripe on the left, then the name. */
+@Composable
+private fun BoxScope.CoverFace(
     item: DiscoverItem,
-    modifier: Modifier,
+    index: Int,
 ) {
-    if (item.imageUrl.isNotBlank()) {
-        ArtImage(url = squareArtUrl(item.imageUrl, 400), modifier = modifier)
-        return
-    }
-    val kind = StationId.kindOf(item.id)
-    val hue = ((item.id.hashCode().toLong() and 0x7fffffffL) % 360L).toFloat()
-    val top = if (kind == StationId.MIX) Color(0xFFFF4D6D) else if (kind == StationId.DISCOVER) Color(0xFF4F5BD5) else Color.hsv(hue, 0.55f, 0.6f)
-    val bottom = if (kind == StationId.MIX) Color(0xFFFF8A4C) else if (kind == StationId.DISCOVER) Color(0xFF2FB8A6) else Color.hsv((hue + 40f) % 360f, 0.6f, 0.5f)
-    Canvas(modifier) {
-        drawRect(Brush.linearGradient(listOf(top, bottom), Offset.Zero, Offset(this.size.width, this.size.height)))
-        // Two soft discs break up the flat gradient and give the tile some depth.
-        drawCircle(Color.White.copy(alpha = 0.12f), radius = this.size.width * 0.55f, center = Offset(this.size.width * 0.9f, this.size.height * 0.05f))
-        drawCircle(Color.Black.copy(alpha = 0.14f), radius = this.size.width * 0.45f, center = Offset(this.size.width * 0.05f, this.size.height * 1.0f))
-        inset(this.size.width * 0.24f) {
-            val w = size.width
-            val h = size.height
-            val stroke = Stroke(width = (w / 14f).coerceAtLeast(2.dp.toPx()), cap = StrokeCap.Round, join = StrokeJoin.Round)
-            val mark = Color.White.copy(alpha = 0.92f)
-            val path = Path()
-            when (kind) {
-                StationId.MIX ->
-                    listOf(0.34f, 0.2f).forEach { at ->
-                        path.reset()
-                        path.moveTo(w * at, h * 0.26f)
-                        path.lineTo(w * (at + 0.3f), h * 0.5f)
-                        path.lineTo(w * at, h * 0.74f)
-                        drawPath(path, mark, style = stroke)
-                    }
-
-                StationId.DISCOVER -> {
-                    val c = Offset(w / 2f, h / 2f)
-                    val r = w * 0.34f
-                    path.moveTo(c.x, c.y - r)
-                    path.quadraticTo(c.x, c.y, c.x + r, c.y)
-                    path.quadraticTo(c.x, c.y, c.x, c.y + r)
-                    path.quadraticTo(c.x, c.y, c.x - r, c.y)
-                    path.quadraticTo(c.x, c.y, c.x, c.y - r)
-                    path.close()
-                    drawPath(path, mark, style = stroke)
-                }
-
-                else ->
-                    listOf(0.3f to 0.3f, 0.5f to 0.5f, 0.7f to 0.38f).forEach { (fx, fh) ->
-                        drawLine(mark, Offset(w * fx, h * 0.72f), Offset(w * fx, h * (0.72f - fh)), stroke.width, StrokeCap.Round)
-                    }
-            }
+    val accent = TagColors[index % TagColors.size]
+    ArtImage(url = squareArtUrl(item.imageUrl, 400), modifier = Modifier.fillMaxSize())
+    CornerMark(accent)
+    Row(Modifier.align(Alignment.BottomStart).padding(bottom = 14.dp).fillMaxWidth().height(IntrinsicSize.Min)) {
+        Box(Modifier.width(8.dp).fillMaxHeight().background(lerp(accent, Color.White, 0.55f)))
+        Box(Modifier.weight(1f).background(accent).padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Text(
+                item.title,
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold),
+                color = OnPastel,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
 
-/** One outline emblem per mood, [side] pixels square around [center]: a few strokes, legible at chip size. */
-private fun DrawScope.drawEmblem(
-    mood: Mood,
-    center: Offset,
-    side: Float,
-    color: Color,
-    strokeWidth: Float,
+/** A soft colour, the kind of station top right, artist photos in a row (the first, in the middle, largest), the name below. */
+@Composable
+private fun BoxScope.ColorFace(
+    item: DiscoverItem,
+    index: Int,
 ) {
-    val left = center.x - side / 2f
-    val top = center.y - side / 2f
-
-    fun x(f: Float) = left + side * f
-
-    fun y(f: Float) = top + side * f
-
-    fun at(
-        fx: Float,
-        fy: Float,
-    ) = Offset(x(fx), y(fy))
-    val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
-    val path = Path()
-
-    fun polygon(vararg points: Pair<Float, Float>) {
-        path.reset()
-        points.forEachIndexed { i, (fx, fy) -> if (i == 0) path.moveTo(x(fx), y(fy)) else path.lineTo(x(fx), y(fy)) }
-        path.close()
-        drawPath(path, color, style = stroke)
+    val color = PastelColors[index % PastelColors.size]
+    val photos = item.images.ifEmpty { listOf(item.imageUrl).filter { it.isNotBlank() } }.take(3)
+    Box(Modifier.fillMaxSize().background(color))
+    CornerMark(Color.White)
+    Text(
+        stationBadge(item),
+        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp),
+        color = OnPastel,
+        maxLines = 1,
+        modifier = Modifier.align(Alignment.TopEnd).padding(end = 12.dp, top = 14.dp),
+    )
+    photos.getOrNull(1)?.let { url ->
+        ArtImage(
+            url = squareArtUrl(url, 200),
+            modifier = Modifier.align(Alignment.TopStart).offset(x = (-18).dp, y = 40.dp).size(56.dp).clip(CircleShape),
+        )
     }
-
-    when (mood) {
-        Mood.ENERGY -> polygon(0.60f to 0.0f, 0.18f to 0.56f, 0.46f to 0.56f, 0.38f to 1.0f, 0.82f to 0.40f, 0.54f to 0.40f)
-
-        Mood.CHILL ->
-            listOf(0.28f, 0.5f, 0.72f).forEach { fy ->
-                path.reset()
-                path.moveTo(x(0.05f), y(fy))
-                path.cubicTo(x(0.25f), y(fy - 0.16f), x(0.40f), y(fy - 0.16f), x(0.5f), y(fy))
-                path.cubicTo(x(0.60f), y(fy + 0.16f), x(0.75f), y(fy + 0.16f), x(0.95f), y(fy))
-                drawPath(path, color, style = stroke)
-            }
-
-        Mood.FOCUS -> {
-            listOf(0.5f, 0.34f, 0.18f).forEach { r -> drawCircle(color, radius = side * r, center = center, style = stroke) }
-            drawCircle(color, radius = side * 0.04f, center = center)
-        }
-
-        Mood.FEEL_GOOD -> {
-            drawCircle(color, radius = side * 0.22f, center = center, style = stroke)
-            for (i in 0 until 8) {
-                val a = PI * 2 * i / 8
-                val from = Offset(center.x + (side * 0.32f * cos(a)).toFloat(), center.y + (side * 0.32f * sin(a)).toFloat())
-                val to = Offset(center.x + (side * 0.46f * cos(a)).toFloat(), center.y + (side * 0.46f * sin(a)).toFloat())
-                drawLine(color, from, to, strokeWidth, StrokeCap.Round)
-            }
-        }
-
-        Mood.LOVE -> {
-            path.reset()
-            path.moveTo(x(0.5f), y(0.92f))
-            path.cubicTo(x(-0.15f), y(0.45f), x(0.15f), y(-0.1f), x(0.5f), y(0.28f))
-            path.cubicTo(x(0.85f), y(-0.1f), x(1.15f), y(0.45f), x(0.5f), y(0.92f))
-            path.close()
-            drawPath(path, color, style = stroke)
-        }
-
-        Mood.BLUE -> {
-            path.reset()
-            path.moveTo(x(0.5f), y(0.0f))
-            path.cubicTo(x(0.62f), y(0.28f), x(0.84f), y(0.46f), x(0.84f), y(0.68f))
-            path.cubicTo(x(0.84f), y(0.90f), x(0.68f), y(1.0f), x(0.5f), y(1.0f))
-            path.cubicTo(x(0.32f), y(1.0f), x(0.16f), y(0.90f), x(0.16f), y(0.68f))
-            path.cubicTo(x(0.16f), y(0.46f), x(0.38f), y(0.28f), x(0.5f), y(0.0f))
-            path.close()
-            drawPath(path, color, style = stroke)
-        }
-
-        Mood.PARTY -> {
-            fun sparkle(
-                c: Offset,
-                r: Float,
-            ) {
-                path.reset()
-                path.moveTo(c.x, c.y - r)
-                path.quadraticTo(c.x, c.y, c.x + r, c.y)
-                path.quadraticTo(c.x, c.y, c.x, c.y + r)
-                path.quadraticTo(c.x, c.y, c.x - r, c.y)
-                path.quadraticTo(c.x, c.y, c.x, c.y - r)
-                path.close()
-                drawPath(path, color, style = stroke)
-            }
-            sparkle(at(0.42f, 0.55f), side * 0.40f)
-            sparkle(at(0.84f, 0.16f), side * 0.16f)
-            sparkle(at(0.86f, 0.84f), side * 0.12f)
-        }
-
-        Mood.WORKOUT ->
-            listOf(0.18f to 0.45f, 0.39f to 0.7f, 0.61f to 0.55f, 0.82f to 0.95f).forEach { (fx, h) ->
-                drawLine(color, at(fx, 1f), at(fx, 1f - h), strokeWidth * 2.2f, StrokeCap.Round)
-            }
-
-        Mood.LATE_NIGHT -> {
-            val moon = Path().apply { addOval(Rect(center, side * 0.4f)) }
-            val bite = Path().apply { addOval(Rect(Offset(center.x + side * 0.2f, center.y - side * 0.12f), side * 0.34f)) }
-            drawPath(Path.combine(PathOperation.Difference, moon, bite), color, style = stroke)
-            drawCircle(color, radius = strokeWidth * 0.9f, center = at(0.8f, 0.2f))
-            drawCircle(color, radius = strokeWidth * 0.7f, center = at(0.62f, 0.06f))
-        }
-
-        Mood.SLEEP ->
-            listOf(Triple(0.08f, 0.62f, 0.26f), Triple(0.36f, 0.34f, 0.34f), Triple(0.66f, 0.04f, 0.30f)).forEach { (fx, fy, s) ->
-                path.reset()
-                path.moveTo(x(fx), y(fy))
-                path.lineTo(x(fx + s), y(fy))
-                path.lineTo(x(fx), y(fy + s))
-                path.lineTo(x(fx + s), y(fy + s))
-                drawPath(path, color, style = stroke)
-            }
-
-        Mood.COMMUTE -> {
-            drawLine(color, at(0.08f, 1f), at(0.44f, 0.04f), strokeWidth, StrokeCap.Round)
-            drawLine(color, at(0.92f, 1f), at(0.56f, 0.04f), strokeWidth, StrokeCap.Round)
-            drawLine(color, at(0.5f, 1f), at(0.5f, 0.06f), strokeWidth, StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(side * 0.1f, side * 0.1f)))
-        }
+    photos.getOrNull(2)?.let { url ->
+        ArtImage(
+            url = squareArtUrl(url, 200),
+            modifier = Modifier.align(Alignment.TopEnd).offset(x = 18.dp, y = 40.dp).size(56.dp).clip(CircleShape),
+        )
     }
+    photos.getOrNull(0)?.let { url ->
+        ArtImage(
+            url = squareArtUrl(url, 300),
+            modifier =
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = 28.dp)
+                    .size(78.dp)
+                    .border(3.dp, Color.White.copy(alpha = 0.7f), CircleShape)
+                    .clip(CircleShape),
+        )
+    }
+    val withPhotos = photos.isNotEmpty()
+    Text(
+        item.title.removeSuffix(" Radio"),
+        style =
+            MaterialTheme.typography.titleLarge.copy(
+                fontSize = if (withPhotos) 17.sp else 22.sp,
+                lineHeight = if (withPhotos) 20.sp else 26.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+        color = OnPastel,
+        maxLines = if (withPhotos) 1 else 3,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.align(Alignment.BottomStart).padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+    )
 }
 
-
-/** Stands in for the carousel while the page is built, at about its size, so nothing jumps when it arrives. */
+/** Stands in for the station row while the page is built, at about its size, so nothing jumps when it arrives. */
 @Composable
 internal fun TopPicksSkeleton() {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = DiscoverInset, vertical = 4.dp)
-            .aspectRatio(HERO_ASPECT)
-            .clip(HeroShape)
-            .background(ink(0.06f)),
-    )
+    Row(
+        Modifier.padding(horizontal = DiscoverInset, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        repeat(2) { Box(Modifier.size(StationCardSize).clip(TileShape).background(ink(0.06f))) }
+    }
 }

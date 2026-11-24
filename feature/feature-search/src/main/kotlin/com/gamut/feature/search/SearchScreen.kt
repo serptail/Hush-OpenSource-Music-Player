@@ -109,17 +109,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Bold
-import com.adamglin.phosphoricons.Fill
-import com.adamglin.phosphoricons.bold.ArrowClockwise
-import com.adamglin.phosphoricons.bold.ArrowRight
-import com.adamglin.phosphoricons.bold.ClockCounterClockwise
-import com.adamglin.phosphoricons.bold.MagnifyingGlass
-import com.adamglin.phosphoricons.bold.MusicNote
-import com.adamglin.phosphoricons.bold.Play
-import com.adamglin.phosphoricons.bold.User
-import com.adamglin.phosphoricons.bold.X
 import com.gamut.core.designsystem.AcrylicHost
 import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.ArtistLine
@@ -131,8 +120,8 @@ import com.gamut.core.designsystem.LocalAcrylicState
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.NowPlayingBars
 import com.gamut.core.designsystem.ProfileAvatar
-import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.ShareSheet
+import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.TrackRowSkeleton
 import com.gamut.core.designsystem.acrylicSource
 import com.gamut.core.designsystem.adaptiveGutter
@@ -354,7 +343,7 @@ fun SearchScreen(
                             },
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(PhosphorIcons.Bold.ArrowClockwise, null, tint = ink(0.9f), modifier = Modifier.size(26.dp))
+                            Icon(TablerIcons.Refresh, null, tint = ink(0.9f), modifier = Modifier.size(26.dp))
                         }
                         Spacer(Modifier.width(8.dp))
                     }
@@ -381,10 +370,10 @@ fun SearchScreen(
                         ProfileAvatar(
                             name = profileName,
                             seed = profileSeed,
-                            size = 40.dp,
-                            guestIcon = PhosphorIcons.Bold.User,
+                            size = 44.dp,
+                            guestIcon = TablerIcons.User,
                             image = profileImage,
-                            invertedGuest = true,
+                            softGuest = true,
                         )
                     }
                 }
@@ -829,7 +818,7 @@ private fun SearchField(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                PhosphorIcons.Bold.MagnifyingGlass,
+                TablerIcons.Search,
                 null,
                 tint = ink(0.45f + 0.35f * focus),
                 modifier = Modifier.size(20.dp),
@@ -872,7 +861,7 @@ private fun SearchField(
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(Modifier.size(22.dp).background(ink(0.14f), CircleShape), contentAlignment = Alignment.Center) {
-                        Icon(PhosphorIcons.Bold.X, "Clear", tint = ink(0.8f), modifier = Modifier.size(13.dp))
+                        Icon(TablerIcons.Close, "Clear", tint = ink(0.8f), modifier = Modifier.size(13.dp))
                     }
                 }
             }
@@ -955,7 +944,7 @@ private fun RecentRow(
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
     ) { _ ->
         Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-            Icon(PhosphorIcons.Bold.ClockCounterClockwise, null, tint = ink(0.45f), modifier = Modifier.size(20.dp))
+            Icon(TablerIcons.History, null, tint = ink(0.45f), modifier = Modifier.size(20.dp))
         }
         Text(
             query,
@@ -965,7 +954,7 @@ private fun RecentRow(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
         )
-        RowIconButton(PhosphorIcons.Bold.X, "Remove from recent searches", ink(0.45f), onRemove)
+        RowIconButton(TablerIcons.Close, "Remove from recent searches", ink(0.45f), onRemove)
     }
 }
 
@@ -995,7 +984,7 @@ private fun NoResults(query: String) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(PhosphorIcons.Bold.MagnifyingGlass, null, tint = ink(0.3f), modifier = Modifier.size(40.dp))
+        Icon(TablerIcons.Search, null, tint = ink(0.3f), modifier = Modifier.size(40.dp))
         Spacer(Modifier.height(4.dp))
         Text(
             "No results for \u201C${query.trim()}\u201D",
@@ -1172,7 +1161,7 @@ private fun ArtistHit(
             label = "artist-arrow",
         )
         Icon(
-            PhosphorIcons.Bold.ArrowRight,
+            TablerIcons.ArrowRight,
             "Open artist",
             tint = ink(if (active) 0.9f else 0.5f),
             modifier = Modifier.offset(x = slide).size(22.dp),
@@ -1288,7 +1277,7 @@ private fun TrackResultRow(
                     )
                 }
                 Icon(
-                    PhosphorIcons.Bold.Play,
+                    TablerIcons.Play,
                     null,
                     tint = ink(),
                     modifier = Modifier.size(14.dp).graphicsLayer { alpha = playAlpha },
@@ -1328,5 +1317,5 @@ internal fun RowIconButton(
 
 @Composable
 internal fun ArtworkFallbackIcon() {
-    Icon(PhosphorIcons.Bold.MusicNote, null, tint = ink(0.45f), modifier = Modifier.size(22.dp))
+    Icon(TablerIcons.MusicNote, null, tint = ink(0.45f), modifier = Modifier.size(22.dp))
 }

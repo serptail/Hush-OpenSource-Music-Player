@@ -129,6 +129,7 @@ class DiscoverDiskCache
                 .put("meta", meta ?: JSONObject.NULL)
                 .put("trend", trend?.name ?: JSONObject.NULL)
                 .put("trendDelta", trendDelta)
+                .put("images", JSONArray(images))
 
         private fun Track.toJson() =
             JSONObject()
@@ -155,6 +156,7 @@ class DiscoverDiskCache
                 meta = str("meta"),
                 trend = str("trend")?.let { runCatching { Trend.valueOf(it) }.getOrNull() },
                 trendDelta = optInt("trendDelta"),
+                images = optJSONArray("images")?.let { arr -> List(arr.length()) { arr.getString(it) } }.orEmpty(),
             )
 
         private fun JSONObject.toTrack() =
@@ -176,6 +178,6 @@ class DiscoverDiskCache
         private fun JSONArray.objects(): List<JSONObject> = List(length()) { getJSONObject(it) }
 
         private companion object {
-            const val VERSION = 5
+            const val VERSION = 6
         }
     }
