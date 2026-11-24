@@ -24,6 +24,11 @@ data class DiscoverTab(
 )
 
 enum class FeedKind {
+    /** The lead row of tall station cards: latest release, mixes, radio, a mood. */
+    TOP_PICKS,
+
+    /** Tiles for every mood, the ones that suit the hour first. */
+    MOODS,
     QUICK_PICKS,
     TRACK_RAILS,
     TRACK_CAROUSEL,

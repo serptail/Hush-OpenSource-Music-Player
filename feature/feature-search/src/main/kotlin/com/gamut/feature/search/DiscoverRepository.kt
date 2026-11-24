@@ -35,6 +35,8 @@ data class DiscoverState(
     val feedExhausted: Boolean = false,
     val feedFailed: Boolean = false,
     val feedEnabled: Boolean = true,
+    /** The personal rows are still being built, so the page keeps room for them. */
+    val personalLoading: Boolean = false,
 )
 
 data class ArtistDetails(
@@ -68,6 +70,7 @@ class DiscoverRepository
         private val diskCache: DiscoverDiskCache,
         private val billboard: BillboardRepository,
         private val feedRepo: FeedRepository,
+        private val engine: RecommendationEngine,
     ) {
         @Volatile private var cachedDiscover: DiscoverState? = null
         private val albumCache = ConcurrentHashMap<String, AlbumDetails>()
@@ -77,7 +80,11 @@ class DiscoverRepository
             albumCache.clear()
             billboard.clearCache()
             feedRepo.clearCache()
+            engine.clearCache()
         }
+
+        /** The queue behind a station card (`station:...`), empty when it cannot be built. */
+        suspend fun stationQueue(item: DiscoverItem): List<Track> = engine.stationQueue(item)
 
         private inline fun <T> safe(block: () -> T): Result<T> =
             try {
@@ -187,6 +194,7 @@ class DiscoverRepository
 
                 fun feedNow(): List<FeedSection> = feedMap.values.sortedWith(compareBy<FeedSection>({ it.slot.ordinal }, { it.order }))
                 feedRepo.quickPicks(songs.map { it.toDiscoverItem() }, feedSeed)?.let { putFeed(it) }
+                putFeed(engine.moods())
 
                 fun buildTabs(): List<DiscoverTab> =
                     buildList {
@@ -241,12 +249,37 @@ class DiscoverRepository
                 val albumRow = if (albums.isNotEmpty()) albums.take(10).map { it.toDiscoverAlbum() } else stale?.albums.orEmpty()
                 var tabsNow = buildTabs()
 
-                fun state() = DiscoverState(albums = albumRow, artists = artistsNow, tabs = tabsNow, isLoading = false, feed = feedNow())
+                var personalPending = PERSONAL_ROWS
+
+                fun state() =
+                    DiscoverState(
+                        albums = albumRow,
+                        artists = artistsNow,
+                        tabs = tabsNow,
+                        isLoading = false,
+                        feed = feedNow(),
+                        personalLoading = personalPending > 0,
+                    )
                 send(state())
 
                 val lock = Mutex()
                 val gate = Semaphore(4)
                 coroutineScope {
+                    // The personal rows build independently, so each lands as soon as its own requests are done.
+                    listOf<suspend () -> FeedSection?>(
+                        { engine.topPicks() },
+                        { engine.jumpBackIn() },
+                        { engine.newArtistsForYou() },
+                    ).forEach { build ->
+                        launch {
+                            val section = withTimeoutOrNull(FEED_TIMEOUT_MS) { safe { build() }.getOrNull() }
+                            lock.withLock {
+                                section?.let { putFeed(it) }
+                                personalPending--
+                                send(state())
+                            }
+                        }
+                    }
                     launch {
                         withTimeoutOrNull(FEED_TIMEOUT_MS) {
                             safe {
@@ -487,6 +520,7 @@ class DiscoverRepository
             const val ARTIST_IMAGES_TIMEOUT_MS = 20_000L
             const val ALBUM_TIMEOUT_MS = 10_000L
             const val FEED_TIMEOUT_MS = 25_000L
+            private const val PERSONAL_ROWS = 3
             const val BILLBOARD_RESOLVE_TIMEOUT_MS = 45_000L
             const val BILLBOARD_TAB_LIMIT = 100
             const val PUSH_THROTTLE_MS = 500L

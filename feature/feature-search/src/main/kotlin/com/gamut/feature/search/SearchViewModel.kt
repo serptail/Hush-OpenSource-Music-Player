@@ -83,6 +83,43 @@ class SearchViewModel
                 }
             }.stateIn(viewModelScope, SharingStarted.Eagerly, DiscoverState())
 
+        private val _stationLoading = MutableStateFlow<String?>(null)
+
+        /** The id of the station card whose queue is being built, or null. */
+        val stationLoading: StateFlow<String?> = _stationLoading.asStateFlow()
+        private var stationJob: Job? = null
+
+        /**
+         * Builds the queue behind a station card and hands it to [onReady], first track first. [onFailed] runs when
+         * nothing could be built, which is a network failure far more often than an empty station.
+         */
+        fun playStation(
+            item: DiscoverItem,
+            onReady: (Track, List<Track>) -> Unit,
+            onFailed: () -> Unit,
+        ) {
+            if (_stationLoading.value == item.id) return
+            stationJob?.cancel()
+            stationJob =
+                viewModelScope.launch {
+                    _stationLoading.value = item.id
+                    try {
+                        val queue =
+                            try {
+                                discoverRepository.stationQueue(item)
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Exception) {
+                                emptyList()
+                            }
+                        val first = queue.firstOrNull()
+                        if (first != null) onReady(first, queue) else onFailed()
+                    } finally {
+                        if (_stationLoading.value == item.id) _stationLoading.value = null
+                    }
+                }
+        }
+
         private val artistSignal = MutableStateFlow<ArtistSignal?>(null)
 
         private val rawArtistHit =

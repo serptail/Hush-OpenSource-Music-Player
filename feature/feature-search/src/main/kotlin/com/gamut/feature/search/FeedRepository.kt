@@ -1,7 +1,5 @@
 package com.gamut.feature.search
 
-import com.gamut.core.database.FollowDao
-import com.gamut.core.database.RecentDao
 import com.gamut.core.model.Track
 import com.gamut.core.model.TrackSource
 import com.gamut.core.network.DeezerAlbumDto
@@ -11,7 +9,6 @@ import com.gamut.core.network.DeezerTrackDto
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
@@ -34,8 +31,7 @@ class FeedRepository
     @Inject
     constructor(
         private val api: DeezerChartsApi,
-        private val follows: FollowDao,
-        private val recents: RecentDao,
+        private val tasteRepo: TasteRepository,
     ) {
         private data class Genre(
             val id: Int,
@@ -59,7 +55,6 @@ class FeedRepository
 
         private val nonce = AtomicInteger(0)
 
-        @Volatile private var tasteCache: List<Taste>? = null
         private val deezerArtistIds = ConcurrentHashMap<String, Long>()
 
         @Volatile private var globalArtistIds: Set<Any?>? = null
@@ -72,7 +67,7 @@ class FeedRepository
 
         fun clearCache() {
             nonce.incrementAndGet()
-            tasteCache = null
+            tasteRepo.clear()
             globalArtistIds = null
             globalAlbumIds = null
         }
@@ -192,37 +187,8 @@ class FeedRepository
             )
         }
 
-        private suspend fun taste(): List<Taste> {
-            tasteCache?.let { return it }
-            val result =
-                try {
-                    val out = LinkedHashMap<String, Taste>()
-                    follows.all().sortedByDescending { it.followedAtEpochMs }.forEach { f ->
-                        val key = artistKey(f.name)
-                        if (key.isNotBlank()) out.putIfAbsent(key, Taste(f.name, followed = true))
-                    }
-                    val counts = LinkedHashMap<String, Int>()
-                    val names = HashMap<String, String>()
-                    recents.observeTracks(RECENT_SCAN).first().forEach { t ->
-                        val name = leadName(t.artist)
-                        val key = artistKey(name)
-                        if (key.isNotBlank()) {
-                            counts.merge(key, 1, Int::plus)
-                            names.putIfAbsent(key, name)
-                        }
-                    }
-                    counts.entries.sortedByDescending { it.value }.forEach { (key, _) ->
-                        out.putIfAbsent(key, Taste(names.getValue(key), followed = false))
-                    }
-                    out.values.take(MAX_TASTE)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    return emptyList()
-                }
-            tasteCache = result
-            return result
-        }
+        /** The listener's strongest artists, from the shared [TasteRepository]. */
+        private suspend fun taste(): List<Taste> = tasteRepo.artists().take(MAX_TASTE).map { Taste(it.name, it.followed) }
 
         private suspend fun deezerArtistId(
             name: String,
@@ -449,8 +415,6 @@ class FeedRepository
             return emptyList()
         }
 
-        private fun leadName(artist: String): String = artist.split(LEAD_SPLIT).first().trim()
-
         private fun trackTitle(t: DeezerTrackDto): String =
             listOfNotNull(
                 t.titleShort ?: t.title,
@@ -509,14 +473,11 @@ class FeedRepository
             private const val QUICK_PICK_COUNT = 8
             private const val RAILS_COUNT = 24
             private const val CAROUSEL_COUNT = 20
-            private const val RECENT_SCAN = 60
             private const val MAX_TASTE = 6
             private const val HEAD_TASTE = 1
             private const val MAX_SKIPS = 3
             private const val FIRST_TRY_MS = 9_000L
             private const val RETRY_MS = 6_000L
-
-            private val LEAD_SPLIT = Regex("(?i)\\s+(featuring|feat\\.?|ft\\.?|with|x|&|and)\\s+|,|/")
 
             private val GENRES =
                 listOf(

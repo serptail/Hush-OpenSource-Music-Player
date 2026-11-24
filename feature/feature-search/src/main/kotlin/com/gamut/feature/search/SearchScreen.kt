@@ -202,6 +202,8 @@ fun SearchScreen(
     val artistHit by viewModel.artistHit.collectAsStateWithLifecycle()
     val remoteSuggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     val preview by viewModel.preview.collectAsStateWithLifecycle()
+    val stationLoading by viewModel.stationLoading.collectAsStateWithLifecycle()
+    val notifier = com.gamut.core.designsystem.LocalNotifier.current
     androidx.compose.runtime.DisposableEffect(Unit) { onDispose { viewModel.stopPreview() } }
 
     val palette = LocalCoverPalette.current
@@ -215,6 +217,18 @@ fun SearchScreen(
         var chartExpanded by rememberSaveable { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
         val openArtistItem: (DiscoverItem) -> Unit = { item -> scope.launch { viewModel.artistIdFor(item)?.let(onArtistSelected) } }
+        val openStation: (DiscoverItem) -> Unit = { item ->
+            viewModel.playStation(
+                item,
+                onReady = { first, queue -> onTrackSelected(first, queue) },
+                onFailed = {
+                    notifier.show(
+                        "Couldn\u2019t start that station. Check your connection and try again.",
+                        com.gamut.core.designsystem.NoticeKind.Warning,
+                    )
+                },
+            )
+        }
         var filter by rememberSaveable { mutableIntStateOf(FILTER_ALL) }
         val searchFocus = remember { FocusRequester() }
         var actionsTrack by remember { mutableStateOf<Track?>(null) }
@@ -452,6 +466,8 @@ fun SearchScreen(
                                     onRetry = { viewModel.refreshDiscover() },
                                     onMoreClick = { actionsTrack = it },
                                     onArtistItemClick = openArtistItem,
+                                    onStationClick = openStation,
+                                    stationLoadingId = stationLoading,
                                 )
                                 discoverFeedItems(
                                     state = discover,
@@ -573,6 +589,8 @@ fun SearchScreen(
                                     onRetry = { viewModel.refreshDiscover() },
                                     onArtistItemClick = openArtistItem,
                                     onLoadMore = { viewModel.loadMoreFeed() },
+                                    onStationClick = openStation,
+                                    stationLoadingId = stationLoading,
                                 )
                             } else {
                                 val loadingEmpty = state.tracks.isEmpty() && (state.isLoading || !settled)

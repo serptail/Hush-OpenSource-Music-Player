@@ -139,6 +139,18 @@ data class DeezerArtistDto(
 )
 
 @Serializable
+data class DeezerPlaylistResponse(
+    val data: List<DeezerPlaylistDto> = emptyList(),
+)
+
+@Serializable
+data class DeezerPlaylistDto(
+    val id: Long,
+    val title: String? = null,
+    @SerialName("nb_tracks") val trackCount: Int = 0,
+)
+
+@Serializable
 data class DeezerTrackResponse(
     val data: List<DeezerTrackDto> = emptyList(),
 )

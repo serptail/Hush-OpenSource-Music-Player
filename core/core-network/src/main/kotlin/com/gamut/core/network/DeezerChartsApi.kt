@@ -59,6 +59,24 @@ interface DeezerChartsApi {
         @Query("limit") limit: Int,
     ): DeezerArtistSearchResponse
 
+    @GET("search/playlist")
+    suspend fun searchPlaylists(
+        @Query("q") query: String,
+        @Query("limit") limit: Int,
+    ): DeezerPlaylistResponse
+
+    @GET("playlist/{id}/tracks")
+    suspend fun playlistTracks(
+        @Path("id") id: Long,
+        @Query("limit") limit: Int,
+    ): DeezerTrackResponse
+
+    @GET("artist/{id}/albums")
+    suspend fun artistAlbums(
+        @Path("id") id: Long,
+        @Query("limit") limit: Int,
+    ): DeezerAlbumResponse
+
     @GET("album/{id}/tracks")
     suspend fun albumTracks(
         @Path("id") id: Long,

@@ -1,6 +1,7 @@
 package com.gamut.core.database
 
 import androidx.room.Dao
+import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -185,10 +186,19 @@ abstract class FavoriteDao {
     }
 }
 
+/** A recently played track with when it was played, for callers that weigh plays by age. */
+data class RecentPlay(
+    @Embedded val track: TrackEntity,
+    val playedAtEpochMs: Long,
+)
+
 @Dao
 interface RecentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun put(entry: RecentEntity)
+
+    @Query("SELECT t.*, r.playedAtEpochMs AS playedAtEpochMs FROM tracks t INNER JOIN recently_played r ON t.isrc = r.isrc ORDER BY r.playedAtEpochMs DESC LIMIT :limit")
+    suspend fun plays(limit: Int): List<RecentPlay>
 
     @Query("SELECT t.* FROM tracks t INNER JOIN recently_played r ON t.isrc = r.isrc ORDER BY r.playedAtEpochMs DESC LIMIT :limit")
     fun observeTracks(limit: Int): Flow<List<TrackEntity>>

@@ -27,4 +27,5 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+    testImplementation("junit:junit:4.13.2")
 }

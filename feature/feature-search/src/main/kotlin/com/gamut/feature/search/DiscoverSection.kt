@@ -1,6 +1,5 @@
 package com.gamut.feature.search
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,8 +18,6 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -29,12 +26,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -60,7 +55,6 @@ import com.gamut.core.model.Track
 
 private val NUMBERED_TABS = setOf("Trending", "Billboard")
 private const val COLLAPSED_ROWS = 10
-private const val FEATURED_COUNT = 5
 
 internal fun LazyListScope.discoverFeaturedItems(
     state: DiscoverState,
@@ -71,6 +65,8 @@ internal fun LazyListScope.discoverFeaturedItems(
     onRetry: () -> Unit = {},
     onMoreClick: (Track) -> Unit = {},
     onArtistItemClick: (DiscoverItem) -> Unit = {},
+    onStationClick: (DiscoverItem) -> Unit = {},
+    stationLoadingId: String? = null,
 ) {
     if (state.tabs.isEmpty()) {
         if (state.error != null && !state.isLoading) {
@@ -95,34 +91,19 @@ internal fun LazyListScope.discoverFeaturedItems(
                 }
             }
         } else {
-            item(key = "discover-skeleton-hero") {
-                Box(
-                    Modifier
-                        .padding(horizontal = 24.dp, vertical = 8.dp)
-                        .fillMaxWidth()
-                        .aspectRatio(1.35f)
-                        .clip(CardShapeLarge)
-                        .background(ink(0.06f)),
-                )
-            }
+            item(key = "discover-skeleton-hero") { TopPicksSkeleton() }
             items(6, key = { "discover-skeleton-$it" }) { TrackRowSkeleton(Modifier.padding(horizontal = 24.dp)) }
         }
         return
     }
 
-    val trending = state.tabs.first()
-    val featured = trending.items.filter { it.track != null }.take(FEATURED_COUNT)
-
-    if (featured.isNotEmpty()) {
-        item(key = "hero") {
-            val queue = remember(trending.items) { trending.items.mapNotNull { it.track } }
-            FeaturedPager(
-                items = featured,
-                nowPlayingIsrc = nowPlayingIsrc,
-                onPlay = { picked -> picked.track?.let { onTrackClick(it, queue) } },
-            )
-        }
+    // Top to bottom: the carousel, stations made for the listener, what they played, the shelves and moods,
+    // then the artists and albums of the week.
+    if (state.personalLoading && state.feed.none { it.kind == FeedKind.TOP_PICKS }) {
+        item(key = "top-picks-skeleton") { TopPicksSkeleton() }
     }
+    discoverHero(state, nowPlayingIsrc, onStationClick, onAlbumClick, onTrackClick)
+    discoverMadeForYou(state, stationLoadingId, onStationClick)
 
     feedSectionItems(
         state.feed.filter { it.slot == FeedSlot.TOP },
@@ -131,6 +112,18 @@ internal fun LazyListScope.discoverFeaturedItems(
         nowPlayingIsrc,
         onArtistItemClick,
         onAlbumClick,
+        onStationClick,
+        stationLoadingId,
+    )
+    feedSectionItems(
+        state.feed.filter { it.slot == FeedSlot.MIDDLE },
+        onTrackClick,
+        onMoreClick,
+        nowPlayingIsrc,
+        onArtistItemClick,
+        onAlbumClick,
+        onStationClick,
+        stationLoadingId,
     )
 
     if (state.artists.isNotEmpty()) {
@@ -156,17 +149,6 @@ internal fun LazyListScope.discoverFeaturedItems(
             }
         }
     }
-
-    feedSectionItems(
-        state.feed.filter {
-            it.slot == FeedSlot.MIDDLE
-        },
-        onTrackClick,
-        onMoreClick,
-        nowPlayingIsrc,
-        onArtistItemClick,
-        onAlbumClick,
-    )
 }
 
 internal fun LazyListScope.discoverFeedItems(
@@ -272,8 +254,21 @@ internal fun LazyListScope.discoverItems(
     onRetry: () -> Unit = {},
     onArtistItemClick: (DiscoverItem) -> Unit = {},
     onLoadMore: () -> Unit = {},
+    onStationClick: (DiscoverItem) -> Unit = {},
+    stationLoadingId: String? = null,
 ) {
-    discoverFeaturedItems(state, onTrackClick, nowPlayingIsrc, onArtistClick, onAlbumClick, onRetry, onMoreClick, onArtistItemClick)
+    discoverFeaturedItems(
+        state,
+        onTrackClick,
+        nowPlayingIsrc,
+        onArtistClick,
+        onAlbumClick,
+        onRetry,
+        onMoreClick,
+        onArtistItemClick,
+        onStationClick,
+        stationLoadingId,
+    )
     discoverChartItems(
         state,
         selectedTab,
@@ -288,68 +283,15 @@ internal fun LazyListScope.discoverItems(
     discoverFeedItems(state, onTrackClick, onMoreClick, nowPlayingIsrc, onArtistItemClick, onAlbumClick, onLoadMore)
 }
 
-/** The week's top songs as a swipeable shelf: one large card at a time with the next one peeking in. */
 @Composable
-private fun FeaturedPager(
-    items: List<DiscoverItem>,
-    nowPlayingIsrc: String?,
-    onPlay: (DiscoverItem) -> Unit,
-) {
-    val pager = rememberPagerState(pageCount = { items.size })
-    Column(Modifier.fillMaxWidth()) {
-        HorizontalPager(
-            state = pager,
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp),
-            pageSpacing = 12.dp,
-            key = { items[it].id },
-            modifier = Modifier.fillMaxWidth(),
-        ) { page ->
-            val item = items[page]
-            HeroCard(
-                item = item,
-                isPlaying = item.track?.isrc == nowPlayingIsrc,
-                onClick = { onPlay(item) },
-                label = "#${page + 1} Trending",
-            )
-        }
-        if (items.size > 1) PagerDots(count = items.size, current = pager.currentPage)
-    }
-}
-
-@Composable
-private fun PagerDots(
-    count: Int,
-    current: Int,
-) {
-    Row(
-        Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 2.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        repeat(count) { index ->
-            val selected = index == current
-            val width by animateDpAsState(if (selected) 18.dp else 6.dp, label = "featured-dot")
-            Box(
-                Modifier
-                    .padding(horizontal = 3.dp)
-                    .height(6.dp)
-                    .width(width)
-                    .clip(CircleShape)
-                    .background(if (selected) TextPrimary else ink(0.2f)),
-            )
-        }
-    }
-}
-
-@Composable
-private fun DiscoverSectionTitle(
+internal fun DiscoverSectionTitle(
     text: String,
     subtitle: String? = null,
 ) {
-    Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 28.dp, bottom = 12.dp)) {
+    Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 10.dp)) {
         Text(
             text,
-            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+            style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
             color = TextPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -380,13 +322,7 @@ private fun HeroCard(
         modifier
             .fillMaxWidth()
             .aspectRatio(aspect)
-            .shadow(
-                18.dp,
-                CardShapeLarge,
-                clip = false,
-                ambientColor = Color.Black.copy(alpha = 0.25f),
-                spotColor = Color.Black.copy(alpha = 0.35f),
-            ).pressScale(onClick = onClick, scaleDown = 0.98f)
+            .pressScale(onClick = onClick, scaleDown = 0.98f)
             .clip(CardShapeLarge)
             .thumbnailBorder(CardShapeLarge),
     ) {
@@ -454,13 +390,7 @@ private fun ArtistBubble(
             modifier =
                 Modifier
                     .size(88.dp)
-                    .shadow(
-                        8.dp,
-                        CircleShape,
-                        clip = false,
-                        ambientColor = Color.Black.copy(alpha = 0.22f),
-                        spotColor = Color.Black.copy(alpha = 0.3f),
-                    ).clip(CircleShape)
+                    .clip(CircleShape)
                     .thumbnailBorder(CircleShape),
             contentDescription = item.title,
             fallback = { ArtworkFallbackIcon() },
@@ -489,14 +419,8 @@ private fun AlbumCard(
             modifier =
                 Modifier
                     .size(148.dp)
-                    .shadow(
-                        10.dp,
-                        RoundedCornerShape(14.dp),
-                        clip = false,
-                        ambientColor = Color.Black.copy(alpha = 0.22f),
-                        spotColor = Color.Black.copy(alpha = 0.3f),
-                    ).clip(RoundedCornerShape(14.dp))
-                    .thumbnailBorder(RoundedCornerShape(14.dp)),
+                    .clip(RoundedCornerShape(8.dp))
+                    .thumbnailBorder(RoundedCornerShape(8.dp)),
             contentDescription = item.title,
             fallback = { ArtworkFallbackIcon() },
         )
@@ -570,13 +494,7 @@ private fun ChartRow(
             modifier =
                 Modifier
                     .size(52.dp)
-                    .shadow(
-                        6.dp,
-                        ThumbShape,
-                        clip = false,
-                        ambientColor = Color.Black.copy(alpha = 0.20f),
-                        spotColor = Color.Black.copy(alpha = 0.30f),
-                    ).clip(ThumbShape)
+                    .clip(ThumbShape)
                     .thumbnailBorder(ThumbShape),
             fallback = { ArtworkFallbackIcon() },
         )
@@ -634,9 +552,12 @@ private fun LazyListScope.feedSectionItems(
     nowPlayingIsrc: String?,
     onArtistItemClick: (DiscoverItem) -> Unit,
     onAlbumClick: (DiscoverItem) -> Unit,
+    onStationClick: (DiscoverItem) -> Unit = {},
+    stationLoadingId: String? = null,
 ) {
     sections.forEach { section ->
-        if (section.items.isEmpty()) return@forEach
+        // The station rows are drawn by discoverMadeForYou, beside the hero they belong with.
+        if (section.items.isEmpty() || section.kind == FeedKind.TOP_PICKS) return@forEach
         val queue = section.items.mapNotNull { it.track }
         val play: (DiscoverItem) -> Unit = { item -> item.track?.let { onTrackClick(it, queue) } }
         val playing: (DiscoverItem) -> Boolean = { item -> nowPlayingIsrc != null && item.track?.isrc == nowPlayingIsrc }
@@ -660,15 +581,19 @@ private fun LazyListScope.feedSectionItems(
         item(key = "feed-${section.id}-title") { DiscoverSectionTitle(section.title, section.subtitle) }
         item(key = "feed-${section.id}-body") {
             when (section.kind) {
-                FeedKind.QUICK_PICKS -> {
-                    QuickPicksGrid(section.items, playing, play)
+                FeedKind.TOP_PICKS -> {
+                    Unit
+                }
+
+                FeedKind.MOODS -> {
+                    MoodGrid(section.items, stationLoadingId, onStationClick)
                 }
 
                 FeedKind.TRACK_RAILS -> {
                     TrackRails(section.items, playing, play, onMoreClick)
                 }
 
-                FeedKind.TRACK_CAROUSEL -> {
+                FeedKind.TRACK_CAROUSEL, FeedKind.QUICK_PICKS -> {
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 24.dp, vertical = 6.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -700,63 +625,6 @@ private fun LazyListScope.feedSectionItems(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun QuickPicksGrid(
-    items: List<DiscoverItem>,
-    isPlaying: (DiscoverItem) -> Boolean,
-    onPlay: (DiscoverItem) -> Unit,
-) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items.chunked(2).forEach { pair ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                pair.forEach { item ->
-                    QuickPickTile(item, isPlaying(item), { onPlay(item) }, Modifier.weight(1f))
-                }
-                if (pair.size == 1) Spacer(Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun QuickPickTile(
-    item: DiscoverItem,
-    isPlaying: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val accent = MaterialTheme.colorScheme.primary
-    Row(
-        modifier
-            .height(56.dp)
-            .pressScale(onClick = onClick, scaleDown = 0.97f)
-            .clip(RoundedCornerShape(12.dp))
-            .background(ink(0.07f)),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ArtImage(
-            url = remember(item.imageUrl) { squareArtUrl(item.imageUrl, 200) },
-            modifier = Modifier.size(56.dp),
-            contentDescription = item.title,
-            fallback = { ArtworkFallbackIcon() },
-        )
-        val explicit = item.track?.isExplicit == true
-        if (explicit) {
-            Spacer(Modifier.width(10.dp))
-            ExplicitMark(true, TextSecondary, size = 12.dp)
-        }
-        Text(
-            item.title,
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (isPlaying) FontWeight.SemiBold else FontWeight.Medium),
-            color = if (isPlaying) accent else TextPrimary,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(start = if (explicit) 0.dp else 10.dp, end = 10.dp),
-        )
-        if (isPlaying) NowPlayingBars(color = accent, modifier = Modifier.padding(end = 10.dp))
     }
 }
 
