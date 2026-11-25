@@ -92,5 +92,13 @@ object TablerIcons {
     val Search: ImageVector by lazy { icon("Search", "M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0", "M21 21l-6 -6") }
     val Refresh: ImageVector by lazy { icon("Refresh", "M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4", "M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4") }
     val ArrowRight: ImageVector by lazy { icon("ArrowRight", "M5 12l14 0", "M13 18l6 -6", "M13 6l6 6") }
+    val RewindForward5: ImageVector by lazy { icon("RewindForward5", "M9 18a6 6 0 1 1 0 -12h11", "M13 20h2a1 1 0 0 0 1 -1v-1a1 1 0 0 0 -1 -1h-2v-3h3", "M17 9l3 -3l-3 -3") }
+    val RewindForward10: ImageVector by lazy { icon("RewindForward10", "M17 9l3 -3l-3 -3", "M8 17.918a5.997 5.997 0 0 1 -5 -5.918a6 6 0 0 1 6 -6h11", "M12 14v6", "M15 15.5v3a1.5 1.5 0 0 0 3 0v-3a1.5 1.5 0 0 0 -3 0") }
+    val RewindForward15: ImageVector by lazy { icon("RewindForward15", "M17 9l3 -3l-3 -3", "M9 18a6 6 0 1 1 0 -12h11", "M16 20h2a1 1 0 0 0 1 -1v-1a1 1 0 0 0 -1 -1h-2v-3h3", "M13 14v6") }
+    val RewindForward20: ImageVector by lazy { icon("RewindForward20", "M5.007 16.478a6 6 0 0 1 3.993 -10.478h11", "M15 15.5v3a1.5 1.5 0 0 0 3 0v-3a1.5 1.5 0 0 0 -3 0", "M17 9l3 -3l-3 -3", "M9 14h2a1 1 0 0 1 1 1v1a1 1 0 0 1 -1 1h-1a1 1 0 0 0 -1 1v1a1 1 0 0 0 1 1h2") }
+    val RewindBackward5: ImageVector by lazy { icon("RewindBackward5", "M15 18a6 6 0 1 0 0 -12h-11", "M7 9l-3 -3l3 -3", "M8 20h2a1 1 0 0 0 1 -1v-1a1 1 0 0 0 -1 -1h-2v-3h3") }
+    val RewindBackward10: ImageVector by lazy { icon("RewindBackward10", "M7 9l-3 -3l3 -3", "M15.997 17.918a6.002 6.002 0 0 0 -.997 -11.918h-11", "M6 14v6", "M9 15.5v3a1.5 1.5 0 0 0 3 0v-3a1.5 1.5 0 0 0 -3 0") }
+    val RewindBackward15: ImageVector by lazy { icon("RewindBackward15", "M8 20h2a1 1 0 0 0 1 -1v-1a1 1 0 0 0 -1 -1h-2v-3h3", "M15 18a6 6 0 1 0 0 -12h-11", "M5 14v6", "M7 9l-3 -3l3 -3") }
+    val RewindBackward20: ImageVector by lazy { icon("RewindBackward20", "M19.007 16.466a6 6 0 0 0 -4.007 -10.466h-11", "M7 9l-3 -3l3 -3", "M12 15.5v3a1.5 1.5 0 0 0 3 0v-3a1.5 1.5 0 0 0 -3 0", "M6 14h2a1 1 0 0 1 1 1v1a1 1 0 0 1 -1 1h-1a1 1 0 0 0 -1 1v1a1 1 0 0 0 1 1h2") }
     val HeartFilled: ImageVector by lazy { icon("HeartFilled", "M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572Z", filled = true) }
 }

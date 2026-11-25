@@ -39,6 +39,12 @@ ICONS = {
     "History": "history", "BrandShazam": "brand-shazam", "Download": "download", "PackageImport": "package-import", "Archive": "archive",
     # Search screen: the magnifier, the refresh arrow and the arrow that opens a result.
     "Search": "search", "Refresh": "refresh", "ArrowRight": "arrow-right",
+    # Double-tap seek confirmation: the glyph carries the number, so no text is needed. Tabler stops at 20 per
+    # direction (there is no 25), so a longer streak wraps back to 5.
+    "RewindForward5": "rewind-forward-5", "RewindForward10": "rewind-forward-10",
+    "RewindForward15": "rewind-forward-15", "RewindForward20": "rewind-forward-20",
+    "RewindBackward5": "rewind-backward-5", "RewindBackward10": "rewind-backward-10",
+    "RewindBackward15": "rewind-backward-15", "RewindBackward20": "rewind-backward-20",
 }
 # Kotlin name -> Tabler file name, drawn stroke + fill
 FILLED = {"HeartFilled": "heart"}

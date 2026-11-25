@@ -28,12 +28,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -57,16 +60,15 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -80,10 +82,10 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.gamut.core.designsystem.TablerIcons
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -97,7 +99,7 @@ import kotlin.math.roundToInt
 internal const val DoubleTapSeekMs = 5_000L
 
 /** After a double tap, further single taps keep skipping for this long (like a video player). */
-private const val ChainWindowMs = 650L
+internal const val ChainWindowMs = 650L
 
 private val SeekZoneInset = 20.dp
 
@@ -202,45 +204,71 @@ internal fun Modifier.doubleTapSeekGesture(
         }
     }
 
-/** The round "« 5 seconds »" confirmation. Shared by the live overlay and the tutorial so they look identical. */
-@Composable
-private fun SeekBubble(
+/** Tabler ships the rewind glyphs in 5 s steps up to 20; the number is part of the icon, so a longer streak wraps. */
+private const val SeekIconStepSeconds = 5
+
+private val SeekIndicatorSize = 96.dp
+
+private fun seekIcon(
     side: Int,
-    label: String,
+    seconds: Int,
+): ImageVector {
+    val index = (seconds.coerceAtLeast(SeekIconStepSeconds) / SeekIconStepSeconds - 1).mod(4)
+    return if (side < 0) {
+        when (index) {
+            0 -> TablerIcons.RewindBackward5
+            1 -> TablerIcons.RewindBackward10
+            2 -> TablerIcons.RewindBackward15
+            else -> TablerIcons.RewindBackward20
+        }
+    } else {
+        when (index) {
+            0 -> TablerIcons.RewindForward5
+            1 -> TablerIcons.RewindForward10
+            2 -> TablerIcons.RewindForward15
+            else -> TablerIcons.RewindForward20
+        }
+    }
+}
+
+/**
+ * The skip confirmation: one white Tabler rewind glyph on a soft radial scrim. No text and no hard-edged bubble, so
+ * nothing to clip or wrap, and the scrim fades out to nothing so the glyph still reads over bright artwork. Shared by
+ * the live overlay and the tutorial so they look identical.
+ */
+@Composable
+private fun SeekIndicator(
+    side: Int,
+    seconds: Int,
     wave: Float,
     modifier: Modifier = Modifier,
 ) {
     Box(
         modifier
-            .size(92.dp)
-            .clip(RoundedCornerShape(50))
-            .background(Color.Black.copy(alpha = 0.5f))
-            .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(50)),
+            .size(SeekIndicatorSize)
+            .background(
+                Brush.radialGradient(
+                    0f to Color.Black.copy(alpha = 0.28f),
+                    0.55f to Color.Black.copy(alpha = 0.14f),
+                    1f to Color.Transparent,
+                ),
+            ),
         contentAlignment = Alignment.Center,
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Row {
-                repeat(3) { i ->
-                    val order = if (side > 0) i else 2 - i
-                    val lit = (wave * 3f - order).coerceIn(0f, 1f)
-                    Icon(
-                        TablerIcons.ChevronRight,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.35f + 0.65f * lit),
-                        modifier =
-                            Modifier
-                                .size(17.dp)
-                                .graphicsLayer { rotationZ = if (side < 0) 180f else 0f },
-                    )
-                }
-            }
-            Spacer(Modifier.height(2.dp))
-            Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
-        }
+        Icon(
+            seekIcon(side, seconds),
+            contentDescription = if (side < 0) "Back $seconds seconds" else "Forward $seconds seconds",
+            tint = Color.White,
+            modifier =
+                Modifier
+                    .size(40.dp)
+                    // Each skip nudges the glyph the way the playhead moves.
+                    .graphicsLayer { translationX = -side * 10.dp.toPx() * (1f - wave) },
+        )
     }
 }
 
-/** The bubble beside the cover that confirms a double-tap skip. */
+/** Confirms a double-tap skip where the finger landed. */
 @Composable
 internal fun DoubleTapSeekOverlay(
     hud: VolumeHud,
@@ -264,7 +292,7 @@ internal fun DoubleTapSeekOverlay(
     Box(modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
         val zone = hud.anchor
         if (visible.value > 0.01f && zone.width > 0f) {
-            val half = with(density) { 46.dp.toPx() }
+            val half = with(density) { SeekIndicatorSize.toPx() / 2f }
             val cx = zone.left + zone.width * (if (seek.side < 0) 0.25f else 0.75f)
             Box(
                 Modifier
@@ -276,7 +304,7 @@ internal fun DoubleTapSeekOverlay(
                         scaleY = s
                     },
             ) {
-                SeekBubble(seek.side, "${seek.seconds} seconds", wave.value)
+                SeekIndicator(seek.side, seek.seconds, wave.value)
             }
         }
     }
@@ -327,12 +355,9 @@ private fun DrawScope.touchDot(
     press: Float,
 ) {
     if (alpha <= 0.01f) return
-    val r = 26.dp.toPx() * (1f - 0.16f * press)
-    val glow = r * 2.4f
-    drawCircle(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.30f * alpha), Color.Transparent), center, glow), glow, center)
-    drawCircle(Color.Black.copy(alpha = 0.22f * alpha), r + 1.dp.toPx(), center + Offset(0f, 3.dp.toPx()))
-    drawCircle(Color.White.copy(alpha = 0.93f * alpha), r, center)
-    drawCircle(Color.Black.copy(alpha = 0.07f * alpha), r * 0.6f, center, style = Stroke(1.dp.toPx()))
+    // A fingertip, nothing more: a solid core inside a faint halo, both easing in a little when pressed.
+    drawCircle(Color.White.copy(alpha = 0.18f * alpha), 26.dp.toPx() * (1f - 0.12f * press), center)
+    drawCircle(Color.White.copy(alpha = 0.92f * alpha), 14.dp.toPx() * (1f - 0.22f * press), center)
 }
 
 private fun DrawScope.tapRipple(
@@ -361,23 +386,36 @@ private fun TutorialCard(
     Column(
         modifier
             .navigationBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 28.dp)
+            .padding(horizontal = 20.dp, vertical = 20.dp)
+            .widthIn(max = 420.dp)
+            .fillMaxWidth()
             .clip(shape)
-            .background(Color.White.copy(alpha = 0.13f))
-            .border(1.dp, Color.White.copy(alpha = 0.2f), shape)
-            .padding(horizontal = 26.dp, vertical = 20.dp),
+            // Opaque: the player behind (lyrics, controls) must never show through the copy.
+            .background(Color(0xFF1B1B1E))
+            .border(1.dp, Color.White.copy(alpha = 0.08f), shape)
+            .padding(horizontal = 24.dp, vertical = 22.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Crossfade(targetState = step, animationSpec = tween(300), label = "tutorial-copy") { s ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(steps[s].first, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    steps[s].second,
-                    color = Color.White.copy(alpha = 0.72f),
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                )
+        // A fixed-height slot so the card does not change size between steps, and balanced line breaks so a
+        // description never ends in a single orphaned word.
+        Box(Modifier.fillMaxWidth().heightIn(min = 76.dp), contentAlignment = Alignment.TopCenter) {
+            Crossfade(targetState = step, animationSpec = tween(300), label = "tutorial-copy") { s ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        steps[s].first,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        steps[s].second,
+                        color = Color.White.copy(alpha = 0.66f),
+                        style = MaterialTheme.typography.bodyMedium.copy(lineBreak = LineBreak.Heading),
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
         }
         Spacer(Modifier.height(14.dp))
@@ -389,11 +427,11 @@ private fun TutorialCard(
                         .width(6.dp + 14.dp * w)
                         .height(6.dp)
                         .clip(RoundedCornerShape(50))
-                        .background(Color.White.copy(alpha = 0.35f + 0.55f * w)),
+                        .background(Color.White.copy(alpha = 0.30f + 0.60f * w)),
                 )
             }
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(18.dp))
         Text(
             action,
             color = Color.Black.copy(alpha = 0.85f),
@@ -404,7 +442,7 @@ private fun TutorialCard(
                     .clip(RoundedCornerShape(50))
                     .background(Color.White)
                     .clickable(onClick = onAction)
-                    .padding(horizontal = 30.dp, vertical = 11.dp),
+                    .padding(horizontal = 32.dp, vertical = 11.dp),
         )
     }
 }
@@ -426,16 +464,10 @@ private fun TouchTutorial(
     val press = remember { Animatable(0f) }
     val ring = remember { Animatable(1f) }
     val bubbleVis = remember { Animatable(0f) }
+    val bubbleWave = remember { Animatable(1f) }
     var bubbleSide by remember { mutableIntStateOf(1) }
     var step by remember { mutableIntStateOf(0) }
     var origin by remember { mutableStateOf(Offset.Zero) }
-    val pulse by rememberInfiniteTransition(label = "hint").animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "hint-pulse",
-    )
-
     // Trying the real gesture is the best way to dismiss the guide.
     LaunchedEffect(hud.holding) { if (hud.holding) done() }
     DisposableEffect(Unit) { onDispose { preview(null) } }
@@ -488,11 +520,16 @@ private fun TouchTutorial(
                     press.animateTo(0f, tween(120))
                     delay(90)
                 }
+                // The finger lifts and the skip confirmation takes its place, exactly as it does for real.
+                dotAlpha.animateTo(0f, tween(140))
                 bubbleSide = side
+                launch {
+                    bubbleWave.snapTo(0f)
+                    bubbleWave.animateTo(1f, tween(420, easing = LinearOutSlowInEasing))
+                }
                 bubbleVis.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
-                delay(900)
+                delay(850)
                 bubbleVis.animateTo(0f, tween(220))
-                dotAlpha.animateTo(0f, tween(200))
                 delay(280)
             }
             delay(500)
@@ -508,36 +545,22 @@ private fun TouchTutorial(
         Canvas(
             Modifier
                 .fillMaxSize()
-                .graphicsLayer {
-                    compositingStrategy = CompositingStrategy.Offscreen
-                    alpha = reveal.value
-                },
+                .graphicsLayer { alpha = reveal.value },
         ) {
-            drawRect(Color.Black.copy(alpha = 0.68f))
+            drawRect(Color.Black.copy(alpha = 0.6f))
             val zone = hud.anchor
             if (zone.width <= 0f) return@Canvas
-            val hole =
-                Rect(zone.left - origin.x, zone.top - origin.y, zone.right - origin.x, zone.bottom - origin.y).inflate(6.dp.toPx())
-            val corner = CornerRadius(26.dp.toPx())
-            drawRoundRect(Color.Black, hole.topLeft, hole.size, corner, blendMode = BlendMode.Clear)
-            drawRoundRect(Color.White.copy(alpha = 0.2f + 0.14f * pulse), hole.topLeft, hole.size, corner, style = Stroke(1.5.dp.toPx()))
 
             val cx = zone.center.x - origin.x
             val cy = zone.center.y - origin.y
             val a = dotAlpha.value
-            if (step == 0) {
-                // Faint chevrons either side hint at the direction.
-                val far = zone.width * 0.27f + 58.dp.toPx()
-                val tint = Color.White.copy(alpha = (0.25f + 0.4f * pulse) * reveal.value)
-                chevron(Offset(cx - far, cy), -1, 9.dp.toPx(), tint, 2.5.dp.toPx())
-                chevron(Offset(cx + far, cy), 1, 9.dp.toPx(), tint, 2.5.dp.toPx())
-            }
             if (a > 0.01f && abs(dotX.value - trailX.value) > 1f) {
+                // A thin line behind the fingertip shows the direction of the swipe.
                 drawLine(
-                    Color.White.copy(alpha = 0.15f * a),
+                    Color.White.copy(alpha = 0.35f * a),
                     Offset(cx + trailX.value, cy),
                     Offset(cx + dotX.value, cy),
-                    strokeWidth = 46.dp.toPx(),
+                    strokeWidth = 4.dp.toPx(),
                     cap = StrokeCap.Round,
                 )
             }
@@ -548,12 +571,11 @@ private fun TouchTutorial(
 
         val zone = hud.anchor
         if (zone.width > 0f && bubbleVis.value > 0.01f) {
-            val half = with(density) { 46.dp.toPx() }
+            val half = with(density) { SeekIndicatorSize.toPx() / 2f }
             val bx = zone.left + zone.width * (if (bubbleSide < 0) 0.25f else 0.75f)
-            val lift = with(density) { 62.dp.toPx() }
             Box(
                 Modifier
-                    .offset { IntOffset((bx - origin.x - half).roundToInt(), (zone.center.y - origin.y - half - lift).roundToInt()) }
+                    .offset { IntOffset((bx - origin.x - half).roundToInt(), (zone.center.y - origin.y - half).roundToInt()) }
                     .graphicsLayer {
                         alpha = bubbleVis.value.coerceIn(0f, 1f)
                         val s = 0.78f + 0.22f * bubbleVis.value
@@ -561,7 +583,7 @@ private fun TouchTutorial(
                         scaleY = s
                     },
             ) {
-                SeekBubble(bubbleSide, "5 seconds", pulse)
+                SeekIndicator(bubbleSide, DoubleTapSeekMs.toInt() / 1000, bubbleWave.value)
             }
         }
 
@@ -569,8 +591,8 @@ private fun TouchTutorial(
             step = step,
             steps =
                 listOf(
-                    "Swipe for volume" to "Slide your finger left or right across the cover",
-                    "Double-tap to skip" to "Tap the left or right side of the cover twice to jump 5 seconds",
+                    "Swipe for volume" to "Slide your finger across the cover to change the volume",
+                    "Double-tap to skip" to "Tap either side of the cover twice to jump 5 seconds",
                 ),
             action = "Got it",
             onAction = { done() },

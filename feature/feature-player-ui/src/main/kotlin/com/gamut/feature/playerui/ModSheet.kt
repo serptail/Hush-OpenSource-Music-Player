@@ -3,7 +3,6 @@ package com.gamut.feature.playerui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,9 +37,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -97,11 +100,13 @@ internal fun ModSheet(
     accent: Color,
     onDismiss: () -> Unit,
 ) {
-    val tone = readableAccent(accent)
     val state by ModController.state.collectAsState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     GamutSheet(onDismiss = onDismiss, sheetState = sheetState) {
+        // Resolved here, inside the sheet's own CoverTheme. Outside it, ink() is the player's theme rather than the
+        // sheet's, so the fallback could come out the same colour as the sheet it is meant to stand out from.
+        val tone = readableAccent(accent)
         Column(
             Modifier
                 .softResize()
@@ -184,15 +189,11 @@ private fun PresetCell(
     modifier: Modifier,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(18.dp)
-    // Selected state is drawn with the (already contrast-checked) accent PLUS an ink fallback, so the cell never
-    // collapses into the sheet colour whatever the cover palette is.
-    val cellBg by animateColorAsState(
-        if (selected) ink(0.14f) else ink(0.06f),
-        tween(GamutMotion.CONTENT_MS),
-        label = "mod-cell-bg",
-    )
-    val cellEdge by animateColorAsState(if (selected) accent else ink(0.07f), tween(GamutMotion.CONTENT_MS), label = "mod-cell-edge")
+    val shape = RoundedCornerShape(CellCorner)
+    val inkColor = ink()
+    // 0 = resting, 1 = selected. The fill and the outline are both drawn from this one value in a single pass, so
+    // they always change together and always scale with the cell when it bounces.
+    val sel by animateFloatAsState(if (selected) 1f else 0f, tween(GamutMotion.CONTENT_MS), label = "mod-cell-sel")
     val chipBg by animateColorAsState(
         if (selected) accent.copy(alpha = 0.28f) else ink(0.07f),
         tween(GamutMotion.CONTENT_MS),
@@ -201,12 +202,25 @@ private fun PresetCell(
     Column(
         modifier
             .height(76.dp)
-            .clip(shape)
-            .background(cellBg)
-            .background(if (selected) accent.copy(alpha = 0.12f) else Color.Transparent)
-            .border(BorderStroke(if (selected) 2.dp else 1.dp, cellEdge), shape)
-            .bounceTap(onClick = onClick)
-            .padding(horizontal = 6.dp),
+            .focusRing(shape)
+            .bounceClickable(scaleDown = 0.95f, haptics = true, onClick = onClick)
+            .drawBehind {
+                val t = sel
+                val radius = CellCorner.toPx()
+                drawRoundRect(inkColor.copy(alpha = 0.06f + 0.08f * t), cornerRadius = CornerRadius(radius))
+                if (t > 0f) drawRoundRect(accent.copy(alpha = 0.12f * t), cornerRadius = CornerRadius(radius))
+                // The outline is the theme ink, which is by definition readable on the sheet, and is inset by half
+                // its width so none of the stroke falls outside the cell.
+                val stroke = (1.dp + 1.dp * t).toPx()
+                val half = stroke / 2f
+                drawRoundRect(
+                    color = inkColor.copy(alpha = 0.07f + 0.83f * t),
+                    topLeft = Offset(half, half),
+                    size = Size(size.width - stroke, size.height - stroke),
+                    cornerRadius = CornerRadius(radius - half),
+                    style = Stroke(stroke),
+                )
+            }.padding(horizontal = 6.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -230,6 +244,8 @@ private fun PresetCell(
         )
     }
 }
+
+private val CellCorner = 18.dp
 
 private fun presetHint(preset: ModPreset): String =
     when (preset) {

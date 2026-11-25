@@ -350,7 +350,10 @@ internal fun ArtworkWithRing(
                                         var skips = 0
                                         while (true) {
                                             val again =
-                                                withTimeoutOrNull(viewConfiguration.doubleTapTimeoutMillis) {
+                                                // The first follow-up has the usual double-tap window; once a skip has
+                                                // landed, taps keep chaining for as long as the other players allow, so
+                                                // 5 s -> 10 s -> 15 s works here too.
+                                                withTimeoutOrNull(if (skips == 0) viewConfiguration.doubleTapTimeoutMillis else ChainWindowMs) {
                                                     val d = awaitFirstDown(requireUnconsumed = false)
                                                     d.consume()
                                                     val u = waitForUpOrCancellation()
