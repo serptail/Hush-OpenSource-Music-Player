@@ -108,10 +108,9 @@ class FeedRepository
                 launch {
                     val taste = taste().firstOrNull() ?: return@launch
                     val artistId = deezerArtistId(taste.name, attempts = 2) ?: return@launch
-                    coroutineScope {
-                        launch { becauseTop(artistId, taste, FeedSlot.MIDDLE, order = 10, attempts = 2)?.let { onSection(it) } }
-                        launch { becauseRelated(artistId, taste, FeedSlot.MIDDLE, order = 11, attempts = 2)?.let { onSection(it) } }
-                    }
+                    // "Fans of X also like" is not built here: "New artists for you" draws on the same related-artist graph
+                    // (and drops artists already known), so showing both put near-identical rows back to back.
+                    becauseTop(artistId, taste, FeedSlot.MIDDLE, order = 10, attempts = 2)?.let { onSection(it) }
                 }
             }
         }

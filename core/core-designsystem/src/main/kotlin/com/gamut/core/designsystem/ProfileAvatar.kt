@@ -42,8 +42,8 @@ fun ProfileAvatar(
         return
     }
     if (seed == null && softGuest) {
-        // The same soft circle and outline icon as the Shazam button beside it.
-        Box(modifier.size(size).clip(shape).background(ink(0.07f)), contentAlignment = Alignment.Center) {
+        // Just the outline icon, like the Shazam and heart buttons beside it: no circle behind it.
+        Box(modifier.size(size), contentAlignment = Alignment.Center) {
             Icon(guestIcon, null, tint = ink(0.9f), modifier = Modifier.size(26.dp))
         }
         return

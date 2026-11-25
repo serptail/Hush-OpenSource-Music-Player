@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
@@ -42,8 +43,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
@@ -80,39 +86,25 @@ import kotlin.math.absoluteValue
 internal val DiscoverInset: Dp = 20.dp
 
 private const val HERO_COUNT = 6
-private const val HERO_ASPECT = 0.84f
-private val HeroShape = RoundedCornerShape(28.dp)
-private val HeroDot = Color(0xFFFF5C5C)
+private const val HERO_ASPECT = 0.72f
+private val HeroShape = RoundedCornerShape(32.dp)
+private val HeroArtShape = RoundedCornerShape(20.dp)
 private val StationCardSize = 156.dp
 
 // ---- Moods --------------------------------------------------------------------------------------------------------
 
-private val MoodCardWidth = 168.dp
-private val MoodCardHeight = 92.dp
+private val MoodCardWidth = 172.dp
+private val MoodCardHeight = 96.dp
 private val MoodGap = 12.dp
 private val TileShape = RoundedCornerShape(10.dp)
+private val MoodShape = RoundedCornerShape(18.dp)
 
-/** One flat colour per mood, the way a browse tile is: no gradient, no drawn symbol. */
-private fun moodColor(mood: Mood): Color =
-    Color(
-        when (mood) {
-            Mood.ENERGY -> 0xFFE8451E
-            Mood.CHILL -> 0xFF2D7D9A
-            Mood.FOCUS -> 0xFF6B3E75
-            Mood.FEEL_GOOD -> 0xFFC77B0A
-            Mood.LOVE -> 0xFFD6247F
-            Mood.BLUE -> 0xFF1E3264
-            Mood.PARTY -> 0xFF8D67AB
-            Mood.WORKOUT -> 0xFF9E1B32
-            Mood.LATE_NIGHT -> 0xFF23235C
-            Mood.SLEEP -> 0xFF477D95
-            Mood.COMMUTE -> 0xFF1E7B4F
-        },
-    )
+/** The two colours of a mood's card, from its definition: a deep tone fading to a lighter one. */
+private fun moodColors(mood: Mood): Pair<Color, Color> = Color(mood.from) to Color(mood.to)
 
 /**
- * Every mood as a colour card with a tilted cover tucked into its corner, two rows that scroll sideways. The covers
- * are artwork the page already holds (this week's biggest songs), so a card costs no request of its own.
+ * Every mood as a gradient card with a tilted cover tucked into its corner, two rows that scroll sideways. The cover
+ * comes from the mood's own playlists and is tinted to the card, so the row stays one family of colours.
  */
 internal fun LazyListScope.discoverMoods(
     state: DiscoverState,
@@ -122,7 +114,6 @@ internal fun LazyListScope.discoverMoods(
     val section = state.feed.firstOrNull { it.kind == FeedKind.MOODS } ?: return
     val moods = section.items.mapNotNull { item -> Mood.bySlug(item.id.substringAfterLast(':'))?.let { item to it } }
     if (moods.isEmpty()) return
-    val covers = state.tabs.firstOrNull()?.items.orEmpty().map { it.imageUrl }.filter { it.isNotBlank() }.distinct()
     item(key = "moods-title") { DiscoverSectionTitle(section.title, section.subtitle) }
     item(key = "moods-grid") {
         LazyHorizontalGrid(
@@ -132,11 +123,11 @@ internal fun LazyListScope.discoverMoods(
             horizontalArrangement = Arrangement.spacedBy(MoodGap),
             verticalArrangement = Arrangement.spacedBy(MoodGap),
         ) {
-            itemsIndexed(moods, key = { _, pair -> pair.first.id }) { index, (item, mood) ->
+            itemsIndexed(moods, key = { _, pair -> pair.first.id }) { _, (item, mood) ->
                 MoodCard(
                     label = item.title,
-                    color = moodColor(mood),
-                    cover = covers.takeIf { it.isNotEmpty() }?.get((index * 3) % covers.size),
+                    colors = moodColors(mood),
+                    cover = item.imageUrl.takeIf { it.isNotBlank() },
                     loading = item.id == loadingId,
                 ) { onStation(item) }
             }
@@ -144,52 +135,68 @@ internal fun LazyListScope.discoverMoods(
     }
 }
 
-/** A flat colour card: the mood's name top left, a cover turned on its corner at the bottom right. */
+/**
+ * A gradient card: the mood's name top left, a cover turned on its corner at the bottom right. The cover is drawn in
+ * the card's own hue (the picture keeps its light and dark, the colour is the card's), so whatever artwork a mood
+ * ends up with, the row reads as one set.
+ */
 @Composable
 private fun MoodCard(
     label: String,
-    color: Color,
+    colors: Pair<Color, Color>,
     cover: String?,
     loading: Boolean,
     onClick: () -> Unit,
 ) {
+    val (from, to) = colors
     Box(
         Modifier
             .pressScale(onClick = onClick, scaleDown = 0.96f)
             .width(MoodCardWidth)
             .height(MoodCardHeight)
-            .clip(TileShape)
-            .background(color)
+            .clip(MoodShape)
+            .background(Brush.linearGradient(listOf(from, to)))
             .semantics { contentDescription = "$label mood station" },
     ) {
         Text(
             label,
-            style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, lineHeight = 21.sp, fontWeight = FontWeight.Bold),
             color = Color.White,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 12.dp, top = 12.dp).width(96.dp),
+            modifier = Modifier.padding(start = 14.dp, top = 14.dp).width(92.dp),
         )
         Box(
             Modifier
                 .align(Alignment.BottomEnd)
-                .offset(x = 14.dp, y = 12.dp)
-                .size(70.dp)
+                .offset(x = 10.dp, y = 10.dp)
+                .size(72.dp)
                 .graphicsLayer {
-                    rotationZ = 25f
-                    shadowElevation = 8.dp.toPx()
-                    shape = RoundedCornerShape(5.dp)
+                    rotationZ = 14f
+                    shadowElevation = 10.dp.toPx()
+                    shape = RoundedCornerShape(10.dp)
                     clip = true
                 },
         ) {
             if (cover != null) {
-                ArtImage(url = squareArtUrl(cover, 200), modifier = Modifier.fillMaxSize())
+                ArtImage(
+                    url = squareArtUrl(cover, 200),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                            .drawWithContent {
+                                drawContent()
+                                // Keep the picture's light and dark, take the card's colour.
+                                drawRect(to.copy(alpha = 0.9f), blendMode = BlendMode.Color)
+                            },
+                )
             } else {
                 // No artwork yet: a plain record in a lighter tone of the card.
                 Canvas(Modifier.fillMaxSize()) {
                     drawRect(Color.White.copy(alpha = 0.2f))
                     drawCircle(Color.Black.copy(alpha = 0.35f), radius = size.width * 0.36f)
-                    drawCircle(color, radius = size.width * 0.1f)
+                    drawCircle(to, radius = size.width * 0.1f)
                 }
             }
         }
@@ -267,38 +274,53 @@ private fun HeroCarousel(
 ) {
     val pager = rememberPagerState(pageCount = { entries.size })
     val current = pager.currentPage.coerceIn(0, entries.lastIndex)
-    // One card per screen with a sliver of the next one showing, so it reads as swipeable.
-    HorizontalPager(
-        state = pager,
-        contentPadding = PaddingValues(horizontal = DiscoverInset),
-        pageSpacing = 12.dp,
-        key = { entries[it].item.id },
-        modifier = Modifier.padding(top = 4.dp),
-    ) { page ->
-        val entry = entries[page]
-        val playing = entry.item.track?.isrc != null && entry.item.track?.isrc == nowPlayingIsrc
-        HeroCard(
-            item = entry.item,
-            eyebrow = heroEyebrow(entry),
-            cta = if (entry.kind == HeroKind.RELEASE) "Open album" else "Play",
-            isPlaying = playing,
-            onClick = { onClick(entry) },
-            modifier =
-                Modifier.graphicsLayer {
-                    val distance = ((pager.currentPage - page) + pager.currentPageOffsetFraction).absoluteValue.coerceIn(0f, 1f)
-                    val scale = 1f - 0.04f * distance
-                    scaleX = scale
-                    scaleY = scale
-                    alpha = 1f - 0.35f * distance
-                },
-            indicator = { if (entries.size > 1) PagerDashes(entries.size, current) },
-        )
+    Column {
+        // One card per screen with a sliver of the next one showing, so it reads as swipeable.
+        HorizontalPager(
+            state = pager,
+            contentPadding = PaddingValues(horizontal = DiscoverInset),
+            pageSpacing = 12.dp,
+            key = { entries[it].item.id },
+            modifier = Modifier.padding(top = 4.dp),
+        ) { page ->
+            val entry = entries[page]
+            val playing = entry.item.track?.isrc != null && entry.item.track?.isrc == nowPlayingIsrc
+            HeroCard(
+                item = entry.item,
+                eyebrow = heroEyebrow(entry),
+                cta = if (entry.kind == HeroKind.RELEASE) "Open album" else "Play",
+                isPlaying = playing,
+                onClick = { onClick(entry) },
+                modifier =
+                    Modifier.graphicsLayer {
+                        val distance = ((pager.currentPage - page) + pager.currentPageOffsetFraction).absoluteValue.coerceIn(0f, 1f)
+                        val scale = 1f - 0.05f * distance
+                        scaleX = scale
+                        scaleY = scale
+                        alpha = 1f - 0.4f * distance
+                    },
+                // The blurred backdrop drifts against the swipe; the cover itself stays whole and put.
+                imageModifier =
+                    Modifier.graphicsLayer {
+                        val offset = (pager.currentPage - page) + pager.currentPageOffsetFraction
+                        translationX = offset * size.width * 0.2f
+                        scaleX = 1.4f
+                        scaleY = 1.4f
+                    },
+            )
+        }
+        if (entries.size > 1) {
+            Box(Modifier.fillMaxWidth().padding(top = 14.dp), contentAlignment = Alignment.Center) {
+                PagerDashes(entries.size, current, MaterialTheme.colorScheme.onSurface)
+            }
+        }
     }
 }
 
 /**
- * The big cover card: artwork edge to edge, a scrim for the text, an eyebrow with a live dot, the title, who it is
- * by, then a white call-to-action pill and, when given, [indicator] on the right. The whole card is the tap target.
+ * The big cover card. The cover is shown whole: a true square, never stretched or cropped, floating over a blurred,
+ * darkened copy of itself that gives the card its colour. Below it sit a quiet label, the title, who it is by and a
+ * round play button. The whole card is the tap target. [imageModifier] moves only the blurred backdrop (the parallax).
  */
 @Composable
 internal fun HeroCard(
@@ -309,91 +331,92 @@ internal fun HeroCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     aspect: Float = HERO_ASPECT,
+    imageModifier: Modifier = Modifier,
     indicator: @Composable () -> Unit = {},
 ) {
+    val art = remember(item.imageUrl) { squareArtUrl(item.imageUrl, 800) }
     Box(
         modifier
             .fillMaxWidth()
             .aspectRatio(aspect)
             .pressScale(onClick = onClick, scaleDown = 0.985f)
             .clip(HeroShape)
-            .background(ink(0.06f)),
+            .background(ink(0.06f))
+            .semantics { contentDescription = "$cta ${item.title}" },
     ) {
+        // Backdrop: the same cover, blurred and pushed back. Cropping it is fine, nobody reads it as a picture.
         ArtImage(
-            url = remember(item.imageUrl) { squareArtUrl(item.imageUrl, 800) },
-            modifier = Modifier.fillMaxSize(),
-            contentDescription = item.title,
-            fallback = { ArtworkFallbackIcon() },
+            url = remember(item.imageUrl) { squareArtUrl(item.imageUrl, 200) },
+            modifier = Modifier.fillMaxSize().blur(36.dp).then(imageModifier),
         )
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(0.28f to Color.Transparent, 0.6f to Color.Black.copy(alpha = 0.38f), 1f to Color.Black.copy(alpha = 0.9f)),
-            ),
-        )
-        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(6.dp).clip(CircleShape).background(HeroDot))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    eyebrow.uppercase(),
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp),
-                    color = Color.White.copy(alpha = 0.82f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)))
+        Column(Modifier.fillMaxSize()) {
+            BoxWithConstraints(
+                Modifier.weight(1f).fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                // The largest square that fits, so the cover keeps its own proportions.
+                val side = minOf(maxWidth, maxHeight)
+                ArtImage(
+                    url = art,
+                    modifier = Modifier.size(side).shadow(18.dp, HeroArtShape).clip(HeroArtShape),
+                    contentDescription = item.title,
+                    fallback = { ArtworkFallbackIcon() },
                 )
             }
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ExplicitMark(item.track?.isExplicit, Color.White.copy(alpha = 0.78f), size = 18.dp)
-                Text(
-                    item.title,
-                    style = MaterialTheme.typography.headlineLarge.copy(fontSize = 30.sp, lineHeight = 34.sp),
-                    color = Color.White,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-            }
-            Spacer(Modifier.height(2.dp))
-            Text(
-                item.subtitle,
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-                color = Color.White.copy(alpha = 0.78f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(18.dp))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                HeroButton(cta, isPlaying)
-                Spacer(Modifier.weight(1f))
+            Row(
+                Modifier.fillMaxWidth().padding(start = 22.dp, end = 18.dp, bottom = 20.dp),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        eyebrow,
+                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+                        color = Color.White.copy(alpha = 0.72f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        ExplicitMark(item.track?.isExplicit, Color.White.copy(alpha = 0.78f), size = 18.dp)
+                        Text(
+                            item.title,
+                            style = MaterialTheme.typography.headlineLarge.copy(fontSize = 26.sp, lineHeight = 30.sp),
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        item.subtitle,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                        color = Color.White.copy(alpha = 0.78f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(Modifier.width(14.dp))
+                HeroButton(isPlaying)
                 indicator()
             }
         }
     }
 }
 
+/** A plain round button: the play triangle, or the playing bars while this card's track is the one on. */
 @Composable
-private fun HeroButton(
-    label: String,
-    playing: Boolean,
-) {
-    Row(
-        Modifier.height(44.dp).clip(CircleShape).background(Color.White).padding(horizontal = 20.dp),
-        verticalAlignment = Alignment.CenterVertically,
+private fun HeroButton(playing: Boolean) {
+    Box(
+        Modifier.size(52.dp).clip(CircleShape).background(Color.White),
+        contentAlignment = Alignment.Center,
     ) {
         if (playing) {
             NowPlayingBars(color = Color.Black)
         } else {
-            Icon(TablerIcons.Play, null, tint = Color.Black, modifier = Modifier.size(14.dp))
+            Icon(TablerIcons.Play, null, tint = Color.Black, modifier = Modifier.size(20.dp))
         }
-        Spacer(Modifier.width(8.dp))
-        Text(
-            if (playing) "Playing" else label,
-            style = MaterialTheme.typography.labelLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-            color = Color.Black,
-            maxLines = 1,
-            softWrap = false,
-        )
     }
 }
 
@@ -402,6 +425,7 @@ private fun HeroButton(
 private fun PagerDashes(
     count: Int,
     current: Int,
+    color: Color,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
         repeat(count) { i ->
@@ -411,7 +435,7 @@ private fun PagerDashes(
                     .height(4.dp)
                     .width(width)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = if (i == current) 1f else 0.4f)),
+                    .background(color.copy(alpha = if (i == current) 0.9f else 0.25f)),
             )
         }
     }

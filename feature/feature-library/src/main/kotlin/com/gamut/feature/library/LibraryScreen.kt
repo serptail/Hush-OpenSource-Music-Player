@@ -191,20 +191,15 @@ fun LibraryScreen(
             Column(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = barHeight)) {
                 Column(Modifier.weight(1f).fillMaxWidth()) {
                     Row(
-                        Modifier.fillMaxWidth().padding(start = 24.dp + gutter, end = 24.dp + gutter, top = 22.dp),
+                        // Same margins as the Discover header, so the two titles sit in the same place.
+                        Modifier.fillMaxWidth().padding(start = 20.dp + gutter, end = 20.dp + gutter, top = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text(
                                 "Library",
-                                style = MaterialTheme.typography.displayMedium,
+                                style = MaterialTheme.typography.displayLarge,
                                 color = TextPrimary,
-                            )
-                            Text(
-                                countOf(userPlaylists.size, "playlist") + " \u00B7 " + countOf(artists.size, "artist"),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = ink(0.55f),
-                                modifier = Modifier.padding(top = 2.dp),
                             )
                         }
                         Box {

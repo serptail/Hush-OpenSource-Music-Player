@@ -124,18 +124,6 @@ internal fun LazyListScope.discoverFeaturedItems(
         stationLoadingId,
     )
 
-    if (state.artists.isNotEmpty()) {
-        item(key = "artists-title") { DiscoverSectionTitle("Artists to know") }
-        item(key = "artists-row") {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = DiscoverInset, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(18.dp),
-            ) {
-                items(state.artists, key = { it.id }) { artist -> ArtistBubble(artist) { artist.artistId?.let(onArtistClick) } }
-            }
-        }
-    }
-
     if (state.albums.isNotEmpty()) {
         item(key = "albums-title") { DiscoverSectionTitle("Albums on the rise") }
         item(key = "albums-row") {
@@ -144,6 +132,18 @@ internal fun LazyListScope.discoverFeaturedItems(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 items(state.albums, key = { it.id }) { album -> AlbumCard(album) { onAlbumClick(album) } }
+            }
+        }
+    }
+
+    if (state.artists.isNotEmpty()) {
+        item(key = "artists-title") { DiscoverSectionTitle("Artists to know") }
+        item(key = "artists-row") {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = DiscoverInset, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+                items(state.artists, key = { it.id }) { artist -> ArtistBubble(artist) { artist.artistId?.let(onArtistClick) } }
             }
         }
     }
@@ -524,7 +524,6 @@ private fun LazyListScope.feedSectionItems(
                     isPlaying = false,
                     onClick = { onAlbumClick(album) },
                     modifier = Modifier.padding(horizontal = DiscoverInset, vertical = 20.dp),
-                    aspect = 1.2f,
                 )
             }
             return@forEach

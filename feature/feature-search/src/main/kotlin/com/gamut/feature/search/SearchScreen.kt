@@ -2,6 +2,7 @@ package com.gamut.feature.search
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -12,6 +13,8 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -78,6 +81,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
@@ -281,6 +285,11 @@ fun SearchScreen(
                 listState.scrollToItem(0)
             }
         }
+        // Completions arrive after the query changes (the remote ones a moment later), so the jump above can come too
+        // early. Bring the panel into view whenever it appears or changes, unless the person has scrolled well down.
+        LaunchedEffect(suggestionRows) {
+            if (suggestionRows.isNotEmpty() && listState.firstVisibleItemIndex <= 1) listState.scrollToItem(0)
+        }
         LaunchedEffect(state.query) { filter = FILTER_ALL }
 
         var settled by remember { mutableStateOf(false) }
@@ -311,7 +320,6 @@ fun SearchScreen(
 
         val header: @Composable (Modifier) -> Unit = { m ->
             Column(m.fillMaxWidth().onSizeChanged { headerHeightPx = it.height }.statusBarsPadding()) {
-                val searching = fieldFocused || state.query.isNotBlank()
                 Row(Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(
@@ -319,21 +327,6 @@ fun SearchScreen(
                             style = MaterialTheme.typography.displayLarge,
                             color = TextPrimary,
                         )
-                        // The tagline gives way to the results as soon as the person starts searching.
-                        AnimatedVisibility(
-                            visible = !searching,
-                            enter = fadeIn(tween(160)) + expandVertically(tween(200)),
-                            exit = fadeOut(tween(120)) + shrinkVertically(tween(180)),
-                        ) {
-                            Text(
-                                "Made from what you play and follow",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-                                color = TextSecondary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = 2.dp),
-                            )
-                        }
                     }
                     if (showingDiscover && LocalInputModeManager.current.inputMode == InputMode.Keyboard) {
                         Box(
@@ -349,7 +342,7 @@ fun SearchScreen(
                     }
                     headerExtra()
                     Box(
-                        Modifier.size(44.dp).pressScale(onClick = onShazam, scaleDown = 0.92f).clip(CircleShape).background(ink(0.07f)),
+                        Modifier.size(44.dp).pressScale(onClick = onShazam, scaleDown = 0.92f),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -609,6 +602,9 @@ fun SearchScreen(
                                 // were looking at in place, so an item inserted above it later would push the
                                 // suggestions out of view; this one grows in place at the top instead.
                                 item(key = "suggestions") {
+                                    // Never zero tall: a zero-height first item is not counted as the first visible one, so
+                                    // the list anchors on the item after it and the panel then grew out of sight above it.
+                                    Spacer(Modifier.height(1.dp).fillMaxWidth())
                                     if (state.query.trim().length >= 2 && suggestionRows.isNotEmpty()) {
                                         SuggestionPanel(
                                             typed = state.query,
@@ -787,7 +783,7 @@ private fun SearchField(
     armTick: Int = 0,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val focus by animateFloatAsState(if (focused) 1f else 0f, tween(200), label = "search-focus")
+    val focus by animateFloatAsState(if (focused) 1f else 0f, tween(180, easing = FastOutSlowInEasing), label = "search-focus")
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     val remote = LocalInputModeManager.current.inputMode == InputMode.Keyboard
@@ -813,15 +809,20 @@ private fun SearchField(
                     } else {
                         Modifier
                     },
-                ).glass(CircleShape, fill = 0.07f + 0.03f * focus, borderColor = accent.copy(alpha = 0.55f * focus))
+                ).glass(CircleShape, fill = 0.07f + 0.035f * focus, borderColor = accent.copy(alpha = 0.5f * focus))
                 .padding(start = 18.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
                 TablerIcons.Search,
                 null,
-                tint = ink(0.45f + 0.35f * focus),
-                modifier = Modifier.size(20.dp),
+                tint = lerp(ink(0.5f), accent, focus * 0.85f),
+                modifier = Modifier.size(20.dp).graphicsLayer {
+                    // A small settle as the field takes focus.
+                    val grow = 1f + 0.08f * focus
+                    scaleX = grow
+                    scaleY = grow
+                },
             )
             Spacer(Modifier.width(12.dp))
             BasicTextField(
@@ -849,41 +850,50 @@ private fun SearchField(
                 decorationBox = { inner ->
                     Box(contentAlignment = Alignment.CenterStart) {
                         if (query.isEmpty()) {
-                            Text("Search artists, songs, albums", style = MaterialTheme.typography.bodyLarge, color = TextTertiary)
+                            Text(
+                                "Search artists, songs, albums",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = TextTertiary,
+                                modifier = Modifier.graphicsLayer { alpha = 1f - 0.35f * focus },
+                            )
                         }
                         inner()
                     }
                 },
             )
-            AnimatedVisibility(visible = query.isNotEmpty(), enter = fadeIn(tween(120)), exit = fadeOut(tween(120))) {
+            AnimatedVisibility(
+                visible = query.isNotEmpty(),
+                enter = fadeIn(tween(120)) + scaleIn(tween(160, easing = FastOutSlowInEasing), initialScale = 0.6f),
+                exit = fadeOut(tween(100)) + scaleOut(tween(120), targetScale = 0.6f),
+            ) {
                 Box(
-                    Modifier.size(40.dp).pressScale(onClick = { onQueryChange("") }, scaleDown = 0.88f),
+                    Modifier.size(40.dp).pressScale(onClick = { onQueryChange("") }, scaleDown = 0.85f),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Box(Modifier.size(22.dp).background(ink(0.14f), CircleShape), contentAlignment = Alignment.Center) {
-                        Icon(TablerIcons.Close, "Clear", tint = ink(0.8f), modifier = Modifier.size(13.dp))
+                    Box(Modifier.size(20.dp).background(ink(0.16f), CircleShape), contentAlignment = Alignment.Center) {
+                        Icon(TablerIcons.Close, "Clear", tint = ink(0.75f), modifier = Modifier.size(12.dp))
                     }
                 }
             }
         }
         AnimatedVisibility(
             visible = focused,
-            enter = fadeIn(tween(180)) + expandHorizontally(tween(220)),
-            exit = fadeOut(tween(120)) + shrinkHorizontally(tween(180)),
+            enter = expandHorizontally(tween(240, easing = FastOutSlowInEasing)) + fadeIn(tween(200, delayMillis = 40)),
+            exit = shrinkHorizontally(tween(200, easing = FastOutSlowInEasing)) + fadeOut(tween(100)),
         ) {
             Text(
                 "Cancel",
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
                 color = ink(0.85f),
                 maxLines = 1,
                 softWrap = false,
                 modifier =
                     Modifier
-                        .padding(start = 16.dp)
+                        .padding(start = 14.dp)
                         .pressScale(onClick = {
                             onQueryChange("")
                             focusManager.clearFocus()
-                        }, scaleDown = 0.94f),
+                        }, scaleDown = 0.92f),
             )
         }
     }

@@ -130,8 +130,6 @@ fun SupportHeartButton(onClick: () -> Unit) {
         Modifier
             .size(44.dp)
             .pressScale(onClick = onClick)
-            .clip(CircleShape)
-            .background(ink(0.07f))
             .semantics { contentDescription = "Support Gamut" },
         contentAlignment = Alignment.Center,
     ) {

@@ -11,7 +11,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -92,12 +95,14 @@ class RecommendationEngine
         private val artistRefs = ConcurrentHashMap<String, ArtistRef>()
         private val topCache = TtlCache<Pair<Long, Int>, List<Track>>(CACHE_TTL_MS)
         private val relatedCache = TtlCache<Long, List<DeezerArtistDto>>(CACHE_TTL_MS)
+        private val moodCoverCache = TtlCache<String, List<String>>(MOOD_COVER_TTL_MS)
 
         /** Drops what was learned about the listener and what was fetched for them, so the next build starts over. */
         fun clearCache() {
             taste.clear()
             topCache.clear()
             relatedCache.clear()
+            moodCoverCache.clear()
         }
 
         // ---- Sections ------------------------------------------------------------------------------------------------
@@ -142,6 +147,23 @@ class RecommendationEngine
                             imageUrl = seeds.getOrNull(1)?.artist?.picture.orEmpty(),
                             meta = "Discovery",
                         )
+                }
+                // Never a lone card: when too few of the listener's own artists resolved, chart artists fill the shelf.
+                val haveRadio = rest.count { StationId.kindOf(it.id) == StationId.ARTIST }
+                if (haveRadio < MIN_RADIO_CARDS) {
+                    val taken = seeds.mapTo(HashSet()) { it.artist.id }
+                    val chart = attempt { api.chartArtists(0, 24).data }.orEmpty().distinctBy { it.id }.filter { it.photo() != null }
+                    rest +=
+                        chart
+                            .filter { it.id !in taken }
+                            .shuffled(Random(LocalDate.now().toEpochDay()))
+                            .take(MIN_RADIO_CARDS - haveRadio)
+                            .map { artist ->
+                                async {
+                                    val fallback = chart.filter { it.id != artist.id }.take(2).mapNotNull { it.photo() }
+                                    radioCard(artist.id, artist.name, artist.photo(), fallback)
+                                }
+                            }.awaitAll()
                 }
                 val mood = pickMood()
                 rest +=
@@ -217,16 +239,8 @@ class RecommendationEngine
                         .shuffled(Random(LocalDate.now().toEpochDay()))
                         .take(MIX_GENRE_COUNT)
                         .map { (id, name) ->
-                            async {
-                                val artists = attempt { api.chartArtists(id, 4).data }.orEmpty()
-                                DiscoverItem(
-                                    id = "station:chart:$id",
-                                    title = "$name Mix",
-                                    subtitle = joinNames(artists.map { it.name }),
-                                    imageUrl = artists.firstNotNullOfOrNull { it.photo() }.orEmpty(),
-                                    meta = "Mix",
-                                )
-                            }
+                            // The artist chart ignores the genre, so every mix wore the same face. The track chart does not.
+                            async { Triple(id, name, attempt { api.chartTracks(id, 12).data }.orEmpty().distinctBy { it.id }) }
                         }
                 val eraRows =
                     ERAS.map { era ->
@@ -242,8 +256,24 @@ class RecommendationEngine
                             )
                         }
                     }
-                val genres = genreRows.awaitAll()
                 val eras = eraRows.awaitAll()
+                val usedCovers = HashSet<String>().apply { eras.forEach { if (it.imageUrl.isNotBlank()) add(it.imageUrl) } }
+                val genres =
+                    genreRows.awaitAll().map { (id, name, tracks) ->
+                        // First cover in this genre's chart that no other mix already uses.
+                        val cover =
+                            tracks
+                                .mapNotNull { (it.album.coverXl ?: it.album.coverBig)?.takeIf(String::isNotBlank) }
+                                .firstOrNull { usedCovers.add(it) }
+                                .orEmpty()
+                        DiscoverItem(
+                            id = "station:chart:$id",
+                            title = "$name Mix",
+                            subtitle = joinNames(tracks.map { it.artist.name }.distinct().take(3)),
+                            imageUrl = cover,
+                            meta = "Mix",
+                        )
+                    }
                 // A decade, then two genres, so neither runs for long.
                 val items = ArrayList<DiscoverItem>()
                 var next = 0
@@ -326,6 +356,38 @@ class RecommendationEngine
                 subtitle = "Stations for how you feel",
                 items = Mood.orderedFor(now.hour).map { DiscoverItem(id = "station:mood:${it.slug}", title = it.label, subtitle = "", imageUrl = "") },
             )
+
+        /**
+         * The mood tiles with a cover each. A mood's cover comes from the public playlists found for that mood's own
+         * search (the ones its station plays from), so "Feeling blue" is dressed from sad songs and "Workout" from
+         * workout playlists. No two moods share a cover. Moods whose lookup fails keep the plain card.
+         */
+        suspend fun moodsWithCovers(): FeedSection? =
+            coroutineScope {
+                val base = moods()
+                val gate = Semaphore(MOOD_COVER_PARALLEL)
+                val candidates =
+                    Mood.values().associateWith { mood -> async { gate.withPermit { moodCovers(mood) } } }.mapValues { it.value.await() }
+                val used = HashSet<String>()
+                val items =
+                    base.items.map { item ->
+                        val mood = Mood.bySlug(item.id.substringAfterLast(':'))
+                        val cover = mood?.let { candidates[it].orEmpty().firstOrNull(used::add) }.orEmpty()
+                        item.copy(imageUrl = cover)
+                    }
+                if (items.none { it.imageUrl.isNotBlank() }) return@coroutineScope null
+                base.copy(items = items)
+            }
+
+        private suspend fun moodCovers(mood: Mood): List<String> =
+            moodCoverCache.getOrLoad(mood.slug) {
+                val lists = attempt { api.searchPlaylists(mood.query, 8).data }.orEmpty()
+                val usable = lists.filter { it.trackCount in 20..300 }.ifEmpty { lists }
+                usable
+                    .mapNotNull { (it.pictureXl ?: it.pictureBig)?.takeIf(String::isNotBlank) }
+                    .distinct()
+                    .takeIf { it.isNotEmpty() }
+            }.orEmpty()
 
         /**
          * Artists the listener does not know yet. Each of their top artists lists the artists fans also play; one that
@@ -440,12 +502,17 @@ class RecommendationEngine
         private suspend fun artistRef(name: String): ArtistRef? {
             val key = artistKey(name)
             artistRefs[key]?.let { return it }
-            val hit =
-                attempt { api.searchArtists(name, 5).data }
-                    .orEmpty()
-                    .filter { artistKey(it.name) == key }
-                    .maxByOrNull { it.fanCount ?: 0L }
-                    ?: return null
+            var found: DeezerArtistDto? = null
+            repeat(ARTIST_LOOKUP_ATTEMPTS) { n ->
+                if (found != null) return@repeat
+                if (n > 0) delay(400L * n)
+                found =
+                    attempt { api.searchArtists(name, 5).data }
+                        .orEmpty()
+                        .filter { artistKey(it.name) == key }
+                        .maxByOrNull { it.fanCount ?: 0L }
+            }
+            val hit = found ?: return null
             return ArtistRef(hit.id, hit.name, hit.pictureBig ?: hit.pictureXl).also { artistRefs[key] = it }
         }
 
@@ -586,6 +653,10 @@ class RecommendationEngine
             private const val REQUEST_TIMEOUT_MS = 8_000L
             private const val CACHE_TTL_MS = 15 * 60_000L
             private const val ARTIST_CAP = 6
+            private const val MOOD_COVER_TTL_MS = 6 * 60 * 60_000L
+            private const val MOOD_COVER_PARALLEL = 3
+            private const val ARTIST_LOOKUP_ATTEMPTS = 3
+            private const val MIN_RADIO_CARDS = 6
 
             private const val MIX_GENRE_COUNT = 8
             private const val RADIO_COUNT = 8
