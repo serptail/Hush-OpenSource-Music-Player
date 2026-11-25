@@ -4,9 +4,13 @@ import android.app.Activity
 import android.app.Application
 import android.os.Bundle
 import androidx.work.Configuration
+import coil.ImageLoader
+import coil.ImageLoaderFactory
 import com.gamut.account.ProfileStore
 import com.gamut.core.database.DownloadIndex
 import com.gamut.core.player.MusicPlayer
+import com.gamut.core.player.NetworkMonitor
+import com.gamut.image.NetworkRetryInterceptor
 import com.gamut.core.sync.SyncManager
 import com.gamut.feature.playerui.LyricsRepository
 import com.gamut.feature.resolver.AndroidYtDlpEngine
@@ -26,7 +30,8 @@ import javax.inject.Inject
 @HiltAndroidApp
 class GamutApplication :
     Application(),
-    Configuration.Provider {
+    Configuration.Provider,
+    ImageLoaderFactory {
     override val workManagerConfiguration: Configuration get() = Configuration.Builder().build()
 
     @Inject lateinit var ytDlp: AndroidYtDlpEngine
@@ -48,6 +53,15 @@ class GamutApplication :
     @Inject lateinit var profileStore: ProfileStore
 
     @Inject lateinit var shazamSession: ShazamSession
+
+    @Inject lateinit var networkMonitor: NetworkMonitor
+
+    /** The app-wide Coil loader: the default one, plus retrying failed web images once the network is back. */
+    override fun newImageLoader(): ImageLoader =
+        ImageLoader
+            .Builder(this)
+            .components { add(NetworkRetryInterceptor(networkMonitor)) }
+            .build()
 
     override fun onCreate() {
         super.onCreate()

@@ -37,15 +37,22 @@ class AppleCatalogRepository
         private val noPhotoChecked = ConcurrentHashMap<String, Int>()
         private val similarCache = ConcurrentHashMap<Long, List<DiscoverItem>>()
 
-        suspend fun findArtistId(name: String): Long? =
-            withTimeoutOrNull(5_000) {
-                val wanted = TextMatch.primaryArtist(name)
-                val hits =
-                    runCatching { itunes.searchArtists(name).results }
-                        .getOrDefault(emptyList())
-                        .filter { it.artistId != null }
-                (hits.firstOrNull { TextMatch.norm(it.artistName.orEmpty()) == wanted } ?: hits.firstOrNull())?.artistId
+        suspend fun findArtistId(name: String): Long? {
+            val wanted = TextMatch.primaryArtist(name)
+            repeat(2) { attempt ->
+                val id =
+                    withTimeoutOrNull(if (attempt == 0) 6_000 else 8_000) {
+                        val hits =
+                            runCatching { itunes.searchArtists(name).results }
+                                .getOrDefault(emptyList())
+                                .filter { it.artistId != null }
+                        (hits.firstOrNull { TextMatch.norm(it.artistName.orEmpty()) == wanted } ?: hits.firstOrNull())?.artistId
+                    }
+                if (id != null) return id
+                if (attempt == 0) delay(1_000)
             }
+            return null
+        }
 
         suspend fun searchArtistCard(query: String): DiscoverItem? =
             withTimeoutOrNull(4_000) {

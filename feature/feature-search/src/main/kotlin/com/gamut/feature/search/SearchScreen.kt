@@ -630,13 +630,11 @@ fun SearchScreen(
                                             onArtist = { artist ->
                                                 saveRecent(artist.name)
                                                 keyboard?.hide()
-                                                if (artist.artistId >= 0) {
-                                                    onArtistSelected(artist.artistId)
-                                                } else {
-                                                    openArtistItem(
-                                                        DiscoverItem(id = "follow-${artist.name}", title = artist.name, subtitle = "", imageUrl = artist.imageUrl.orEmpty()),
-                                                    )
-                                                }
+                                                // Suggestion ids come from Deezer, but the artist screen loads from the Apple
+                                                // catalogue, so a Deezer id opens "couldn't load artist". Resolve by name instead.
+                                                openArtistItem(
+                                                    DiscoverItem(id = "suggest-${artist.name}", title = artist.name, subtitle = "", imageUrl = artist.imageUrl.orEmpty()),
+                                                )
                                             },
                                             onSearch = { picked ->
                                                 saveRecent(picked)

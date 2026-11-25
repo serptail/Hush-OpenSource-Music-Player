@@ -25,6 +25,7 @@ import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.CacheWriter
@@ -38,6 +39,8 @@ import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import com.gamut.core.model.LocalCovers
 import com.gamut.core.model.PlaybackState
 import com.gamut.core.model.QueueState
@@ -80,7 +83,34 @@ class Media3MusicPlayer
     constructor(
         @ApplicationContext private val context: Context,
         private val settings: PlaybackSettings,
+        private val network: NetworkMonitor,
     ) : MusicPlayer {
+        private val httpFactory =
+            DefaultHttpDataSource
+                .Factory()
+                .setConnectTimeoutMs(HTTP_CONNECT_TIMEOUT_MS)
+                .setReadTimeoutMs(HTTP_READ_TIMEOUT_MS)
+                .setAllowCrossProtocolRedirects(true)
+
+        /**
+         * Keeps retrying a failed load while the device is offline instead of surfacing an error, so a dropped
+         * connection resumes by itself once the network is back. Online failures behave as the default policy.
+         */
+        private val loadPolicy: LoadErrorHandlingPolicy =
+            object : DefaultLoadErrorHandlingPolicy(ONLINE_LOAD_RETRIES) {
+                override fun getMinimumLoadableRetryCount(dataType: Int): Int =
+                    if (network.online.value) super.getMinimumLoadableRetryCount(dataType) else OFFLINE_LOAD_RETRIES
+
+                override fun getRetryDelayMsFor(info: LoadErrorHandlingPolicy.LoadErrorInfo): Long =
+                    if (!network.online.value && info.exception is java.io.IOException &&
+                        info.exception !is androidx.media3.common.ParserException
+                    ) {
+                        OFFLINE_RETRY_DELAY_MS
+                    } else {
+                        super.getRetryDelayMsFor(info)
+                    }
+            }
+
         private val cacheFactory: CacheDataSource.Factory by lazy {
             val cache =
                 SimpleCache(
@@ -91,7 +121,7 @@ class Media3MusicPlayer
             CacheDataSource
                 .Factory()
                 .setCache(cache)
-                .setUpstreamDataSourceFactory(DefaultDataSource.Factory(context))
+                .setUpstreamDataSourceFactory(DefaultDataSource.Factory(context, httpFactory))
                 .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
         }
 
@@ -131,6 +161,7 @@ class Media3MusicPlayer
             val slot = newSlot(handleFocus = true)
             activeSlot = slot
             startSettingsObservers()
+            startNetworkWatcher()
             return slot
         }
 
@@ -174,7 +205,7 @@ class Media3MusicPlayer
                                     remote = cacheFactory.createDataSource(),
                                 )
                             },
-                        ),
+                        ).setLoadErrorHandlingPolicy(loadPolicy),
                     ).setLoadControl(
                         DefaultLoadControl
                             .Builder()
@@ -587,7 +618,7 @@ class Media3MusicPlayer
         override fun sourceUrlFor(isrc: String): String? = synchronized(sourceUrls) { sourceUrls[isrc] }
 
         private fun updateAwaiting() {
-            awaiting.value = transitioning || state.value is PlaybackState.Loading ||
+            awaiting.value = transitioning || state.value is PlaybackState.Loading || pendingResume != null ||
                 (player.playWhenReady && player.playbackState == Player.STATE_BUFFERING)
             loadingFlow.value = transitioning || state.value is PlaybackState.Loading
         }
@@ -596,6 +627,61 @@ class Media3MusicPlayer
         private var prefetchedFor: String? = null
         private var recoveringIsrc: String? = null
         private var recoveries = 0
+        private var healthySinceMs = 0L
+
+        /** A song that stopped because the connection dropped, and where; it is picked up again once back online. */
+        private data class PendingResume(
+            val isrc: String,
+            val positionMs: Long,
+        )
+
+        private var pendingResume: PendingResume? = null
+        private var networkJob: Job? = null
+
+        private fun waitForNetwork(
+            track: Track,
+            positionMs: Long,
+        ) {
+            pendingResume = PendingResume(track.isrc, positionMs.coerceAtLeast(0L))
+            transitioning = false
+            state.value = PlaybackState.Paused(positionMs.coerceAtLeast(0L), track)
+            updateAwaiting()
+        }
+
+        /** Picks a stalled song up again when the connection returns, and retries an errored one the same way. */
+        private fun startNetworkWatcher() {
+            if (networkJob?.isActive == true) return
+            networkJob =
+                scope.launch {
+                    var wasOnline = network.online.value
+                    network.online.collect { online ->
+                        if (online && !wasOnline) {
+                            // Give the connection a moment to settle so the first request is not the one that fails.
+                            delay(RECONNECT_SETTLE_MS)
+                            resumeAfterReconnect()
+                        }
+                        wasOnline = online
+                    }
+                }
+        }
+
+        private fun resumeAfterReconnect() {
+            val pending = pendingResume ?: return
+            pendingResume = null
+            val track = currentTrack
+            if (track == null || track.isrc != pending.isrc) {
+                updateAwaiting()
+                return
+            }
+            recoveries = 0
+            val p = order.indexOfFirst { items[it].isrc == track.isrc }
+            if (p < 0) {
+                updateAwaiting()
+                return
+            }
+            // The stream url may have expired while offline, so ask the resolver for a fresh one.
+            loadAtPos(p, startPositionMs = pending.positionMs, forceRefresh = true)
+        }
 
         private fun attachPlayerListener(slot: Slot) {
             slot.exo.addListener(
@@ -603,6 +689,8 @@ class Media3MusicPlayer
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
                         if (slot !== activeSlot) return
                         if (isPlaying) {
+                            if (healthySinceMs == 0L) healthySinceMs = SystemClock.elapsedRealtime()
+                            pendingResume = null
                             startPositionUpdates()
                             startCrossfadeWatcher()
                         } else {
@@ -701,9 +789,21 @@ class Media3MusicPlayer
                                 "cause=${error.cause?.javaClass?.simpleName}: ${error.cause?.message?.take(160)}",
                         )
                         val failing = player.currentMediaItem?.mediaId?.let { queuedTrack(it) } ?: currentTrack
-                        if (failing != null && error.errorCode / 1000 == 2 && recover(failing, player.currentPosition)) return
+                        val resumeAt = player.currentPosition
+                        val networkError = error.errorCode / 1000 == 2
+                        if (failing != null && networkError && !network.online.value) {
+                            // Offline: hold the position and carry on when the connection is back.
+                            waitForNetwork(failing, resumeAt)
+                            return
+                        }
+                        if (failing != null && networkError && recover(failing, resumeAt)) return
+                        if (failing != null && networkError) {
+                            // Out of immediate retries while online: keep the spot so a reconnect or play press retries.
+                            pendingResume = PendingResume(failing.isrc, resumeAt.coerceAtLeast(0L))
+                        }
                         transitioning = false
                         state.value = PlaybackState.Error("Playback could not start")
+                        updateAwaiting()
                     }
                 },
             )
@@ -837,6 +937,7 @@ class Media3MusicPlayer
         }
 
         override fun pause() {
+            pendingResume = null
             val resolving = loadJob?.isActive == true
             if (resolving) loadJob?.cancel()
             if (resolving || transitioning) {
@@ -850,7 +951,17 @@ class Media3MusicPlayer
         override fun resume() {
             val track = currentTrack ?: return
             ensureSessionService()
-            if (loadedIsrc == track.isrc) resumePlayer() else loadAtPos(pos)
+            val pending = pendingResume?.takeIf { it.isrc == track.isrc }
+            if (pending != null || state.value is PlaybackState.Error) {
+                // The player stopped on an error or a lost connection, so play() alone would do nothing.
+                pendingResume = null
+                recoveries = 0
+                loadAtPos(pos, startPositionMs = pending?.positionMs ?: 0L, forceRefresh = true)
+            } else if (loadedIsrc == track.isrc) {
+                resumePlayer()
+            } else {
+                loadAtPos(pos)
+            }
         }
 
         override fun seekTo(positionMs: Long) {
@@ -1105,9 +1216,16 @@ class Media3MusicPlayer
                             raiseProgress(RESOLVE_START + (RESOLVE_END - RESOLVE_START) * done.coerceIn(0f, 1f))
                         }
                     if (url == null) {
-                        transitioning = false
-                        state.value = PlaybackState.Paused(0L, track)
+                        if (!network.online.value) {
+                            waitForNetwork(track, startPositionMs)
+                        } else {
+                            transitioning = false
+                            state.value = PlaybackState.Paused(startPositionMs.coerceAtLeast(0L), track)
+                            pendingResume = PendingResume(track.isrc, startPositionMs.coerceAtLeast(0L))
+                            updateAwaiting()
+                        }
                     } else {
+                        pendingResume = null
                         raiseProgress(RESOLVE_END)
                         startMedia(track, url, soft = true, startPositionMs = startPositionMs)
                     }
@@ -1164,10 +1282,13 @@ class Media3MusicPlayer
             resumeAtMs: Long,
         ): Boolean {
             if (resolver == null) return false
-            if (recoveringIsrc != track.isrc) {
+            if (recoveringIsrc != track.isrc ||
+                (healthySinceMs != 0L && SystemClock.elapsedRealtime() - healthySinceMs >= HEALTHY_AFTER_MS)
+            ) {
                 recoveringIsrc = track.isrc
                 recoveries = 0
             }
+            healthySinceMs = 0L
             if (recoveries >= MAX_RECOVERIES) return false
             recoveries++
             if (trackAt(pos)?.isrc != track.isrc) {
@@ -1608,6 +1729,16 @@ class Media3MusicPlayer
             const val LOW_BATTERY_PERCENT = 15
 
             const val MAX_RECOVERIES = 3
+
+            const val HTTP_CONNECT_TIMEOUT_MS = 10_000
+            const val HTTP_READ_TIMEOUT_MS = 15_000
+            const val ONLINE_LOAD_RETRIES = 6
+            const val OFFLINE_LOAD_RETRIES = 1_000
+            const val OFFLINE_RETRY_DELAY_MS = 2_000L
+
+            /** Playing this long without an error means the stream is healthy again, so recovery attempts refill. */
+            const val HEALTHY_AFTER_MS = 15_000L
+            const val RECONNECT_SETTLE_MS = 600L
 
             const val RESOLVE_ATTEMPTS = 3
             const val TRANSITION_LOCK_MS = 90_000L

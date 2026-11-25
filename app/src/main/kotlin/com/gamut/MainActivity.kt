@@ -71,7 +71,9 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -102,6 +104,7 @@ import com.gamut.core.designsystem.LocalAppearance
 import com.gamut.core.designsystem.LocalArtistPhotoResolver
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.LocalNavSettled
+import com.gamut.core.designsystem.ConnectionRestoredBanner
 import com.gamut.core.designsystem.LocalNotifier
 import com.gamut.core.designsystem.LocalPlayerDock
 import com.gamut.core.designsystem.LocalPlayerMotion
@@ -195,9 +198,14 @@ import javax.inject.Inject
 import kotlin.math.abs
 import com.gamut.feature.search.ArtistScreen as DiscoverArtistScreen
 
+/** How long the "Internet restored" strip stays on screen. */
+private const val RESTORED_BANNER_MS = 3_000L
+
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
     @Inject lateinit var player: MusicPlayer
+
+    @Inject lateinit var connectivityNotice: com.gamut.core.player.ConnectivityNotice
 
     @Inject lateinit var resolveTrackSource: ResolveTrackSourceUseCase
 
@@ -218,6 +226,7 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var discoverRepository: DiscoverRepository
 
     private val incomingAudio = kotlinx.coroutines.flow.MutableStateFlow<IncomingAudio?>(null)
+    private val restoredBanner = kotlinx.coroutines.flow.MutableStateFlow(false)
 
     /** Reads the file another app opened or shared with Gamut and queues it up for the UI to play. */
     private fun handleAudioIntent(intent: Intent?) {
@@ -262,26 +271,46 @@ class MainActivity : FragmentActivity() {
                 }
             },
         )
+        // Announce "Internet restored" only while the app is on screen. A drop that happened in the background is
+        // still pending when the person comes back, so it is shown then.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                connectivityNotice.restoredPending.collect { pending ->
+                    if (!pending) return@collect
+                    connectivityNotice.consume()
+                    restoredBanner.value = true
+                    try {
+                        delay(RESTORED_BANNER_MS)
+                    } finally {
+                        restoredBanner.value = false
+                    }
+                }
+            }
+        }
         setContent {
             val appearance by appearanceStore.settings.collectAsState()
+            val bannerVisible by restoredBanner.collectAsState()
             CompositionLocalProvider(LocalAppearance provides appearance) {
-                com.gamut.update.UpdateGate {
-                    com.gamut.onboarding.OnboardingGate {
-                        GamutApp(
-                            player,
-                            resolveTrackSource,
-                            audioSources,
-                            newPipe,
-                            downloadIndex,
-                            downloadManager,
-                            appearance,
-                            telemetry,
-                            discoverRepository,
-                            videoStreams,
-                            incomingAudio,
-                            onIncomingHandled = { incomingAudio.value = null },
-                        )
+                Box(Modifier.fillMaxSize()) {
+                    com.gamut.update.UpdateGate {
+                        com.gamut.onboarding.OnboardingGate {
+                            GamutApp(
+                                player,
+                                resolveTrackSource,
+                                audioSources,
+                                newPipe,
+                                downloadIndex,
+                                downloadManager,
+                                appearance,
+                                telemetry,
+                                discoverRepository,
+                                videoStreams,
+                                incomingAudio,
+                                onIncomingHandled = { incomingAudio.value = null },
+                            )
+                        }
                     }
+                    ConnectionRestoredBanner(visible = bannerVisible, modifier = Modifier.align(androidx.compose.ui.Alignment.TopCenter))
                 }
             }
         }
