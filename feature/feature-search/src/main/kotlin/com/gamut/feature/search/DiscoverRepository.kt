@@ -414,6 +414,13 @@ class DiscoverRepository
 
         suspend fun similarArtists(base: ArtistDetails): List<DiscoverItem> = catalog.similarArtists(base)
 
+        /** A few songs from each of the [similar] artists (their cards carry the Deezer id as `similar:<id>`). */
+        suspend fun similarTracks(similar: List<DiscoverItem>): List<Track> {
+            val ids = similar.mapNotNull { it.artistId ?: it.id.removePrefix("similar:").toLongOrNull() }.take(SIMILAR_TRACK_ARTISTS)
+            if (ids.isEmpty()) return emptyList()
+            return engine.tracksFromArtists(ids, perArtist = SIMILAR_TRACKS_EACH, limit = SIMILAR_TRACK_LIMIT)
+        }
+
         suspend fun artistPhotoFor(
             name: String,
             albumTitle: String,
@@ -529,6 +536,9 @@ class DiscoverRepository
             const val PUSH_THROTTLE_MS = 500L
             const val BLEND_WEIGHT = 0.5
             const val ALBUM_BOOST_CAP = 30.0
+            const val SIMILAR_TRACK_ARTISTS = 6
+            const val SIMILAR_TRACKS_EACH = 4
+            const val SIMILAR_TRACK_LIMIT = 24
         }
     }
 

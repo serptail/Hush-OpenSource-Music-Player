@@ -199,7 +199,7 @@ class AndroidYtDlpEngine
                     } else {
                         throw error
                     }
-                }
+                }.onFailure { com.gamut.core.network.NetworkDiagnostics.record("ytdlp-audio", null, it) }
             }
 
         private fun resolveAudioUrl(

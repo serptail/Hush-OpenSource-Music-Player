@@ -372,7 +372,10 @@ private fun AlbumCard(
     onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
-    Column(Modifier.width(size).pressScale(onClick = onClick, scaleDown = 0.96f, onLongClick = onLongClick)) {
+    // Song cards pass their own long-press; a card with no song behind it is an album.
+    val albumActions = LocalAlbumActions.current
+    val hold = onLongClick ?: if (item.track == null) albumActions?.let { open -> { open(item) } } else null
+    Column(Modifier.width(size).pressScale(onClick = onClick, scaleDown = 0.96f, onLongClick = hold)) {
         ArtImage(
             url = remember(item.imageUrl) { squareArtUrl(item.imageUrl, 400) },
             modifier =

@@ -32,6 +32,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,6 +44,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,7 +56,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
+import com.gamut.core.designsystem.TablerIcons
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
@@ -158,6 +170,22 @@ fun AlbumScreen(
     val palette = LocalCoverPalette.current
     TransparentStatusBar(darkIcons = palette.isLight)
     val settled = LocalNavSettled.current
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var songQuery by rememberSaveable { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    val wide = isWideLayout()
+    LaunchedEffect(searching) {
+        // Bring the field into view: it sits just below the hero on a phone and at the top on a wide screen.
+        if (searching) listState.animateScrollToItem(if (wide) 0 else 1)
+    }
+    AlbumActionsHost(
+        loadTracks = { album?.tracks },
+        favoriteIsrcs = favoriteIsrcs,
+        onToggleFavorite = onToggleFavorite,
+        playlists = playlists,
+        onAddToPlaylist = onAddToPlaylist,
+        onPlay = onTrackSelected,
+    ) {
     CoverTheme(palette) {
         var actionsTrack by remember { mutableStateOf<Track?>(null) }
         var shareTrack by remember { mutableStateOf<Track?>(null) }
@@ -224,8 +252,42 @@ fun AlbumScreen(
                                     }
                                 }
                             }
+                            val needle = songQuery.trim()
+                            // Keep each song's place in the album so its number stays the album's number.
+                            val visible =
+                                remember(value.tracks, needle) {
+                                    value.tracks.withIndex().filter { (_, t) ->
+                                        needle.isEmpty() ||
+                                            t.title.contains(needle, ignoreCase = true) ||
+                                            t.artist.contains(needle, ignoreCase = true)
+                                    }
+                                }
                             val trackItems: LazyListScope.() -> Unit = {
-                                itemsIndexed(value.tracks, key = { i, t -> "${t.isrc}-$i" }) { index, track ->
+                                if (searching) {
+                                    item(key = "album-search") {
+                                        AlbumSongSearch(
+                                            query = songQuery,
+                                            onQueryChange = { songQuery = it },
+                                            onClose = {
+                                                searching = false
+                                                songQuery = ""
+                                            },
+                                        )
+                                    }
+                                    if (visible.isEmpty()) {
+                                        item(key = "album-search-empty") {
+                                            Text(
+                                                "No songs match \u201C$needle\u201D",
+                                                color = ink(0.6f),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                                itemsIndexed(visible, key = { _, iv -> "${iv.value.isrc}-${iv.index}" }) { position, indexed ->
+                                    val index = indexed.index
+                                    val track = indexed.value
                                     val showArtist = !track.artist.equals(value.artist, ignoreCase = true)
                                     val onArtist = { name: String -> onTrackArtist(track.copy(artist = name)) }
                                     val isPlaying = track.isrc == nowPlayingIsrc
@@ -235,8 +297,8 @@ fun AlbumScreen(
                                                 number = index + 1,
                                                 track = track,
                                                 showArtist = showArtist,
-                                                first = index == 0,
-                                                last = index == value.tracks.lastIndex,
+                                                first = position == 0,
+                                                last = position == visible.lastIndex,
                                                 onArtist = onArtist,
                                                 isPlaying = isPlaying,
                                                 accent = accent,
@@ -249,7 +311,7 @@ fun AlbumScreen(
                                                 number = index + 1,
                                                 track = track,
                                                 showArtist = showArtist,
-                                                last = index == value.tracks.lastIndex,
+                                                last = position == visible.lastIndex,
                                                 onArtist = onArtist,
                                                 isPlaying = isPlaying,
                                                 accent = accent,
@@ -285,16 +347,35 @@ fun AlbumScreen(
                                     }
                                     LazyColumn(
                                         Modifier.weight(0.6f).fillMaxHeight().statusBarsPadding(),
+                                        state = listState,
                                         contentPadding = PaddingValues(top = 16.dp, end = 12.dp, bottom = 24.dp),
                                     ) { trackItems() }
                                 }
                             } else {
-                                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+                                LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
                                     item(key = "hero") { heroContent() }
                                     trackItems()
                                 }
                             }
                             BackButton(onBack)
+                            val albumActions = LocalAlbumActions.current
+                            AlbumTopActions(
+                                searching = searching,
+                                onSearch = {
+                                    searching = !searching
+                                    if (!searching) songQuery = ""
+                                },
+                                onMore = {
+                                    albumActions?.invoke(
+                                        DiscoverItem(id = value.id, title = value.title, subtitle = value.artist, imageUrl = value.imageUrl.orEmpty()),
+                                    )
+                                },
+                                modifier =
+                                    Modifier
+                                        .align(if (wide) Alignment.TopStart else Alignment.TopEnd)
+                                        .statusBarsPadding()
+                                        .padding(top = 12.dp, start = if (wide) 76.dp else 0.dp, end = if (wide) 0.dp else 20.dp),
+                            )
                         }
 
                         value == null && failed -> {
@@ -356,6 +437,80 @@ fun AlbumScreen(
             )
         }
         shareTrack?.let { t -> ShareSheet(title = t.title, artist = t.artist, artUrl = t.albumArtUrl, onDismiss = { shareTrack = null }) }
+    }
+    }
+}
+
+/** Search and menu buttons shown over the top of the album, beside the back button. */
+@Composable
+private fun AlbumTopActions(
+    searching: Boolean,
+    onSearch: () -> Unit,
+    onMore: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        AcrylicCircleButton(onClick = onSearch, size = 44.dp) {
+            Icon(
+                if (searching) TablerIcons.Close else TablerIcons.Search,
+                if (searching) "Close song search" else "Search songs in this album",
+                tint = ink(),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        AcrylicCircleButton(onClick = onMore, size = 44.dp) {
+            Icon(PhosphorIcons.Bold.DotsThreeVertical, "Album options", tint = ink(), modifier = Modifier.size(22.dp))
+        }
+    }
+}
+
+/** A field that filters the album's songs as you type. Takes focus when it appears. */
+@Composable
+private fun AlbumSongSearch(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    val focus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(Unit) {
+        runCatching { focus.requestFocus() }
+        keyboard?.show()
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .height(44.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(ink(0.07f))
+            .padding(start = 14.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(TablerIcons.Search, null, tint = ink(0.6f), modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(10.dp))
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier.weight(1f).focusRequester(focus),
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = ink()),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
+            decorationBox = { inner ->
+                Box(contentAlignment = Alignment.CenterStart) {
+                    if (query.isEmpty()) {
+                        Text("Search in this album", style = MaterialTheme.typography.bodyLarge, color = ink(0.45f))
+                    }
+                    inner()
+                }
+            },
+        )
+        Box(
+            Modifier.size(36.dp).clip(CircleShape).bounceClickable(role = Role.Button, onClickLabel = "Close search", onClick = onClose),
+            contentAlignment = Alignment.Center,
+        ) { Icon(TablerIcons.Close, "Close search", tint = ink(0.55f), modifier = Modifier.size(16.dp)) }
     }
 }
 

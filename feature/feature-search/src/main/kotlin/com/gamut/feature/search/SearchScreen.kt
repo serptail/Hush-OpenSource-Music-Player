@@ -203,6 +203,14 @@ fun SearchScreen(
     val palette = LocalCoverPalette.current
 
     CoverTheme(palette) {
+        AlbumActionsHost(
+            loadTracks = viewModel::albumTracks,
+            favoriteIsrcs = favoriteIsrcs,
+            onToggleFavorite = onToggleFavorite,
+            playlists = playlists,
+            onAddToPlaylist = onAddToPlaylist,
+            onPlay = onTrackSelected,
+        ) {
         val accent = MaterialTheme.colorScheme.primary
         val showingDiscover = state.tracks.isEmpty() && state.query.isBlank()
         val listState = rememberLazyListState()
@@ -835,7 +843,8 @@ fun SearchScreen(
             )
         }
         shareTrack?.let { t -> ShareSheet(title = t.title, artist = t.artist, artUrl = t.albumArtUrl, onDismiss = { shareTrack = null }) }
-    }
+            }
+}
 }
 
 @Composable
@@ -893,7 +902,9 @@ private fun SearchField(
                 modifier =
                     Modifier
                         .weight(1f)
-                        .focusProperties { canFocus = (!remote || editing) && live }
+                        // Keep focus once the field has it. Some tablets flip to keyboard input mode on the first typed
+                        // character, which made `remote` true and `editing` false and dropped focus after every key.
+                        .focusProperties { canFocus = (!remote || editing || focused) && live }
                         .focusRequester(focusRequester)
                         .onFocusChanged {
                             focused = it.isFocused

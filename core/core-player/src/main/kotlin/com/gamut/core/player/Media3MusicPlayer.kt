@@ -695,6 +695,11 @@ class Media3MusicPlayer
 
                     override fun onPlayerError(error: PlaybackException) {
                         if (slot !== activeSlot) return
+                        android.util.Log.w(
+                            "GamutNet",
+                            "playback error ${error.errorCodeName} host=${player.currentMediaItem?.localConfiguration?.uri?.host} " +
+                                "cause=${error.cause?.javaClass?.simpleName}: ${error.cause?.message?.take(160)}",
+                        )
                         val failing = player.currentMediaItem?.mediaId?.let { queuedTrack(it) } ?: currentTrack
                         if (failing != null && error.errorCode / 1000 == 2 && recover(failing, player.currentPosition)) return
                         transitioning = false

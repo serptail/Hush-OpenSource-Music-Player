@@ -451,6 +451,19 @@ class RecommendationEngine
                 interleave(lists, QUEUE_SIZE)
             }
 
+        /**
+         * Top songs of the artists behind [artistIds], one round at a time so no artist leads. Used to put music from
+         * similar artists behind a song picked on an artist page.
+         */
+        suspend fun tracksFromArtists(
+            artistIds: List<Long>,
+            perArtist: Int,
+            limit: Int,
+        ): List<Track> =
+            coroutineScope {
+                interleave(artistIds.map { id -> async { top(id, perArtist) } }.awaitAll(), limit)
+            }
+
         private suspend fun radioQueue(id: Long): List<Track> =
             coroutineScope {
                 val own = async { top(id, 12) }

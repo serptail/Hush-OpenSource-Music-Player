@@ -120,6 +120,9 @@ class SearchViewModel
                 }
         }
 
+        /** The songs of the album a card stands for, null when they cannot be loaded. */
+        suspend fun albumTracks(item: DiscoverItem): List<Track>? = discoverRepository.album(item)?.tracks
+
         /** Resolves the songs behind a mix or radio card without playing them, for the card's options sheet. */
         fun resolveStation(
             item: DiscoverItem,

@@ -124,6 +124,36 @@ class ArtistViewModel
         private val _failed = MutableStateFlow(false)
         val failed: StateFlow<Boolean> = _failed.asStateFlow()
 
+        /** The songs of an album on this page, null when they cannot be loaded. */
+        suspend fun albumTracks(item: DiscoverItem): List<Track>? = repository.album(item)?.tracks
+
+        /** Songs from similar artists, loaded once the similar-artist row is. Empty until then. */
+        @Volatile private var discovery: List<Track> = emptyList()
+
+        /**
+         * [queue] with songs from similar artists mixed in behind the picked song: one for every few of the artist's
+         * own, and any left over at the end. Songs before [picked] stay where they are. Returns [queue] unchanged when
+         * the similar songs have not loaded, so tapping a song never waits on them.
+         */
+        fun withDiscovery(
+            queue: List<Track>,
+            picked: Track,
+        ): List<Track> {
+            val own = queue.mapTo(HashSet()) { it.isrc }
+            val extra = discovery.filter { it.isrc !in own }
+            if (extra.isEmpty()) return queue
+            val at = queue.indexOfFirst { it.isrc == picked.isrc }.coerceAtLeast(0)
+            val out = ArrayList<Track>(queue.size + extra.size)
+            out.addAll(queue.subList(0, at + 1))
+            var next = 0
+            queue.subList(at + 1, queue.size).forEachIndexed { n, track ->
+                out += track
+                if ((n + 1) % OWN_RUN == 0 && next < extra.size) out += extra[next++]
+            }
+            while (next < extra.size) out += extra[next++]
+            return out
+        }
+
         init {
             viewModelScope.launch {
                 val id = artistId ?: repository.findArtistId(savedStateHandle.get<String>("artistName").orEmpty())
@@ -135,6 +165,7 @@ class ArtistViewModel
                 launch {
                     val similar = repository.similarArtists(base)
                     _state.update { it?.copy(similar = similar) }
+                    discovery = runCatching { repository.similarTracks(similar) }.getOrDefault(emptyList())
                 }
                 launch { loadPortrait(base) }
                 if (base.songsLoaded) return@launch
@@ -152,6 +183,11 @@ class ArtistViewModel
                 }
                 if (attempt < 3) delay(1_500L * (attempt + 1))
             }
+        }
+
+        private companion object {
+            /** How many of the artist's own songs play between songs from similar artists. */
+            const val OWN_RUN = 4
         }
     }
 
@@ -173,6 +209,7 @@ fun ArtistScreen(
     onToggleFollow: (key: String, name: String, imageUrl: String?) -> Unit = { _, _, _ -> },
     style: ArtistStyle = ArtistStyle.Classic,
 ) {
+    val playFrom: (Track, List<Track>) -> Unit = { picked, queue -> onTrackSelected(picked, viewModel.withDiscovery(queue, picked)) }
     val artist by viewModel.state.collectAsStateWithLifecycle()
     val failed by viewModel.failed.collectAsStateWithLifecycle()
     val palette = LocalCoverPalette.current
@@ -180,6 +217,14 @@ fun ArtistScreen(
     val settled = LocalNavSettled.current
     val wide = isWideLayout()
     CoverTheme(palette) {
+        AlbumActionsHost(
+            loadTracks = viewModel::albumTracks,
+            favoriteIsrcs = favoriteIsrcs,
+            onToggleFavorite = onToggleFavorite,
+            playlists = playlists,
+            onAddToPlaylist = onAddToPlaylist,
+            onPlay = onTrackSelected,
+        ) {
         if (artist == null || !settled) {
             Box(Modifier.fillMaxSize().statusBarsPadding()) {
                 if (!failed) {
@@ -222,9 +267,9 @@ fun ArtistScreen(
                     Text("Couldn't load this artist.", color = ink(0.6f), modifier = Modifier.align(Alignment.Center).padding(24.dp))
                 }
             }
-            return@CoverTheme
+            return@AlbumActionsHost
         }
-        val value = artist ?: return@CoverTheme
+        val value = artist ?: return@AlbumActionsHost
         val followKey by viewModel.followKey.collectAsStateWithLifecycle()
         val notifier = com.gamut.core.designsystem.LocalNotifier.current
         val following = followKey != null && followKey in followedKeys
@@ -250,7 +295,7 @@ fun ArtistScreen(
                 onTab = { selectedTab = it },
                 wide = wide,
                 onBack = onBack,
-                onTrack = onTrackSelected,
+                onTrack = playFrom,
                 onAlbum = onAlbumSelected,
                 onSimilarArtist = onSimilarArtist,
                 nowPlayingIsrc = nowPlayingIsrc,
@@ -265,7 +310,7 @@ fun ArtistScreen(
                 artist = value,
                 wide = wide,
                 onBack = onBack,
-                onTrack = onTrackSelected,
+                onTrack = playFrom,
                 onAlbum = onAlbumSelected,
                 onSimilarArtist = onSimilarArtist,
                 nowPlayingIsrc = nowPlayingIsrc,
@@ -307,7 +352,7 @@ fun ArtistScreen(
                                 ArtistOverview(
                                     artist = value,
                                     wide = wide,
-                                    onTrack = { picked -> onTrackSelected(picked, value.popular) },
+                                    onTrack = { picked -> playFrom(picked, value.popular) },
                                     nowPlayingIsrc = nowPlayingIsrc,
                                     accent = accent,
                                     onMore = { actionsTrack = it },
@@ -323,7 +368,7 @@ fun ArtistScreen(
                                 TrackList(value.songs, loading = !value.songsLoaded, wide = wide, nowPlayingIsrc = nowPlayingIsrc, accent = accent, onMore = {
                                     actionsTrack =
                                         it
-                                }) { picked -> onTrackSelected(picked, value.songs) }
+                                }) { picked -> playFrom(picked, value.songs) }
                             }
 
                             2 -> {
@@ -334,7 +379,7 @@ fun ArtistScreen(
                                 TrackList(value.latestSongs, loading = !value.songsLoaded, wide = wide, nowPlayingIsrc = nowPlayingIsrc, accent = accent, onMore = {
                                     actionsTrack =
                                         it
-                                }) { picked -> onTrackSelected(picked, value.latestSongs) }
+                                }) { picked -> playFrom(picked, value.latestSongs) }
                             }
                         }
                     }
@@ -382,7 +427,8 @@ fun ArtistScreen(
             )
         }
         shareTrack?.let { t -> ShareSheet(title = t.title, artist = t.artist, artUrl = t.albumArtUrl, onDismiss = { shareTrack = null }) }
-    }
+            }
+}
 }
 
 private const val OVERVIEW_ALBUM_FRACTION = 0.8f
@@ -605,7 +651,14 @@ private fun AlbumCard(
     onClick: (DiscoverItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.fillMaxWidth().pressScale(onClick = { onClick(album) }, scaleDown = 0.97f)) {
+    val albumActions = LocalAlbumActions.current
+    Column(
+        modifier.fillMaxWidth().pressScale(
+            onClick = { onClick(album) },
+            scaleDown = 0.97f,
+            onLongClick = albumActions?.let { open -> { open(album) } },
+        ),
+    ) {
         AsyncImage(
             model = remember(album.imageUrl) { squareArtUrl(album.imageUrl, 480) },
             contentDescription = album.title,
@@ -1321,7 +1374,14 @@ private fun BigAlbumCover(
     onClick: (DiscoverItem) -> Unit,
 ) {
     val shape = RoundedCornerShape(22.dp)
-    Column(Modifier.width(size).pressScale(onClick = { onClick(album) }, scaleDown = 0.97f)) {
+    val albumActions = LocalAlbumActions.current
+    Column(
+        Modifier.width(size).pressScale(
+            onClick = { onClick(album) },
+            scaleDown = 0.97f,
+            onLongClick = albumActions?.let { open -> { open(album) } },
+        ),
+    ) {
         AsyncImage(
             model = remember(album.imageUrl) { squareArtUrl(album.imageUrl, 800) },
             contentDescription = album.title,

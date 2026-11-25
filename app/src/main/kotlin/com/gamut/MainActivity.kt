@@ -729,7 +729,22 @@ private fun GamutApp(
                                                         notifier.dismiss(noticeId)
                                                         openPlayer()
                                                     },
-                                                    onFailure = { notifier.error("Couldn\u2019t play this song") },
+                                                    onFailure = { failure ->
+                                                        // Find out whether a DNS filter or firewall is the reason before blaming the song.
+                                                        com.gamut.core.network.NetworkDiagnostics
+                                                            .record("play", null, failure)
+                                                        val probes =
+                                                            kotlinx.coroutines.withTimeoutOrNull(3_000L) {
+                                                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                                                    com.gamut.core.network.NetworkDiagnostics
+                                                                        .probeHosts()
+                                                                }
+                                                            }.orEmpty()
+                                                        notifier.error(
+                                                            com.gamut.core.network.NetworkDiagnostics
+                                                                .playbackMessage(failure, probes),
+                                                        )
+                                                    },
                                                 )
                                             },
                                             onFailure = { error ->

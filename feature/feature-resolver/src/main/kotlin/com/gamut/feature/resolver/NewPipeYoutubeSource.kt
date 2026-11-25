@@ -54,6 +54,7 @@ class NewPipeYoutubeSource
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
+                    com.gamut.core.network.NetworkDiagnostics.record("newpipe-audio", "www.youtube.com", e)
                     Result.failure(e)
                 }
             }
@@ -124,6 +125,7 @@ class NewPipeYoutubeSource
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
+                    com.gamut.core.network.NetworkDiagnostics.record("newpipe-search", "www.youtube.com", e)
                     emptyList()
                 }
             }

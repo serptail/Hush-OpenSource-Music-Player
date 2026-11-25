@@ -92,7 +92,7 @@ object NetworkModule {
     @Provides
     @Singleton
     @Named("youtube")
-    fun youtubeClient(): OkHttpClient = baseClient()
+    fun youtubeClient(): OkHttpClient = baseClient().newBuilder().addInterceptor(DiagnosticsInterceptor("youtube")).build()
 
     @Provides
     @Singleton
