@@ -68,6 +68,7 @@ internal fun SleepTimerSheet(
     GamutSheet(
         onDismiss = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        scrollable = true,
     ) {
         Column(
             Modifier

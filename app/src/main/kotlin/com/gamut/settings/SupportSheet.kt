@@ -31,7 +31,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -66,6 +65,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.gamut.core.designsystem.AdaptiveLayout
+import com.gamut.core.designsystem.CappedModalBottomSheet
 import com.gamut.core.designsystem.TablerIcons
 import com.gamut.core.designsystem.bounceClickable
 import com.gamut.core.designsystem.bounceOnTouch
@@ -153,7 +153,7 @@ private fun SupportSheet(
         scope.launch { sheetState.hide() }.invokeOnCompletion { onGone() }
     }
 
-    ModalBottomSheet(
+    CappedModalBottomSheet(
         onDismissRequest = {
             resolve(onLater)
             onGone()

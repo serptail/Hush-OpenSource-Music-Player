@@ -134,7 +134,7 @@ internal fun TrackActionsSheet(
     onAddToPlaylist: () -> Unit,
     onGoToArtist: (() -> Unit)?,
 ) {
-    GamutSheet(onDismiss = onDismiss, shape = SheetShape) {
+    GamutSheet(onDismiss = onDismiss, shape = SheetShape, scrollable = true) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
             TrackHeader(track)
             HorizontalDivider(Modifier.padding(top = 14.dp, bottom = 6.dp), color = ink(0.1f))
@@ -162,7 +162,7 @@ internal fun StationActionsSheet(
     onAddToFavorites: () -> Unit,
     onAddToPlaylist: () -> Unit,
 ) {
-    GamutSheet(onDismiss = onDismiss, shape = SheetShape) {
+    GamutSheet(onDismiss = onDismiss, shape = SheetShape, scrollable = true) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(

@@ -531,6 +531,7 @@ fun PlaylistScreen(
                 onDismiss = { sheet = PlaylistSheet.None },
                 sheetState = state,
                 dragHandle = { BottomSheetDefaults.DragHandle(color = ink(0.3f)) },
+                scrollable = true,
             ) {
                 Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp)) {
                     Row(

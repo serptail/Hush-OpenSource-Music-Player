@@ -78,7 +78,7 @@ fun ShazamSheet(
     onAddToPlaylist: (Track, String) -> Unit,
     onTrackArtist: (Track) -> Unit,
 ) {
-    GamutSheet(onDismiss = onDismiss) {
+    GamutSheet(onDismiss = onDismiss, scrollable = true) {
         when (state) {
             is ShazamState.Listening -> {
                 ListeningContent(level, state.searching, onDismiss)

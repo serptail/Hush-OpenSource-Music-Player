@@ -82,6 +82,15 @@ interface MusicPlayer {
 
     fun removeFromQueue(index: Int)
 
+    /**
+     * Moves the queue entry at [from] to [to] (both positions in the queue as listed in [queue]). The playing
+     * track keeps playing and stays the current one wherever it ends up.
+     */
+    fun moveInQueue(
+        from: Int,
+        to: Int,
+    ) {}
+
     fun setSourceResolver(resolver: TrackSourceResolver?)
 
     /** Optional: a slower lookup run while a track plays, whose answer replaces the stream in place. */

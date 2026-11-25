@@ -840,6 +840,7 @@ private fun TrackActionsSheet(
         onDismiss = onDismiss,
         sheetState = sheetState,
         dragHandle = { BottomSheetDefaults.DragHandle(color = ink(0.3f)) },
+        scrollable = true,
     ) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp)) {
             Row(

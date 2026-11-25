@@ -1199,6 +1199,7 @@ fun PlayerScreen(
             onDismiss = { showQueue = false },
             onPlay = player::skipTo,
             onRemove = player::removeFromQueue,
+            onMove = player::moveInQueue,
         )
     }
 }

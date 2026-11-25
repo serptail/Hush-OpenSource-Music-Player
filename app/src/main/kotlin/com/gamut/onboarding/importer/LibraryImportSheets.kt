@@ -27,7 +27,6 @@ import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -50,6 +49,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.gamut.R
+import com.gamut.core.designsystem.CappedModalBottomSheet
 import com.gamut.core.designsystem.LocalCoverPalette
 import com.gamut.core.designsystem.bounceClickable
 import com.gamut.core.designsystem.ink
@@ -168,10 +168,11 @@ private fun LinkImportSheet(
     var text by rememberSaveable { mutableStateOf("") }
     val count = remember(text) { countLinks(text) }
 
-    ModalBottomSheet(
+    CappedModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = LocalCoverPalette.current.base,
+        scrollable = true,
         dragHandle = { BottomSheetDefaults.DragHandle(color = ink(0.25f)) },
     ) {
         Column(

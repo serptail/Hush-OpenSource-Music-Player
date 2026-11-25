@@ -1060,6 +1060,23 @@ class Media3MusicPlayer
             queueChanged()
         }
 
+        override fun moveInQueue(
+            from: Int,
+            to: Int,
+        ) {
+            if (from !in order.indices || to !in order.indices || from == to) return
+            order.add(to, order.removeAt(from))
+            pos =
+                when {
+                    pos == from -> to
+                    from < pos && to >= pos -> pos - 1
+                    from > pos && to <= pos -> pos + 1
+                    else -> pos
+                }
+            publishQueue()
+            queueChanged()
+        }
+
         override fun setSourceResolver(resolver: TrackSourceResolver?) {
             this.resolver = resolver
         }
