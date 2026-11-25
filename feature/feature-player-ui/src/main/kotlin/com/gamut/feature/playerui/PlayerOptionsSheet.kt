@@ -57,6 +57,9 @@ internal fun PlayerOptionsSheet(
     /** Null hides the row (nothing is playing). [upgradeStatus] is the row's right-hand text. */
     onUpgradeQuality: (() -> Unit)? = null,
     upgradeStatus: String? = null,
+    /** Null hides the row. [downloadStatus] is the row's right-hand text ("Downloaded", "Downloading\u2026"). */
+    onDownload: (() -> Unit)? = null,
+    downloadStatus: String? = null,
     /** No longer used: ON/OFF values are neutral so they stay legible on every theme. Kept so callers don't break. */
     @Suppress("UNUSED_PARAMETER") accent: Color = MaterialTheme.colorScheme.primary,
 ) {
@@ -76,6 +79,9 @@ internal fun PlayerOptionsSheet(
             )
             if (onUpgradeQuality != null) {
                 OptionRow(TablerIcons.RippleUp, "Upgrade quality", upgradeStatus, onUpgradeQuality)
+            }
+            if (onDownload != null) {
+                OptionRow(TablerIcons.Download, "Download", downloadStatus, onDownload)
             }
             OptionRow(TablerIcons.Share, "Share", null, onShare)
             OptionRow(TablerIcons.Microphone, "Lyrics", null, onToggleLyrics, toggled = lyricsOn)

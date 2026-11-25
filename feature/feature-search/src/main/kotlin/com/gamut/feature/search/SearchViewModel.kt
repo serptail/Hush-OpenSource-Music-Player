@@ -120,6 +120,25 @@ class SearchViewModel
                 }
         }
 
+        /** Resolves the songs behind a mix or radio card without playing them, for the card's options sheet. */
+        fun resolveStation(
+            item: DiscoverItem,
+            onReady: (List<Track>) -> Unit,
+            onFailed: () -> Unit,
+        ) {
+            viewModelScope.launch {
+                val queue =
+                    try {
+                        discoverRepository.stationQueue(item)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                if (queue.isEmpty()) onFailed() else onReady(queue)
+            }
+        }
+
         private val artistSignal = MutableStateFlow<ArtistSignal?>(null)
 
         private val rawArtistHit =

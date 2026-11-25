@@ -27,9 +27,25 @@
         <package android:name="com.instagram.android" />
     </queries>
     <application android:allowBackup="false" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:name=".GamutApplication" android:label="Gamut" android:theme="@style/Theme.Gamut" android:usesCleartextTraffic="true" tools:replace="android:usesCleartextTraffic" android:enableOnBackInvokedCallback="true">
-        <activity android:name=".MainActivity" android:exported="true" android:theme="@style/Theme.Gamut.Splash"
+        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask" android:theme="@style/Theme.Gamut.Splash"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|uiMode|density|fontScale|locale|layoutDirection">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+            <!-- "Open with" / "Share" for audio files, so Gamut is offered next to other players. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/ogg" />
+                <data android:mimeType="application/x-ogg" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
         </activity>
         <service android:name="com.gamut.core.player.GamutMediaSessionService" android:foregroundServiceType="mediaPlayback" android:exported="true">
             <intent-filter>

@@ -71,6 +71,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -146,6 +147,7 @@ import com.gamut.feature.resolver.NewPipeYoutubeSource
 import com.gamut.feature.resolver.VideoStreamRepository
 import com.gamut.feature.resolver.ResolveFailure
 import com.gamut.feature.resolver.ResolveTrackSourceUseCase
+import com.gamut.feature.resolver.DownloadState
 import com.gamut.feature.resolver.TrackDownloadManager
 import com.gamut.feature.search.AlbumScreen
 import com.gamut.feature.search.AlbumViewModel
@@ -215,9 +217,32 @@ class MainActivity : FragmentActivity() {
 
     @Inject lateinit var discoverRepository: DiscoverRepository
 
+    private val incomingAudio = kotlinx.coroutines.flow.MutableStateFlow<IncomingAudio?>(null)
+
+    /** Reads the file another app opened or shared with Gamut and queues it up for the UI to play. */
+    private fun handleAudioIntent(intent: Intent?) {
+        val uri = audioUriFrom(intent) ?: return
+        // A launch from history replays the old intent; only a fresh one should start playback again.
+        if (intent != null && (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return
+        lifecycleScope.launch {
+            val audio =
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching { readIncomingAudio(applicationContext, uri) }.getOrNull()
+                }
+            if (audio != null) incomingAudio.value = audio
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleAudioIntent(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) handleAudioIntent(intent)
         telemetry.install()
         com.gamut.feature.playerui.components.WaveformSource
             .init(applicationContext)
@@ -253,6 +278,8 @@ class MainActivity : FragmentActivity() {
                             telemetry,
                             discoverRepository,
                             videoStreams,
+                            incomingAudio,
+                            onIncomingHandled = { incomingAudio.value = null },
                         )
                     }
                 }
@@ -273,6 +300,8 @@ private fun GamutApp(
     telemetry: TelemetryCollector,
     discoverRepository: DiscoverRepository,
     videoStreams: VideoStreamRepository,
+    incomingAudio: kotlinx.coroutines.flow.StateFlow<IncomingAudio?>,
+    onIncomingHandled: () -> Unit,
 ) {
     val nav = rememberNavController()
     val notifier = rememberNotifier()
@@ -429,6 +458,18 @@ private fun GamutApp(
         }
     }
     val closePlayer: () -> Unit = { playerMotion.close() }
+    // A file opened from another app ("Open with" or Share) plays straight away and opens the player.
+    val incoming by incomingAudio.collectAsState()
+    LaunchedEffect(incoming) {
+        val audio = incoming ?: return@LaunchedEffect
+        selectedTrack = audio.track
+        player.setQueue(listOf(audio.track), 0)
+        com.gamut.feature.playerui.components.WaveformSource
+            .register(audio.track, audio.uri)
+        player.play(audio.track, audio.uri)
+        openPlayer()
+        onIncomingHandled()
+    }
     val createPos = remember { Animatable(0f) }
     var createOpen by remember { mutableStateOf(false) }
     var createComposed by remember { mutableStateOf(false) }
@@ -1033,6 +1074,8 @@ private fun GamutApp(
                                 val playlists by libraryVm.playlists.collectAsState()
                                 val tracksByPlaylist by libraryVm.tracksByPlaylist.collectAsState()
                                 val playlistInfo by libraryVm.playlistInfo.collectAsState()
+                                val downloaded by downloadIndex.downloads.collectAsState()
+                                val downloadStates by downloadManager.states.collectAsState()
                                 PlayerScreen(
                                     player,
                                     onBack = closePlayer,
@@ -1076,6 +1119,21 @@ private fun GamutApp(
                                         nav.navigate("artist-name/${Uri.encode(t.artist)}")
                                     },
                                     videoProvider = videoStreams,
+                                    onDownload = { t ->
+                                        if (t.isrc in downloaded) {
+                                            notifier.info("Already downloaded")
+                                        } else {
+                                            downloadManager.download(listOf(t))
+                                            notifier.info("Downloading \u201C${t.title}\u201D")
+                                        }
+                                    },
+                                    downloadStatusOf = { t ->
+                                        when {
+                                            t.isrc in downloaded -> "Downloaded"
+                                            downloadStates[t.isrc] is DownloadState.Failed || downloadStates[t.isrc] == null -> null
+                                            else -> "Downloading\u2026"
+                                        }
+                                    },
                                 )
                             }
                             PlayerArtFlight(dock = playerDock, motion = playerMotion)

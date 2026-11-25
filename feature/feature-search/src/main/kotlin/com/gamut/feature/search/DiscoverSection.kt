@@ -61,6 +61,7 @@ internal fun LazyListScope.discoverFeaturedItems(
     onArtistItemClick: (DiscoverItem) -> Unit = {},
     onStationClick: (DiscoverItem) -> Unit = {},
     stationLoadingId: String? = null,
+    onStationLongClick: (DiscoverItem) -> Unit = {},
 ) {
     if (state.tabs.isEmpty()) {
         if (state.error != null && !state.isLoading) {
@@ -97,8 +98,8 @@ internal fun LazyListScope.discoverFeaturedItems(
     if (state.personalLoading && state.feed.none { it.kind == FeedKind.TOP_PICKS }) {
         item(key = "top-picks-skeleton") { TopPicksSkeleton() }
     }
-    discoverStations(state, stationLoadingId, onStationClick, "picks")
-    discoverStations(state, stationLoadingId, onStationClick, "mixes")
+    discoverStations(state, stationLoadingId, onStationClick, "picks", onStationLongClick)
+    discoverStations(state, stationLoadingId, onStationClick, "mixes", onStationLongClick)
 
     feedSectionItems(
         state.feed.filter { it.slot == FeedSlot.TOP },
@@ -109,9 +110,10 @@ internal fun LazyListScope.discoverFeaturedItems(
         onAlbumClick,
         onStationClick,
         stationLoadingId,
+        onStationLongClick,
     )
     discoverHero(state, nowPlayingIsrc, onStationClick, onAlbumClick, onTrackClick)
-    discoverStations(state, stationLoadingId, onStationClick, "radio")
+    discoverStations(state, stationLoadingId, onStationClick, "radio", onStationLongClick)
     discoverMoods(state, stationLoadingId, onStationClick)
     feedSectionItems(
         state.feed.filter { it.slot == FeedSlot.MIDDLE },
@@ -122,6 +124,7 @@ internal fun LazyListScope.discoverFeaturedItems(
         onAlbumClick,
         onStationClick,
         stationLoadingId,
+        onStationLongClick,
     )
 
     if (state.albums.isNotEmpty()) {
@@ -256,6 +259,7 @@ internal fun LazyListScope.discoverItems(
     onLoadMore: () -> Unit = {},
     onStationClick: (DiscoverItem) -> Unit = {},
     stationLoadingId: String? = null,
+    onStationLongClick: (DiscoverItem) -> Unit = {},
 ) {
     discoverFeaturedItems(
         state,
@@ -268,6 +272,7 @@ internal fun LazyListScope.discoverItems(
         onArtistItemClick,
         onStationClick,
         stationLoadingId,
+        onStationLongClick,
     )
     discoverChartItems(
         state,
@@ -364,9 +369,10 @@ private fun AlbumCard(
     item: DiscoverItem,
     isPlaying: Boolean = false,
     size: Dp = 144.dp,
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
-    Column(Modifier.width(size).pressScale(onClick = onClick, scaleDown = 0.96f)) {
+    Column(Modifier.width(size).pressScale(onClick = onClick, scaleDown = 0.96f, onLongClick = onLongClick)) {
         ArtImage(
             url = remember(item.imageUrl) { squareArtUrl(item.imageUrl, 400) },
             modifier =
@@ -506,6 +512,7 @@ private fun LazyListScope.feedSectionItems(
     onAlbumClick: (DiscoverItem) -> Unit,
     onStationClick: (DiscoverItem) -> Unit = {},
     stationLoadingId: String? = null,
+    onStationLongClick: (DiscoverItem) -> Unit = {},
 ) {
     sections.forEach { section ->
         // Station cards are drawn by discoverStations and the mood cards by discoverMoods, in their own places on the page.
@@ -513,6 +520,8 @@ private fun LazyListScope.feedSectionItems(
         val queue = section.items.mapNotNull { it.track }
         val play: (DiscoverItem) -> Unit = { item -> item.track?.let { onTrackClick(it, queue) } }
         val playing: (DiscoverItem) -> Boolean = { item -> nowPlayingIsrc != null && item.track?.isrc == nowPlayingIsrc }
+        // Holding a song card opens the same options as the "more" button on a row.
+        val hold: (DiscoverItem) -> (() -> Unit)? = { item -> item.track?.let { t -> { onMoreClick(t) } } }
 
         if (section.kind == FeedKind.SPOTLIGHT) {
             item(key = "feed-${section.id}") {
@@ -547,7 +556,7 @@ private fun LazyListScope.feedSectionItems(
                             contentPadding = PaddingValues(horizontal = DiscoverInset, vertical = 4.dp),
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                         ) {
-                            items(section.items, key = { it.id }) { song -> AlbumCard(song, isPlaying = playing(song)) { play(song) } }
+                            items(section.items, key = { it.id }) { song -> AlbumCard(song, isPlaying = playing(song), onLongClick = hold(song)) { play(song) } }
                         }
                     } else {
                         TrackRails(section.items, playing, play, onMoreClick)
@@ -560,7 +569,9 @@ private fun LazyListScope.feedSectionItems(
                         contentPadding = PaddingValues(horizontal = DiscoverInset, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        items(section.items, key = { it.id }) { song -> AlbumCard(song, isPlaying = playing(song), size = cover) { play(song) } }
+                        items(section.items, key = { it.id }) { song ->
+                            AlbumCard(song, isPlaying = playing(song), size = cover, onLongClick = hold(song)) { play(song) }
+                        }
                     }
                 }
 

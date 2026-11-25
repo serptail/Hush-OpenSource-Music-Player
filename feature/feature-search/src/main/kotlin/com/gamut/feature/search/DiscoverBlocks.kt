@@ -473,6 +473,7 @@ internal fun LazyListScope.discoverStations(
     loadingId: String?,
     onStation: (DiscoverItem) -> Unit,
     family: String,
+    onStationLongClick: (DiscoverItem) -> Unit = {},
 ) {
     val (section, rows) = shelf(state, family) ?: return
     val first = family == "picks" || (family == "mixes" && shelf(state, "picks") == null)
@@ -484,13 +485,13 @@ internal fun LazyListScope.discoverStations(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             itemsIndexed(rows, key = { _, row -> row.id }) { index, row ->
-                StationCard(row, index, loading = row.id == loadingId) { onStation(row) }
+                StationCard(row, index, loading = row.id == loadingId, onLongClick = { onStationLongClick(row) }) { onStation(row) }
             }
         }
     }
 }
 
-private fun stationBadge(item: DiscoverItem): String =
+internal fun stationBadge(item: DiscoverItem): String =
     if (item.meta == "Mix") {
         "MIX"
     } else when (StationId.kindOf(item.id)) {
@@ -503,17 +504,18 @@ private fun stationBadge(item: DiscoverItem): String =
 
 /**
  * A square station card with its names underneath. A mix wears its cover art with a colour label across the bottom;
- * a radio is a colour with the artists' photos in a row. Tapping anywhere plays it.
+ * a radio is a colour with the artists' photos in a row. Tapping anywhere plays it, holding opens its options.
  */
 @Composable
 private fun StationCard(
     item: DiscoverItem,
     index: Int,
     loading: Boolean,
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val onCover = item.imageUrl.isNotBlank() && StationId.kindOf(item.id) != StationId.ARTIST
-    Column(Modifier.width(StationCardSize).pressScale(onClick = onClick, scaleDown = 0.96f)) {
+    Column(Modifier.width(StationCardSize).pressScale(onClick = onClick, scaleDown = 0.96f, onLongClick = onLongClick)) {
         Box(Modifier.size(StationCardSize).clip(TileShape)) {
             if (onCover) CoverFace(item, index) else ColorFace(item, index)
             if (loading) {

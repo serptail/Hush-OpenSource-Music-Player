@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -68,12 +69,28 @@ import com.gamut.core.player.ModSettings
 import com.gamut.feature.playerui.components.bounceTap
 import kotlin.math.roundToInt
 
+/**
+ * The cover accent is white when a track has no artwork, and a pale cover colour can sit very close to a light sheet.
+ * Used raw for a selected cell's outline and fill, that leaves an empty-looking shell, so when the accent can't be told
+ * apart from the sheet the theme ink stands in for it.
+ */
+@Composable
+private fun readableAccent(accent: Color): Color {
+    val inkColor = ink()
+    val sheetLuminance = if (inkColor.luminance() > 0.5f) 0.02f else 0.95f
+    val a = accent.luminance() + 0.05f
+    val b = sheetLuminance + 0.05f
+    val contrast = if (a > b) a / b else b / a
+    return if (contrast < 1.6f) inkColor else accent.copy(alpha = 1f)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ModSheet(
     accent: Color,
     onDismiss: () -> Unit,
 ) {
+    val tone = readableAccent(accent)
     val state by ModController.state.collectAsState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -106,11 +123,11 @@ internal fun ModSheet(
                         "Reset",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
-                        color = accent,
+                        color = tone,
                         modifier =
                             Modifier
                                 .clip(RoundedCornerShape(50))
-                                .border(1.dp, accent.copy(alpha = 0.6f), RoundedCornerShape(50))
+                                .border(1.dp, tone.copy(alpha = 0.6f), RoundedCornerShape(50))
                                 .bounceTap(onClick = ModController::reset)
                                 .padding(horizontal = 14.dp, vertical = 6.dp),
                     )
@@ -125,7 +142,7 @@ internal fun ModSheet(
                             PresetCell(
                                 preset = preset,
                                 selected = preset == state.preset,
-                                accent = accent,
+                                accent = tone,
                                 modifier = Modifier.weight(1f),
                                 onClick = { ModController.select(preset) },
                             )
@@ -145,7 +162,7 @@ internal fun ModSheet(
                         .border(1.dp, ink(0.06f), RoundedCornerShape(20.dp))
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                 ) {
-                    controls.forEach { ControlRow(it, state.settings, accent) }
+                    controls.forEach { ControlRow(it, state.settings, tone) }
                 }
             }
         }
@@ -162,7 +179,7 @@ private fun PresetCell(
 ) {
     val shape = RoundedCornerShape(18.dp)
     val cellBg by animateColorAsState(
-        if (selected) accent.copy(alpha = 0.20f) else ink(0.06f),
+        if (selected) accent.copy(alpha = 0.22f) else ink(0.06f),
         tween(GamutMotion.CONTENT_MS),
         label = "mod-cell-bg",
     )
@@ -177,7 +194,7 @@ private fun PresetCell(
             .height(76.dp)
             .clip(shape)
             .background(cellBg)
-            .border(BorderStroke(if (selected) 1.5.dp else 1.dp, cellEdge), shape)
+            .border(BorderStroke(if (selected) 2.dp else 1.dp, cellEdge), shape)
             .bounceTap(onClick = onClick)
             .padding(horizontal = 6.dp),
         verticalArrangement = Arrangement.Center,

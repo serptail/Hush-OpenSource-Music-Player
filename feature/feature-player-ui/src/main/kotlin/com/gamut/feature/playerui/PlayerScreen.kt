@@ -177,6 +177,10 @@ fun PlayerScreen(
     onGoToArtist: (Track) -> Unit = {},
     active: Boolean = true,
     videoProvider: VideoStreamProvider? = null,
+    /** Null hides the Download row in the options sheet. */
+    onDownload: ((Track) -> Unit)? = null,
+    /** Maps a track to the row's status text: "Downloaded", "Downloading\u2026" or null when it can be started. */
+    downloadStatusOf: (Track) -> String? = { null },
 ) {
     val state by player.playbackState.collectAsState()
     val liveTrack by remember { derivedStateOf { (state as? PlaybackState.Playing)?.track ?: (state as? PlaybackState.Paused)?.track } }
@@ -1013,6 +1017,16 @@ fun PlayerScreen(
             videoOn = videoOn,
             onToggleVideo = toggleVideo,
             onToggleFavorite = { track?.let(onToggleFavorite) },
+            onDownload =
+                if (onDownload != null && track != null) {
+                    {
+                        showMore = false
+                        track?.let(onDownload)
+                    }
+                } else {
+                    null
+                },
+            downloadStatus = track?.let(downloadStatusOf),
             accent = accent,
             onUpgradeQuality =
                 track?.let {

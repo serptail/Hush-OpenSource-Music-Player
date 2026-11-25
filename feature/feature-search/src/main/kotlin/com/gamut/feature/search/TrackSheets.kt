@@ -150,6 +150,100 @@ internal fun TrackActionsSheet(
     }
 }
 
+/** Options for a mix or radio card: play it, keep its songs in Favorites, or drop them into a playlist. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun StationActionsSheet(
+    item: DiscoverItem,
+    badge: String,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onPlay: () -> Unit,
+    onAddToFavorites: () -> Unit,
+    onAddToPlaylist: () -> Unit,
+) {
+    GamutSheet(onDismiss = onDismiss, shape = SheetShape) {
+        Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)).background(ink(0.07f)).thumbnailBorder(RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (item.imageUrl.isNotBlank()) {
+                        ArtImage(url = remember(item.imageUrl) { squareArtUrl(item.imageUrl, 256) }, modifier = Modifier.size(52.dp), fallback = {})
+                    } else {
+                        Icon(TablerIcons.MusicNote, null, tint = ink(0.5f))
+                    }
+                }
+                Column(Modifier.weight(1f).padding(start = 14.dp)) {
+                    Text(
+                        item.title.ifBlank { item.subtitle },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = ink(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        listOf(badge.lowercase().replaceFirstChar { it.uppercase() }, item.subtitle.takeIf { it != item.title })
+                            .filterNotNull()
+                            .filter { it.isNotBlank() }
+                            .joinToString(" \u00B7 "),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ink(0.6f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            HorizontalDivider(Modifier.padding(top = 14.dp, bottom = 6.dp), color = ink(0.1f))
+            ActionRow(TablerIcons.Play, "Play") { onPlay() }
+            ActionRow(TablerIcons.Heart, if (busy) "Adding\u2026" else "Add songs to favorites") { if (!busy) onAddToFavorites() }
+            ActionRow(TablerIcons.ListPlus, "Add songs to playlist") { if (!busy) onAddToPlaylist() }
+        }
+    }
+}
+
+/** Picks the playlist that receives every song of a station. [onPick] gets the playlist id. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun StationPlaylistSheet(
+    playlists: List<TrackPlaylistOption>,
+    accent: Color,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    GamutSheet(onDismiss = onDismiss, shape = SheetShape) {
+        Text(
+            "Add to playlist",
+            style = MaterialTheme.typography.titleLarge,
+            color = ink(),
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+        )
+        LazyColumn(modifier = Modifier.imePadding(), contentPadding = PaddingValues(bottom = 32.dp)) {
+            if (playlists.isEmpty()) {
+                item(key = "no-playlists") {
+                    Text(
+                        "You don't have any playlists yet.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ink(0.6f),
+                        modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 12.dp),
+                    )
+                }
+            }
+            items(playlists, key = { it.id }) { p ->
+                PlaylistRow(
+                    name = p.name,
+                    sub = p.trackCount?.let { if (it == 1) "1 song" else "$it songs" },
+                    coverUrl = p.coverUrl,
+                    checked = false,
+                    accent = accent,
+                    onClick = { onPick(p.id) },
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun TrackHeader(track: Track) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {

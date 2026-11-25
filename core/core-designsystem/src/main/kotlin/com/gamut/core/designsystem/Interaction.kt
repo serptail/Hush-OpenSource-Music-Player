@@ -10,7 +10,9 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.FocusInteraction
 import androidx.compose.foundation.interaction.HoverInteraction
@@ -62,6 +64,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalFoundationApi::class)
 fun Modifier.pressScale(
     onClick: () -> Unit,
     scaleDown: Float = 0.94f,
@@ -69,6 +72,7 @@ fun Modifier.pressScale(
     focusScale: Float = 1f,
     enabled: Boolean = true,
     haptics: Boolean = true,
+    onLongClick: (() -> Unit)? = null,
 ): Modifier =
     composed {
         val interaction = remember { MutableInteractionSource() }
@@ -145,10 +149,22 @@ fun Modifier.pressScale(
                 }
             }.focusProperties { if (!live) canFocus = false }
             .hoverable(interaction, enabled)
-            .clickable(interactionSource = interaction, indication = null, enabled = enabled) {
-                if (haptics) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onClick()
-            }
+            .combinedClickable(
+                interactionSource = interaction,
+                indication = null,
+                enabled = enabled,
+                onLongClick =
+                    onLongClick?.let { long ->
+                        {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            long()
+                        }
+                    },
+                onClick = {
+                    if (haptics) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onClick()
+                },
+            )
     }
 
 fun Modifier.focusRing(shape: Shape = RoundedCornerShape(14.dp)): Modifier =

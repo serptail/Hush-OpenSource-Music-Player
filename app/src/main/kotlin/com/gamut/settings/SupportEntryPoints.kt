@@ -128,7 +128,7 @@ fun SupportHeartButton(onClick: () -> Unit) {
     val fill by animateFloatAsState(if (filled) 1f else 0f, tween(220), label = "heart")
     Box(
         Modifier
-            .size(44.dp)
+            .size(40.dp)
             .pressScale(onClick = onClick)
             .semantics { contentDescription = "Support Gamut" },
         contentAlignment = Alignment.Center,
@@ -136,7 +136,6 @@ fun SupportHeartButton(onClick: () -> Unit) {
         Icon(TablerIcons.Heart, null, tint = ink(0.9f * (1f - fill)), modifier = Modifier.size(24.dp))
         Icon(TablerIcons.HeartFilled, null, tint = KoFiPink.copy(alpha = fill), modifier = Modifier.size(24.dp))
     }
-    Spacer(Modifier.width(8.dp))
 }
 
 @Composable

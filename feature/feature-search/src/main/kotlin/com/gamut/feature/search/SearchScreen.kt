@@ -81,7 +81,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
@@ -113,6 +112,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.adamglin.PhosphorIcons
+import com.adamglin.phosphoricons.Regular
+import com.adamglin.phosphoricons.regular.User
 import com.gamut.core.designsystem.AcrylicHost
 import com.gamut.core.designsystem.ArtImage
 import com.gamut.core.designsystem.ArtistLine
@@ -132,7 +134,6 @@ import com.gamut.core.designsystem.adaptiveGutter
 import com.gamut.core.designsystem.bounceClickable
 import com.gamut.core.designsystem.collectIsPulsedAsState
 import com.gamut.core.designsystem.focusRing
-import com.gamut.core.designsystem.glass
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.isWideLayout
 import com.gamut.core.designsystem.pressScale
@@ -225,6 +226,9 @@ fun SearchScreen(
         var filter by rememberSaveable { mutableIntStateOf(FILTER_ALL) }
         val searchFocus = remember { FocusRequester() }
         var actionsTrack by remember { mutableStateOf<Track?>(null) }
+        var stationActions by remember { mutableStateOf<DiscoverItem?>(null) }
+        var stationPicker by remember { mutableStateOf<DiscoverItem?>(null) }
+        var stationBusy by remember { mutableStateOf(false) }
         var savedTrack by remember { mutableStateOf<Track?>(null) }
         var shareTrack by remember { mutableStateOf<Track?>(null) }
         var pickerTrack by remember { mutableStateOf<Track?>(null) }
@@ -330,43 +334,41 @@ fun SearchScreen(
                     }
                     if (showingDiscover && LocalInputModeManager.current.inputMode == InputMode.Keyboard) {
                         Box(
-                            Modifier.size(44.dp).pressScale(onClick = { viewModel.refreshDiscover() }).semantics {
+                            Modifier.size(40.dp).pressScale(onClick = { viewModel.refreshDiscover() }).semantics {
                                 contentDescription =
                                     "Refresh Discover"
                             },
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(TablerIcons.Refresh, null, tint = ink(0.9f), modifier = Modifier.size(26.dp))
+                            Icon(TablerIcons.Refresh, null, tint = ink(0.9f), modifier = Modifier.size(24.dp))
                         }
-                        Spacer(Modifier.width(8.dp))
                     }
                     headerExtra()
                     Box(
-                        Modifier.size(44.dp).pressScale(onClick = onShazam, scaleDown = 0.92f),
+                        Modifier.size(40.dp).pressScale(onClick = onShazam, scaleDown = 0.92f),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             painterResource(com.gamut.core.designsystem.R.drawable.ic_shazam),
                             "Identify a song",
                             tint = ink(0.9f),
-                            modifier = Modifier.size(26.dp),
+                            modifier = Modifier.size(24.dp),
                         )
                     }
-                    Spacer(Modifier.width(8.dp))
                     Box(
-                        Modifier.size(44.dp).then(profileModifier).pressScale(onClick = onProfile).semantics {
+                        Modifier.size(40.dp).then(profileModifier).pressScale(onClick = onProfile).semantics {
                             contentDescription =
                                 "Profile"
                         },
                         contentAlignment = Alignment.Center,
                     ) {
+                        // Same avatar the Settings screen uses: initial when signed in, the circled user glyph as a guest.
                         ProfileAvatar(
                             name = profileName,
                             seed = profileSeed,
-                            size = 44.dp,
-                            guestIcon = TablerIcons.User,
+                            size = 34.dp,
+                            guestIcon = PhosphorIcons.Regular.User,
                             image = profileImage,
-                            softGuest = true,
                         )
                     }
                 }
@@ -470,6 +472,10 @@ fun SearchScreen(
                                     onArtistItemClick = openArtistItem,
                                     onStationClick = openStation,
                                     stationLoadingId = stationLoading,
+                                    onStationLongClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        stationActions = it
+                                    },
                                 )
                                 discoverFeedItems(
                                     state = discover,
@@ -593,6 +599,10 @@ fun SearchScreen(
                                     onLoadMore = { viewModel.loadMoreFeed() },
                                     onStationClick = openStation,
                                     stationLoadingId = stationLoading,
+                                    onStationLongClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        stationActions = it
+                                    },
                                 )
                             } else {
                                 val loadingEmpty = state.tracks.isEmpty() && (state.isLoading || !settled)
@@ -740,6 +750,62 @@ fun SearchScreen(
                 },
             )
         }
+        stationActions?.let { item ->
+            StationActionsSheet(
+                item = item,
+                badge = stationBadge(item),
+                busy = stationBusy,
+                onDismiss = { stationActions = null },
+                onPlay = {
+                    stationActions = null
+                    openStation(item)
+                },
+                onAddToFavorites = {
+                    stationBusy = true
+                    viewModel.resolveStation(
+                        item,
+                        onReady = { tracks ->
+                            val fresh = tracks.filter { it.isrc !in favoriteIsrcs }
+                            fresh.forEach(onToggleFavorite)
+                            stationBusy = false
+                            stationActions = null
+                            notifier.show(
+                                if (fresh.isEmpty()) "Already in your favorites" else "Added ${fresh.size} songs to favorites",
+                                com.gamut.core.designsystem.NoticeKind.Success,
+                            )
+                        },
+                        onFailed = {
+                            stationBusy = false
+                            notifier.show("Couldn\u2019t load that station.", com.gamut.core.designsystem.NoticeKind.Warning)
+                        },
+                    )
+                },
+                onAddToPlaylist = {
+                    stationActions = null
+                    stationPicker = item
+                },
+            )
+        }
+        stationPicker?.let { item ->
+            StationPlaylistSheet(
+                playlists = playlists,
+                accent = accent,
+                onDismiss = { stationPicker = null },
+                onPick = { playlistId ->
+                    stationPicker = null
+                    viewModel.resolveStation(
+                        item,
+                        onReady = { tracks ->
+                            tracks.forEach { onAddToPlaylist(it, playlistId) }
+                            notifier.show("Added ${tracks.size} songs to the playlist", com.gamut.core.designsystem.NoticeKind.Success)
+                        },
+                        onFailed = {
+                            notifier.show("Couldn\u2019t load that station.", com.gamut.core.designsystem.NoticeKind.Warning)
+                        },
+                    )
+                },
+            )
+        }
         savedTrack?.let { t ->
             SavedInSheet(
                 track = t,
@@ -800,7 +866,7 @@ private fun SearchField(
         Row(
             Modifier
                 .weight(1f)
-                .height(48.dp)
+                .height(44.dp)
                 .then(
                     if (remote && !editing &&
                         !focused
@@ -809,22 +875,18 @@ private fun SearchField(
                     } else {
                         Modifier
                     },
-                ).glass(CircleShape, fill = 0.07f + 0.035f * focus, borderColor = accent.copy(alpha = 0.5f * focus))
-                .padding(start = 18.dp, end = 6.dp),
+                ).clip(RoundedCornerShape(14.dp))
+                .background(ink(0.06f + 0.03f * focus))
+                .padding(start = 14.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
                 TablerIcons.Search,
                 null,
-                tint = lerp(ink(0.5f), accent, focus * 0.85f),
-                modifier = Modifier.size(20.dp).graphicsLayer {
-                    // A small settle as the field takes focus.
-                    val grow = 1f + 0.08f * focus
-                    scaleX = grow
-                    scaleY = grow
-                },
+                tint = ink(0.5f + 0.2f * focus),
+                modifier = Modifier.size(18.dp),
             )
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
             BasicTextField(
                 value = query,
                 onValueChange = onQueryChange,
@@ -867,12 +929,10 @@ private fun SearchField(
                 exit = fadeOut(tween(100)) + scaleOut(tween(120), targetScale = 0.6f),
             ) {
                 Box(
-                    Modifier.size(40.dp).pressScale(onClick = { onQueryChange("") }, scaleDown = 0.85f),
+                    Modifier.size(36.dp).pressScale(onClick = { onQueryChange("") }, scaleDown = 0.85f),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Box(Modifier.size(20.dp).background(ink(0.16f), CircleShape), contentAlignment = Alignment.Center) {
-                        Icon(TablerIcons.Close, "Clear", tint = ink(0.75f), modifier = Modifier.size(12.dp))
-                    }
+                    Icon(TablerIcons.Close, "Clear", tint = ink(0.5f), modifier = Modifier.size(16.dp))
                 }
             }
         }
@@ -883,17 +943,18 @@ private fun SearchField(
         ) {
             Text(
                 "Cancel",
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                color = ink(0.85f),
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                color = accent,
                 maxLines = 1,
                 softWrap = false,
                 modifier =
                     Modifier
-                        .padding(start = 14.dp)
+                        .padding(start = 6.dp)
                         .pressScale(onClick = {
                             onQueryChange("")
                             focusManager.clearFocus()
-                        }, scaleDown = 0.92f),
+                        }, scaleDown = 0.92f)
+                        .padding(horizontal = 8.dp, vertical = 10.dp),
             )
         }
     }
