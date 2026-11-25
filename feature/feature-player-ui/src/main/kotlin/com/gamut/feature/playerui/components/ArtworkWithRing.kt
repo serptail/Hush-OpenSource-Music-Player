@@ -109,6 +109,7 @@ internal fun ArtworkWithRing(
     onSeekFraction: (Float) -> Unit,
     seekStep: Float = 0.04f,
     dockEnabled: Boolean = true,
+    onDoubleTapSeek: ((Int) -> Unit)? = null,
 ) {
     val live = LocalFocusLive.current
     val shapedWaveform = remember(waveform) { shapeWaveform(waveform) }
@@ -120,6 +121,7 @@ internal fun ArtworkWithRing(
     val scrub by animateFloatAsState(if (scrubbing) 1f else 0f, tween(180), label = "scrub")
 
     val currentToggle by rememberUpdatedState(onTogglePlay)
+    val currentDoubleTap by rememberUpdatedState(onDoubleTapSeek)
     val currentSeek by rememberUpdatedState(onSeekFraction)
     val currentScrub by rememberUpdatedState(onScrub)
     val haptics = LocalHapticFeedback.current
@@ -339,8 +341,35 @@ internal fun ArtworkWithRing(
                                 val up = waitForUpOrCancellation()
                                 if (up != null) {
                                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    currentToggle()
-                                    tapTrigger++
+                                    if (currentDoubleTap == null) {
+                                        currentToggle()
+                                        tapTrigger++
+                                    } else {
+                                        // A single tap waits a beat for a possible second one: two quick taps skip
+                                        // 5 s (and keep skipping while the taps keep coming); a lone tap plays / pauses.
+                                        var skips = 0
+                                        while (true) {
+                                            val again =
+                                                withTimeoutOrNull(viewConfiguration.doubleTapTimeoutMillis) {
+                                                    val d = awaitFirstDown(requireUnconsumed = false)
+                                                    d.consume()
+                                                    val u = waitForUpOrCancellation()
+                                                    if (u != null) {
+                                                        u.consume()
+                                                        d
+                                                    } else {
+                                                        null
+                                                    }
+                                                } ?: break
+                                            skips++
+                                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            currentDoubleTap?.invoke(if (again.position.x < size.width / 2f) -1 else 1)
+                                        }
+                                        if (skips == 0) {
+                                            currentToggle()
+                                            tapTrigger++
+                                        }
+                                    }
                                 }
                             }
                         }

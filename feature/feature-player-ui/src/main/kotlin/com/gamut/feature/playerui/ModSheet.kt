@@ -77,11 +77,18 @@ import kotlin.math.roundToInt
 @Composable
 private fun readableAccent(accent: Color): Color {
     val inkColor = ink()
-    val sheetLuminance = if (inkColor.luminance() > 0.5f) 0.02f else 0.95f
-    val a = accent.luminance() + 0.05f
-    val b = sheetLuminance + 0.05f
-    val contrast = if (a > b) a / b else b / a
-    return if (contrast < 1.6f) inkColor else accent.copy(alpha = 1f)
+    val sheet = LocalCoverPalette.current.base
+    return if (contrastRatio(accent, sheet) < 2.2f) inkColor else accent.copy(alpha = 1f)
+}
+
+/** WCAG-style contrast between two opaque colours, measured against the sheet's real (cover-tinted) background. */
+private fun contrastRatio(
+    a: Color,
+    b: Color,
+): Float {
+    val la = a.luminance() + 0.05f
+    val lb = b.luminance() + 0.05f
+    return if (la > lb) la / lb else lb / la
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -178,8 +185,10 @@ private fun PresetCell(
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(18.dp)
+    // Selected state is drawn with the (already contrast-checked) accent PLUS an ink fallback, so the cell never
+    // collapses into the sheet colour whatever the cover palette is.
     val cellBg by animateColorAsState(
-        if (selected) accent.copy(alpha = 0.22f) else ink(0.06f),
+        if (selected) ink(0.14f) else ink(0.06f),
         tween(GamutMotion.CONTENT_MS),
         label = "mod-cell-bg",
     )
@@ -194,6 +203,7 @@ private fun PresetCell(
             .height(76.dp)
             .clip(shape)
             .background(cellBg)
+            .background(if (selected) accent.copy(alpha = 0.12f) else Color.Transparent)
             .border(BorderStroke(if (selected) 2.dp else 1.dp, cellEdge), shape)
             .bounceTap(onClick = onClick)
             .padding(horizontal = 6.dp),

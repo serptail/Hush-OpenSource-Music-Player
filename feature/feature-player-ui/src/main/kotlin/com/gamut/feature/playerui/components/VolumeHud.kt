@@ -154,6 +154,7 @@ internal fun Modifier.swipeVolumeGesture(
 internal fun VolumeHudOverlay(
     hud: VolumeHud,
     modifier: Modifier = Modifier,
+    preview: Float? = null,
 ) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(hud.holding) {
@@ -173,12 +174,12 @@ internal fun VolumeHudOverlay(
 
     Box(modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
         AnimatedVisibility(
-            visible = visible,
+            visible = visible || preview != null,
             enter = fadeIn(tween(120)),
             exit = fadeOut(tween(260)),
         ) {
             Box(Modifier.fillMaxSize()) {
-                VolumePill(hud.fraction, Modifier.align(Alignment.TopCenter).offset { IntOffset(0, top) })
+                VolumePill(preview ?: hud.fraction, Modifier.align(Alignment.TopCenter).offset { IntOffset(0, top) })
             }
         }
     }

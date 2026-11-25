@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -71,6 +72,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.text.TextStyle
@@ -110,12 +112,18 @@ import com.gamut.core.player.VideoStreamProvider
 import com.gamut.feature.playerui.components.ArtworkWithRing
 import com.gamut.feature.playerui.components.BouncingText
 import com.gamut.feature.playerui.components.DepthIcon
+import com.gamut.feature.playerui.components.DoubleTapSeek
+import com.gamut.feature.playerui.components.DoubleTapSeekMs
+import com.gamut.feature.playerui.components.DoubleTapSeekOverlay
+import com.gamut.feature.playerui.components.GestureTutorial
 import com.gamut.feature.playerui.components.TimeRow
 import com.gamut.feature.playerui.components.VolumeHud
 import com.gamut.feature.playerui.components.VolumeHudOverlay
 import com.gamut.feature.playerui.components.WaveformSource
 import com.gamut.feature.playerui.components.backdropArtUrl
 import com.gamut.feature.playerui.components.bounceTap
+import com.gamut.feature.playerui.components.doubleTapSeekGesture
+import com.gamut.feature.playerui.components.rememberIsTelevision
 import com.gamut.feature.playerui.components.rememberCoverAccent
 import com.gamut.feature.playerui.components.rememberCoverSubAccent
 import com.gamut.feature.playerui.components.rememberCoverTint
@@ -133,6 +141,7 @@ import com.gamut.core.model.RepeatMode as PlaybackRepeatMode
 private val FavoriteColor = Color(0xFFFF4D6D)
 private const val PrefsName = "player_ui"
 private const val PrefLyricsOn = "lyrics_on"
+private const val PrefGestureTutorialSeen = "gesture_tutorial_seen"
 private const val PrefVideoOn = "video_on"
 
 /** How far the content below the hero slides up over the video's faded bottom edge. */
@@ -245,6 +254,10 @@ fun PlayerScreen(
     var lyricsOn by remember { mutableStateOf(prefs.getBoolean(PrefLyricsOn, true)) }
     var lyricsPanelOpen by remember { mutableStateOf(false) }
     var videoOn by remember { mutableStateOf(prefs.getBoolean(PrefVideoOn, false)) }
+    val doubleTapSeek = remember { DoubleTapSeek() }
+    var showGestureTutorial by remember { mutableStateOf(false) }
+    var tutorialVolume by remember { mutableStateOf<Float?>(null) }
+    val isTv = rememberIsTelevision()
 
     val toggleVideo: () -> Unit = {
         videoOn = !videoOn
@@ -254,6 +267,18 @@ fun PlayerScreen(
     val leave: () -> Unit = { if (active) onBack() }
     BackHandler(enabled = active && !lyricsPanelOpen) { leave() }
     BackHandler(enabled = active && lyricsPanelOpen) { lyricsPanelOpen = false }
+    BackHandler(enabled = active && showGestureTutorial) { showGestureTutorial = false }
+    // One-time gesture guide: shown the first time the player screen is open with a track, never again.
+    LaunchedEffect(active, track != null) {
+        if (active && track != null && !prefs.getBoolean(PrefGestureTutorialSeen, false)) {
+            delay(1000L)
+            if ((isTv || volumeHud.anchor.width > 0f) && !lyricsPanelOpen) {
+                prefs.edit().putBoolean(PrefGestureTutorialSeen, true).apply()
+                showGestureTutorial = true
+            }
+        }
+    }
+    LaunchedEffect(active) { if (!active) showGestureTutorial = false }
     LaunchedEffect(active) {
         if (!active) {
             // Past the whole spring: flipping this mid-flight would switch the artwork's flight on halfway.
@@ -295,9 +320,20 @@ fun PlayerScreen(
         clock.seeked(target)
         player.seekTo(target)
     }
+    val seekByMs: (Long) -> Unit = { delta ->
+        if (durationKnown) {
+            val now = (progressProvider() * duration).toLong()
+            seekToFraction(((now + delta).toFloat() / duration).coerceIn(0f, 1f))
+        }
+    }
     val togglePlay: () -> Unit = {
         if (shownPlaying) player.pause() else player.resume()
         shownPlaying = !shownPlaying
+    }
+    val currentSeekByMs by androidx.compose.runtime.rememberUpdatedState(seekByMs)
+    val coverDoubleTap: (Int) -> Unit = { direction ->
+        doubleTapSeek.registerSeek(direction)
+        seekByMs(direction * DoubleTapSeekMs)
     }
     val coverFocus = remember { FocusRequester() }
     val inputMode = LocalInputModeManager.current
@@ -423,6 +459,9 @@ fun PlayerScreen(
 
     val meshStyle = LocalAppearance.current.playerStyle == PlayerStyle.Mesh && !videoMode
     val artworkMesh = if (meshStyle) rememberArtworkMesh(artUrl) else null
+    // Classic owns its cover tap (play / pause), so it handles the double tap inside the cover itself.
+    val classicPlayer = !meshStyle && !(LocalAppearance.current.playerStyle == PlayerStyle.Cover && !videoMode)
+    val topBarPx = with(LocalDensity.current) { WindowInsets.statusBars.getTop(this) + 64.dp.toPx() }
     val meshSeam = remember { MeshSeam() }
     val meshSeamLift = animateFloatAsState(if (lyricsPanelOpen) 0f else 1f, tween(400), label = "mesh-seam-lift")
 
@@ -432,7 +471,19 @@ fun PlayerScreen(
                 .fillMaxSize()
                 .background(CoverPalette.Neutral.base)
                 .then(if (meshStyle) meshSeam.onHost else Modifier)
-                .then(if (lyricsPanelOpen || videoExpanded) Modifier else Modifier.swipeVolumeGesture(volumeHud)),
+                .then(if (lyricsPanelOpen || videoExpanded) Modifier else Modifier.swipeVolumeGesture(volumeHud))
+                .then(
+                    if (lyricsPanelOpen || videoMode || showGestureTutorial || classicPlayer) {
+                        Modifier
+                    } else {
+                        Modifier.doubleTapSeekGesture(
+                            hud = volumeHud,
+                            seek = doubleTapSeek,
+                            topExclusionPx = { topBarPx },
+                            onSeekBy = { currentSeekByMs(it) },
+                        )
+                    },
+                ),
         ) {
             val coverStyle = LocalAppearance.current.playerStyle == PlayerStyle.Cover && !videoMode
             val exactLyrics = (shownLyrics as? LyricsState.Loaded)?.lines?.any { it.exact } == true
@@ -520,7 +571,20 @@ fun PlayerScreen(
                     extras = extrasContent,
                     highlight = lyricHighlight,
                 )
-                VolumeHudOverlay(volumeHud)
+                VolumeHudOverlay(volumeHud, preview = tutorialVolume)
+                DoubleTapSeekOverlay(volumeHud, doubleTapSeek)
+                if (showGestureTutorial && !lyricsPanelOpen) {
+                    GestureTutorial(
+                        hud = volumeHud,
+                        remote = isTv,
+                        onPreviewVolume = { tutorialVolume = it },
+                        onDone = {
+                            showGestureTutorial = false
+                            tutorialVolume = null
+                            if (isTv) runCatching { coverFocus.requestFocus() }
+                        },
+                    )
+                }
             } else {
                 if (meshStyle) {
                     ArtworkMeshBackdrop(artworkMesh, animate = active, seam = { meshSeam.px * meshSeamLift.value })
@@ -692,6 +756,7 @@ fun PlayerScreen(
                                     onSeekFraction = seekToFraction,
                                     seekStep = seekStep,
                                     dockEnabled = !lyricsPanelOpen,
+                                    onDoubleTapSeek = if (videoMode) null else coverDoubleTap,
                                 )
                             }
                             DepthIcon(
@@ -959,7 +1024,20 @@ fun PlayerScreen(
                     }
                 }
 
-                VolumeHudOverlay(volumeHud)
+                VolumeHudOverlay(volumeHud, preview = tutorialVolume)
+                DoubleTapSeekOverlay(volumeHud, doubleTapSeek)
+                if (showGestureTutorial && !lyricsPanelOpen) {
+                    GestureTutorial(
+                        hud = volumeHud,
+                        remote = isTv,
+                        onPreviewVolume = { tutorialVolume = it },
+                        onDone = {
+                            showGestureTutorial = false
+                            tutorialVolume = null
+                            if (isTv) runCatching { coverFocus.requestFocus() }
+                        },
+                    )
+                }
 
                 AnimatedVisibility(
                     visible = lyricsPanelOpen && track != null,
