@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gamut.core.database.DownloadIndex
 import com.gamut.core.database.toDomain
+import com.gamut.core.model.GroupedTrack
 import com.gamut.core.model.Playlist
 import com.gamut.core.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -201,6 +202,45 @@ class LibraryViewModel
         val favorites: StateFlow<List<Track>> =
             repository.observeFavorites().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+        /** The favorites in order with the album group each song was added in. Albums show as one group. */
+        val favoriteRows: StateFlow<List<GroupedTrack>> =
+            repository.observeGroupedFavorites().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+        /** Adds an album to the favorites as one group. Returns how many of its songs were not there yet. */
+        suspend fun addAlbumToFavorites(tracks: List<Track>): Int = repository.addFavoriteAlbum(tracks)
+
+        /** Adds an album to a playlist as one group. Returns how many of its songs were not there yet. */
+        suspend fun addAlbumToPlaylist(
+            playlistId: Long,
+            tracks: List<Track>,
+        ): Int = addMutex.withLock { repository.appendAlbum(playlistId, tracks) }
+
+        fun ungroupFavoriteAlbum(groupId: String) {
+            viewModelScope.launch { repository.ungroupFavoriteAlbum(groupId) }
+        }
+
+        fun removeFavoriteAlbum(groupId: String) {
+            viewModelScope.launch { repository.removeFavoriteAlbum(groupId) }
+        }
+
+        /** Moves a song one step ([delta] is -1 or +1) in the favorites. A song of an album stays inside its album. */
+        fun moveFavorite(
+            index: Int,
+            delta: Int,
+        ) {
+            val order = reorderTrack(favoriteRows.value, index, delta) ?: return
+            setFavoriteOrder(order)
+        }
+
+        /** Moves a whole album group one step past a loose song or another group in the favorites. */
+        fun moveFavoriteAlbum(
+            groupId: String,
+            delta: Int,
+        ) {
+            val order = reorderAlbum(favoriteRows.value, groupId, delta) ?: return
+            setFavoriteOrder(order)
+        }
+
         val likedOffline: StateFlow<Boolean> =
             combine(
                 favorites,
@@ -234,9 +274,47 @@ class PlaylistViewModel
                 .map { list -> list.firstOrNull { it.id == playlistId } }
                 .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
 
-        val tracks: StateFlow<List<Track>> =
-            (if (rawId == "liked") repository.observeFavorites() else repository.observeTracks(rawId?.toLongOrNull() ?: -1L))
+        /** The songs in order, each with the album group it was added in. */
+        val rows: StateFlow<List<GroupedTrack>> =
+            (if (rawId == "liked") repository.observeGroupedFavorites() else repository.observeGroupedTracks(rawId?.toLongOrNull() ?: -1L))
                 .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
+
+        val tracks: StateFlow<List<Track>> =
+            rows
+                .map { list -> list.map { it.track } }
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), emptyList())
+
+        /** Moves the song at [index] one step ([delta] is -1 or +1). A song of an album stays inside its album. */
+        fun moveTrack(
+            index: Int,
+            delta: Int,
+        ) {
+            val id = playlistId ?: return
+            val order = reorderTrack(rows.value, index, delta) ?: return
+            viewModelScope.launch { repository.replaceTracks(id, order) }
+        }
+
+        /** Moves a whole album group one step past a loose song or another group. */
+        fun moveAlbum(
+            groupId: String,
+            delta: Int,
+        ) {
+            val id = playlistId ?: return
+            val order = reorderAlbum(rows.value, groupId, delta) ?: return
+            viewModelScope.launch { repository.replaceTracks(id, order) }
+        }
+
+        /** Turns an album group back into loose songs. They stay where they are. */
+        fun ungroupAlbum(groupId: String) {
+            val id = playlistId ?: return
+            viewModelScope.launch { repository.ungroupAlbum(id, groupId) }
+        }
+
+        /** Takes every song of an album group out of the playlist. */
+        fun removeAlbum(groupId: String) {
+            val id = playlistId ?: return
+            viewModelScope.launch { repository.removeAlbum(id, groupId) }
+        }
 
         fun move(
             from: Int,

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -39,7 +40,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -120,6 +120,7 @@ import com.gamut.core.designsystem.glass
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.splitArtists
+import com.gamut.core.model.GroupedTrack
 import com.gamut.core.model.Track
 import com.gamut.feature.resolver.DownloadState
 import kotlin.math.abs
@@ -143,20 +144,26 @@ private val SheetDestructive = Color(0xFFFF6B6B)
 
 @Composable
 fun FavoritesScreen(
-    tracks: List<Track>,
+    rows: List<GroupedTrack>,
     onBack: () -> Unit,
     onTrackSelected: (Track, List<Track>) -> Unit,
     onShuffle: (List<Track>) -> Unit = {},
     onRemove: (Track) -> Unit = {},
     onAddToPlaylist: ((Track) -> Unit)? = null,
     onReorder: (List<Track>) -> Unit = {},
+    onUngroupAlbum: (String) -> Unit = {},
+    onRemoveAlbum: (String) -> Unit = {},
     onTrackArtist: (Track) -> Unit = {},
     nowPlayingIsrc: String? = null,
     downloads: PlaylistDownloadsViewModel,
     style: FavoritesStyle = FavoritesStyle.Grouped,
     nowPlaying: @Composable () -> Unit = {},
 ) {
-    val songs = tracks
+    val songs = remember(rows) { rows.map { it.track } }
+    // Neighbouring songs of one album group make one entry. Which entries are unfolded is kept across rotation.
+    val entries = remember(rows) { buildEntries(rows) }
+    val folds = rememberAlbumFolds()
+    var albumMenuId by remember { mutableStateOf<String?>(null) }
     val downloadStates by downloads.states.collectAsStateWithLifecycle()
     val batch by downloads.batch.collectAsStateWithLifecycle()
     val remote = remember(songs) { songs.filter { !it.isLocal } }
@@ -212,6 +219,14 @@ fun FavoritesScreen(
     val openMenu: (Track) -> Unit = {
         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         menuTrack = it
+    }
+    val openAlbumMenu: (ListEntry.Album) -> Unit = {
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        albumMenuId = it.id
+    }
+    val toggleAlbum: (ListEntry.Album) -> Unit = {
+        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        folds.toggle(it.id)
     }
 
     CoverTheme(palette) {
@@ -296,12 +311,15 @@ fun FavoritesScreen(
                 wheel -> {
                     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         FavoritesWheel(
-                            songs = songs,
+                            entries = entries,
+                            folds = folds,
                             downloadStates = rowStates,
                             nowPlayingIsrc = nowPlayingIsrc,
                             accent = accent,
                             onTrackClick = { onTrackSelected(it, songs) },
                             onTrackMenu = openMenu,
+                            onAlbumToggle = toggleAlbum,
+                            onAlbumMenu = openAlbumMenu,
                             onTrackArtist = onTrackArtist,
                             onCancelDownload = { if (!it.isLocal) downloads.cancel(listOf(it.isrc)) },
                             modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxSize(),
@@ -313,6 +331,8 @@ fun FavoritesScreen(
                     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
                         FavoritesList(
                             songs = songs,
+                            entries = entries,
+                            folds = folds,
                             downloadStates = rowStates,
                             nowPlayingIsrc = nowPlayingIsrc,
                             accent = accent,
@@ -322,6 +342,8 @@ fun FavoritesScreen(
                             onShuffle = { onShuffle(songs) },
                             onTrackClick = { onTrackSelected(it, songs) },
                             onTrackMenu = openMenu,
+                            onAlbumToggle = toggleAlbum,
+                            onAlbumMenu = openAlbumMenu,
                             onTrackArtist = onTrackArtist,
                             onCancelDownload = { if (!it.isLocal) downloads.cancel(listOf(it.isrc)) },
                             modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxSize(),
@@ -350,6 +372,25 @@ fun FavoritesScreen(
                 },
                 onCancelDownloads = { downloads.cancel(remote.map { it.isrc }) },
                 onRemoveDownloads = { downloads.remove(remote.map { it.isrc }) },
+            )
+        }
+
+        val menuAlbum = albumMenuId?.let { id -> entries.firstOrNull { it is ListEntry.Album && it.id == id } as? ListEntry.Album }
+        if (menuAlbum != null) {
+            AlbumGroupMenu(
+                album = menuAlbum,
+                coverShape = RowCoverShape,
+                removeLabel = "Remove from favorites",
+                canMoveUp = canMoveAlbum(rows, menuAlbum.id, -1),
+                canMoveDown = canMoveAlbum(rows, menuAlbum.id, 1),
+                showMove = true,
+                onPlay = { onTrackSelected(menuAlbum.tracks.first(), menuAlbum.tracks) },
+                onShuffle = { onShuffle(menuAlbum.tracks) },
+                onMoveUp = { reorderAlbum(rows, menuAlbum.id, -1)?.let(onReorder) },
+                onMoveDown = { reorderAlbum(rows, menuAlbum.id, 1)?.let(onReorder) },
+                onUngroup = { onUngroupAlbum(menuAlbum.id) },
+                onRemove = { onRemoveAlbum(menuAlbum.id) },
+                onDismiss = { albumMenuId = null },
             )
         }
 
@@ -446,6 +487,8 @@ private fun EmptyFavorites(
 @Composable
 private fun FavoritesList(
     songs: List<Track>,
+    entries: List<ListEntry>,
+    folds: AlbumFolds,
     downloadStates: Map<String, DownloadState>,
     nowPlayingIsrc: String?,
     accent: Color,
@@ -455,11 +498,12 @@ private fun FavoritesList(
     onShuffle: () -> Unit,
     onTrackClick: (Track) -> Unit,
     onTrackMenu: (Track) -> Unit,
+    onAlbumToggle: (ListEntry.Album) -> Unit,
+    onAlbumMenu: (ListEntry.Album) -> Unit,
     onTrackArtist: (Track) -> Unit,
     onCancelDownload: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val playingIndex = remember(songs, nowPlayingIsrc) { songs.indexOfFirst { nowPlayingIsrc != null && it.isrc == nowPlayingIsrc } }
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = 0)
 
     // TV and remote: land focus on the first row once the page has settled.
@@ -487,25 +531,90 @@ private fun FavoritesList(
             )
         }
         item(key = "header") { SectionHeader("Songs") }
-        itemsIndexed(songs, key = { index, song -> "${song.isrc}:$index" }) { index, song ->
-            FavoriteRow(
-                song = song,
-                first = index == 0,
-                last = index == songs.lastIndex,
-                playing = index == playingIndex,
-                offline = downloadStates[song.isrc] == DownloadState.Done,
-                downloadState = downloadStates[song.isrc],
-                accent = accent,
-                focusRequester = if (index == 0) firstRowFocus else null,
-                onClick = { onTrackClick(song) },
-                onLongClick = { onTrackMenu(song) },
-                onCancelDownload = { onCancelDownload(song) },
-                onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
-            )
+        // Rows on screen (a header counts as one, its songs only while it is unfolded), so the block knows its
+        // first and last row.
+        val rowCount = entries.sumOf { e -> if (e is ListEntry.Album && folds.isOpen(e.id)) 1 + e.items.size else 1 }
+        var rowPos = 0
+        entries.forEach { entry ->
+            when (entry) {
+                is ListEntry.Single -> {
+                    val song = entry.item.value
+                    val pos = rowPos++
+                    item(key = "${song.isrc}-${entry.item.index}") {
+                        Box(Modifier.fillMaxWidth().animateItem()) {
+                            FavoriteRow(
+                                song = song,
+                                first = pos == 0,
+                                last = pos == rowCount - 1,
+                                playing = song.isrc == nowPlayingIsrc,
+                                offline = downloadStates[song.isrc] == DownloadState.Done,
+                                downloadState = downloadStates[song.isrc],
+                                accent = accent,
+                                focusRequester = if (pos == 0) firstRowFocus else null,
+                                onClick = { onTrackClick(song) },
+                                onLongClick = { onTrackMenu(song) },
+                                onCancelDownload = { onCancelDownload(song) },
+                                onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
+                            )
+                        }
+                    }
+                }
+
+                is ListEntry.Album -> {
+                    val open = folds.isOpen(entry.id)
+                    val headerPos = rowPos++
+                    if (open) rowPos += entry.items.size
+                    val holdsPlaying = nowPlayingIsrc != null && entry.holds(nowPlayingIsrc)
+                    albumEntry(
+                        album = entry,
+                        expanded = open,
+                        header = {
+                            Box(Modifier.fillMaxWidth().animateItem()) {
+                                FavoriteAlbumHeader(
+                                    album = entry,
+                                    expanded = open,
+                                    holdsPlaying = holdsPlaying,
+                                    accent = accent,
+                                    first = headerPos == 0,
+                                    last = headerPos == rowCount - 1,
+                                    focusRequester = if (headerPos == 0) firstRowFocus else null,
+                                    onToggle = { onAlbumToggle(entry) },
+                                    onLongClick = { onAlbumMenu(entry) },
+                                    onMore = { onAlbumMenu(entry) },
+                                )
+                            }
+                        },
+                        child = { position, item ->
+                            val song = item.value
+                            val pos = headerPos + 1 + position
+                            FavoriteAlbumChild(
+                                album = entry,
+                                position = position,
+                                song = song,
+                                playing = song.isrc == nowPlayingIsrc,
+                                holdsPlaying = holdsPlaying,
+                                accent = accent,
+                                offline = downloadStates[song.isrc] == DownloadState.Done,
+                                downloadState = downloadStates[song.isrc],
+                                lastInAlbum = position == entry.items.lastIndex,
+                                last = pos == rowCount - 1,
+                                onClick = { onTrackClick(song) },
+                                onLongClick = { onTrackMenu(song) },
+                                onCancelDownload = { onCancelDownload(song) },
+                                onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
+                            )
+                        },
+                    )
+                }
+            }
         }
         item(key = "footer") {
             Text(
-                "Press and hold a song for more options. Reorder or remove songs from Manage.",
+                if (entries.any { it is ListEntry.Album }) {
+                    "Tap an album to fold or unfold it. Press and hold a song or an album for more options."
+                } else {
+                    "Press and hold a song for more options. Reorder or remove songs from Manage."
+                },
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Normal),
                 color = ink(0.5f),
                 modifier = Modifier.padding(horizontal = PageInset + 6.dp, vertical = 10.dp),
@@ -797,6 +906,177 @@ private fun FavoriteRow(
     }
 }
 
+/**
+ * The frame shared by the rows of an album group in the Grouped style: the same filled block, hairlines, press scale
+ * and focus ring as [FavoriteRow]. [rail] is the thread line, drawn on top of the fill and outside the press scale so
+ * it stays put while a row is pressed.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FavoriteBlockRow(
+    first: Boolean,
+    last: Boolean,
+    lit: Boolean,
+    accent: Color,
+    focusRequester: FocusRequester?,
+    rail: Modifier,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val shape = blockShape(first, last)
+    val interaction = remember { MutableInteractionSource() }
+    val pulsed by interaction.collectIsPulsedAsState()
+    val focused by interaction.collectIsFocusedAsState()
+    val scale by animateFloatAsState(if (pulsed) 0.985f else 1f, label = "rowPress")
+    val fill by animateColorAsState(
+        if (lit) accent.copy(alpha = 0.14f) else ink(if (focused) 0.12f else 0.07f),
+        tween(GamutMotion.CONTENT_MS),
+        label = "rowFill",
+    )
+    Box(Modifier.fillMaxWidth().padding(horizontal = PageInset).then(rail)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .graphicsLayer { scaleX = scale; scaleY = scale }
+                .clip(shape)
+                .background(fill)
+                .then(if (focused) Modifier.border(2.dp, ink(0.9f), shape) else Modifier)
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .onKeyEvent { e ->
+                    if (e.key == Key.Menu && e.type == KeyEventType.KeyDown) {
+                        onLongClick()
+                        true
+                    } else {
+                        false
+                    }
+                }.combinedClickable(
+                    interactionSource = interaction,
+                    indication = null,
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                ),
+            content = content,
+        )
+    }
+}
+
+// The thread line sits under the middle of the header's cover.
+private val FavoriteRailX = 12.dp + RowCover / 2
+
+/** An album group's header: its cover, title, count and running time, and the fold arrow. Tap folds, hold opens the menu. */
+@Composable
+private fun FavoriteAlbumHeader(
+    album: ListEntry.Album,
+    expanded: Boolean,
+    holdsPlaying: Boolean,
+    accent: Color,
+    first: Boolean,
+    last: Boolean,
+    focusRequester: FocusRequester?,
+    onToggle: () -> Unit,
+    onLongClick: () -> Unit,
+    onMore: () -> Unit,
+) {
+    val rail =
+        if (expanded) {
+            Modifier.albumRailHeader(FavoriteRailX, fromY = 10.dp + RowCover + 4.dp, color = railColor(accent, holdsPlaying), over = true)
+        } else {
+            Modifier
+        }
+    FavoriteBlockRow(
+        first = first,
+        last = last,
+        lit = holdsPlaying && !expanded,
+        accent = accent,
+        focusRequester = focusRequester,
+        rail = rail,
+        onClick = onToggle,
+        onLongClick = onLongClick,
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = if (expanded) 14.dp else 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AlbumHeaderContent(
+                album = album,
+                expanded = expanded,
+                playing = holdsPlaying && !expanded,
+                accent = accent,
+                cover = { CoverImage(album.coverUrl.orEmpty(), Modifier.size(RowCover).softCover(RowCoverShape)) },
+                onMore = onMore,
+            )
+        }
+        if (!expanded && !last) {
+            Box(Modifier.padding(start = 12.dp + RowCover + 14.dp).fillMaxWidth().height(0.5.dp).background(ink(0.1f)))
+        }
+    }
+}
+
+/** One song of an unfolded album group, hanging off the thread line. */
+@Composable
+private fun FavoriteAlbumChild(
+    album: ListEntry.Album,
+    position: Int,
+    song: Track,
+    playing: Boolean,
+    holdsPlaying: Boolean,
+    accent: Color,
+    offline: Boolean,
+    downloadState: DownloadState?,
+    lastInAlbum: Boolean,
+    last: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onCancelDownload: () -> Unit,
+    onArtist: (String) -> Unit,
+) {
+    val downloading = downloadState != null && downloadState != DownloadState.Done && downloadState !is DownloadState.Failed
+    val rail = Modifier.albumRailChild(FavoriteRailX, lastInAlbum, railColor(accent, holdsPlaying), over = true)
+    val contentStart = FavoriteRailX + RailChildInset
+    FavoriteBlockRow(
+        first = false,
+        last = last,
+        lit = playing,
+        accent = accent,
+        focusRequester = null,
+        rail = rail,
+        onClick = onClick,
+        onLongClick = onLongClick,
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = contentStart, end = 12.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AlbumChildContent(
+                number = position + 1,
+                track = song,
+                showArtist = showsArtistInAlbum(song, album),
+                playing = playing,
+                accent = accent,
+                onArtist = onArtist,
+                belowTitle = {
+                    if (downloading && !playing) DownloadProgressLine(downloadState, Modifier.padding(top = 6.dp))
+                },
+                trailing = {
+                    when {
+                        downloading -> {
+                            TrackDownloadButton(downloadState, onDownload = {}, onCancel = onCancelDownload, onDone = {}, glyph = 20.dp)
+                        }
+
+                        offline -> {
+                            Icon(PhosphorIcons.Fill.CheckCircle, "Available offline", tint = ink(0.5f), modifier = Modifier.padding(start = 8.dp).size(16.dp))
+                        }
+                    }
+                },
+            )
+        }
+        if (!last) {
+            Box(Modifier.padding(start = contentStart).fillMaxWidth().height(0.5.dp).background(ink(0.1f)))
+        }
+    }
+}
+
 private fun formatTotal(ms: Long): String {
     val minutes = (ms / 60_000).coerceAtLeast(1)
     val h = minutes / 60
@@ -933,17 +1213,37 @@ private val DiscInnerRadius = 250.dp
 
 @Composable
 private fun FavoritesWheel(
-    songs: List<Track>,
+    entries: List<ListEntry>,
+    folds: AlbumFolds,
     downloadStates: Map<String, DownloadState>,
     nowPlayingIsrc: String?,
     accent: Color,
     onTrackClick: (Track) -> Unit,
     onTrackMenu: (Track) -> Unit,
+    onAlbumToggle: (ListEntry.Album) -> Unit,
+    onAlbumMenu: (ListEntry.Album) -> Unit,
     onTrackArtist: (Track) -> Unit,
     onCancelDownload: (Track) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val playingIndex = remember(songs, nowPlayingIsrc) { songs.indexOfFirst { nowPlayingIsrc != null && it.isrc == nowPlayingIsrc } }
+    // The wheel turns the entries into one flat run of slots: loose songs, album headers and, while an album is
+    // unfolded, its songs. Every slot is the same height, which the disc geometry relies on.
+    val wheelItems = remember(entries, folds.open) { buildWheelItems(entries, folds) }
+    val playingIndex = remember(wheelItems, nowPlayingIsrc) { wheelItems.indexOfFirst { it.plays(nowPlayingIsrc) } }
+    val clickItem: (WheelItem) -> Unit = { item ->
+        when (item) {
+            is WheelItem.Song -> onTrackClick(item.track)
+            is WheelItem.Child -> onTrackClick(item.track)
+            is WheelItem.Header -> onAlbumToggle(item.album)
+        }
+    }
+    val menuItem: (WheelItem) -> Unit = { item ->
+        when (item) {
+            is WheelItem.Song -> onTrackMenu(item.track)
+            is WheelItem.Child -> onTrackMenu(item.track)
+            is WheelItem.Header -> onAlbumMenu(item.album)
+        }
+    }
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val arcColor = ink(0.16f)
@@ -961,7 +1261,7 @@ private fun FavoritesWheel(
 
         val wheelFocus = remember { FocusRequester() }
         var wheelFocused by remember { mutableStateOf(false) }
-        var target by remember { mutableIntStateOf(start.coerceIn(0, songs.lastIndex)) }
+        var target by remember { mutableIntStateOf(start.coerceIn(0, wheelItems.lastIndex)) }
         var enterLong by remember { mutableStateOf(false) }
         val live = LocalFocusLive.current
         val remoteInput = LocalInputModeManager.current.inputMode == InputMode.Keyboard
@@ -1043,7 +1343,7 @@ private fun FavoritesWheel(
                     .focusRequester(wheelFocus)
                     .onFocusChanged { wheelFocused = it.isFocused }
                     .onKeyEvent { e ->
-                        val last = songs.lastIndex
+                        val last = wheelItems.lastIndex
                         when (e.key) {
                             Key.DirectionDown, Key.DirectionUp -> {
                                 val next = target + if (e.key == Key.DirectionDown) 1 else -1
@@ -1062,17 +1362,17 @@ private fun FavoritesWheel(
                                 if (e.type == KeyEventType.KeyDown) {
                                     if (e.nativeKeyEvent.isLongPress) {
                                         enterLong = true
-                                        songs.getOrNull(target)?.let(onTrackMenu)
+                                        wheelItems.getOrNull(target)?.let(menuItem)
                                     }
                                 } else if (e.type == KeyEventType.KeyUp) {
-                                    if (!enterLong) songs.getOrNull(target)?.let(onTrackClick)
+                                    if (!enterLong) wheelItems.getOrNull(target)?.let(clickItem)
                                     enterLong = false
                                 }
                                 true
                             }
 
                             Key.Menu -> {
-                                if (e.type == KeyEventType.KeyDown) songs.getOrNull(target)?.let(onTrackMenu)
+                                if (e.type == KeyEventType.KeyDown) wheelItems.getOrNull(target)?.let(menuItem)
                                 true
                             }
 
@@ -1085,25 +1385,71 @@ private fun FavoritesWheel(
             flingBehavior = rememberSnapFlingBehavior(state),
             contentPadding = PaddingValues(vertical = pad),
         ) {
-            items(count = songs.size, key = { it }) { index ->
-                val song = songs[index]
-                WheelRow(
-                    song = song,
-                    index = index,
-                    itemHeight = itemHeight,
-                    rowWidth = rowWidth,
-                    rMid = rMid,
-                    state = state,
-                    active = index == activeIndex,
-                    offline = downloadStates[song.isrc] == DownloadState.Done,
-                    downloadState = downloadStates[song.isrc],
-                    playing = index == playingIndex,
-                    accent = accent,
-                    onClick = { onTrackClick(song) },
-                    onLongClick = { onTrackMenu(song) },
-                    onCancelDownload = { onCancelDownload(song) },
-                    onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
-                )
+            items(count = wheelItems.size, key = { it }) { index ->
+                when (val item = wheelItems[index]) {
+                    is WheelItem.Song -> {
+                        val song = item.track
+                        WheelRow(
+                            song = song,
+                            index = index,
+                            itemHeight = itemHeight,
+                            rowWidth = rowWidth,
+                            rMid = rMid,
+                            state = state,
+                            active = index == activeIndex,
+                            offline = downloadStates[song.isrc] == DownloadState.Done,
+                            downloadState = downloadStates[song.isrc],
+                            playing = index == playingIndex,
+                            accent = accent,
+                            onClick = { onTrackClick(song) },
+                            onLongClick = { onTrackMenu(song) },
+                            onCancelDownload = { onCancelDownload(song) },
+                            onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
+                        )
+                    }
+
+                    is WheelItem.Header -> {
+                        WheelAlbumHeaderRow(
+                            album = item.album,
+                            open = item.open,
+                            holdsPlaying = nowPlayingIsrc != null && item.album.holds(nowPlayingIsrc),
+                            lit = index == playingIndex,
+                            index = index,
+                            itemHeight = itemHeight,
+                            rowWidth = rowWidth,
+                            rMid = rMid,
+                            state = state,
+                            active = index == activeIndex,
+                            accent = accent,
+                            onClick = { onAlbumToggle(item.album) },
+                            onLongClick = { onAlbumMenu(item.album) },
+                        )
+                    }
+
+                    is WheelItem.Child -> {
+                        val song = item.track
+                        WheelAlbumChildRow(
+                            album = item.album,
+                            position = item.position,
+                            song = song,
+                            playing = index == playingIndex,
+                            holdsPlaying = nowPlayingIsrc != null && item.album.holds(nowPlayingIsrc),
+                            offline = downloadStates[song.isrc] == DownloadState.Done,
+                            downloadState = downloadStates[song.isrc],
+                            index = index,
+                            itemHeight = itemHeight,
+                            rowWidth = rowWidth,
+                            rMid = rMid,
+                            state = state,
+                            active = index == activeIndex,
+                            accent = accent,
+                            onClick = { onTrackClick(song) },
+                            onLongClick = { onTrackMenu(song) },
+                            onCancelDownload = { onCancelDownload(song) },
+                            onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
+                        )
+                    }
+                }
             }
         }
 
@@ -1154,6 +1500,132 @@ private fun WheelRow(
     val coverSize = itemHeight - 32.dp
     val downloading = downloadState != null && downloadState != DownloadState.Done && downloadState !is DownloadState.Failed
 
+    WheelSlot(
+        index = index,
+        itemHeight = itemHeight,
+        rowWidth = rowWidth,
+        rMid = rMid,
+        state = state,
+        active = active,
+        onClick = onClick,
+        onLongClick = onLongClick,
+    ) {
+        BadgedCover(local = song.isLocal, tagSize = 22.dp) {
+            CoverImage(song.albumArtUrl.orEmpty(), Modifier.size(coverSize).softCover(RoundedCornerShape(14.dp)))
+        }
+        Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ExplicitMark(song.isExplicit, ink(0.6f), size = 14.dp)
+                Text(
+                    song.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (playing) accent else ink(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (offline) {
+                    Icon(
+                        PhosphorIcons.Fill.CheckCircle,
+                        "Available offline",
+                        tint = ink(0.5f),
+                        modifier = Modifier.padding(start = 6.dp).size(13.dp),
+                    )
+                }
+            }
+            ArtistLine(song.artist, song.album, onArtist, stackSize = 18.dp) { m ->
+                Text(
+                    song.artist,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink(0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = m,
+                )
+            }
+            if (downloading && !playing) {
+                DownloadProgressLine(downloadState, Modifier.padding(top = 5.dp))
+            }
+        }
+        if (downloading) {
+            TrackDownloadButton(
+                downloadState,
+                onDownload = {},
+                onCancel = { if (active) onCancelDownload() },
+                onDone = {},
+                glyph = 20.dp,
+            )
+        }
+        WheelPlayMark(playing = playing, accent = accent, state = state, index = index)
+    }
+}
+
+/** What a row of the wheel is: a loose song, an album's header, or one song of an unfolded album. */
+private sealed interface WheelItem {
+    data class Song(
+        val track: Track,
+    ) : WheelItem
+
+    data class Header(
+        val album: ListEntry.Album,
+        val open: Boolean,
+    ) : WheelItem
+
+    data class Child(
+        val album: ListEntry.Album,
+        val position: Int,
+        val track: Track,
+    ) : WheelItem
+}
+
+private fun buildWheelItems(
+    entries: List<ListEntry>,
+    folds: AlbumFolds,
+): List<WheelItem> =
+    buildList {
+        for (entry in entries) {
+            when (entry) {
+                is ListEntry.Single -> {
+                    add(WheelItem.Song(entry.item.value))
+                }
+
+                is ListEntry.Album -> {
+                    val open = folds.isOpen(entry.id)
+                    add(WheelItem.Header(entry, open))
+                    if (open) entry.items.forEachIndexed { position, item -> add(WheelItem.Child(entry, position, item.value)) }
+                }
+            }
+        }
+    }
+
+/** Whether the song [isrc] is what this row stands for. A folded album stands for the songs it holds. */
+private fun WheelItem.plays(isrc: String?): Boolean =
+    isrc != null &&
+        when (this) {
+            is WheelItem.Song -> track.isrc == isrc
+            is WheelItem.Child -> track.isrc == isrc
+            is WheelItem.Header -> !open && album.holds(isrc)
+        }
+
+/**
+ * The frame of one row of the wheel: swings it onto the disc and makes it answer to touch only while it is the lit
+ * row. [rowModifier] sits on the row before its padding, so a thread line drawn there starts at the row's left end.
+ * That end lies on the disc's outer arc, so the line of a whole album runs along the disc as an arc of its own.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun WheelSlot(
+    index: Int,
+    itemHeight: Dp,
+    rowWidth: Dp,
+    rMid: Dp,
+    state: LazyListState,
+    active: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    rowModifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
     val interaction = remember { MutableInteractionSource() }
     val pulsed by interaction.collectIsPulsedAsState()
     val pressScale by animateFloatAsState(if (pulsed && active) 0.97f else 1f, label = "wheelRowPress")
@@ -1187,71 +1659,141 @@ private fun WheelRow(
                     } else {
                         Modifier
                     },
-                ).padding(horizontal = 14.dp),
+                ).then(rowModifier)
+                .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BadgedCover(local = song.isLocal, tagSize = 22.dp) {
-                CoverImage(song.albumArtUrl.orEmpty(), Modifier.size(coverSize).softCover(RoundedCornerShape(14.dp)))
-            }
-            Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    ExplicitMark(song.isExplicit, ink(0.6f), size = 14.dp)
-                    Text(
-                        song.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = if (playing) accent else ink(),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    if (offline) {
-                        Icon(
-                            PhosphorIcons.Fill.CheckCircle,
-                            "Available offline",
-                            tint = ink(0.5f),
-                            modifier = Modifier.padding(start = 6.dp).size(13.dp),
-                        )
-                    }
-                }
-                ArtistLine(song.artist, song.album, onArtist, stackSize = 18.dp) { m ->
-                    Text(
-                        song.artist,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ink(0.6f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = m,
-                    )
-                }
-                if (downloading && !playing) {
-                    DownloadProgressLine(downloadState, Modifier.padding(top = 5.dp))
-                }
-            }
-            if (downloading) {
-                TrackDownloadButton(
-                    downloadState,
-                    onDownload = {},
-                    onCancel = { if (active) onCancelDownload() },
-                    onDone = {},
-                    glyph = 20.dp,
-                )
-            }
-            // The play mark only shows on the lit row, which is also the only one that can play.
-            Box(
-                Modifier
-                    .size(PlayButtonSize)
-                    .graphicsLayer { alpha = ((state.focusOf(index) - 0.5f) * 2f).coerceIn(0f, 1f) }
-                    .clip(CircleShape)
-                    .background(if (playing) accent.copy(alpha = 0.18f) else ink(0.95f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (playing) {
-                    NowPlayingBars(color = accent)
-                } else {
-                    Icon(PhosphorIcons.Fill.Play, "Play", tint = LocalCoverPalette.current.base, modifier = Modifier.size(20.dp))
-                }
-            }
+            content = content,
+        )
+    }
+}
+
+/** The play mark at the end of a row. It only shows on the lit row, which is also the only one that can play. */
+@Composable
+private fun WheelPlayMark(
+    playing: Boolean,
+    accent: Color,
+    state: LazyListState,
+    index: Int,
+) {
+    Box(
+        Modifier
+            .size(PlayButtonSize)
+            .graphicsLayer { alpha = ((state.focusOf(index) - 0.5f) * 2f).coerceIn(0f, 1f) }
+            .clip(CircleShape)
+            .background(if (playing) accent.copy(alpha = 0.18f) else ink(0.95f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (playing) {
+            NowPlayingBars(color = accent)
+        } else {
+            Icon(PhosphorIcons.Fill.Play, "Play", tint = LocalCoverPalette.current.base, modifier = Modifier.size(20.dp))
         }
+    }
+}
+
+/** An album group's row on the wheel. Its thread line starts under the cover and carries on through the songs below. */
+@Composable
+private fun WheelAlbumHeaderRow(
+    album: ListEntry.Album,
+    open: Boolean,
+    holdsPlaying: Boolean,
+    lit: Boolean,
+    index: Int,
+    itemHeight: Dp,
+    rowWidth: Dp,
+    rMid: Dp,
+    state: LazyListState,
+    active: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    val coverSize = itemHeight - 32.dp
+    val rail =
+        if (open) {
+            Modifier.albumRailHeader(14.dp + coverSize / 2, fromY = itemHeight - 12.dp, color = railColor(accent, holdsPlaying))
+        } else {
+            Modifier
+        }
+    WheelSlot(
+        index = index,
+        itemHeight = itemHeight,
+        rowWidth = rowWidth,
+        rMid = rMid,
+        state = state,
+        active = active,
+        onClick = onClick,
+        onLongClick = onLongClick,
+        rowModifier = rail,
+    ) {
+        AlbumHeaderContent(
+            album = album,
+            expanded = open,
+            playing = lit,
+            accent = accent,
+            cover = { CoverImage(album.coverUrl.orEmpty(), Modifier.size(coverSize).softCover(RoundedCornerShape(14.dp))) },
+            onMore = null,
+        )
+    }
+}
+
+/** One song of an unfolded album on the wheel, branching off the thread line. */
+@Composable
+private fun WheelAlbumChildRow(
+    album: ListEntry.Album,
+    position: Int,
+    song: Track,
+    playing: Boolean,
+    holdsPlaying: Boolean,
+    offline: Boolean,
+    downloadState: DownloadState?,
+    index: Int,
+    itemHeight: Dp,
+    rowWidth: Dp,
+    rMid: Dp,
+    state: LazyListState,
+    active: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onCancelDownload: () -> Unit,
+    onArtist: (String) -> Unit,
+) {
+    val railX = 14.dp + (itemHeight - 32.dp) / 2
+    val downloading = downloadState != null && downloadState != DownloadState.Done && downloadState !is DownloadState.Failed
+    WheelSlot(
+        index = index,
+        itemHeight = itemHeight,
+        rowWidth = rowWidth,
+        rMid = rMid,
+        state = state,
+        active = active,
+        onClick = onClick,
+        onLongClick = onLongClick,
+        rowModifier = Modifier.albumRailChild(railX, position == album.items.lastIndex, railColor(accent, holdsPlaying)),
+    ) {
+        // The slot pads its row by 14dp; the song starts a little past where the thread line's curve ends.
+        Spacer(Modifier.width(railX + RailChildInset - 14.dp))
+        AlbumChildContent(
+            number = position + 1,
+            track = song,
+            showArtist = showsArtistInAlbum(song, album),
+            playing = playing,
+            accent = accent,
+            onArtist = onArtist,
+            belowTitle = {
+                if (downloading && !playing) DownloadProgressLine(downloadState, Modifier.padding(top = 5.dp))
+            },
+            titleStyle = MaterialTheme.typography.titleMedium,
+            trailing = {
+                if (downloading) {
+                    TrackDownloadButton(downloadState, onDownload = {}, onCancel = { if (active) onCancelDownload() }, onDone = {}, glyph = 20.dp)
+                } else if (offline) {
+                    Icon(PhosphorIcons.Fill.CheckCircle, "Available offline", tint = ink(0.5f), modifier = Modifier.padding(start = 6.dp).size(13.dp))
+                }
+            },
+        )
+        WheelPlayMark(playing = playing, accent = accent, state = state, index = index)
     }
 }
 

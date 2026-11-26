@@ -110,6 +110,7 @@ internal fun LazyListScope.discoverMoods(
     state: DiscoverState,
     loadingId: String?,
     onStation: (DiscoverItem) -> Unit,
+    onStationLongClick: (DiscoverItem) -> Unit = {},
 ) {
     val section = state.feed.firstOrNull { it.kind == FeedKind.MOODS } ?: return
     val moods = section.items.mapNotNull { item -> Mood.bySlug(item.id.substringAfterLast(':'))?.let { item to it } }
@@ -129,7 +130,8 @@ internal fun LazyListScope.discoverMoods(
                     colors = moodColors(mood),
                     cover = item.imageUrl.takeIf { it.isNotBlank() },
                     loading = item.id == loadingId,
-                ) { onStation(item) }
+                    modifier = Modifier.pressScale(onClick = { onStation(item) }, scaleDown = 0.96f, onLongClick = { onStationLongClick(item) }),
+                )
             }
         }
     }
@@ -141,17 +143,16 @@ internal fun LazyListScope.discoverMoods(
  * ends up with, the row reads as one set.
  */
 @Composable
-private fun MoodCard(
+internal fun MoodCard(
     label: String,
     colors: Pair<Color, Color>,
     cover: String?,
-    loading: Boolean,
-    onClick: () -> Unit,
+    loading: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     val (from, to) = colors
     Box(
-        Modifier
-            .pressScale(onClick = onClick, scaleDown = 0.96f)
+        modifier
             .width(MoodCardWidth)
             .height(MoodCardHeight)
             .clip(MoodShape)
@@ -514,8 +515,34 @@ private fun StationCard(
     onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
+    Box(Modifier.pressScale(onClick = onClick, scaleDown = 0.96f, onLongClick = onLongClick)) {
+        StationCardBody(item, index, loading)
+    }
+}
+
+/** Where a station sits on its Discover shelf, which is what picks its card's colour. 0 when it is not on one. */
+internal fun stationCardIndex(
+    state: DiscoverState,
+    item: DiscoverItem,
+): Int =
+    state.feed
+        .filter { it.kind == FeedKind.TOP_PICKS }
+        .firstNotNullOfOrNull { section ->
+            section.items
+                .filter { !it.id.startsWith(FeedRepository.DEEZER_ALBUM_PREFIX) && StationId.kindOf(it.id) != StationId.MOOD }
+                .indexOfFirst { it.id == item.id }
+                .takeIf { it >= 0 }
+        } ?: 0
+
+/** The station card itself, cover and name, exactly as the shelf draws it. The popup shows the same one. */
+@Composable
+internal fun StationCardBody(
+    item: DiscoverItem,
+    index: Int,
+    loading: Boolean = false,
+) {
     val onCover = item.imageUrl.isNotBlank() && StationId.kindOf(item.id) != StationId.ARTIST
-    Column(Modifier.width(StationCardSize).pressScale(onClick = onClick, scaleDown = 0.96f, onLongClick = onLongClick)) {
+    Column(Modifier.width(StationCardSize)) {
         Box(Modifier.size(StationCardSize).clip(TileShape)) {
             if (onCover) CoverFace(item, index) else ColorFace(item, index)
             if (loading) {

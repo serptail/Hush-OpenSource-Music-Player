@@ -29,6 +29,8 @@ data class AppearanceSettings(
     val glassDensity: AppearanceLevel = AppearanceLevel.Medium,
     val playerStyle: PlayerStyle = PlayerStyle.Classic,
     val videoViewMode: VideoViewMode = VideoViewMode.Full,
+    /** Swipe for volume and double-tap to skip on the player screen. */
+    val playerGestures: Boolean = true,
 ) {
     val effectiveMode: AppThemeMode get() = if (mode == AppThemeMode.Auto && !adaptive) AppThemeMode.System else mode
 

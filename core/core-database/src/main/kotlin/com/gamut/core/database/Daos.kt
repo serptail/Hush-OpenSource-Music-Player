@@ -88,10 +88,81 @@ interface PlaylistDao {
     suspend fun clearRemoteIds()
 }
 
+/** A song of a playlist or of the favorites together with the album group it was added in, if any. */
+data class GroupedTrackRow(
+    @Embedded val track: TrackEntity,
+    val albumGroupId: String?,
+)
+
+/** The album group a song was added in. */
+data class IsrcGroup(
+    val isrc: String,
+    val albumGroupId: String,
+)
+
 @Dao
 abstract class PlaylistTrackDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    abstract suspend fun upsert(ref: PlaylistTrackCrossRef)
+    abstract suspend fun insertRef(ref: PlaylistTrackCrossRef)
+
+    @Query("SELECT albumGroupId FROM playlisttrackcrossref WHERE playlistId = :playlistId AND isrc = :isrc")
+    abstract suspend fun groupOf(
+        playlistId: Long,
+        isrc: String,
+    ): String?
+
+    /** Inserts or replaces a song's row. A row that carries no album group keeps the one it already had. */
+    @Transaction
+    open suspend fun upsert(ref: PlaylistTrackCrossRef) {
+        insertRef(if (ref.albumGroupId != null) ref else ref.copy(albumGroupId = groupOf(ref.playlistId, ref.isrc)))
+    }
+
+    @Query(
+        "SELECT t.*, r.albumGroupId AS albumGroupId FROM tracks t INNER JOIN playlisttrackcrossref r ON t.isrc = r.isrc " +
+            "WHERE r.playlistId = :playlistId ORDER BY r.position",
+    )
+    abstract fun observeGrouped(playlistId: Long): Flow<List<GroupedTrackRow>>
+
+    @Query("SELECT isrc, albumGroupId FROM playlisttrackcrossref WHERE playlistId = :playlistId AND albumGroupId IS NOT NULL")
+    abstract suspend fun groupsFor(playlistId: Long): List<IsrcGroup>
+
+    @Query("SELECT isrc FROM playlisttrackcrossref WHERE playlistId = :playlistId AND albumGroupId = :groupId ORDER BY position")
+    abstract suspend fun isrcsInGroup(
+        playlistId: Long,
+        groupId: String,
+    ): List<String>
+
+    @Query("UPDATE playlisttrackcrossref SET albumGroupId = NULL WHERE playlistId = :playlistId AND albumGroupId = :groupId")
+    abstract suspend fun ungroup(
+        playlistId: Long,
+        groupId: String,
+    )
+
+    @Query("DELETE FROM playlisttrackcrossref WHERE playlistId = :playlistId AND albumGroupId = :groupId")
+    abstract suspend fun removeGroup(
+        playlistId: Long,
+        groupId: String,
+    )
+
+    /**
+     * Appends [isrcs] as one album group. Songs the playlist already has stay where they are and are not pulled
+     * into the group. Returns the songs that were added, in order.
+     */
+    @Transaction
+    open suspend fun appendGroup(
+        playlistId: Long,
+        groupId: String,
+        isrcs: List<String>,
+    ): List<String> {
+        var position = nextPosition(playlistId)
+        val added = ArrayList<String>()
+        for (isrc in isrcs.distinct()) {
+            if (contains(playlistId, isrc)) continue
+            insertRef(PlaylistTrackCrossRef(playlistId, isrc, position++, groupId))
+            added += isrc
+        }
+        return added
+    }
 
     @Query("DELETE FROM playlisttrackcrossref WHERE playlistId = :playlistId AND isrc = :isrc")
     abstract suspend fun remove(
@@ -124,8 +195,10 @@ abstract class PlaylistTrackDao {
         playlistId: Long,
         isrcs: List<String>,
     ) {
+        // A reorder or a removal rewrites the whole list, so the groups are read first and put back on their songs.
+        val groups = groupsFor(playlistId).associate { it.isrc to it.albumGroupId }
         clear(playlistId)
-        isrcs.distinct().forEachIndexed { index, isrc -> upsert(PlaylistTrackCrossRef(playlistId, isrc, index)) }
+        isrcs.distinct().forEachIndexed { index, isrc -> insertRef(PlaylistTrackCrossRef(playlistId, isrc, index, groups[isrc])) }
     }
 }
 
@@ -159,7 +232,50 @@ interface ArtworkCacheDao {
 @Dao
 abstract class FavoriteDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    abstract suspend fun add(favorite: FavoriteEntity)
+    abstract suspend fun insert(favorite: FavoriteEntity)
+
+    @Query("SELECT albumGroupId FROM favorites WHERE isrc = :isrc")
+    abstract suspend fun groupOf(isrc: String): String?
+
+    /** Inserts or replaces a favorite. One that carries no album group keeps the one it already had. */
+    @Transaction
+    open suspend fun add(favorite: FavoriteEntity) {
+        insert(if (favorite.albumGroupId != null) favorite else favorite.copy(albumGroupId = groupOf(favorite.isrc)))
+    }
+
+    @Query(
+        "SELECT t.*, f.albumGroupId AS albumGroupId FROM tracks t INNER JOIN favorites f ON t.isrc = f.isrc " +
+            "ORDER BY f.addedAtEpochMs DESC",
+    )
+    abstract fun observeGrouped(): Flow<List<GroupedTrackRow>>
+
+    @Query("SELECT isrc FROM favorites WHERE albumGroupId = :groupId ORDER BY addedAtEpochMs DESC")
+    abstract suspend fun isrcsInGroup(groupId: String): List<String>
+
+    @Query("UPDATE favorites SET albumGroupId = NULL WHERE albumGroupId = :groupId")
+    abstract suspend fun ungroup(groupId: String)
+
+    @Query("DELETE FROM favorites WHERE albumGroupId = :groupId")
+    abstract suspend fun removeGroup(groupId: String)
+
+    /**
+     * Adds [isrcs] as one album group on top of the favorites, in the album's order (newest first, so the first
+     * song gets the newest time). Songs that are already favorites stay where they are. Returns the songs added.
+     */
+    @Transaction
+    open suspend fun addGroup(
+        groupId: String,
+        isrcs: List<String>,
+    ): List<String> {
+        val base = System.currentTimeMillis()
+        val added = ArrayList<String>()
+        for (isrc in isrcs.distinct()) {
+            if (isFavorite(isrc)) continue
+            insert(FavoriteEntity(isrc, base - added.size, groupId))
+            added += isrc
+        }
+        return added
+    }
 
     @Query("DELETE FROM favorites WHERE isrc = :isrc")
     abstract suspend fun remove(isrc: String)

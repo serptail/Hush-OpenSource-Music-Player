@@ -258,6 +258,8 @@ fun PlayerScreen(
     var showGestureTutorial by remember { mutableStateOf(false) }
     var tutorialVolume by remember { mutableStateOf<Float?>(null) }
     val isTv = rememberIsTelevision()
+    // The Appearance > Player > Gestures switch: swipe for volume and double-tap to skip.
+    val gesturesOn = LocalAppearance.current.playerGestures
 
     val toggleVideo: () -> Unit = {
         videoOn = !videoOn
@@ -268,9 +270,11 @@ fun PlayerScreen(
     BackHandler(enabled = active && !lyricsPanelOpen) { leave() }
     BackHandler(enabled = active && lyricsPanelOpen) { lyricsPanelOpen = false }
     BackHandler(enabled = active && showGestureTutorial) { showGestureTutorial = false }
-    // One-time gesture guide: shown the first time the player screen is open with a track, never again.
-    LaunchedEffect(active, track != null) {
-        if (active && track != null && !prefs.getBoolean(PrefGestureTutorialSeen, false)) {
+    // One-time gesture guide: shown the first time the player screen is open with a track while gestures are on, never
+    // again. With gestures off nothing is shown and nothing is marked as seen, so the guide waits for the first time
+    // they are on.
+    LaunchedEffect(active, track != null, gesturesOn) {
+        if (gesturesOn && active && track != null && !prefs.getBoolean(PrefGestureTutorialSeen, false)) {
             delay(1000L)
             if ((isTv || volumeHud.anchor.width > 0f) && !lyricsPanelOpen) {
                 prefs.edit().putBoolean(PrefGestureTutorialSeen, true).apply()
@@ -279,6 +283,7 @@ fun PlayerScreen(
         }
     }
     LaunchedEffect(active) { if (!active) showGestureTutorial = false }
+    LaunchedEffect(gesturesOn) { if (!gesturesOn) showGestureTutorial = false }
     LaunchedEffect(active) {
         if (!active) {
             // Past the whole spring: flipping this mid-flight would switch the artwork's flight on halfway.
@@ -471,9 +476,9 @@ fun PlayerScreen(
                 .fillMaxSize()
                 .background(CoverPalette.Neutral.base)
                 .then(if (meshStyle) meshSeam.onHost else Modifier)
-                .then(if (lyricsPanelOpen || videoExpanded) Modifier else Modifier.swipeVolumeGesture(volumeHud))
+                .then(if (lyricsPanelOpen || videoExpanded || !gesturesOn) Modifier else Modifier.swipeVolumeGesture(volumeHud))
                 .then(
-                    if (lyricsPanelOpen || videoMode || showGestureTutorial || classicPlayer) {
+                    if (lyricsPanelOpen || videoMode || showGestureTutorial || classicPlayer || !gesturesOn) {
                         Modifier
                     } else {
                         Modifier.doubleTapSeekGesture(
@@ -756,7 +761,8 @@ fun PlayerScreen(
                                     onSeekFraction = seekToFraction,
                                     seekStep = seekStep,
                                     dockEnabled = !lyricsPanelOpen,
-                                    onDoubleTapSeek = if (videoMode) null else coverDoubleTap,
+                                    // Without the double tap the cover's single tap plays / pauses at once.
+                                    onDoubleTapSeek = if (videoMode || !gesturesOn) null else coverDoubleTap,
                                 )
                             }
                             DepthIcon(

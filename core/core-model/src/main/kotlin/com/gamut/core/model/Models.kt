@@ -22,6 +22,15 @@ data class Track(
     val previewUrl: String? = null,
 )
 
+/**
+ * A song as it sits in a playlist or in the favorites. [albumGroupId] is set when the song belongs to an album
+ * that was added as one group; neighbouring songs with the same id are shown and managed as one album.
+ */
+data class GroupedTrack(
+    val track: Track,
+    val albumGroupId: String? = null,
+)
+
 @Serializable
 data class ResolvedSource(
     val isrc: String,

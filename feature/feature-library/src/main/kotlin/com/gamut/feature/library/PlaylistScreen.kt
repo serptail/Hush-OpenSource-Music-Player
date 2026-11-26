@@ -169,11 +169,18 @@ fun PlaylistScreen(
     nowPlaying: @Composable () -> Unit = {},
     style: PlaylistStyle = PlaylistStyle.Classic,
 ) {
-    val storedSongs by viewModel.tracks.collectAsStateWithLifecycle()
-    val songs = remember(storedSongs, existingLocalIsrcs) { storedSongs.withoutMissingLocal(existingLocalIsrcs) }
-    LaunchedEffect(storedSongs, existingLocalIsrcs) {
-        if (songs.size != storedSongs.size) viewModel.setTracks(songs)
+    val storedRows by viewModel.rows.collectAsStateWithLifecycle()
+    val rows =
+        remember(storedRows, existingLocalIsrcs) {
+            if (existingLocalIsrcs == null) storedRows else storedRows.filter { !it.track.isLocal || it.track.isrc in existingLocalIsrcs }
+        }
+    val songs = remember(rows) { rows.map { it.track } }
+    LaunchedEffect(storedRows, existingLocalIsrcs) {
+        if (rows.size != storedRows.size) viewModel.setTracks(songs)
     }
+    // Which album groups are unfolded, and which album's menu is open.
+    val folds = rememberAlbumFolds()
+    var albumMenuId by remember { mutableStateOf<String?>(null) }
     val playlist by viewModel.playlist.collectAsStateWithLifecycle()
     val downloadStates by downloads.states.collectAsStateWithLifecycle()
     val palette = LocalCoverPalette.current
@@ -226,6 +233,9 @@ fun PlaylistScreen(
                         .contains(q)
             }
         }
+
+    // Neighbouring songs of one album group make one entry. A search lists matching songs loose instead.
+    val groupedEntries = remember(rows) { buildEntries(rows) }
 
     val customCover = playlist?.coverUri
     val coverUrl = customCover ?: songs.lastOrNull()?.albumArtUrl
@@ -381,6 +391,107 @@ fun PlaylistScreen(
                     )
                 }
             }
+            val actionsFor: (Listed) -> SongActions = { item ->
+                val song = item.value
+                SongActions(
+                    downloadState = states[song.isrc],
+                    onDownload = { downloads.download(listOf(song)) },
+                    onCancelDownload = { downloads.cancel(listOf(song.isrc)) },
+                    onArtist = { artist -> onTrackArtist(song.copy(artist = artist)) },
+                    onClick = { onTrackSelected(song) },
+                    onLongClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        menuIndex = item.index
+                    },
+                    onMore = { menuIndex = item.index },
+                )
+            }
+            val openAlbumMenu: (ListEntry.Album) -> Unit = { album ->
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                albumMenuId = album.id
+            }
+            val toggleAlbum: (ListEntry.Album) -> Unit = { album ->
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                folds.toggle(album.id)
+            }
+
+            // One loose song, in the playlist's style.
+            val singleRow: @Composable (Listed, Int, Boolean) -> Unit = { item, pos, last ->
+                val song = item.value
+                val a = actionsFor(item)
+                if (vinyl) {
+                    VinylTrackRow(
+                        label = (item.index + 1).toString(),
+                        first = pos == 0,
+                        last = last,
+                        track = song,
+                        isPlaying = song.isrc == nowPlayingIsrc,
+                        accent = accent,
+                        downloadState = a.downloadState,
+                        onDownload = a.onDownload,
+                        onCancelDownload = a.onCancelDownload,
+                        onArtist = a.onArtist,
+                        onClick = a.onClick,
+                        onLongClick = a.onLongClick,
+                        onMore = a.onMore,
+                    )
+                } else if (immersive) {
+                    ImmersiveTrackRow(
+                        last = last,
+                        track = song,
+                        isPlaying = song.isrc == nowPlayingIsrc,
+                        accent = accent,
+                        downloadState = a.downloadState,
+                        onDownload = a.onDownload,
+                        onCancelDownload = a.onCancelDownload,
+                        onArtist = a.onArtist,
+                        onClick = a.onClick,
+                        onLongClick = a.onLongClick,
+                        onMore = a.onMore,
+                    )
+                } else {
+                    PlaylistTrackRow(
+                        track = song,
+                        isPlaying = song.isrc == nowPlayingIsrc,
+                        accent = accent,
+                        downloadState = a.downloadState,
+                        onDownload = a.onDownload,
+                        onCancelDownload = a.onCancelDownload,
+                        onArtist = a.onArtist,
+                        onClick = a.onClick,
+                        onLongClick = a.onLongClick,
+                        onMore = a.onMore,
+                    )
+                }
+            }
+
+            // The header of an album group, in the playlist's style.
+            val albumHeader: @Composable (ListEntry.Album, Boolean, Boolean, Int, Boolean) -> Unit =
+                { album, open, holdsPlaying, pos, last ->
+                    if (vinyl) {
+                        VinylAlbumHeader(album, open, holdsPlaying, accent, first = pos == 0, last = last, onToggle = { toggleAlbum(album) }, onLongClick = { openAlbumMenu(album) }, onMore = { openAlbumMenu(album) })
+                    } else if (immersive) {
+                        ImmersiveAlbumHeader(album, open, holdsPlaying, accent, last = last, onToggle = { toggleAlbum(album) }, onLongClick = { openAlbumMenu(album) }, onMore = { openAlbumMenu(album) })
+                    } else {
+                        ClassicAlbumHeader(album, open, holdsPlaying, accent, onToggle = { toggleAlbum(album) }, onLongClick = { openAlbumMenu(album) }, onMore = { openAlbumMenu(album) })
+                    }
+                }
+
+            // One song inside an unfolded album group, hanging off the thread line.
+            val albumChild: @Composable (ListEntry.Album, Int, Listed, Boolean, Int, Boolean) -> Unit =
+                { album, position, item, holdsPlaying, pos, last ->
+                    val lastInAlbum = position == album.items.lastIndex
+                    val a = actionsFor(item)
+                    val playingHere = item.value.isrc == nowPlayingIsrc
+                    if (vinyl) {
+                        VinylAlbumChild(album, position, item.value, playingHere, holdsPlaying, accent, lastInAlbum, last, a)
+                    } else if (immersive) {
+                        ImmersiveAlbumChild(album, position, item.value, playingHere, holdsPlaying, accent, lastInAlbum, last, a)
+                    } else {
+                        ClassicAlbumChild(album, position, item.value, playingHere, holdsPlaying, accent, lastInAlbum, a)
+                    }
+                }
+
             val listBody: LazyListScope.(Boolean) -> Unit = { showHeader ->
                 if (showHeader && !searching) {
                     item(key = "header") { headerSlot() }
@@ -406,70 +517,40 @@ fun PlaylistScreen(
                         )
                     }
                 }
-                if (vinyl) {
-                    visible.forEachIndexed { pos, item ->
-                        val song = item.value
-                        item(key = "${song.isrc}-${item.index}") {
-                            VinylTrackRow(
-                                label = (item.index + 1).toString(),
-                                first = pos == 0,
-                                last = pos == visible.lastIndex,
-                                track = song,
-                                isPlaying = song.isrc == nowPlayingIsrc,
-                                accent = accent,
-                                downloadState = states[song.isrc],
-                                onDownload = { downloads.download(listOf(song)) },
-                                onCancelDownload = { downloads.cancel(listOf(song.isrc)) },
-                                onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
-                                onClick = { onTrackSelected(song) },
-                                onLongClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    menuIndex = item.index
+                val shown = if (searching) flatEntries(visible) else groupedEntries
+                // Rows on screen (a header counts as one, its songs only while it is unfolded), so the Vinyl table
+                // knows which row is its first and which its last.
+                val rowCount = shown.sumOf { e -> if (e is ListEntry.Album && folds.isOpen(e.id)) 1 + e.items.size else 1 }
+                var rowPos = 0
+                shown.forEach { entry ->
+                    when (entry) {
+                        is ListEntry.Single -> {
+                            val loose = entry.item
+                            val pos = rowPos++
+                            item(key = "${loose.value.isrc}-${loose.index}") {
+                                Box(Modifier.fillMaxWidth().animateItem()) { singleRow(loose, pos, pos == rowCount - 1) }
+                            }
+                        }
+
+                        is ListEntry.Album -> {
+                            val open = folds.isOpen(entry.id)
+                            val headerPos = rowPos++
+                            if (open) rowPos += entry.items.size
+                            val holdsPlaying = nowPlayingIsrc != null && entry.holds(nowPlayingIsrc)
+                            albumEntry(
+                                album = entry,
+                                expanded = open,
+                                header = {
+                                    Box(Modifier.fillMaxWidth().animateItem()) {
+                                        albumHeader(entry, open, holdsPlaying, headerPos, headerPos == rowCount - 1)
+                                    }
                                 },
-                                onMore = { menuIndex = item.index },
+                                child = { position, item ->
+                                    val pos = headerPos + 1 + position
+                                    albumChild(entry, position, item, holdsPlaying, pos, pos == rowCount - 1)
+                                },
                             )
                         }
-                    }
-                } else if (immersive) {
-                    visible.forEachIndexed { pos, item ->
-                        val song = item.value
-                        item(key = "${song.isrc}-${item.index}") {
-                            ImmersiveTrackRow(
-                                last = pos == visible.lastIndex,
-                                track = song,
-                                isPlaying = song.isrc == nowPlayingIsrc,
-                                accent = accent,
-                                downloadState = states[song.isrc],
-                                onDownload = { downloads.download(listOf(song)) },
-                                onCancelDownload = { downloads.cancel(listOf(song.isrc)) },
-                                onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
-                                onClick = { onTrackSelected(song) },
-                                onLongClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    menuIndex = item.index
-                                },
-                                onMore = { menuIndex = item.index },
-                            )
-                        }
-                    }
-                } else {
-                    itemsIndexed(visible, key = { _, item -> "${item.value.isrc}-${item.index}" }) { _, item ->
-                        val song = item.value
-                        PlaylistTrackRow(
-                            track = song,
-                            isPlaying = song.isrc == nowPlayingIsrc,
-                            accent = accent,
-                            downloadState = states[song.isrc],
-                            onDownload = { downloads.download(listOf(song)) },
-                            onCancelDownload = { downloads.cancel(listOf(song.isrc)) },
-                            onArtist = { name -> onTrackArtist(song.copy(artist = name)) },
-                            onClick = { onTrackSelected(song) },
-                            onLongClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                menuIndex = item.index
-                            },
-                            onMore = { menuIndex = item.index },
-                        )
                     }
                 }
                 item(key = "nav-space") { Box(Modifier.navigationBarsPadding()) }
@@ -500,16 +581,35 @@ fun PlaylistScreen(
                 local = menuTrack.isLocal,
                 onDownload = { downloads.download(listOf(menuTrack)) },
                 onRemoveDownload = { downloads.remove(listOf(menuTrack.isrc)) },
-                canMoveUp = !searching && i > 0,
-                canMoveDown = !searching && i < songs.lastIndex,
+                canMoveUp = !searching && canMoveTrack(rows, i, -1),
+                canMoveDown = !searching && canMoveTrack(rows, i, 1),
                 onPlay = { onTrackSelected(menuTrack) },
                 onToggleFavorite = { onToggleFavorite(menuTrack) },
                 onGoToArtist = { if (splitArtists(menuTrack.artist).size > 1) artistPickTrack = menuTrack else onTrackArtist(menuTrack) },
                 onShare = { shareTrack = menuTrack },
-                onMoveUp = { viewModel.move(i, i - 1) },
-                onMoveDown = { viewModel.move(i, i + 1) },
+                onMoveUp = { viewModel.moveTrack(i, -1) },
+                onMoveDown = { viewModel.moveTrack(i, 1) },
                 onRemove = { viewModel.removeAt(i) },
                 onDismiss = { menuIndex = null },
+            )
+        }
+
+        val menuAlbum = albumMenuId?.let { id -> groupedEntries.firstOrNull { it is ListEntry.Album && it.id == id } as? ListEntry.Album }
+        if (menuAlbum != null) {
+            AlbumGroupMenu(
+                album = menuAlbum,
+                coverShape = RoundedCornerShape(10.dp),
+                removeLabel = "Remove from playlist",
+                canMoveUp = canMoveAlbum(rows, menuAlbum.id, -1),
+                canMoveDown = canMoveAlbum(rows, menuAlbum.id, 1),
+                showMove = !searching && playlist != null,
+                onPlay = { onPlay(menuAlbum.tracks) },
+                onShuffle = { onShuffle(menuAlbum.tracks) },
+                onMoveUp = { viewModel.moveAlbum(menuAlbum.id, -1) },
+                onMoveDown = { viewModel.moveAlbum(menuAlbum.id, 1) },
+                onUngroup = { viewModel.ungroupAlbum(menuAlbum.id) },
+                onRemove = { viewModel.removeAlbum(menuAlbum.id) },
+                onDismiss = { albumMenuId = null },
             )
         }
 
@@ -1732,3 +1832,332 @@ private fun plural(
     n: Int,
     word: String,
 ) = if (n == 1) "1 $word" else "$n ${word}s"
+
+// ---------------------------------------------------------------------------------------------
+// Album groups. An album that was added as one group shows as a header that folds and unfolds. Unfolded, a thread
+// line drops from under its cover and every song branches off it through a small curve, the way replies hang under
+// a comment. Each style wraps the shared content from AlbumGroups.kt in its own row.
+// ---------------------------------------------------------------------------------------------
+
+/** What a song row can do, bundled so the album rows do not each take seven parameters. */
+private class SongActions(
+    val downloadState: DownloadState?,
+    val onDownload: () -> Unit,
+    val onCancelDownload: () -> Unit,
+    val onArtist: (String) -> Unit,
+    val onClick: () -> Unit,
+    val onLongClick: () -> Unit,
+    val onMore: () -> Unit,
+)
+
+/** Download and menu buttons at the end of a song inside an album. */
+@Composable
+private fun AlbumChildTrailing(
+    actions: SongActions,
+    moreTint: Float,
+) {
+    TrackDownloadButton(
+        actions.downloadState,
+        onDownload = actions.onDownload,
+        onCancel = actions.onCancelDownload,
+        onDone = actions.onMore,
+        glyph = 20.dp,
+    )
+    Box(Modifier.size(40.dp).pressScale(onClick = actions.onMore), contentAlignment = Alignment.Center) {
+        Icon(PhosphorIcons.Bold.DotsThreeVertical, "More options", tint = ink(moreTint), modifier = Modifier.size(20.dp))
+    }
+}
+
+// Classic: plain rows, so the thread line sits on the page itself.
+
+private val ClassicCover = 54.dp
+private val ClassicRailX = 24.dp + ClassicCover / 2
+
+@Composable
+private fun ClassicAlbumHeader(
+    album: ListEntry.Album,
+    expanded: Boolean,
+    holdsPlaying: Boolean,
+    accent: Color,
+    onToggle: () -> Unit,
+    onLongClick: () -> Unit,
+    onMore: () -> Unit,
+) {
+    val rail = railColor(accent, holdsPlaying)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .then(if (expanded) Modifier.albumRailHeader(ClassicRailX, fromY = 8.dp + ClassicCover + 4.dp, color = rail) else Modifier),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .rowPress(onClick = onToggle, onLongClick = onLongClick)
+                .padding(start = 24.dp, end = 12.dp, top = 8.dp, bottom = if (expanded) 12.dp else 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AlbumHeaderContent(
+                album = album,
+                expanded = expanded,
+                playing = holdsPlaying && !expanded,
+                accent = accent,
+                cover = {
+                    CoverImage(remember(album.coverUrl) { resolveCoverUrl(album.coverUrl, 160) }, Modifier.size(ClassicCover).softCover())
+                },
+                onMore = onMore,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ClassicAlbumChild(
+    album: ListEntry.Album,
+    position: Int,
+    track: Track,
+    playing: Boolean,
+    holdsPlaying: Boolean,
+    accent: Color,
+    lastInAlbum: Boolean,
+    actions: SongActions,
+) {
+    Box(Modifier.fillMaxWidth().albumRailChild(ClassicRailX, lastInAlbum, railColor(accent, holdsPlaying))) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .rowPress(onClick = actions.onClick, onLongClick = actions.onLongClick)
+                .padding(start = ClassicRailX + RailChildInset, end = 12.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AlbumChildContent(
+                number = position + 1,
+                track = track,
+                showArtist = showsArtistInAlbum(track, album),
+                playing = playing,
+                accent = accent,
+                onArtist = actions.onArtist,
+                belowTitle = { DownloadProgressLine(actions.downloadState, Modifier.padding(top = 4.dp)) },
+                trailing = { AlbumChildTrailing(actions, 0.7f) },
+            )
+        }
+    }
+}
+
+// Vinyl: the songs are one joined, filled table. The header and the songs of an unfolded album are rows of that table
+// and the thread line is drawn on top of their fill, running through the 1dp seams between rows.
+
+private val VinylCover = 46.dp
+private val VinylRailX = TableInset + 16.dp + 28.dp + VinylCover / 2
+
+private fun tableShape(
+    first: Boolean,
+    last: Boolean,
+): RoundedCornerShape {
+    val top = if (first) TableBlockRadius else 0.dp
+    val bottom = if (last) TableBlockRadius else 0.dp
+    return RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom)
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun VinylAlbumHeader(
+    album: ListEntry.Album,
+    expanded: Boolean,
+    holdsPlaying: Boolean,
+    accent: Color,
+    first: Boolean,
+    last: Boolean,
+    onToggle: () -> Unit,
+    onLongClick: () -> Unit,
+    onMore: () -> Unit,
+) {
+    val shape = tableShape(first, last)
+    val lit = holdsPlaying && !expanded
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val fill by animateColorAsState(
+        targetValue = if (lit) accent.copy(alpha = 0.14f) else ink(if (pressed) 0.12f else 0.07f),
+        animationSpec = tween(140),
+        label = "table-album-fill",
+    )
+    val rail = railColor(accent, holdsPlaying)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .then(
+                if (expanded) {
+                    Modifier.albumRailHeader(VinylRailX, fromY = 6.dp + VinylCover + 3.dp, color = rail, over = true)
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = TableInset)) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(shape)
+                    .background(fill)
+                    .focusRing(shape)
+                    .combinedClickable(interactionSource = source, indication = null, onClick = onToggle, onLongClick = onLongClick)
+                    .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = if (expanded) 10.dp else 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Where a song shows its number, an album shows the stack mark.
+                Box(Modifier.width(28.dp), contentAlignment = Alignment.CenterStart) {
+                    Icon(TablerIcons.Stack, null, tint = ink(0.4f), modifier = Modifier.size(16.dp))
+                }
+                AlbumHeaderContent(
+                    album = album,
+                    expanded = expanded,
+                    playing = lit,
+                    accent = accent,
+                    cover = {
+                        CoverImage(remember(album.coverUrl) { resolveCoverUrl(album.coverUrl, 160) }, Modifier.size(VinylCover).softCover())
+                    },
+                    onMore = onMore,
+                    titleStyle = MaterialTheme.typography.bodyLarge,
+                    subtitleStyle = MaterialTheme.typography.bodySmall,
+                    subtitleColor = ink(0.55f),
+                )
+            }
+            if (!last) Spacer(Modifier.height(1.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun VinylAlbumChild(
+    album: ListEntry.Album,
+    position: Int,
+    track: Track,
+    playing: Boolean,
+    holdsPlaying: Boolean,
+    accent: Color,
+    lastInAlbum: Boolean,
+    last: Boolean,
+    actions: SongActions,
+) {
+    val shape = tableShape(first = false, last = last)
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val fill by animateColorAsState(
+        targetValue = if (playing) accent.copy(alpha = 0.14f) else ink(if (pressed) 0.12f else 0.07f),
+        animationSpec = tween(140),
+        label = "table-album-child-fill",
+    )
+    Box(Modifier.fillMaxWidth().albumRailChild(VinylRailX, lastInAlbum, railColor(accent, holdsPlaying), over = true)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = TableInset)) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(shape)
+                    .background(fill)
+                    .focusRing(shape)
+                    .combinedClickable(interactionSource = source, indication = null, onClick = actions.onClick, onLongClick = actions.onLongClick)
+                    .padding(start = VinylRailX - TableInset + RailChildInset, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AlbumChildContent(
+                    number = position + 1,
+                    track = track,
+                    showArtist = showsArtistInAlbum(track, album),
+                    playing = playing,
+                    accent = accent,
+                    onArtist = actions.onArtist,
+                    belowTitle = { DownloadProgressLine(actions.downloadState, Modifier.padding(top = 4.dp)) },
+                    trailing = { AlbumChildTrailing(actions, 0.5f) },
+                )
+            }
+            if (!last) Spacer(Modifier.height(1.dp))
+        }
+    }
+}
+
+// Immersive: plain rows with thin divider lines. The thread line replaces the dividers inside an unfolded album, and a
+// wider divider closes the album.
+
+private val ImmersiveCover = 48.dp
+private val ImmersiveRailX = 20.dp + ImmersiveCover / 2
+
+@Composable
+private fun ImmersiveAlbumHeader(
+    album: ListEntry.Album,
+    expanded: Boolean,
+    holdsPlaying: Boolean,
+    accent: Color,
+    last: Boolean,
+    onToggle: () -> Unit,
+    onLongClick: () -> Unit,
+    onMore: () -> Unit,
+) {
+    val rail = railColor(accent, holdsPlaying)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .then(if (expanded) Modifier.albumRailHeader(ImmersiveRailX, fromY = 8.dp + ImmersiveCover + 4.dp, color = rail) else Modifier),
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .rowPress(onClick = onToggle, onLongClick = onLongClick)
+                    .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = if (expanded) 12.dp else 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AlbumHeaderContent(
+                    album = album,
+                    expanded = expanded,
+                    playing = holdsPlaying && !expanded,
+                    accent = accent,
+                    cover = {
+                        CoverImage(remember(album.coverUrl) { resolveCoverUrl(album.coverUrl, 160) }, Modifier.size(ImmersiveCover).softCover())
+                    },
+                    onMore = onMore,
+                    titleStyle = MaterialTheme.typography.bodyLarge,
+                    subtitleStyle = MaterialTheme.typography.bodySmall,
+                    subtitleColor = ink(0.55f),
+                )
+            }
+            if (!expanded && !last) Box(Modifier.fillMaxWidth().padding(start = 82.dp, end = 20.dp).height(1.dp).background(ink(0.07f)))
+        }
+    }
+}
+
+@Composable
+private fun ImmersiveAlbumChild(
+    album: ListEntry.Album,
+    position: Int,
+    track: Track,
+    playing: Boolean,
+    holdsPlaying: Boolean,
+    accent: Color,
+    lastInAlbum: Boolean,
+    last: Boolean,
+    actions: SongActions,
+) {
+    Box(Modifier.fillMaxWidth().albumRailChild(ImmersiveRailX, lastInAlbum, railColor(accent, holdsPlaying))) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .rowPress(onClick = actions.onClick, onLongClick = actions.onLongClick)
+                    .padding(start = ImmersiveRailX + RailChildInset, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AlbumChildContent(
+                    number = position + 1,
+                    track = track,
+                    showArtist = showsArtistInAlbum(track, album),
+                    playing = playing,
+                    accent = accent,
+                    onArtist = actions.onArtist,
+                    belowTitle = { DownloadProgressLine(actions.downloadState, Modifier.padding(top = 4.dp)) },
+                    trailing = { AlbumChildTrailing(actions, 0.5f) },
+                )
+            }
+            if (lastInAlbum && !last) Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp).height(1.dp).background(ink(0.07f)))
+        }
+    }
+}

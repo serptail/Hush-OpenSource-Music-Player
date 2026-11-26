@@ -71,6 +71,7 @@ object TablerIcons {
     val CircleArrowDown: ImageVector by lazy { icon("CircleArrowDown", "M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0", "M8 12l4 4", "M12 8v8", "M16 12l-4 4") }
     val Dots: ImageVector by lazy { icon("Dots", "M4 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M18 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0") }
     val GripVertical: ImageVector by lazy { icon("GripVertical", "M8 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M8 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M8 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M14 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M14 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M14 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0") }
+    val Stack: ImageVector by lazy { icon("Stack", "M12 4l-8 4l8 4l8 -4l-8 -4", "M4 12l8 4l8 -4", "M4 16l8 4l8 -4") }
     val Trash: ImageVector by lazy { icon("Trash", "M4 7l16 0", "M10 11l0 6", "M14 11l0 6", "M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12", "M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3") }
     val ArrowLeft: ImageVector by lazy { icon("ArrowLeft", "M5 12l14 0", "M5 12l6 6", "M5 12l6 -6") }
     val ArrowUp: ImageVector by lazy { icon("ArrowUp", "M12 5l0 14", "M18 11l-6 -6", "M6 11l6 -6") }

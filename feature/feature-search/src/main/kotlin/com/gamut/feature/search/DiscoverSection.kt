@@ -114,7 +114,7 @@ internal fun LazyListScope.discoverFeaturedItems(
     )
     discoverHero(state, nowPlayingIsrc, onStationClick, onAlbumClick, onTrackClick)
     discoverStations(state, stationLoadingId, onStationClick, "radio", onStationLongClick)
-    discoverMoods(state, stationLoadingId, onStationClick)
+    discoverMoods(state, stationLoadingId, onStationClick, onStationLongClick)
     feedSectionItems(
         state.feed.filter { it.slot == FeedSlot.MIDDLE },
         onTrackClick,

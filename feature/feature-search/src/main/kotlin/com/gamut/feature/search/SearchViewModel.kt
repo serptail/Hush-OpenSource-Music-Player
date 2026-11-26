@@ -123,6 +123,16 @@ class SearchViewModel
         /** The songs of the album a card stands for, null when they cannot be loaded. */
         suspend fun albumTracks(item: DiscoverItem): List<Track>? = discoverRepository.album(item)?.tracks
 
+        /** The songs behind a mood, mix or radio card, for its preview popup. Empty when they cannot be loaded. */
+        suspend fun stationPreview(item: DiscoverItem): List<Track> =
+            try {
+                discoverRepository.stationQueue(item)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                emptyList()
+            }
+
         /** Resolves the songs behind a mix or radio card without playing them, for the card's options sheet. */
         fun resolveStation(
             item: DiscoverItem,

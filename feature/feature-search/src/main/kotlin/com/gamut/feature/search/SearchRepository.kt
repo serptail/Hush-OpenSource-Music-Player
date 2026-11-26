@@ -45,6 +45,7 @@ class SearchRepositoryImpl
         private val itunesApi: ItunesApi,
         private val deezerApi: DeezerApi,
         private val youtubeSource: YoutubeMusicSearchSource,
+        private val coverArt: CoverArtPreferences,
     ) : SearchRepository {
         private val resultCache = ConcurrentHashMap<String, CachedResult>()
 
@@ -63,7 +64,9 @@ class SearchRepositoryImpl
                     return@channelFlow
                 }
 
-                val cacheKey = trimmed.lowercase()
+                // Read once per search, so a result is built and cached under the setting it was asked with.
+                val preferSingle = coverArt.preferSingleCovers.value
+                val cacheKey = trimmed.lowercase() + if (preferSingle) "|single" else ""
                 val cached = resultCache[cacheKey]?.takeIf { it.isFresh() }
                 if (cached != null) {
                     send(SearchResult(cached.tracks, true, cached.artist))
@@ -85,7 +88,7 @@ class SearchRepositoryImpl
 
                 val itunes = itunesDeferred.await()
                 val deezer = deezerDeferred.await()
-                val first = assemble(trimmed, itunes, deezer, emptyList(), boostArtist = false, youtube = emptyList())
+                val first = assemble(trimmed, itunes, deezer, emptyList(), boostArtist = false, youtube = emptyList(), preferSingle = preferSingle)
                 send(SearchResult(first, isFinal = false))
 
                 val artist = artistDeferred.await()
@@ -97,7 +100,7 @@ class SearchRepositoryImpl
                 val artistTracks = if (boost) topTracks(artist!!.id) else emptyList()
 
                 val youtube = youtubeDeferred.await()
-                val finalTracks = assemble(trimmed, itunes, deezer, artistTracks, boost, youtube)
+                val finalTracks = assemble(trimmed, itunes, deezer, artistTracks, boost, youtube, preferSingle)
                 if (finalTracks.isNotEmpty()) {
                     resultCache[cacheKey] = CachedResult(finalTracks, signal, System.currentTimeMillis())
                 }
@@ -187,12 +190,20 @@ class SearchRepositoryImpl
             artistTracks: List<DeezerTrackDto>,
             boostArtist: Boolean,
             youtube: List<YoutubeCandidate>,
+            preferSingle: Boolean = false,
         ): List<Track> {
             val items = ArrayList<Sourced>()
 
             // Priority order matters: the first hit of a recording supplies the metadata that is shown.
             itunes.forEachIndexed { i, track ->
-                items += Sourced(track, popularity = 0.0, position = i, provider = Provider.APPLE)
+                items +=
+                    Sourced(
+                        track,
+                        popularity = 0.0,
+                        position = i,
+                        provider = Provider.APPLE,
+                        isSingle = track.album?.trim()?.endsWith(" - Single", ignoreCase = true) == true,
+                    )
             }
             deezer.forEachIndexed { i, dto ->
                 items +=
@@ -202,6 +213,7 @@ class SearchRepositoryImpl
                         i,
                         Provider.DEEZER,
                         penalty = DEEZER_PENALTY,
+                        isSingle = dto.album.recordType.equals("single", ignoreCase = true),
                     )
             }
             artistTracks.forEachIndexed { i, dto ->
@@ -212,6 +224,7 @@ class SearchRepositoryImpl
                         i,
                         Provider.DEEZER,
                         boost = if (boostArtist) ARTIST_BOOST else 0.0,
+                        isSingle = dto.album.recordType.equals("single", ignoreCase = true),
                     )
             }
             youtube
@@ -236,7 +249,7 @@ class SearchRepositoryImpl
 
             // A recording that Apple, Deezer and YouTube all return becomes one candidate with
             // the best position and popularity any of them gave it, and a cross-provider agreement bonus.
-            return SearchRanking.rank(query, ResultMerger.merge(items))
+            return SearchRanking.rank(query, ResultMerger.merge(items, preferSingleArt = preferSingle))
         }
 
         private fun YoutubeCandidate.toYoutubeOnlyTrack(): Track {

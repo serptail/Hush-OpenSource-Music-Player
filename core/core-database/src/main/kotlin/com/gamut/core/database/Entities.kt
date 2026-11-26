@@ -43,6 +43,8 @@ data class PlaylistTrackCrossRef(
     val playlistId: Long,
     val isrc: String,
     val position: Int,
+    /** Set when the song was added as part of an album group; shared by every song of that group. */
+    val albumGroupId: String? = null,
 )
 
 @Entity(tableName = "downloads")
@@ -64,6 +66,8 @@ data class ArtworkCacheEntity(
 data class FavoriteEntity(
     @PrimaryKey val isrc: String,
     val addedAtEpochMs: Long,
+    /** Set when the song was added as part of an album group; shared by every song of that group. */
+    val albumGroupId: String? = null,
 )
 
 @Entity(tableName = "pending_sync", indices = [Index(value = ["type", "itemKey"], unique = true)])

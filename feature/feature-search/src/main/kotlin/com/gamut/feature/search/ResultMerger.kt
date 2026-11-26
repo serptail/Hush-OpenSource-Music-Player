@@ -13,6 +13,8 @@ internal data class Sourced(
     val provider: Provider,
     val penalty: Double = 0.0,
     val boost: Double = 0.0,
+    /** The release this hit came from is a single (Apple names those "... - Single"; Deezer says so). */
+    val isSingle: Boolean = false,
 )
 
 /**
@@ -31,16 +33,32 @@ internal object ResultMerger {
         var penalty: Double,
         var boost: Double,
         val providers: MutableSet<Provider>,
-    )
+    ) {
+        /** The cover of the first single this recording was found on, when one was. */
+        var singleArt: String? = null
+    }
 
-    fun merge(items: List<Sourced>): List<Candidate> {
+    /**
+     * With [preferSingleArt], a recording that appears on a single as well as on an album (or a deluxe) takes the
+     * single's cover instead of whichever release happened to come first. Only the picture changes: the title, album
+     * name and ranking stay as they were.
+     */
+    fun merge(
+        items: List<Sourced>,
+        preferSingleArt: Boolean = false,
+    ): List<Candidate> {
         val clusters = ArrayList<Cluster>()
         for (item in items) {
             val track = item.track
             val print = TrackIdentity.fingerprint(track.title, track.artist, track.durationMs)
             val hit = clusters.firstOrNull { TrackIdentity.sameRecording(it.print, print) }
+            val cluster =
+                hit ?: Cluster(track, print, item.popularity, item.position, item.penalty, item.boost, mutableSetOf(item.provider))
+            if (preferSingleArt && item.isSingle && cluster.singleArt == null && !track.albumArtUrl.isNullOrBlank()) {
+                cluster.singleArt = track.albumArtUrl
+            }
             if (hit == null) {
-                clusters += Cluster(track, print, item.popularity, item.position, item.penalty, item.boost, mutableSetOf(item.provider))
+                clusters += cluster
             } else {
                 hit.popularity = maxOf(hit.popularity, item.popularity)
                 hit.position = minOf(hit.position, item.position)
@@ -57,6 +75,9 @@ internal object ResultMerger {
                     )
             }
         }
-        return clusters.map { Candidate(it.track, it.popularity, it.position, it.penalty, it.boost, it.providers.size) }
+        return clusters.map {
+            val shown = it.singleArt?.let { art -> it.track.copy(albumArtUrl = art) } ?: it.track
+            Candidate(shown, it.popularity, it.position, it.penalty, it.boost, it.providers.size)
+        }
     }
 }

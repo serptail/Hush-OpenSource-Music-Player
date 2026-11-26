@@ -157,6 +157,8 @@ import com.gamut.feature.search.AlbumViewModel
 import com.gamut.feature.search.ArtistViewModel
 import com.gamut.feature.search.DiscoverItem
 import com.gamut.feature.search.DiscoverRepository
+import com.gamut.feature.search.AlbumLibraryActions
+import com.gamut.feature.search.LocalAlbumLibrary
 import com.gamut.feature.search.LocalPlaylistCreate
 import com.gamut.feature.search.LocalPlaylistRemove
 import com.gamut.feature.search.SearchScreen
@@ -679,6 +681,15 @@ private fun GamutApp(
                             remember(appLibraryVm) {
                                 { name: String, t: Track -> appLibraryVm.createPlaylistAndAdd(name, t) }
                             }
+                        val albumLibrary =
+                            remember(appLibraryVm) {
+                                AlbumLibraryActions(
+                                    addToFavorites = { tracks -> appLibraryVm.addAlbumToFavorites(tracks) },
+                                    addToPlaylist = { tracks, playlistId ->
+                                        appLibraryVm.addAlbumToPlaylist(playlistId.toLong(), tracks)
+                                    },
+                                )
+                            }
                         CompositionLocalProvider(
                             LocalCoverPalette provides palette,
                             LocalSupportNudge provides supportNudge,
@@ -686,6 +697,7 @@ private fun GamutApp(
                             LocalArtistPhotoResolver provides photoResolver,
                             LocalPlaylistRemove provides removeFromPlaylist,
                             LocalPlaylistCreate provides createPlaylistAndAdd,
+                            LocalAlbumLibrary provides albumLibrary,
                             LocalPlayerDock provides playerDock,
                             LocalPlayerMotion provides playerMotion,
                         ) {
@@ -977,12 +989,12 @@ private fun GamutApp(
                                             }
                                         }
                                         composable("favorites") {
-                                            val favorites by appLibraryVm.favorites.collectAsState()
+                                            val favoriteRows by appLibraryVm.favoriteRows.collectAsState()
                                             val downloadsVm = hiltViewModel<PlaylistDownloadsViewModel>()
                                             val favoritesStyle by hiltViewModel<AppearanceViewModel>().favoritesStyle.collectAsState()
                                             Settled {
                                                 FavoritesScreen(
-                                                    tracks = favorites,
+                                                    rows = favoriteRows,
                                                     onBack = { nav.popBackStack() },
                                                     onTrackSelected = playTrackWithQueue,
                                                     onShuffle = { list ->
@@ -991,6 +1003,8 @@ private fun GamutApp(
                                                     },
                                                     onRemove = { appLibraryVm.toggleFavorite(it) },
                                                     onReorder = { appLibraryVm.setFavoriteOrder(it) },
+                                                    onUngroupAlbum = appLibraryVm::ungroupFavoriteAlbum,
+                                                    onRemoveAlbum = appLibraryVm::removeFavoriteAlbum,
                                                     onTrackArtist = { t -> openArtist(t.artist) },
                                                     nowPlayingIsrc = loadedTrack?.isrc,
                                                     downloads = downloadsVm,

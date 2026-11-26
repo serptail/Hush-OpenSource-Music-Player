@@ -135,6 +135,7 @@ class AppearanceStore
                 glassDensity = enum("glass_density", d.glassDensity),
                 playerStyle = enum("player_style", d.playerStyle),
                 videoViewMode = enum("video_view_mode", d.videoViewMode),
+                playerGestures = prefs.getBoolean("player_gestures", d.playerGestures),
             )
         }
 
@@ -153,6 +154,7 @@ class AppearanceStore
                 .putString("glass_density", s.glassDensity.name)
                 .putString("player_style", s.playerStyle.name)
                 .putString("video_view_mode", s.videoViewMode.name)
+                .putBoolean("player_gestures", s.playerGestures)
                 .apply()
         }
 

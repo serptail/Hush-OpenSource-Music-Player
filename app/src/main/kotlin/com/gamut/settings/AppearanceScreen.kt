@@ -75,6 +75,7 @@ import com.gamut.core.designsystem.acrylicSource
 import com.gamut.core.designsystem.ink
 import com.gamut.core.designsystem.pressScale
 import com.gamut.core.designsystem.softResize
+import com.gamut.feature.search.CoverArtPreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
@@ -86,8 +87,12 @@ class AppearanceViewModel
     @Inject
     constructor(
         private val store: AppearanceStore,
+        private val coverArt: CoverArtPreferences,
     ) : ViewModel() {
         val settings: StateFlow<AppearanceSettings> = store.settings
+        val preferSingleCovers: StateFlow<Boolean> = coverArt.preferSingleCovers
+
+        fun setPreferSingleCovers(value: Boolean) = coverArt.setPreferSingleCovers(value)
         val surfaceOpacity: StateFlow<Float> = store.surfaceOpacity
         val surfaceSolid: StateFlow<Boolean> = store.surfaceSolid
         val surfaceColor: StateFlow<Int> = store.surfaceColor
@@ -112,7 +117,10 @@ class AppearanceViewModel
 
         fun update(transform: (AppearanceSettings) -> AppearanceSettings) = store.update(transform)
 
-        fun reset() = store.reset()
+        fun reset() {
+            store.reset()
+            coverArt.setPreferSingleCovers(CoverArtPreferences.DEFAULT_PREFER_SINGLE)
+        }
     }
 
 @Composable
@@ -129,6 +137,7 @@ fun AppearanceScreen(
     val albumStyle by vm.albumStyle.collectAsState()
     val artistStyle by vm.artistStyle.collectAsState()
     val playlistStyle by vm.playlistStyle.collectAsState()
+    val preferSingleCovers by vm.preferSingleCovers.collectAsState()
     val systemDark = isSystemInDarkTheme()
     val showDark = s.resolvedDark(systemDark) ?: !LocalCoverPalette.current.isLight
     var confirmReset by remember { mutableStateOf(false) }
@@ -280,6 +289,14 @@ fun AppearanceScreen(
                         VideoViewMode.Boxed -> "Music videos play upright in a box under the top bar, with their own controls and a button to expand to landscape. The player stays as it is below."
                     },
             )
+            GroupedDivider()
+            GroupedSwitchRow(
+                "Gestures",
+                icons.MonitorPlay,
+                checked = s.playerGestures,
+                onChange = { v -> vm.update { it.copy(playerGestures = v) } },
+                subtitle = "Swipe for volume and double-tap to skip 5 seconds on the player",
+            )
 
             GroupedHeader("Favorites")
             GroupedSegmentedRow(
@@ -357,6 +374,15 @@ fun AppearanceScreen(
                         PlaylistStyle.Vinyl -> "The cover as a record sleeve with a record that spins while it plays, and songs in a numbered table."
                         PlaylistStyle.Immersive -> "A full-width cover that fades into the page, round action buttons and clean song rows."
                     },
+            )
+
+            GroupedHeader("Cover art")
+            GroupedSwitchRow(
+                "Prefer single covers",
+                icons.Stack,
+                checked = preferSingleCovers,
+                onChange = vm::setPreferSingleCovers,
+                subtitle = "When a song is on a single and an album, search shows the single's cover",
             )
 
             GroupedHeader("Glass")

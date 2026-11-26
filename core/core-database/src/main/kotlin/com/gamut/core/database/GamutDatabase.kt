@@ -19,7 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         RecentEntity::class,
         FollowEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 abstract class GamutDatabase : RoomDatabase() {
@@ -120,5 +120,13 @@ val MIGRATION_8_9 =
     object : Migration(8, 9) {
         override fun migrate(database: SupportSQLiteDatabase) {
             database.execSQL("ALTER TABLE tracks ADD COLUMN isExplicit INTEGER")
+        }
+    }
+
+val MIGRATION_9_10 =
+    object : Migration(9, 10) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            database.execSQL("ALTER TABLE playlisttrackcrossref ADD COLUMN albumGroupId TEXT")
+            database.execSQL("ALTER TABLE favorites ADD COLUMN albumGroupId TEXT")
         }
     }

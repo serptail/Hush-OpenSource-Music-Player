@@ -757,14 +757,19 @@ fun SearchScreen(
             )
         }
         stationActions?.let { item ->
-            StationActionsSheet(
+            StationPreviewSheet(
                 item = item,
-                badge = stationBadge(item),
+                cardIndex = stationCardIndex(discover, item),
                 busy = stationBusy,
+                loadTracks = viewModel::stationPreview,
                 onDismiss = { stationActions = null },
                 onPlay = {
                     stationActions = null
                     openStation(item)
+                },
+                onPlayTrack = { first, queue ->
+                    stationActions = null
+                    onTrackSelected(first, queue)
                 },
                 onAddToFavorites = {
                     stationBusy = true

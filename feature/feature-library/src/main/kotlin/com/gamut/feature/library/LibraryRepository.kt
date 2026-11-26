@@ -13,6 +13,7 @@ import com.gamut.core.database.SyncTypes
 import com.gamut.core.database.TrackDao
 import com.gamut.core.database.toDomain
 import com.gamut.core.database.toEntity
+import com.gamut.core.model.GroupedTrack
 import com.gamut.core.model.Playlist
 import com.gamut.core.model.Track
 import dagger.Binds
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.UUID
 import javax.inject.Inject
 
 interface LibraryRepository {
@@ -80,6 +82,37 @@ interface LibraryRepository {
         track: Track,
         addedAtEpochMs: Long,
     )
+
+    /** The songs of a playlist in order, each with the album group it was added in (null for a loose song). */
+    fun observeGroupedTracks(playlistId: Long): Flow<List<GroupedTrack>>
+
+    /** The favorites in order, each with the album group it was added in (null for a loose song). */
+    fun observeGroupedFavorites(): Flow<List<GroupedTrack>>
+
+    /** Adds [tracks] to the end of the playlist as one album group. Returns how many songs were new. */
+    suspend fun appendAlbum(
+        playlistId: Long,
+        tracks: List<Track>,
+    ): Int
+
+    /** Adds [tracks] to the top of the favorites as one album group. Returns how many songs were new. */
+    suspend fun addFavoriteAlbum(tracks: List<Track>): Int
+
+    /** Turns an album group of a playlist back into loose songs, in place. */
+    suspend fun ungroupAlbum(
+        playlistId: Long,
+        groupId: String,
+    )
+
+    /** Takes every song of an album group out of a playlist. */
+    suspend fun removeAlbum(
+        playlistId: Long,
+        groupId: String,
+    )
+
+    suspend fun ungroupFavoriteAlbum(groupId: String)
+
+    suspend fun removeFavoriteAlbum(groupId: String)
 }
 
 class LibraryRepositoryImpl
@@ -238,7 +271,65 @@ class LibraryRepositoryImpl
             favorites.add(FavoriteEntity(track.isrc, addedAtEpochMs))
             mark(SyncTypes.FAV, track.isrc)
         }
+
+        override fun observeGroupedTracks(playlistId: Long) =
+            tracks
+                .observeGrouped(playlistId)
+                .map { rows -> rows.map { GroupedTrack(it.track.toDomain(), it.albumGroupId) } }
+                .flowOn(Dispatchers.Default)
+
+        override fun observeGroupedFavorites() =
+            favorites
+                .observeGrouped()
+                .map { rows -> rows.map { GroupedTrack(it.track.toDomain(), it.albumGroupId) } }
+                .flowOn(Dispatchers.Default)
+
+        override suspend fun appendAlbum(
+            playlistId: Long,
+            tracks: List<Track>,
+        ): Int {
+            val songs = tracks.distinctBy { it.isrc }
+            if (songs.isEmpty()) return 0
+            songs.forEach { trackDao.upsert(it.toEntity()) }
+            val first = this.tracks.nextPosition(playlistId)
+            val added = this.tracks.appendGroup(playlistId, newGroupId(), songs.map { it.isrc })
+            added.forEachIndexed { index, isrc -> mark(SyncTypes.PLS, "$playlistId|$isrc", (first + index).toString()) }
+            return added.size
+        }
+
+        override suspend fun addFavoriteAlbum(tracks: List<Track>): Int {
+            val songs = tracks.distinctBy { it.isrc }
+            if (songs.isEmpty()) return 0
+            songs.forEach { trackDao.upsert(it.toEntity()) }
+            val added = favorites.addGroup(newGroupId(), songs.map { it.isrc })
+            added.forEach { mark(SyncTypes.FAV, it) }
+            return added.size
+        }
+
+        override suspend fun ungroupAlbum(
+            playlistId: Long,
+            groupId: String,
+        ) = tracks.ungroup(playlistId, groupId)
+
+        override suspend fun removeAlbum(
+            playlistId: Long,
+            groupId: String,
+        ) {
+            val isrcs = tracks.isrcsInGroup(playlistId, groupId)
+            tracks.removeGroup(playlistId, groupId)
+            isrcs.forEach { mark(SyncTypes.PLS, "$playlistId|$it", null) }
+        }
+
+        override suspend fun ungroupFavoriteAlbum(groupId: String) = favorites.ungroup(groupId)
+
+        override suspend fun removeFavoriteAlbum(groupId: String) {
+            val isrcs = favorites.isrcsInGroup(groupId)
+            favorites.removeGroup(groupId)
+            isrcs.forEach { mark(SyncTypes.FAV, it) }
+        }
     }
+
+private fun newGroupId(): String = UUID.randomUUID().toString()
 
 private fun String.toTagList(): List<String> = split('\n').filter { it.isNotBlank() }
 
